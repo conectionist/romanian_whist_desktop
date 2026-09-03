@@ -156,7 +156,15 @@ install(TARGETS romanian_whist_desktop
 #           EXCLUDE_PLUGIN_TYPES and NO_TRANSLATIONS. Passing DEPLOY_TOOL_OPTIONS
 #           here would draw a warning, hence the separate branch.
 #   Windows windeployqt, which ignores those keywords entirely and has to be
-#           told in its own flags.
+#           told in its own flags. Two of those flags are not about plugins:
+#           windeployqt ships D3Dcompiler_47.dll and opengl32sw.dll by default,
+#           together 24 MB of a 54 MB tree. The first is for ANGLE, which Qt 6
+#           no longer uses at all. The second is Mesa's software OpenGL, a
+#           fallback for machines with no usable GL driver - a widgets
+#           application paints through the raster engine and never asks for a GL
+#           context, so it goes too. If Windows users on bare VMs or over RDP
+#           ever report the application failing to start, --no-opengl-sw is the
+#           first thing to put back.
 #   macOS   macdeployqt, which has no plugin filtering at all. Nothing here can
 #           trim it, so it keeps the stock behaviour and stays generous.
 #
@@ -192,6 +200,8 @@ qt_deploy_runtime_dependencies(
     DEPLOY_TOOL_OPTIONS
         --no-translations
         --skip-plugin-types generic,iconengines,imageformats,networkinformation,styles,tls
+        --no-system-d3d-compiler
+        --no-opengl-sw
 )
 ")
 else()

@@ -328,6 +328,10 @@ jobs:
             echo "is_new=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # skip-decompress because the build jobs upload with archive: false, so
+      # these artifacts are the .tar.gz and .zip files themselves rather than
+      # zips wrapping them. Without it the download step would unpack them and
+      # leave directories, and the release below attaches files.
       - name: Download artifacts
         if: steps.version.outputs.is_new == 'true'
         uses: actions/download-artifact@v8
@@ -335,6 +339,15 @@ jobs:
           pattern: romanian_whist_desktop-*
           path: artifacts
           merge-multiple: true
+          skip-decompress: true
+
+      # This job only ever runs on master, so it cannot be rehearsed on a branch
+      # the way the build jobs were. Listing what will be attached makes the
+      # first real run self-explanatory if the artifacts arrive in an unexpected
+      # shape, rather than failing inside the release action.
+      - name: Show what will be released
+        if: steps.version.outputs.is_new == 'true'
+        run: ls -l artifacts/
 
       - name: Create release
         if: steps.version.outputs.is_new == 'true'
