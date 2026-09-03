@@ -17,14 +17,30 @@ on:
 # staging tree. Nothing Qt-shaped is vendored in this repository; this is the
 # only place a Qt version is pinned.
 #
-# Not the 6.8 LTS, for two reasons. macos-latest is macOS 26 (Tahoe), whose SDK
-# dropped the long-deprecated AGL framework that Qt linked against; Qt fixed that
-# in 6.8.4, 6.9.2 and 6.5.10, but 6.8's later patch releases are commercial-only,
-# so the newest open-source 6.8 is 6.8.3 and it can never carry the fix - the
-# macOS job cannot link at all on that series. 6.11 also happens to be what this
-# project is developed against, so CI and the desk now build the same Qt.
+# An exact version, not a wildcard, and 6.10.3 specifically. Both halves of that
+# were learned from CI failures rather than chosen up front:
+#
+#   * It must be at least 6.9.2. macos-latest is macOS 26 (Tahoe), whose SDK
+#     dropped the long-deprecated AGL framework that Qt had been linking for
+#     Carbon-era OpenGL. Qt patched that in 6.8.4, 6.9.2 and 6.5.10 - but 6.8 is
+#     an LTS whose later patch releases are commercial-only, so the newest
+#     open-source 6.8 is 6.8.3, which can never carry the fix. Anything on the
+#     6.8 series simply cannot link on macOS.
+#
+#   * It cannot be 6.11. Qt 6.11 is fetchable for Linux and macOS but not for
+#     Windows: aqt fails there with "Failed to locate XML data for Qt version",
+#     and aqtinstall 3.3.0 is the newest release, so there is no client-side fix
+#     to upgrade to. 6.10.3 resolves on all three hosts.
+#
+# Pinned exactly because a floating '6.8.*' and then a '6.11.*' are what produced
+# both failures - the version that gets installed should change when someone
+# edits this line, not when upstream publishes.
+#
+# Note this trails the 6.11 used for local development. That is a deliberate
+# consequence of the Windows availability gap above, not an oversight; revisit
+# when 6.11 becomes fetchable for Windows.
 env:
-  QT_VERSION: '6.11.*'
+  QT_VERSION: '6.10.3'
 
 jobs:
   build-linux:
