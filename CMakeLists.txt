@@ -11,7 +11,14 @@ project(romanian_whist_desktop
 # Qt 6 only. The engine is C++20 and every line of docs/QT_CLIENT_PLAN.md is
 # written against Qt 6 APIs, so a Qt 5 fallback would only half-support a
 # configuration nothing is tested against.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets LinguistTools)
+#
+# Svg is linked for QSvgRenderer, not for the qsvg imageformat plugin: the
+# deploy step below (see EXCLUDE_PLUGIN_TYPES / --skip-plugin-types) deliberately
+# drops iconengines and imageformats, so QPixmap(":/cards/....svg") would come
+# back null in an installed build. Rasterizing through QSvgRenderer sidesteps
+# that plugin entirely - Svg is a linked library, not a plugin - so the card
+# art can stay vector without reopening the plugin trimming above.
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets LinguistTools Svg)
 
 # Turns on AUTOMOC / AUTOUIC / AUTORCC and the rest of the modern defaults, so
 # they do not have to be set one at a time.
@@ -35,16 +42,16 @@ target_compile_features(romanian_whist_desktop PRIVATE cxx_std_20)
 
 target_include_directories(romanian_whist_desktop PRIVATE src)
 
-target_link_libraries(romanian_whist_desktop PRIVATE Qt6::Widgets)
+target_link_libraries(romanian_whist_desktop PRIVATE Qt6::Widgets Qt6::Svg)
 
 # ---------------------------------------------------------------------------
 # Resources
 # ---------------------------------------------------------------------------
-# The 52 card faces live in resources/images/cards/ and are listed by
+# The 52 card faces live in resources/images/cards/{png,svg}/ and are listed by
 # resources/cards.qrc, which aliases each one to a flat name under the /cards
-# prefix. So the source path is resources/images/cards/ace_of_spades.png and
-# the runtime path is :/cards/ace_of_spades.png - moving the files on disk does
-# not move the URLs.
+# prefix. So the source path is resources/images/cards/png/ace_of_spades.png and
+# the runtime path is :/cards/ace_of_spades.png (and likewise ace_of_spades.svg
+# for the vector set) - moving the files on disk does not move the URLs.
 #
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
