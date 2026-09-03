@@ -1,0 +1,264 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+
+# Qt is not on any runner in a usable version - ubuntu-latest's apt Qt6 is 6.4,
+# below the 6.5 floor in find_package(Qt6 6.5 REQUIRED ...) - so every build job
+# installs the official Qt binary distribution first. That install is also where
+# the shipped libraries come from: cmake --install runs the deploy script
+# CMakeLists.txt generates with qt_generate_deploy_app_script(), and that script
+# copies the needed Qt libraries and plugins out of the runner's Qt into the
+# staging tree. Nothing Qt-shaped is vendored in this repository; this is the
+# only place a Qt version is pinned.
+env:
+  QT_VERSION: '6.8.*'
+
+jobs:
+  build-linux:
+    name: Build (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # qt_deploy_runtime_dependencies() rewrites RPATHs with patchelf so the
+      # archived binary finds the Qt libraries shipped beside it rather than
+      # whatever the host happens to have.
+      - name: Install patchelf
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+
+      # QT_ROOT_DIR is exported by install-qt-action, but it does not set
+      # CMAKE_PREFIX_PATH, and find_package(Qt6) does not read QT_ROOT_DIR.
+      #
+      # Passed as an environment variable rather than -DCMAKE_PREFIX_PATH=...
+      # because CMake reads this one from the environment as a documented part of
+      # the find_package search, and going through the environment keeps the value
+      # away from shell and CMake command-line escaping. That matters on Windows,
+      # where QT_ROOT_DIR is a backslash path; the three jobs use the same form so
+      # they do not quietly diverge.
+      #
+      # Editors that lint workflows may flag env.QT_ROOT_DIR as "context access
+      # might be invalid". It is a false positive: install-qt-action sets the
+      # variable at runtime with core.exportVariable(), which a static linter
+      # cannot see, and pointing CMAKE_PREFIX_PATH at ${QT_ROOT_DIR} is the usage
+      # that action's own README prescribes. Do not "fix" it.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset release
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: cmake --build --preset release
+
+      # No test step yet: this client has no test target, so there is nothing for
+      # ctest to run. When tests/ lands, uncomment - the presets are already here.
+      #
+      # --no-tests=error, because a build that lands with tests disabled would
+      # otherwise print "No tests were found!!!" and exit 0 - green having run
+      # nothing. The engine's CI learned this the hard way in Phase 0.
+      #
+      # - name: Test
+      #   run: ctest --preset release --output-on-failure --no-tests=error
+
+      - name: Deploy
+        run: cmake --install build-release --config Release --prefix "staging/romanian_whist_desktop-${{ steps.version.outputs.version }}-linux"
+
+      # qt_generate_deploy_app_script() is called with NO_UNSUPPORTED_PLATFORM_ERROR,
+      # which by design turns an unsupported platform into a silent no-op rather
+      # than a fatal error - the same shape of failure CMakeLists.txt documents for
+      # .qrc files that embed nothing. Without this assertion that path yields a
+      # green build and an archive holding a binary that cannot start.
+      - name: Verify the deploy
+        run: |
+          if [ -z "$(find staging -name 'libQt6Widgets*' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - the deploy script did nothing."
+            find staging
+            exit 1
+          fi
+
+      # cmake -E tar rather than the platform's own tar/zip: it is guaranteed
+      # present (we already require cmake), behaves identically on all three
+      # runners, and preserves the symlinks and executable bits that
+      # upload-artifact drops when it re-zips a directory. That is also why the
+      # archive is built here instead of uploading the staging directory.
+      - name: Archive
+        working-directory: staging
+        run: cmake -E tar czf "../romanian_whist_desktop-${{ steps.version.outputs.version }}-linux.tar.gz" "romanian_whist_desktop-${{ steps.version.outputs.version }}-linux"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: romanian_whist_desktop-${{ steps.version.outputs.version }}-linux
+          path: romanian_whist_desktop-${{ steps.version.outputs.version }}-linux.tar.gz
+
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # See the note on this step in build-linux.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset release
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The default generator here is multi-config Visual Studio, which ignores
+      # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
+      # actually selects Release, and --config Release below matches it.
+      - name: Build
+        run: cmake --build --preset release
+
+      # No test step yet - see the comment in build-linux.
+
+      - name: Deploy
+        shell: bash
+        run: cmake --install build-release --config Release --prefix "staging/romanian_whist_desktop-${{ steps.version.outputs.version }}-windows"
+
+      - name: Verify the deploy
+        shell: bash
+        run: |
+          if [ -z "$(find staging -name 'Qt6Widgets.dll' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - windeployqt did nothing."
+            find staging
+            exit 1
+          fi
+
+      - name: Archive
+        shell: bash
+        working-directory: staging
+        run: cmake -E tar cf "../romanian_whist_desktop-${{ steps.version.outputs.version }}-windows.zip" --format=zip "romanian_whist_desktop-${{ steps.version.outputs.version }}-windows"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: romanian_whist_desktop-${{ steps.version.outputs.version }}-windows
+          path: romanian_whist_desktop-${{ steps.version.outputs.version }}-windows.zip
+
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      - name: Configure
+        run: cmake --preset release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: cmake --build --preset release
+
+      # No test step yet - see the comment in build-linux.
+
+      # qt_add_executable(... MACOSX_BUNDLE) plus BUNDLE DESTINATION . in
+      # CMakeLists.txt puts romanian_whist_desktop.app at the prefix root, and
+      # macdeployqt fills its Frameworks directory.
+      - name: Deploy
+        run: cmake --install build-release --config Release --prefix "staging/romanian_whist_desktop-${{ steps.version.outputs.version }}-macos"
+
+      # This assertion carries more weight than its Linux and Windows siblings:
+      # it is the only automated check on an artifact no maintainer here can open.
+      - name: Verify the deploy
+        run: |
+          if [ -z "$(find staging -name 'QtWidgets.framework' -print -quit)" ]; then
+            echo "::error::No Qt frameworks inside the .app - macdeployqt did nothing."
+            find staging -maxdepth 6
+            exit 1
+          fi
+
+      # tar, not zip: a deployed .app is full of framework symlinks and needs its
+      # executable bits, and tar preserves both without any extra flags.
+      - name: Archive
+        working-directory: staging
+        run: cmake -E tar czf "../romanian_whist_desktop-${{ steps.version.outputs.version }}-macos.tar.gz" "romanian_whist_desktop-${{ steps.version.outputs.version }}-macos"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: romanian_whist_desktop-${{ steps.version.outputs.version }}-macos
+          path: romanian_whist_desktop-${{ steps.version.outputs.version }}-macos.tar.gz
+
+  release:
+    needs: [build-linux, build-windows, build-macos]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # The regex wants three components, so cmake_minimum_required(VERSION 3.21)
+      # on line 1 does not match and project(... VERSION x.y.z) is the first hit.
+      - name: Determine version and check for an existing release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 -oP 'VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "is_new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifacts
+        if: steps.version.outputs.is_new == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: romanian_whist_desktop-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        if: steps.version.outputs.is_new == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          files: artifacts/*

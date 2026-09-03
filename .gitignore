@@ -31,6 +31,10 @@ Makefile*
 *build-*
 build/
 *.qm
+
+# Where CI stages the deployed tree before archiving it, and the natural place to
+# reproduce that step by hand (see .github/workflows/ci.yml).
+staging/
 *.prl
 *.qmlls.ini
 
