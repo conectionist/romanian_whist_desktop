@@ -16,8 +16,15 @@ on:
 # copies the needed Qt libraries and plugins out of the runner's Qt into the
 # staging tree. Nothing Qt-shaped is vendored in this repository; this is the
 # only place a Qt version is pinned.
+#
+# Not the 6.8 LTS, for two reasons. macos-latest is macOS 26 (Tahoe), whose SDK
+# dropped the long-deprecated AGL framework that Qt linked against; Qt fixed that
+# in 6.8.4, 6.9.2 and 6.5.10, but 6.8's later patch releases are commercial-only,
+# so the newest open-source 6.8 is 6.8.3 and it can never carry the fix - the
+# macOS job cannot link at all on that series. 6.11 also happens to be what this
+# project is developed against, so CI and the desk now build the same Qt.
 env:
-  QT_VERSION: '6.8.*'
+  QT_VERSION: '6.11.*'
 
 jobs:
   build-linux:
@@ -59,12 +66,25 @@ jobs:
           CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
         run: cmake --preset release
 
+      # Also derives the artifact name and the install prefix, so the three jobs
+      # differ in exactly one word - the platform - and the Windows path handling
+      # below lives in one place instead of three.
+      #
+      # The prefix must be ABSOLUTE: qt6_deploy_qt_conf() rejects a relative one
+      # outright ("Given qt.conf path is not an absolute path"), which is a
+      # failure that only appears at the deploy step, long after configure and
+      # build have gone green. GITHUB_WORKSPACE is a backslash path on Windows,
+      # and CMake treats backslashes in an argument as escapes, so normalise the
+      # separators here; on Linux and macOS the substitution is a no-op.
       - name: Get project version
         id: version
         shell: bash
         run: |
           version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-linux"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       - name: Build
         run: cmake --build --preset release
@@ -80,7 +100,7 @@ jobs:
       #   run: ctest --preset release --output-on-failure --no-tests=error
 
       - name: Deploy
-        run: cmake --install build-release --config Release --prefix "staging/romanian_whist_desktop-${{ steps.version.outputs.version }}-linux"
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
 
       # qt_generate_deploy_app_script() is called with NO_UNSUPPORTED_PLATFORM_ERROR,
       # which by design turns an unsupported platform into a silent no-op rather
@@ -102,13 +122,13 @@ jobs:
       # archive is built here instead of uploading the staging directory.
       - name: Archive
         working-directory: staging
-        run: cmake -E tar czf "../romanian_whist_desktop-${{ steps.version.outputs.version }}-linux.tar.gz" "romanian_whist_desktop-${{ steps.version.outputs.version }}-linux"
+        run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: romanian_whist_desktop-${{ steps.version.outputs.version }}-linux
-          path: romanian_whist_desktop-${{ steps.version.outputs.version }}-linux.tar.gz
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.tar.gz
 
   build-windows:
     name: Build (Windows)
@@ -129,12 +149,17 @@ jobs:
           CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
         run: cmake --preset release
 
+      # See the note on this step in build-linux. This is the job the separator
+      # normalisation exists for.
       - name: Get project version
         id: version
         shell: bash
         run: |
           version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-windows"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       # The default generator here is multi-config Visual Studio, which ignores
       # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
@@ -146,7 +171,7 @@ jobs:
 
       - name: Deploy
         shell: bash
-        run: cmake --install build-release --config Release --prefix "staging/romanian_whist_desktop-${{ steps.version.outputs.version }}-windows"
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
 
       - name: Verify the deploy
         shell: bash
@@ -160,13 +185,13 @@ jobs:
       - name: Archive
         shell: bash
         working-directory: staging
-        run: cmake -E tar cf "../romanian_whist_desktop-${{ steps.version.outputs.version }}-windows.zip" --format=zip "romanian_whist_desktop-${{ steps.version.outputs.version }}-windows"
+        run: cmake -E tar cf "../${{ steps.version.outputs.name }}.zip" --format=zip "${{ steps.version.outputs.name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: romanian_whist_desktop-${{ steps.version.outputs.version }}-windows
-          path: romanian_whist_desktop-${{ steps.version.outputs.version }}-windows.zip
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.zip
 
   build-macos:
     name: Build (macOS)
@@ -184,12 +209,16 @@ jobs:
       - name: Configure
         run: cmake --preset release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
 
+      # See the note on this step in build-linux.
       - name: Get project version
         id: version
         shell: bash
         run: |
           version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-macos"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       - name: Build
         run: cmake --build --preset release
@@ -200,7 +229,7 @@ jobs:
       # CMakeLists.txt puts romanian_whist_desktop.app at the prefix root, and
       # macdeployqt fills its Frameworks directory.
       - name: Deploy
-        run: cmake --install build-release --config Release --prefix "staging/romanian_whist_desktop-${{ steps.version.outputs.version }}-macos"
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
 
       # This assertion carries more weight than its Linux and Windows siblings:
       # it is the only automated check on an artifact no maintainer here can open.
@@ -216,13 +245,13 @@ jobs:
       # executable bits, and tar preserves both without any extra flags.
       - name: Archive
         working-directory: staging
-        run: cmake -E tar czf "../romanian_whist_desktop-${{ steps.version.outputs.version }}-macos.tar.gz" "romanian_whist_desktop-${{ steps.version.outputs.version }}-macos"
+        run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: romanian_whist_desktop-${{ steps.version.outputs.version }}-macos
-          path: romanian_whist_desktop-${{ steps.version.outputs.version }}-macos.tar.gz
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.tar.gz
 
   release:
     needs: [build-linux, build-windows, build-macos]
