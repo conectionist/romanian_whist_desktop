@@ -118,15 +118,27 @@ jobs:
       - name: Deploy
         run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
 
-      # qt_generate_deploy_app_script() is called with NO_UNSUPPORTED_PLATFORM_ERROR,
-      # which by design turns an unsupported platform into a silent no-op rather
-      # than a fatal error - the same shape of failure CMakeLists.txt documents for
-      # .qrc files that embed nothing. Without this assertion that path yields a
-      # green build and an archive holding a binary that cannot start.
+      # Two assertions, against two different silent failures.
+      #
+      # The libraries: on macOS qt_generate_deploy_app_script() is called with
+      # NO_UNSUPPORTED_PLATFORM_ERROR, which by design turns an unsupported
+      # platform into a no-op rather than a fatal error - the same shape of
+      # failure CMakeLists.txt documents for .qrc files that embed nothing.
+      #
+      # The platform plugin: CMakeLists.txt deploys a deliberately minimal plugin
+      # set, and Qt offers only a denylist to express that. Nothing but this check
+      # would notice if the platform plugin stopped being deployed - the build
+      # stays green, the archive looks reasonable, and the application aborts on
+      # the user's machine with "no Qt platform plugin could be initialized".
       - name: Verify the deploy
         run: |
           if [ -z "$(find staging -name 'libQt6Widgets*' -print -quit)" ]; then
             echo "::error::No Qt libraries in the staging tree - the deploy script did nothing."
+            find staging
+            exit 1
+          fi
+          if [ -z "$(find staging -name 'libqxcb.so' -print -quit)" ]; then
+            echo "::error::No platform plugin in the staging tree - the app cannot start."
             find staging
             exit 1
           fi
@@ -140,11 +152,22 @@ jobs:
         working-directory: staging
         run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
 
+      # archive: false uploads the tarball as-is. Without it upload-artifact wraps
+      # everything in a zip of its own, so downloading from the Actions page gives
+      # a zip containing a tar.gz - two archives to get at one tree. The tarball
+      # itself still has to exist, because that zip does not preserve the
+      # executable bit ("all files will have 644") and would flatten lib/'s
+      # symlinks into duplicate copies. Release assets were never double-wrapped;
+      # this only fixes the run-page download.
+      #
+      # The file name becomes the artifact name when archive is false - the name
+      # input is ignored - which is why it still matches the release job's pattern.
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.version.outputs.name }}
           path: ${{ steps.version.outputs.name }}.tar.gz
+          archive: false
 
   build-windows:
     name: Build (Windows)
@@ -197,6 +220,11 @@ jobs:
             find staging
             exit 1
           fi
+          if [ -z "$(find staging -name 'qwindows.dll' -print -quit)" ]; then
+            echo "::error::No platform plugin in the staging tree - the app cannot start."
+            find staging
+            exit 1
+          fi
 
       - name: Archive
         shell: bash
@@ -208,6 +236,7 @@ jobs:
         with:
           name: ${{ steps.version.outputs.name }}
           path: ${{ steps.version.outputs.name }}.zip
+          archive: false   # see the note in build-linux
 
   build-macos:
     name: Build (macOS)
@@ -256,6 +285,11 @@ jobs:
             find staging -maxdepth 6
             exit 1
           fi
+          if [ -z "$(find staging -name 'libqcocoa.dylib' -print -quit)" ]; then
+            echo "::error::No platform plugin inside the .app - the app cannot start."
+            find staging -maxdepth 6
+            exit 1
+          fi
 
       # tar, not zip: a deployed .app is full of framework symlinks and needs its
       # executable bits, and tar preserves both without any extra flags.
@@ -268,6 +302,7 @@ jobs:
         with:
           name: ${{ steps.version.outputs.name }}
           path: ${{ steps.version.outputs.name }}.tar.gz
+          archive: false   # see the note in build-linux
 
   release:
     needs: [build-linux, build-windows, build-macos]
