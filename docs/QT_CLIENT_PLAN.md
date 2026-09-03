@@ -6,8 +6,8 @@ prerequisite below is met, so this is buildable today.
 
 > **This is the canonical copy.** It used to live in the engine repository, beside the v4 plan it
 > depends on, and moved here when this repo was created; the engine's copy has been deleted. Engine
-> and terminal files are therefore named by repository-relative path rather than linked — neither
-> tree is reachable from here until the engine lands at `libs/RomanianWhistEngine` (§11).
+> files now live under `libs/RomanianWhistEngine/` (§11) and are reachable from here; terminal files
+> are not, so both are named by repository-relative path rather than linked.
 
 ---
 
@@ -26,15 +26,21 @@ this client, for orientation:
 | 5 — Forehead/Hidden | `canSeeHand()` and `RoundType`, which the table and the bid prompt both need |
 | 4.1.0 (post-plan) | `Standing::place` and `getWinners()` — the engine ranks the standings, so no client decides a tie for itself |
 
-Repository layout follows `romanian_whist_terminal`: the engine as a git submodule at
+Repository layout follows `romanian_whist_terminal`: the engine is a git submodule at
 `libs/RomanianWhistEngine`, consumed with `add_subdirectory` and linked as `RomanianWhist::engine`,
 behind the same guard that tells you to run `git submodule update --init --recursive` when it is
 missing. Qt arrives via `find_package(Qt6 REQUIRED COMPONENTS Widgets)`.
 
-**The scaffold's `CMakeLists.txt` already agrees with all of that**: C++20 stated outright rather
-than inherited through the engine's interface, Qt 6 with no Qt 5 fallback, and the submodule guard
-behind an `EXISTS` check on `libs/RomanianWhistEngine/CMakeLists.txt` that names this section when
-the engine is absent. Nothing there needs editing when the submodule lands.
+**The submodule has landed** — pinned at engine `1270b8a` (`v4.1.0-3-g1270b8a`), with `.gitmodules`
+recording the same HTTPS URL the terminal uses so anonymous clones and CI resolve it without a key.
+Clone this repo with `--recurse-submodules`.
+
+`CMakeLists.txt` agrees with all of the above: C++20 stated outright rather than inherited through
+the engine's interface, Qt 6 with no Qt 5 fallback, and a `FATAL_ERROR` guard on
+`libs/RomanianWhistEngine/CMakeLists.txt` — the terminal's form, since there is no useful build
+without the engine and a soft skip would only defer the failure to link errors that say nothing
+about submodules. The engine's own `WHIST_BUILD_TESTS` follows `PROJECT_IS_TOP_LEVEL`, so as a
+subproject its test suite and the Catch2 fetch behind it are skipped with nothing to pass in.
 
 Its comments carry the reasoning — including the three silent ways to embed no card art at all —
 and this document deliberately does not restate them. The build file is the authority on the build.
@@ -1657,8 +1663,7 @@ The last row is the point.
 
 ## 11. Reference files
 
-**Engine (`../RomanianWhist`; a submodule at `libs/RomanianWhistEngine` once this repo has one),
-at 4.1.0:**
+**Engine (the submodule at `libs/RomanianWhistEngine`), at 4.1.0:**
 
 - `README.md` — the API surface this is written against. "Threading, stopping, and
   failure" is the contract §3 and §6 work through, and it points back here for the worked example;
@@ -1692,8 +1697,9 @@ at 4.1.0:**
 - `src/ConsoleMoveProvider.cpp` — the other `IMoveProvider`, including the blind bid prompt that
   §7's Forehead/Hidden row calls for.
 - `src/SetupWizard.h` — `GameConfig`, the shape the setup dialog builds.
-- `CMakeLists.txt` — the submodule guard + `add_subdirectory` + `RomanianWhist::engine` pattern to
-  copy, still current.
+- `CMakeLists.txt` — the submodule guard + `add_subdirectory` + `RomanianWhist::engine` pattern this
+  repo's own `CMakeLists.txt` now copies, down to the HTTPS submodule URL. Still current; the two
+  build files should stay in step.
 
 ---
 

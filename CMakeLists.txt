@@ -80,19 +80,33 @@ qt_add_translations(romanian_whist_desktop
 # ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
-# Not present yet. This goes live the moment the submodule is added, so nothing
-# here needs editing then:
+# All game logic lives in the engine repository, consumed as a git submodule,
+# exactly as romanian_whist_terminal does it:
 #
-#     git submodule add <engine-url> libs/RomanianWhistEngine
+#     git clone --recurse-submodules git@github.com:conectionist/romanian_whist_desktop.git
+#
+# Cloned without --recurse-submodules? Run:
+#
 #     git submodule update --init --recursive
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libs/RomanianWhistEngine/CMakeLists.txt")
-    add_subdirectory(libs/RomanianWhistEngine)
-    target_link_libraries(romanian_whist_desktop PRIVATE RomanianWhist::engine)
-else()
-    message(STATUS
-        "Romanian Whist engine submodule not found at libs/RomanianWhistEngine - "
-        "building the UI shell only. See docs/QT_CLIENT_PLAN.md section 1.")
+#
+# A missing engine is fatal rather than a warning: there is no useful build
+# without it, and skipping it would only defer the failure to link errors that
+# say nothing about submodules.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libs/RomanianWhistEngine/CMakeLists.txt")
+    message(FATAL_ERROR
+        "The Romanian Whist engine submodule is missing.\n"
+        "Run: git submodule update --init --recursive")
 endif()
+
+# The engine's own WHIST_BUILD_TESTS defaults to PROJECT_IS_TOP_LEVEL, which is
+# false here, so its test suite and the Catch2 fetch behind it are skipped with
+# nothing to pass in.
+add_subdirectory(libs/RomanianWhistEngine)
+
+# Engine include directories arrive transitively through the PUBLIC
+# target_include_directories on RomanianWhist::engine, so there is no include
+# path to add here.
+target_link_libraries(romanian_whist_desktop PRIVATE RomanianWhist::engine)
 
 # ---------------------------------------------------------------------------
 # Install
