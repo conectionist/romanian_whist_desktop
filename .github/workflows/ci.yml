@@ -105,15 +105,11 @@ jobs:
       - name: Build
         run: cmake --build --preset release
 
-      # No test step yet: this client has no test target, so there is nothing for
-      # ctest to run. When tests/ lands, uncomment - the presets are already here.
-      #
       # --no-tests=error, because a build that lands with tests disabled would
       # otherwise print "No tests were found!!!" and exit 0 - green having run
       # nothing. The engine's CI learned this the hard way in Phase 0.
-      #
-      # - name: Test
-      #   run: ctest --preset release --output-on-failure --no-tests=error
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
 
       - name: Deploy
         run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
@@ -206,7 +202,8 @@ jobs:
       - name: Build
         run: cmake --build --preset release
 
-      # No test step yet - see the comment in build-linux.
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
 
       - name: Deploy
         shell: bash
@@ -268,7 +265,8 @@ jobs:
       - name: Build
         run: cmake --build --preset release
 
-      # No test step yet - see the comment in build-linux.
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
 
       # qt_add_executable(... MACOSX_BUNDLE) plus BUNDLE DESTINATION . in
       # CMakeLists.txt puts romanian_whist_desktop.app at the prefix root, and
