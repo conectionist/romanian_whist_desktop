@@ -13,6 +13,8 @@ add_executable(desktop_tests
     SnapshotTests.cpp
     QtMoveProviderTests.cpp
     GameBridgeTests.cpp
+    GameControllerTests.cpp
+    TestApp.cpp
 )
 
 target_link_libraries(desktop_tests PRIVATE
