@@ -183,9 +183,11 @@ private:
 // Declared anyway: wherever auto-registration does not reach, the failure is a
 // silent "cannot queue argument of type X" on stderr and a signal that never
 // arrives. Two lines against a dropped event with no crash to point at.
+//
+// BetPrompt and PlayPrompt are NOT here: they are declared in Prompts.h, beside
+// the structs themselves, so that a click handler including only that header
+// sees the same QMetaTypeId specialization this one does.
 Q_DECLARE_METATYPE(std::shared_ptr<const GameSnapshot>)
-Q_DECLARE_METATYPE(BetPrompt)
-Q_DECLARE_METATYPE(PlayPrompt)
 Q_DECLARE_METATYPE(romanian_whist::Card)
 
 // Easy to miss, because it is the only payload that is not one of this client's

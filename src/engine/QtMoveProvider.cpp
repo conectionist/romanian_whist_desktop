@@ -59,6 +59,25 @@ unsigned int QtMoveProvider::makeBet(const BetContext& context)
 
         const unsigned int prompt = ++generation;
 
+        // UNLOCKED ACROSS THE EMIT, and locked again before the wait.
+        //
+        // In this client the signal crosses threads and is queued, so the
+        // handler runs later on the GUI thread and the lock would not matter.
+        // A DIRECT connection runs it right here instead, on this thread - and
+        // a handler that answers inline calls submit(), which takes this same
+        // NON-RECURSIVE mutex. Emitting while holding it is then a self-deadlock
+        // that parks the game thread for good: abandon() cannot get through
+        // either, so closing the window hangs on the join with nothing to show
+        // for it. Not a hypothetical connection - QObject::connect's 3-argument
+        // functor overload is direct by definition, and the tests use it.
+        //
+        // Nothing is lost by the gap. `generation` is already bumped, so a
+        // submit() landing inside it is accepted rather than dropped as stale,
+        // and it sets answeredPrompt before notifying; wait() evaluates its
+        // predicate on entry, so an answer - or an abandon - that arrives while
+        // the lock is down is seen rather than missed.
+        lock.unlock();
+
         // COPIED, not moved: the loop may raise this prompt again.
         bridge->raiseBetRequested(BetPrompt{ prompt,
                                              context.hand.size(),
@@ -66,6 +85,8 @@ unsigned int QtMoveProvider::makeBet(const BetContext& context)
                                              context.roundType,
                                              context.isFirstPlayer,
                                              shown });
+
+        lock.lock();
 
         cv.wait(lock, [this, prompt]{ return answeredPrompt == prompt || abandoned; });
 
@@ -134,11 +155,16 @@ std::optional<std::size_t> QtMoveProvider::playCard(const PlayContext& context)
 
         const unsigned int prompt = ++generation;
 
+        // Unlocked across the emit, for the reason makeBet() gives at length.
+        lock.unlock();
+
         bridge->raiseCardRequested(PlayPrompt{ prompt,
                                                blind ? std::vector<HandEntry>{}
                                                      : layout.entries,
                                                layout.positions,
                                                blind });
+
+        lock.lock();
 
         cv.wait(lock, [this, prompt]{ return answeredPrompt == prompt || abandoned; });
 

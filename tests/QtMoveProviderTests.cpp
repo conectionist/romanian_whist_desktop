@@ -501,3 +501,59 @@ TEST_CASE("A blind round's prompt carries no cards but still carries the way bac
 
     REQUIRE(*parked.result == 0);
 }
+
+// A HANG IS THE FAILURE MODE OF THE NEXT TWO TESTS, not a failed assertion.
+// Both run entirely on one thread on purpose: the handler answers from inside
+// the emission, so if makeBet()/playCard() ever go back to holding their mutex
+// across the emit, submit() re-locks it on the thread that already owns it and
+// the test deadlocks where it stands. There is no way to time that out from
+// here - abandon() would need the same mutex - so it is left to hang loudly.
+TEST_CASE("A play prompt may be answered inline, on the emitting thread", "[provider]")
+{
+    GameBridge bridge(Seat{0}, Pacing{});
+    QtMoveProvider provider(&bridge, Seat{0});
+
+    std::vector<Card> played;
+    PlayContext context{ Hand, played, std::nullopt, std::nullopt, 0, 0 };
+
+    // Three arguments, so Qt makes this a direct connection by definition: the
+    // lambda runs on the thread that emits, which here is this one.
+    unsigned int prompts = 0;
+    QObject::connect(&bridge, &GameBridge::cardRequested,
+                     [&](PlayPrompt prompt)
+                     {
+                         ++prompts;
+
+                         // Out of range the first time, so the re-prompt runs
+                         // inline too - the loop raises its second prompt from
+                         // inside the first one's handler.
+                         provider.submit(prompt.promptId, prompts == 1 ? 99 : 2);
+                     });
+
+    const std::optional<std::size_t> chosen = provider.playCard(context);
+
+    REQUIRE(chosen.has_value());
+    REQUIRE(*chosen == 2);
+    REQUIRE(prompts == 2);
+}
+
+TEST_CASE("A bet prompt may be answered inline, on the emitting thread", "[provider]")
+{
+    GameBridge bridge(Seat{0}, Pacing{});
+    QtMoveProvider provider(&bridge, Seat{0});
+
+    BetContext context{ Hand, std::nullopt, false, 2u, RoundType::Normal };
+
+    unsigned int prompts = 0;
+    QObject::connect(&bridge, &GameBridge::betRequested,
+                     [&](BetPrompt prompt)
+                     {
+                         ++prompts;
+
+                         // The forbidden bet first, for the reason above.
+                         provider.submit(prompt.promptId, prompts == 1 ? 2 : 1);
+                     });
+
+    REQUIRE(provider.makeBet(context) == 1);
+    REQUIRE(prompts == 2);
+}

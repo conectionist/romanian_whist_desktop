@@ -21,6 +21,11 @@ class GameBridge;
 // that touches only a mutex, so it needs no signal, and skipping Qt's event
 // queue means the game thread wakes immediately rather than at the next event
 // loop turn.
+//
+// A prompt handler may therefore answer inline, from inside the betRequested or
+// cardRequested emission itself, direct connection and all: makeBet() and
+// playCard() drop their lock across the emit precisely so that submit() can take
+// it on the emitting thread.
 class QtMoveProvider : public romanian_whist::IMoveProvider
 {
 public:

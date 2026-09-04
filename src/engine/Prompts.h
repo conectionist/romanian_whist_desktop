@@ -16,6 +16,8 @@
 
 #include <romanian_whist/RoundType.h>
 
+#include <QMetaType>
+
 #include <cstddef>
 #include <optional>
 #include <vector>
@@ -67,5 +69,20 @@ struct PlayPrompt
     // the play is forced - and the player is not entitled to see it.
     bool blind = false;
 };
+
+// HERE, not in GameBridge.h where the signals carrying these are declared. Qt 6
+// builds a QMetaType from any complete type, so a queued connection usually
+// resolves them with the macro absent and omitting it is not a compile error;
+// wherever auto-registration does not reach, the failure is a silent "cannot
+// queue argument of type X" on stderr and a signal that never arrives.
+//
+// Declaring them beside the structs is what makes that guarantee hold for every
+// translation unit. Left in GameBridge.h, a click handler that included only
+// this header - which is the whole reason this header exists - would instantiate
+// the primary QMetaTypeId template while the rest of the program used the
+// specialization: an ODR violation whose visible symptom is exactly the dropped
+// signal the macro is here to prevent.
+Q_DECLARE_METATYPE(BetPrompt)
+Q_DECLARE_METATYPE(PlayPrompt)
 
 #endif
