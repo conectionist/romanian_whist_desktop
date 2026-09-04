@@ -28,22 +28,46 @@ qt_standard_project_setup(REQUIRES 6.5)
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
-qt_add_executable(romanian_whist_desktop
-    WIN32 MACOSX_BUNDLE
-    src/main.cpp
+# Everything but main(), so the tests have something to link against - the
+# executable is then just an entry point. Copied from romanian_whist_terminal,
+# whose CMakeLists.txt splits terminal_core out for exactly this reason.
+#
+# qt_add_library rather than add_library so the Qt tooling treats it as a Qt
+# target: AUTOMOC and AUTOUIC are on globally via qt_standard_project_setup()
+# above, and MainWindow needs both - Q_OBJECT for the first, the .ui for the
+# second.
+qt_add_library(desktop_core STATIC
     src/MainWindow.h
     src/MainWindow.cpp
     src/MainWindow.ui        # AUTOUIC turns this into ui_MainWindow.h
+
+    src/core/CardOrder.h
+    src/core/CardOrder.cpp
+    src/core/GameSnapshot.h
+    src/core/HandLayout.h
+    src/core/HandLayout.cpp
+    src/core/Snapshot.h
+    src/core/Snapshot.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
 # target_compile_features(... PUBLIC cxx_std_20), so linking it raises the bar
 # through the interface anyway. Said outright here so the tree has one answer.
-target_compile_features(romanian_whist_desktop PRIVATE cxx_std_20)
+#
+# PUBLIC on both this and the include directory, so main.cpp and the tests see
+# the sources without repeating either.
+target_compile_features(desktop_core PUBLIC cxx_std_20)
 
-target_include_directories(romanian_whist_desktop PRIVATE src)
+target_include_directories(desktop_core PUBLIC src)
 
-target_link_libraries(romanian_whist_desktop PRIVATE Qt6::Widgets Qt6::Svg)
+target_link_libraries(desktop_core PUBLIC Qt6::Widgets Qt6::Svg)
+
+qt_add_executable(romanian_whist_desktop
+    WIN32 MACOSX_BUNDLE
+    src/main.cpp
+)
+
+target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -114,7 +138,10 @@ add_subdirectory(libs/RomanianWhistEngine)
 # Engine include directories arrive transitively through the PUBLIC
 # target_include_directories on RomanianWhist::engine, so there is no include
 # path to add here.
-target_link_libraries(romanian_whist_desktop PRIVATE RomanianWhist::engine)
+#
+# PUBLIC here in turn, so those headers reach main.cpp and the test target
+# through desktop_core rather than being listed again on each.
+target_link_libraries(desktop_core PUBLIC RomanianWhist::engine)
 
 # ---------------------------------------------------------------------------
 # Install
@@ -239,3 +266,16 @@ qt_deploy_runtime_dependencies(
 endif()
 
 install(SCRIPT ${deploy_script})
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+# Off when this project is consumed by another, exactly as the engine's
+# WHIST_BUILD_TESTS is - so nothing downstream builds or fetches our test
+# dependencies. Same shape romanian_whist_terminal uses.
+option(WHIST_DESKTOP_BUILD_TESTS "Build the desktop client's test suite" ${PROJECT_IS_TOP_LEVEL})
+
+if(WHIST_DESKTOP_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
