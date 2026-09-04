@@ -48,6 +48,13 @@ qt_add_library(desktop_core STATIC
     src/core/HandLayout.cpp
     src/core/Snapshot.h
     src/core/Snapshot.cpp
+
+    src/engine/GameAbandoned.h
+    src/engine/Prompts.h
+    src/engine/QtMoveProvider.h
+    src/engine/QtMoveProvider.cpp
+    src/engine/GameBridge.h
+    src/engine/GameBridge.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
