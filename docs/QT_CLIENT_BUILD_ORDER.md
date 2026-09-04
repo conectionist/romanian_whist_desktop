@@ -150,6 +150,12 @@ in a Forehead or Hidden round. Both are §4.0, and both are silent when wrong.
 - [ ] Hardcoded spectator setup: `humanSeat = std::nullopt`, `spectatorBeat`, a fixed `shuffleSeed`.
 - [ ] Wire it in `prepare()` → `connect()` → `start()` order. Connecting after the thread starts
       loses `onGameStarted`'s snapshot (§4.3).
+- [ ] **First chance to check the two open pacing placements** — carried forward from A3, where
+      nothing could run. Even a text log shows them in the gaps between appended lines: the 1.2s
+      dwell should land on the round-result frame and not the blank next-round one, and a bot's card
+      should be preceded by a beat rather than appearing instantly after "waiting on Ana". See the
+      note beside the §4.1 sketch for what the terminal does and why betting is already right.
+      Defer the judgement to B2 if the log is too coarse to tell — just don't lose the question.
 
 ### A6 — the acceptance test
 
@@ -195,9 +201,17 @@ something else.
 - [ ] The hand fan drawn from `GameSnapshot::hand`, **disabled**. It is not clickable until phase C
       and it cannot be (§4.0).
 
+- [ ] **Settle the two open pacing placements here.** This is the first time a table can be watched,
+      and pacing is only judgeable by watching it — which is why they were carried from A3 rather
+      than guessed at. Both are in `GameBridge`, both are a line each, and the §4.1 sketch note has
+      the terminal's answer for each: the round dwell wants to be in `onRoundScored()` rather than
+      `onRoundComplete()`, and `onCardRequested()` wants a `pace(botBeat())` for bots. Watch a full
+      round before changing either, then watch one after.
+
 **Done when:** a spectated game is watchable and legible end to end; the window resizes without the
-layout breaking; and the winning-card highlight always agrees with the trick the engine awards —
-because it comes from `isWinning` and is never recomputed.
+layout breaking; the round result gets a beat you can actually read and no card lands on top of
+another; and the winning-card highlight always agrees with the trick the engine awards — because it
+comes from `isWinning` and is never recomputed.
 
 ---
 

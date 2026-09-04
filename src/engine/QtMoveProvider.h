@@ -5,7 +5,6 @@
 
 #include <romanian_whist/CardValidator.h>
 #include <romanian_whist/IMoveProvider.h>
-#include <romanian_whist/Seat.h>
 
 #include <condition_variable>
 #include <cstddef>
@@ -29,7 +28,7 @@ class GameBridge;
 class QtMoveProvider : public romanian_whist::IMoveProvider
 {
 public:
-    QtMoveProvider(GameBridge* _bridge, romanian_whist::Seat _seat);
+    explicit QtMoveProvider(GameBridge* _bridge);
 
     // ---- called on the GAME thread. Block until the GUI answers. ----
     unsigned int makeBet(const romanian_whist::BetContext& context) override;
@@ -53,7 +52,6 @@ public:
 
 private:
     GameBridge* bridge;                       // non-owning; outlives this
-    romanian_whist::Seat seat;
 
     // getLegalCards() is a non-static const member, so the validator has to be
     // an object rather than a call on the class.

@@ -64,6 +64,36 @@ unsigned int waitForPrompt(const std::atomic<unsigned int>& promptId, unsigned i
     return promptId.load();
 }
 
+// What ParkedPlay's destructor does, for the tests that drive a worker directly
+// rather than through the fixture. Same hazard, one step quieter: a bare
+// std::thread destroyed while joinable calls std::terminate rather than hanging,
+// which still takes the run down mid-report.
+//
+// The worker lambdas it guards have to swallow GameAbandoned, or the abandon()
+// below throws off a std::thread and terminates anyway.
+class JoinGuard
+{
+public:
+    JoinGuard(QtMoveProvider& _provider, std::thread _worker)
+        : provider(_provider), worker(std::move(_worker))
+    {}
+
+    ~JoinGuard()
+    {
+        if(worker.joinable())
+        {
+            provider.abandon();
+            worker.join();
+        }
+    }
+
+    void join() { worker.join(); }
+
+private:
+    QtMoveProvider& provider;
+    std::thread worker;
+};
+
 const Card SpadesAce(Rank::Ace, Suit::Spades);
 const Card HeartsKing(Rank::King, Suit::Hearts);
 const Card DiamondsSeven(Rank::Seven, Suit::Diamonds);
@@ -114,10 +144,21 @@ public:
         });
     }
 
+    // ABANDONS BEFORE IT JOINS. Without that, a failed REQUIRE unwinds into a
+    // join on a worker that is still parked on the provider's condition
+    // variable, and the suite hangs forever having printed nothing - which is a
+    // far worse way to find out about a broken assertion than being told.
+    //
+    // abandon() only latches a flag, so it is safe whether the worker is parked,
+    // on its way to parking, or already finished; the lambda below catches the
+    // GameAbandoned that comes back.
     ~ParkedPlay()
     {
         if(worker.joinable())
+        {
+            provider.abandon();
             worker.join();
+        }
     }
 
     void join() { worker.join(); }
@@ -146,7 +187,7 @@ private:
 TEST_CASE("A submission for the live prompt is accepted", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     ParkedPlay parked(bridge, provider, Hand);
     const unsigned int prompt = parked.awaitPrompt();
@@ -165,7 +206,7 @@ TEST_CASE("A submission for the live prompt is accepted", "[provider]")
 TEST_CASE("A submission for a stale generation is dropped", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     ParkedPlay parked(bridge, provider, Hand);
     const unsigned int prompt = parked.awaitPrompt();
@@ -187,7 +228,7 @@ TEST_CASE("A submission for a stale generation is dropped", "[provider]")
 TEST_CASE("A second submission for the same prompt is dropped", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     ParkedPlay parked(bridge, provider, Hand);
     const unsigned int prompt = parked.awaitPrompt();
@@ -206,7 +247,7 @@ TEST_CASE("A submission with nothing parked does not answer the next prompt", "[
     // immediately with a choice made for a different hand - which reaches a
     // player as "it played a card I did not click".
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     // Nothing is parked: no prompt has been raised, so the generation is 0 and
     // there is no live prompt for this to answer.
@@ -234,7 +275,7 @@ TEST_CASE("An illegal choice re-prompts rather than reaching the engine", "[prov
     // it does not. Handing the engine an illegal play throws out of run() and
     // ends the game.
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     std::vector<Card> played{ Card(Rank::Two, Suit::Spades) };
     PlayContext context{ Hand, played, std::nullopt, Suit::Spades, 0, 0 };
@@ -246,11 +287,19 @@ TEST_CASE("An illegal choice re-prompts rather than reaching the engine", "[prov
     std::atomic<bool> done{false};
     std::optional<std::size_t> result;
 
-    std::thread worker([&]
+    JoinGuard worker(provider, std::thread([&]
     {
-        result = provider.playCard(context);
+        try
+        {
+            result = provider.playCard(context);
+        }
+        catch(const GameAbandoned&)
+        {
+            // Only reached when the guard unwinds a failed assertion.
+        }
+
         done = true;
-    });
+    }));
 
     const unsigned int first = waitForPrompt(lastPrompt, 0);
 
@@ -274,7 +323,7 @@ TEST_CASE("A choice past the end of the hand re-prompts", "[provider]")
     // handIndex is the only sanctioned way to produce this number, and a widget
     // indexing it with a stale display slot produces one out of range.
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     ParkedPlay parked(bridge, provider, Hand);
     const unsigned int first = parked.awaitPrompt();
@@ -295,7 +344,7 @@ TEST_CASE("A choice past the end of the hand re-prompts", "[provider]")
 TEST_CASE("abandon() throws out of a parked provider", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     ParkedPlay parked(bridge, provider, Hand);
     parked.awaitPrompt();
@@ -316,7 +365,7 @@ TEST_CASE("abandon() before the provider parks still throws, rather than hanging
     // not, this test would hang rather than fail, which is why it is worth
     // having.
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     // Counted on the way past, and the count is the point: a provider that
     // raises before it checks the flag tells a GUI that is tearing down to ask
@@ -337,7 +386,7 @@ TEST_CASE("abandon() before the provider parks still throws, rather than hanging
 TEST_CASE("A bet outside the legal range re-prompts", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     // Bidding last, with 2 forbidden: the two rules GameEngine::isBetLegal()
     // applies, restated here because the provider holds no engine reference.
@@ -350,11 +399,19 @@ TEST_CASE("A bet outside the legal range re-prompts", "[provider]")
     std::atomic<bool> done{false};
     unsigned int result = 0;
 
-    std::thread worker([&]
+    JoinGuard worker(provider, std::thread([&]
     {
-        result = provider.makeBet(context);
+        try
+        {
+            result = provider.makeBet(context);
+        }
+        catch(const GameAbandoned&)
+        {
+            // Only reached when the guard unwinds a failed assertion.
+        }
+
         done = true;
-    });
+    }));
 
     const unsigned int first = waitForPrompt(lastPrompt, 0);
     provider.submit(first, 9);      // more tricks than there are cards
@@ -385,7 +442,7 @@ TEST_CASE("A bet that wraps on the way to unsigned int re-prompts", "[provider]"
     if constexpr(sizeof(std::size_t) > sizeof(unsigned int))
     {
         GameBridge bridge(Seat{0}, Pacing{});
-        QtMoveProvider provider(&bridge, Seat{0});
+        QtMoveProvider provider(&bridge);
 
         BetContext context{ Hand, std::nullopt, false, std::nullopt, RoundType::Normal };
 
@@ -396,11 +453,19 @@ TEST_CASE("A bet that wraps on the way to unsigned int re-prompts", "[provider]"
         std::atomic<bool> done{false};
         unsigned int result = 0;
 
-        std::thread worker([&]
+        JoinGuard worker(provider, std::thread([&]
         {
-            result = provider.makeBet(context);
+            try
+            {
+                result = provider.makeBet(context);
+            }
+            catch(const GameAbandoned&)
+            {
+                // Only reached when the guard unwinds a failed assertion.
+            }
+
             done = true;
-        });
+        }));
 
         const unsigned int first = waitForPrompt(lastPrompt, 0);
 
@@ -424,7 +489,7 @@ TEST_CASE("A bet that wraps on the way to unsigned int re-prompts", "[provider]"
 TEST_CASE("A normal round's prompt carries the cards and the way back", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     ParkedPlay parked(bridge, provider, Hand);
     parked.awaitPrompt();
@@ -473,7 +538,7 @@ TEST_CASE("A blind round's prompt carries no cards but still carries the way bac
     REQUIRE(engine.getCurrentRoundType() == RoundType::Forehead);
 
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     // What the engine does on its way into a round, and the only route by which
     // the round type reaches the provider.
@@ -511,7 +576,7 @@ TEST_CASE("A blind round's prompt carries no cards but still carries the way bac
 TEST_CASE("A play prompt may be answered inline, on the emitting thread", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     std::vector<Card> played;
     PlayContext context{ Hand, played, std::nullopt, std::nullopt, 0, 0 };
@@ -540,7 +605,7 @@ TEST_CASE("A play prompt may be answered inline, on the emitting thread", "[prov
 TEST_CASE("A bet prompt may be answered inline, on the emitting thread", "[provider]")
 {
     GameBridge bridge(Seat{0}, Pacing{});
-    QtMoveProvider provider(&bridge, Seat{0});
+    QtMoveProvider provider(&bridge);
 
     BetContext context{ Hand, std::nullopt, false, 2u, RoundType::Normal };
 

@@ -13,9 +13,8 @@ using romanian_whist::BetContext;
 using romanian_whist::Card;
 using romanian_whist::PlayContext;
 using romanian_whist::RoundType;
-using romanian_whist::Seat;
 
-QtMoveProvider::QtMoveProvider(GameBridge* _bridge, Seat _seat) : bridge(_bridge), seat(_seat)
+QtMoveProvider::QtMoveProvider(GameBridge* _bridge) : bridge(_bridge)
 {}
 
 unsigned int QtMoveProvider::makeBet(const BetContext& context)

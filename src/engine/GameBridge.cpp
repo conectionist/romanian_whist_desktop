@@ -29,7 +29,17 @@ void GameBridge::publish(const GameEngine& engine)
     // The other field refreshFromEngine() leaves to the caller. Unlike humanSeat
     // above, nothing in the refresh reads it, so it could equally go after -
     // it sits here because the two are set for the same reason.
-    snapshot.activeSeat = activeSeat;
+    //
+    // ASKED OF THE ENGINE rather than tracked here. getActiveSeat() is engaged
+    // from just before a provider is asked until just after its answer is
+    // recorded, which is exactly the highlight this drives: it stays on the seat
+    // that just bid or just played, and goes empty between turns without any
+    // callback having to remember to say so.
+    //
+    // Safe in onGameStarted(), where the engine is still idle - unlike most of
+    // its accessors this one is a plain return with no requireStarted().
+    const std::optional<Seat> active = engine.getActiveSeat();
+    snapshot.activeSeat = active ? static_cast<int>(active->index) : -1;
 
     refreshFromEngine(snapshot, engine);
 
@@ -50,27 +60,24 @@ void GameBridge::onRoundStarted(const GameEngine& engine)
     // hand may be shown at all.
     roundType = engine.getCurrentRoundType();
 
-    // Dealt, but nobody asked for anything yet.
-    activeSeat = -1;
-
     publish(engine);
 }
 
 void GameBridge::onBetRequested(const GameEngine& engine, Seat seat)
 {
-    // Whose turn it is to bid. Drives the "waiting on Ana" indicator; the human
-    // seat's own prompt comes from QtMoveProvider, not from here.
-    activeSeat = static_cast<int>(seat.index);
-
+    // The snapshot names this seat as active, straight from the engine. Drives
+    // the "waiting on Ana" indicator; the human seat's own prompt comes from
+    // QtMoveProvider, not from here.
     publish(engine);
     emit turnChanged(seat.index);
 }
 
 void GameBridge::onBetPlaced(const GameEngine& engine, Seat seat, unsigned int bet)
 {
-    // activeSeat DELIBERATELY stays on this seat: the snapshot showing the bid
-    // that was just made should still highlight who made it. Clearing it here
-    // reads like the missing half of onBetRequested and is not.
+    // The snapshot still names this seat as active, which is what the engine
+    // means by keeping getActiveSeat() engaged until just after the answer is
+    // recorded: the frame showing the bid that was just made should still
+    // highlight who made it.
     publish(engine);
     emit betPlaced(seat.index, bet);
 
@@ -82,8 +89,6 @@ void GameBridge::onBettingComplete(const GameEngine& engine)
 {
     // Hold on the completed bid table before the first card goes down. Without
     // this the last bid is only ever seen when a bot made it.
-    activeSeat = -1;
-
     publish(engine);
     pace(botBeat());
 
@@ -95,24 +100,20 @@ void GameBridge::onBettingComplete(const GameEngine& engine)
 void GameBridge::onTrickStarted(const GameEngine& engine, unsigned int trickNumber, Seat leader)
 {
     // The leader has not been ASKED yet - onCardRequested is what says that -
-    // so this frame has nobody on turn.
-    activeSeat = -1;
-
+    // so this frame has nobody on turn, and the engine says so too.
     publish(engine);
     emit trickStarted(trickNumber, leader.index);
 }
 
 void GameBridge::onCardRequested(const GameEngine& engine, Seat seat)
 {
-    activeSeat = static_cast<int>(seat.index);
-
     publish(engine);
     emit turnChanged(seat.index);
 }
 
 void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& card)
 {
-    // Stays on this seat, for the reason onBetPlaced gives.
+    // Still names this seat, for the reason onBetPlaced gives.
     publish(engine);
     emit cardPlayed(seat.index, card);
 
@@ -131,8 +132,6 @@ void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int tr
     //
     // The trick is over and the next seat has not been asked, so nobody is on
     // turn for the dwell below - which is the longest a frame stays up.
-    activeSeat = -1;
-
     publish(engine);
     emit trickWon(seat.index, trickNumber);
     pace(pacing.trickDwell);
@@ -143,12 +142,6 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // This callback and not onRoundComplete: it is the last one at which the
     // engine still names the round just scored, so a round sheet drawn from it
     // shows the right round's numbers.
-    //
-    // Cleared here rather than in onRoundComplete or onGameOver: this is the
-    // first callback after the round's last trick, so those two inherit -1 and
-    // need no line of their own.
-    activeSeat = -1;
-
     publish(engine);
     emit roundScored();
 }

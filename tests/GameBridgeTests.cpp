@@ -260,66 +260,95 @@ TEST_CASE("The round type is cached for the provider, which cannot read it itsel
 
 TEST_CASE("Every snapshot names the seat on turn, or nobody", "[bridge]")
 {
-    // The other half of what refreshFromEngine() leaves to the caller. The
-    // engine does not model whose turn it is, so a bridge that only fills
-    // humanSeat ships snapshots that all say "nobody is active" - and the turn
-    // highlight has nothing to draw from.
+    // The other half of what refreshFromEngine() leaves to the caller, and the
+    // reason the bridge keeps no activeSeat of its own: GameEngine models whose
+    // turn it is, with exactly the meaning the snapshot's -1 has, so publish()
+    // asks rather than tracks.
     //
-    // turnChanged() is not a substitute and this is why: it announces a turn
-    // STARTING, and half the assertions below are about the frames where nobody
-    // is on turn, which that signal cannot express.
+    // Which makes this the test of that agreement, across a whole real schedule
+    // rather than a hand-written call order. Driving the callbacks by hand
+    // cannot check it at all - the engine's own activeSeat is empty the whole
+    // time - and the agreement is the entire point.
     //
-    // Driven callback by callback rather than by running a game: the point is
-    // which callback sets what, and a real schedule would only reach them in
-    // one fixed order.
+    // turnChanged() is not a substitute for the field, and this is why: it
+    // announces a turn STARTING, and half the frames below are ones where
+    // nobody is on turn, which that signal has no way to express.
     GameBridge bridge(std::nullopt, instant());
 
-    int active = -2;                 // neither a seat nor "nobody", so an
-                                     // unpublished frame cannot pass by accident
+    std::shared_ptr<const GameSnapshot> latest;
     QObject::connect(&bridge, &GameBridge::stateChanged,
-                     [&active](std::shared_ptr<const GameSnapshot> snapshot)
-                     { active = snapshot->activeSeat; });
+                     [&latest](std::shared_ptr<const GameSnapshot> snapshot)
+                     { latest = std::move(snapshot); });
+
+    // Registered AFTER the bridge, which is what makes "the latest snapshot" this
+    // callback's own: addObserver() pushes back and every notify* walks the list
+    // front to back, so the bridge has already published by the time this runs.
+    //
+    // Records rather than asserts. A REQUIRE here throws through the engine's
+    // dispatch guard mid-walk, which is not a thing to do for a failure that
+    // reads just as well after run() returns.
+    class ActiveSeatChecker : public IGameObserver
+    {
+    public:
+        explicit ActiveSeatChecker(const std::shared_ptr<const GameSnapshot>& _latest)
+            : latest(_latest)
+        {}
+
+        void onGameStarted(const GameEngine& e) override { check(e); }
+        void onRoundStarted(const GameEngine& e) override { check(e); }
+        void onBetRequested(const GameEngine& e, Seat) override { check(e); }
+        void onBetPlaced(const GameEngine& e, Seat, unsigned int) override { check(e); }
+        void onBettingComplete(const GameEngine& e) override { check(e); }
+        void onTrickStarted(const GameEngine& e, unsigned int, Seat) override { check(e); }
+        void onCardRequested(const GameEngine& e, Seat) override { check(e); }
+        void onCardPlayed(const GameEngine& e, Seat, const Card&) override { check(e); }
+        void onTrickWon(const GameEngine& e, Seat, unsigned int) override { check(e); }
+        void onRoundScored(const GameEngine& e) override { check(e); }
+        void onRoundComplete(const GameEngine& e) override { check(e); }
+        void onGameOver(const GameEngine& e) override { check(e); }
+
+        // Deliberately not onGameStopped: it is the one callback that publishes
+        // nothing, so the latest snapshot there belongs to some earlier frame. A
+        // game run to the end never reaches it anyway.
+
+        unsigned int frames = 0;
+        unsigned int disagreed = 0;
+        bool sawSeat = false;
+        bool sawNobody = false;
+
+    private:
+        void check(const GameEngine& engine)
+        {
+            const std::optional<Seat> active = engine.getActiveSeat();
+            const int expected = active ? static_cast<int>(active->index) : -1;
+
+            ++frames;
+
+            if(!latest || latest->activeSeat != expected)
+                ++disagreed;
+
+            if(expected == -1)
+                sawNobody = true;
+            else
+                sawSeat = true;
+        }
+
+        const std::shared_ptr<const GameSnapshot>& latest;
+    };
+
+    ActiveSeatChecker checker(latest);
 
     GameEngine engine;
+    engine.addObserver(&bridge);
+    engine.addObserver(&checker);
     engine.start(buildSetup());
+    engine.run();
 
-    // Dealt, and nobody asked for anything yet.
-    bridge.onRoundStarted(engine);
-    REQUIRE(active == -1);
+    REQUIRE(checker.frames > 0);
+    REQUIRE(checker.disagreed == 0);
 
-    bridge.onBetRequested(engine, Seat{1});
-    REQUIRE(active == 1);
-
-    // Deliberately still 1: the frame showing a bid that was just made should
-    // still highlight who made it.
-    bridge.onBetPlaced(engine, Seat{1}, 0);
-    REQUIRE(active == 1);
-
-    bridge.onBettingComplete(engine);
-    REQUIRE(active == -1);
-
-    // The leader has not been ASKED yet, so this frame has nobody on turn.
-    bridge.onTrickStarted(engine, 1, Seat{0});
-    REQUIRE(active == -1);
-
-    bridge.onCardRequested(engine, Seat{0});
-    REQUIRE(active == 0);
-
-    // Stays on the player, for the reason onBetPlaced does.
-    bridge.onCardPlayed(engine, Seat{0}, Card(Rank::Ace, Suit::Spades));
-    REQUIRE(active == 0);
-
-    bridge.onTrickWon(engine, Seat{0}, 1);
-    REQUIRE(active == -1);
-
-    bridge.onRoundScored(engine);
-    REQUIRE(active == -1);
-
-    // onRoundComplete and onGameOver inherit the clear above rather than
-    // repeating it, so they are worth an assertion each.
-    bridge.onRoundComplete(engine);
-    REQUIRE(active == -1);
-
-    bridge.onGameOver(engine);
-    REQUIRE(active == -1);
+    // Both halves, so the test cannot pass by saying "nobody" to everything -
+    // which is exactly what a publish() that stopped filling the field would do.
+    REQUIRE(checker.sawSeat);
+    REQUIRE(checker.sawNobody);
 }
