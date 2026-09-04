@@ -9,7 +9,20 @@ prerequisite below is met, so this is buildable today.
 > files now live under `libs/RomanianWhistEngine/` (§11) and are reachable from here; terminal files
 > are not, so both are named by repository-relative path rather than linked.
 
+**The document is in two parts.** **Part I** (§§1–11) is the seam: how the engine is driven, what
+crosses the thread boundary, and what happens when the window closes at the wrong moment. **Part II**
+(§§12–21) is the design — what a player sees, screen by screen — merged in from a parallel proposal,
+with §7 as the hinge between them. Read Part I before building any of Part II: several screens turn
+out to have architectural consequences, and all of them are consequences of §§4–6.
+
+**To build it, start with `QT_CLIENT_BUILD_ORDER.md`**, which decomposes §8's phases into
+commit-sized steps, says which sections to read before each one, and carries a symptom-to-cause
+table for when something goes wrong. It holds the order; this document holds the reasoning, and
+where the two disagree this one is right.
+
 ---
+
+# Part I — The seam
 
 ## 1. Prerequisites
 
@@ -926,11 +939,11 @@ private:
     // publishes the pointer (step 4 below).
     //
     // CLEARED BY prepare(), and that is not housekeeping. A controller is
-    // reused for a second game (phase C), and the stop that ended the first one
+    // reused for a second game (phase D), and the stop that ended the first one
     // set this - so a flag left latched is read back by game two's run slot,
     // which requests a stop before the first card is dealt and ends it at the
     // first boundary. That is QtMoveProvider::abandoned's bug exactly (section
-    // 8, phase C), in the object one level up: a game that appears to deal
+    // 8, phase D), in the object one level up: a game that appears to deal
     // itself and stop. prepare() is where it belongs because prepare() is
     // already where everything else per-game is rebuilt.
     bool stopRequested = false;
@@ -985,7 +998,7 @@ gap because both are latches on objects `prepare()` already built; **`requestSto
 of the three with nowhere to land**, and it is the one that ends the game.
 
 **What that costs is worst in phase A**, which is why this belongs in the phase that looks simplest.
-A spectator game has no provider, so the latched `abandon()` that rescues phase B is not there;
+A spectator game has no provider, so the latched `abandon()` that rescues phase C is not there;
 `cancelPacing()` still lands and switches every beat off. The game then replays its whole schedule
 unpaced, into a window that is closing, while the GUI thread waits in `thread.wait()` — and it ends
 through `onGameOver()`. That is exactly the assertion phase A exists to make (§8), failing
@@ -1136,7 +1149,7 @@ void MainWindow::onBetChosen(unsigned int bet)
 > thread and no engine frame is on this stack — but it is the state the window is in for exactly as
 > long as the game thread is parked in `makeBet()`, which is unbounded. A modal dialog takes the
 > close button with it: `MainWindow::closeEvent` does not run while it is up, so `stop()` is never
-> called, so `abandon()` never wakes the provider. **That is precisely the path Phase B's shutdown
+> called, so `abandon()` never wakes the provider. **That is precisely the path Phase C's shutdown
 > test exercises**, and with a modal bet dialog the test cannot even be performed.
 >
 > If a modal dialog is wanted anyway, the close has to be routed around it: `QDialog::reject()` on
@@ -1225,14 +1238,14 @@ for the whole game, so that thread's event loop never spins and a queued connect
 costs nothing today, because the one inbound path is `QtMoveProvider::submit()` and it deliberately
 goes around Qt entirely. But it decides how anything later has to be built: **a pause button, a
 skip key, a "deal faster" control and an animation-finished handshake are all mutex-and-condition-
-variable affairs on the model of `submit()` and `cancelPacing()`, not slots.** Phase D is where
+variable affairs on the model of `submit()` and `cancelPacing()`, not slots.** Phase E is where
 this comes due.
 
 **`stateChanged` is not coalesced, and today it does not need to be.** Every one of the twelve
 publishing callbacks deep-copies a whole `GameSnapshot` — six names, six hands, the table — into a
 queued event, and nothing merges two of them. That is affordable only because `pace()` blocks the
 game thread right after most of them: the queue drains during a beat, and the game thread is the
-slower of the two by construction. **Phase D's pacing controls are what remove that.** A skip key
+slower of the two by construction. **Phase E's pacing controls are what remove that.** A skip key
 or a "deal faster" control shortens or deletes the beat, and the same twelve publishes per trick
 then arrive with nothing throttling them — on a thread that, per the paragraph above, cannot be
 signalled back to ask it to slow down. The fix when it comes is on the emitting side, not the
@@ -1387,7 +1400,7 @@ void GameBridge::pace(std::chrono::milliseconds delay)
 > `cancelPacing()` would win the race against `requestStop()` essentially every time, and phase A's
 > shutdown test would be verifying the exception path while claiming to verify the clean one. The
 > exception path stays reserved for the case that genuinely needs it: a provider parked on a human,
-> which is phase B.
+> which is phase C.
 
 When `GameAbandoned` *is* thrown — from the provider — it propagates through `GameEngine::run()` and
 must be caught in the thread's run slot. Per the engine's own contract, an engine that throws out of
@@ -1408,7 +1421,9 @@ one that is *expected*, and so the one that reports nothing.
 
 ## 7. UI surface
 
-Minimum to play a full game:
+**The minimum to play a full game, and the hinge into Part II.** This table is the contract: every
+widget below, and every screen in §§12–20, reads from one of these sources and no other. What Part II
+adds is what each one looks like and how it behaves; what it may not add is a new source of truth.
 
 | Widget | Reads from snapshot |
 |---|---|
@@ -1416,7 +1431,7 @@ Minimum to play a full game:
 | Seat panel × N | `seats[i]`: `name`, `bet` (only when `hasBet`), `tricksWon`, `cardsLeft`, `roundScore`/`totalScore`, `winStreak`/`lossStreak`, `bidOrder` |
 | Trick area | `table` (`PlayedCardView`: `seatIndex`, `card`, `isWinning`) in play order; trump from `hasTrump`/`trump` |
 | Hand | Two sources, never one. Between turns: `hand` in display order, drawn **disabled** — a snapshot carries no legality and is empty in a blind round (§4.0). On your turn: `PlayPrompt::entries`, illegal cards dimmed and non-clickable — or `handIndex.size()` face-down cards when `blind`. Other seats' hands come from `seats[i].hand`, non-empty only where `canSeeHand()` allows — a Forehead round |
-| Bet prompt | A **panel, not a modal dialog** (§4.4) — a modal one takes the close button with it for as long as the game thread is parked, which is Phase B's shutdown test. `0..prompt.handSize`; `forbiddenBet` disabled with a tooltip explaining why. **Blind in Forehead and Hidden** — `prompt.hand` is empty there, so there is nothing to show the bidder back even by accident |
+| Bet prompt | A **panel, not a modal dialog** (§4.4) — a modal one takes the close button with it for as long as the game thread is parked, which is Phase C's shutdown test. `0..prompt.handSize`; `forbiddenBet` disabled with a tooltip explaining why. **Blind in Forehead and Hidden** — `prompt.hand` is empty there, so there is nothing to show the bidder back even by accident |
 | Scoreboard | per-round bid/actual/score; `roundScored` is the signal to refresh it |
 | Status bar | round number, trick number, `roundType`, whose turn (`turnChanged`) |
 | Game over dialog | `getStandings()` for the table **and `getWinners()` for the headline**. A drawn game has more than one winner and `standings.front()` names only one of them; the terminal renders it as a draw |
@@ -1463,24 +1478,63 @@ PNGs cost nothing, and a card widget that can draw any card is one fewer thing t
 
 ## 8. Phases
 
-Each ends in something runnable.
+Each ends in something runnable, and each ends in something you can *show*.
 
-**Phase A — spectator window.** All-bot game, no input. Setup hardcoded, with a fixed
-`shuffleSeed` so a misrender is reproducible. `GameController` + `GameBridge` +
-`MainWindow::render`. Proves the thread boundary, the snapshot marshalling and the metatype
-registration — the three things most likely to be subtly wrong. **Do the whole of §4.3's ordering
-and §6's shutdown here**, not later: prepare/connect/start as three steps, the guarded engine
-pointer, the provider owned by the controller. They are cheap now and each one is a heisenbug once
-there is a UI on top of them. *Verify:* a full game plays out on
-screen, the window stays responsive throughout, and closing it mid-game exits cleanly through
-`onGameStopped()` with no leaked thread. **That `onGameStopped()` is a real assertion, not a
-formality:** a spectator game is asleep in `pace()` almost all the time, so this close will land
-there, and it reaches the clean path only because `pace()` returns instead of throwing (§6). If you
-see `GameAbandoned` here instead, `pace()` is throwing and §6 has been implemented backwards. Note
-the parked-provider half of §6 cannot be exercised here — an all-bot game never parks — which is
-why B repeats the shutdown test.
+**The boundaries are drawn where the failure mode changes, not where the layer changes.** The
+tempting split — build the core, then build the UI — is the one that does not work here. It leaves
+weeks with nothing on screen and no way to know whether the seam is right, and then it collapses
+into a single integration where a rendering bug and a threading bug are indistinguishable: a card in
+the wrong place could be a bad `handIndex`, a snapshot read off-thread, a stale prompt, or a layout
+error, and you would be disambiguating all four at once. Every phase below is a vertical slice
+instead, ordered so that **the riskiest thing is proved first with the least UI standing on top of
+it**, and so that a bug inside a phase has only one plausible cause.
 
-Three things phase A needs that are easy to skip because a spectator game seems simpler:
+Note that risk and size do not correlate. A is the smallest of the early phases and by far the most
+dangerous; B is the largest and almost risk-free.
+
+| Phase | What | Risk | Size | Done when |
+|---|---|---|---|---|
+| **0** Skeleton | Repo, engine submodule, CMake, card art, three-platform CI, an empty `QMainWindow` | — | — | **Already done** — this is the repository as it stands |
+| **A** Spectator | §4's three types, §4.3's ordering, §6's shutdown. **The UI is a `QTextEdit` logging snapshots** | **Highest** | Medium | A seeded bot game logs start to finish, the window stays responsive, and closing it mid-game exits through `onGameStopped()` |
+| **B** Cards on a table | §18.1's two seams, then §14's scene. Still bots, still no input | Low | **Largest** | A spectated game is watchable and legible |
+| **C** The human plays | `QtMoveProvider`, both prompts, §15's clickable hand and bid strip | High | Medium | A full game is playable — *including* the Forehead and Hidden rounds that end it |
+| **D** The game around the game | §13's dialog, §16's scoreboard, round sheet and game-over panel, Play again | Medium | Large | The app never needs a command line and never needs restarting between games |
+| **E** Polish | §18.2's animation, §16.3's history, §19's clock, §20's preferences, pacing controls | Mixed | Large | Part II is on screen |
+| **F** Ship | Packaging, icons, About, the i18n pass, `v1.0.0` | Low | Small | Three platforms produce installable artifacts |
+
+**`QT_CLIENT_BUILD_ORDER.md` decomposes every row of that table into steps** — what to write, in
+what order, which sections to read first, and what to tick when it works. The rest of this section
+is why the phases are cut where they are; that document is what to do on a given morning.
+
+**Phase A — the spectator window.** All-bot game, no input. Setup hardcoded, with a fixed
+`shuffleSeed` so a misrender is reproducible. `GameController` + `GameBridge` + `GameSnapshot` and
+the ported `refreshFromEngine()`. Proves the thread boundary, the snapshot marshalling and the
+metatype registration — the three things most likely to be subtly wrong. **Do the whole of §4.3's
+ordering and §6's shutdown here**, not later: prepare/connect/start as three steps, the guarded
+engine pointer, the provider owned by the controller. They are cheap now and each one is a
+heisenbug once there is a UI on top of them.
+
+> **The UI in this phase is deliberately ugly: a `QTextEdit` that prints each snapshot as it
+> arrives.** That is not a placeholder to apologise for, it is what makes the phase diagnostic. With
+> no scene, no card art and no layout in the process, a wrong card in the log **must** be a snapshot
+> bug — there is nothing else it could be. Draw a table here and you have merged phases A and B and
+> given up the property the ordering was chosen for.
+
+*Verify:* a full game logs start to finish, the window stays responsive throughout, and closing it
+mid-game exits cleanly through `onGameStopped()` with no leaked thread. **That `onGameStopped()` is
+a real assertion, not a formality:** a spectator game is asleep in `pace()` almost all the time, so
+this close will land there, and it reaches the clean path only because `pace()` returns instead of
+throwing (§6). If you see `GameAbandoned` here instead, `pace()` is throwing and §6 has been
+implemented backwards. Note the parked-provider half of §6 cannot be exercised here — an all-bot
+game never parks — which is why C repeats the shutdown test.
+
+**And there is a stronger assertion available for free:** log the snapshots for a fixed seed and
+**compare against the terminal client's transcript for the same seed**. Same engine, same seed, same
+schedule, so the two must agree card for card. It catches a mis-ported `refreshFromEngine()` on the
+day it is written rather than in phase C, where it will look like a threading bug, and it is the one
+check that pins the whole data path in a single line (§21.5).
+
+Four things phase A needs that are easy to skip because a spectator game seems simpler:
 
 - `humanSeat` is `std::nullopt`, **not** some arbitrary seat. Pass one and that bot silently plays
   without a beat, and `canSeeHand()` is asked about a viewer who is not there (§4.0).
@@ -1494,30 +1548,54 @@ Three things phase A needs that are easy to skip because a spectator game seems 
   `onGameOver()`. It is rare enough to look like flakiness and common enough to see, since a window
   closed at once is the quickest way to test any of this.
 
-**Phase B — the human seat.** `QtMoveProvider`, both prompts, the clickable hand. This is the hard
-part; A exists to make it the only hard part. *Verify:* play a full game; confirm illegal cards
-cannot be clicked, the forbidden bid is disabled, the card clicked is the card played (the
-`HandLayout` translation of §4.4), and closing the window **while the bet prompt is open** exits
-cleanly — that is the `GameAbandoned` path, the only one that should produce it, and the reason §6
-keeps a throw at all. That last one is the test the bet panel's non-modality exists for (§4.4): a
-`QDialog::exec()` here swallows the close and the test cannot be run at all, which reads as a
-shutdown bug rather than as the dialog it actually is.
+**Phase B — cards on a table.** `Theme`, `CardRenderer`, then `TableScene`: seats on the ellipse,
+the trick in the middle, the hand fan drawn from the snapshot and **disabled**, the info strip and
+the scoreboard rows. Still bots, still no interaction, so the log of phase A simply gains a picture
+beside it.
+
+The largest phase by volume and the safest by nature — pure rendering, no threading, and every
+result is visible immediately. **Split it in two**, because the halves are independent:
+
+- **B1 — the two seams of §18.1 and one card.** `Theme` and `CardRenderer` with a pixmap cache keyed
+  on `(card, size, state, dpr)`, and a single card drawn at the right size on a HiDPI display.
+  Nothing in B1 touches the engine, which also makes it the thing to work on while phase A is
+  blocked or you have no appetite for threading.
+- **B2 — the scene.** §14's layout, applied from a snapshot. Seat positions computed in fractions of
+  the view rect, never read off the artwork.
+
+*Verify:* a spectated game is watchable and legible end to end, the window resizes without the
+layout breaking, and the winning card's highlight always matches the trick the engine eventually
+awards — it comes from `isWinning` and is never recomputed (§14).
+
+**Phase C — the human seat.** `QtMoveProvider`, both prompts, the clickable hand, the bid strip of
+§15.1 and the prompt bar. This is the hard part; A and B exist to make it the only hard part.
+
+*Verify:* play a full game; confirm illegal cards cannot be clicked, the forbidden bid is disabled,
+the card clicked is the card played (the `HandLayout` translation of §4.4), and closing the window
+**while the bet prompt is open** exits cleanly — that is the `GameAbandoned` path, the only one that
+should produce it, and the reason §6 keeps a throw at all. That last one is the test the bet panel's
+non-modality exists for (§4.4): a `QDialog::exec()` here swallows the close and the test cannot be
+run at all, which reads as a shutdown bug rather than as the dialog it actually is.
 
 **Play the game to the end, and do not stop at the last 8-card round.** With
 `endWithForeheadAndHidden` left at its default, the schedule finishes with a Forehead round and then
 a Hidden one, and **those two rounds are where a hand widget driven by snapshots stops working** —
 the snapshot's hand is empty in both, so there is nothing on screen to click and the engine parks on
-a card it will never be given (§4.0). *Verify specifically:* in each of the last two rounds the hand
-shows one face-down card, clicking it plays the round out, and the game reaches `onGameOver()`. A
-run that stalls there has the prompt/snapshot split wrong, not the blind rendering.
+a card it will never be given (§4.0, §17). *Verify specifically:* in each of the last two rounds the
+hand shows one face-down card, clicking it plays the round out, and the game reaches `onGameOver()`.
+A run that stalls there has the prompt/snapshot split wrong, not the blind rendering.
 
-**Phase C — setup dialog and scoreboard.** `GameSetup` from a real dialog, per-round score table,
-game-over standings and winners. *Verify:* a game deliberately ended in a draw announces both
-seats.
+**Phase D — the game around the game.** §13's setup dialog, the per-round scoreboard, §16's round
+sheet and game-over panel, and Play again. Large but shallow, and it contains exactly one dangerous
+idea, which is worth isolating:
 
-A setup dialog also introduces the **second game**, which is the first thing here that reuses a
-`GameController`. It is not a special path so much as §4.3's ordering run again from the top:
-`stop()` and join, then a fresh `GameBridge` and `QtMoveProvider` from `prepare()`, then reconnect
+- **D1 — the dialog and the second game.** A real `GameSetup`, then Play again, which is the first
+  thing in the whole client that reuses a `GameController`.
+- **D2 — the read-only panels.** Scoreboard, round sheet, game-over standings. Nothing here can
+  break a game.
+
+The second game is not a special path so much as §4.3's ordering run again from the top: `stop()`
+and join, then a fresh `GameBridge` and `QtMoveProvider` from `prepare()`, then reconnect
 `MainWindow`, then `start()`. Nothing is reset in place. `QtMoveProvider::abandoned` in particular
 is latched and never cleared, so a reused provider refuses every prompt of the second game
 instantly, which looks like the bots playing a game by themselves at full speed.
@@ -1525,15 +1603,50 @@ instantly, which looks like the bots playing a game by themselves at full speed.
 is *not* solved by rebuilding, because the controller is the object being reused: `prepare()` clears
 it, and a `prepare()` that forgets to leaves game two dealing a round and stopping in it.
 `GameSetup` is spent by the move into the first `start()` (§4.3), so the dialog builds a new one
-each time regardless. *Verify:* two games back to back in one process, the second as playable as
-the first.
+each time regardless.
 
-**Phase D — polish.** Card animation, pacing controls, round-type presentation (Forehead/Hidden),
-keyboard shortcuts, window state persistence via `QSettings`. Two things here are threading work
-wearing a UI hat, and both are §5's: every control is a condition variable rather than a slot,
-because nothing can be signalled into a thread parked in `run()`; and shortening the beat is what
-first makes `stateChanged`'s lack of coalescing visible, because the beat is the only thing
-throttling it today.
+**The round sheet is where §21.3 comes due.** Its `34 → 41` column cannot be reconstructed after the
+fact — the engine stores no per-round score, and `onRoundScored()` is the only callback at which one
+can be read against the right round index (§16.1). If `roundScored()` is still the payload-less
+signal §4.1 declares, this phase is where that is discovered, and the fix is upstream in the bridge
+rather than in the widget asking for it.
+
+*Verify:* two games back to back in one process, the second as playable as the first; and a game
+deliberately ended in a draw announces **both** seats, from `getWinners()` rather than
+`standings.front()` (§16.2).
+
+**Phase E — polish.** §18.2's animations, §16.3's round history, §19's clock, §20's preferences and
+`QSettings`, dark mode, reduce motion, streak pips, Forehead/Hidden presentation. Almost all of it
+is independent and can be done in any order — with one group that is not polish at all and should be
+treated as a small phase-A-shaped task of its own:
+
+> **Pacing controls and the animation handshake are threading work wearing a UI hat**, and both are
+> §5's. Every such control is a condition variable rather than a slot, because nothing can be
+> signalled into a thread parked in `run()`. That covers the bot-speed slider, "wait for me between
+> tricks", "skip to end of round" and the **Deal round n** button — and §15.3 is the warning that the
+> last two turn `pace()` into an *indefinite* wait, which `requestStop()` cannot reach and only
+> `cancelPacing()` can. Shortening the beat is also what first makes `stateChanged`'s lack of
+> coalescing visible, because the beat is the only thing throttling it today.
+
+The clock is the opposite case and worth doing early in the phase for contrast: it is pure GUI-thread
+state on a `QTimer`, touches nothing that crosses the boundary, and §19 exists to keep it off the
+snapshot where it would acquire the terminal's stutter.
+
+**Phase F — ship.** Packaging per platform through the workflow the repo already has, icons, the
+About box printing both versions, README and CHANGELOG, and the i18n pass — `lupdate` over the tree
+and the Romanian translation filled in against `i18n/romanian_whist_desktop_ro_RO.ts`. §7's rule is
+that every user-facing string went through `tr()` as it was written; this phase is where a string
+that did not is found, and it is much cheaper to have not made the mistake than to sweep for it here.
+
+### Whether a phase is too big
+
+Not a question about lines of code. Two tests, and a phase that fails either one is really two
+phases:
+
+1. **Can you write the single sentence that says it is done?** Every row of the table above has one.
+   If you cannot write it, the phase contains more than one idea.
+2. **If something breaks in it, is there only one plausible cause?** This is the whole argument for
+   phase A's `QTextEdit`, and the reason B1 comes before B2 and D1 before D2.
 
 ### What to test, as opposed to what to look at
 
@@ -1701,6 +1814,698 @@ The last row is the point.
   repo's own `CMakeLists.txt` now copies, down to the HTTPS submodule URL. Still current; the two
   build files should stay in step.
 
+**The other two proposals in this directory, both retired into this one:**
+
+- `QT_GUI_PLAN_prproposal3_claude_opus_based_on_terminal_app.md` — **Part II is merged from its
+  Part I**, and §21 takes four things from its Part II. Its remaining architecture is superseded by
+  §§2–6; Appendix B lists the six places the two disagreed and which won. Written inside
+  `romanian_whist_terminal`, so its relative links do not resolve from here.
+- `qt_implementation_plan_proposal2_gemini_proposal.md` — retired. Two things survive, both in §14:
+  the seat-angle table and the colour-coded bid/won pill. Appendix B says why nothing else does.
+
+---
+
+# Part II — The design
+
+Part I says almost nothing about what a player sees. §7 is one table, and a table is not a design:
+it names the sources every widget reads from and stops there, deliberately, because getting the seam
+right was the part that could not be deferred.
+
+**This part is that design**, taken from `QT_GUI_PLAN_prproposal3_claude_opus_based_on_terminal_app.md`
+— a parallel proposal whose Part I is a screen-by-screen specification and is the best account of
+the product anywhere in these three documents. It is merged in here rather than left beside this
+one because two documents describing the same client is how they come to disagree, and because
+several of its screens turn out to have architectural consequences (§15's skip control, §16's
+round sheet, §19's clock) that only make sense next to §§4–6.
+
+**Three rules govern the merge**, and they are why this is not a copy-paste:
+
+1. **Where the design contradicts §§2–6, §§2–6 win**, and the contradiction is written down rather
+   than quietly resolved. Appendix B lists every one.
+2. **Where the source was written against a repository that no longer exists**, it is rewritten
+   against this one. That proposal was authored inside `romanian_whist_terminal` and argues for
+   creating a repository that now exists, for a Qt version that is now pinned, and for painting
+   card art that is now committed.
+3. **Nothing here decides a rule.** Same standard as §3: the forbidden bid comes from
+   `getForbiddenBet()`, the winning card from `getCurrentTrickLeader()`, who may see whose hand
+   from `canSeeHand()`, and the winners from `getWinners()`. A screen that computes one of those
+   for itself is a bug however good it looks.
+
+---
+
+## 12. The shape of the application
+
+One main window. No MDI, no floating tool windows, no wizard with a back button. A card game is a
+single focused activity and the window should read as a table, not as an IDE.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│  Romanian Whist                                              ─  □  ✕             │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  Game   View   Help                                                              │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  Round 7/24     6 cards dealt     Normal     Trump ♠Q     Elapsed 4:12           │  ← info strip
+├───────────────────────────────────────────────────────┬──────────────────────────┤
+│                                                       │  SEATS                   │
+│                        ┌────────────┐                 │  ┌────────────────────┐  │
+│                        │ Bogdan  ●3 │                 │  │ #  Name   Bid Won │  │
+│                        │ 4 cards    │                 │  │ ▸1 You     2   1  │  │
+│                        └────────────┘                 │  │  2 Ana     1   2  │  │
+│                                                       │  │  3 Bogdan  0   0  │  │
+│      ┌────┐                          ┌────┐           │  │  4 Carmen  3   1  │  │
+│      │ Ana│         ╭─────╮          │Carm│           │  │                   │  │
+│      │    │      ♥K │  ♠7 │ ♦2       │    │           │  │ Round   Total  Str│  │
+│      └────┘         ╰─────╯          └────┘           │  │  +7      41    ●●●│  │
+│                    (the trick)                        │  │  -1      33       │  │
+│                                                       │  │  +5      28    ●● │  │
+│                                                       │  │  -2      19       │  │
+│         ┌───┐┌───┐┌───┐┌───┐┌───┐┌───┐                │  └────────────────────┘  │
+│         │♠A ││♠9 ││♥K ││♥4 ││♦J ││♣3 │  ← your hand   │                          │
+│         └───┘└───┘└───┘└───┘└───┘└───┘                │  Bids: 6 of 6 · total 6  │
+│              You  ·  bid 2, won 1                     │  for 6 tricks — someone   │
+│                                                       │  is going to be wrong.   │
+├───────────────────────────────────────────────────────┴──────────────────────────┤
+│  You must follow ♠.                                            [ Skip to end ]   │  ← prompt bar
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Four regions, each with one job:
+
+| Region | What it is | Why it is separate |
+|---|---|---|
+| **Info strip** | Round n/N, cards dealt, round type, trump, elapsed | The five facts that are true all round and change only between rounds. Mirrors the terminal's header table. Note `elapsed` is the one field here that does **not** come from a snapshot — §19. |
+| **Table** | A `QGraphicsView` — seats, the trick, your hand | The only animated surface. Everything that moves, moves here. |
+| **Scoreboard** | One row per seat: bid order, name, bid, won, round score, total, streak | The terminal's seat table, which is what players actually read between plays. **Never animated** — a number that slides is a number you cannot read. |
+| **Prompt bar** | Hint, error, and the one contextual action | Where the game talks to you. One line, always in the same place, so you learn where to look. |
+
+Menus stay thin: **Game** (New Game…, Abandon Game, Quit), **View** (Round history…, Preferences…,
+Full screen), **Help** (Rules, About — the About box prints the client version and the linked engine
+version, exactly as the terminal's `--version` does).
+
+**Abandon Game and Quit both route through `GameController::stop()`** (§6), and neither is a
+special path: closing the window, quitting, and starting a second game are the same three calls in
+the same order, which is the whole reason §6 insists `stop()` be idempotent.
+
+## 13. Setup
+
+`Game ▸ New Game…` opens a single modal dialog — not a wizard. The terminal asks its questions one
+per screen because a terminal has one screen; a dialog can show all of them at once, and seeing the
+whole shape of the game before starting it is strictly better.
+
+```
+┌─ New Game ───────────────────────────────────────────────┐
+│                                                          │
+│  ( ) I'm watching        (•) I'm playing                 │
+│                                                          │
+│  Your name   [ Dan            ]                          │
+│                                                          │
+│  Opponents   [ 3  ▾ ]   (2–6 at the table)               │
+│                                                          │
+│    1.  [ Ana      ]   plays  [ Low risk      ▾ ]         │
+│    2.  [ Bogdan   ]   plays  [ Ducking       ▾ ]         │
+│    3.  [ Carmen   ]   plays  [ Random        ▾ ]         │
+│                                                          │
+│  ── Shape of the game ─────────────────────────────────  │
+│                                                          │
+│  (•) 1-8-1   counts up from one card and back down       │
+│  ( ) 8-1-8   the other way round                         │
+│                                                          │
+│  [x] End with a forehead round and a hidden round        │
+│  [ ] Play every one-card round forehead                  │
+│                                                          │
+│         24 rounds · about 20 minutes                     │
+│                                                          │
+│  ── Pace ──────────────────────────────────────────────  │
+│                                                          │
+│  Bot speed   Slow ──────●──────── Instant                │
+│  [x] Wait for me between tricks                          │
+│  [ ] Fixed deal, seed [ 12345 ]                          │
+│                                                          │
+│                            [ Cancel ]  [ Deal ]          │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **"I'm watching" is not a mode bolted on later.** It is `humanSeat == std::nullopt`, which is
+  phase A's entire configuration (§8) and the state §4.3 and §6 null-check for. The radio button is
+  the last thing built and the first thing supported.
+- **The opponent rows appear and disappear with the count.** Changing "Opponents" to 4 adds a
+  fourth row with a pre-filled default name; it does not open another dialog.
+- **The count is clamped, not validated after the fact.** 2–6 seats total, so watching offers 2–6
+  opponents and playing offers 1–5. `GameEngine::start()` throws outside that range, and the deck
+  is built from the player count, so a spinner that cannot reach an illegal value is better than an
+  error message that explains one.
+- **Names are validated as you type.** The engine rejects an empty name and rejects two names equal
+  **byte for byte** — no trimming, no case folding, which is deliberate on its side. The dialog
+  marks the offending field and disables **Deal** rather than letting `start()` throw.
+- **"24 rounds · about 20 minutes" updates live** from the four shape controls. The round count is a
+  pure function of the player count and the structure, so it is computable before an engine exists;
+  the estimate is a rule of thumb off the bot-speed slider.
+- **Fixed deal is `shuffleSeed` with a friendlier name.** It stays in the GUI because it is how a
+  rendering change gets reviewed as a diff, and because §8 asks phase A to run seeded so a misrender
+  is reproducible. One checkbox.
+- **The strategy names are the terminal wizard's four, in its order**: Random, First card, Low risk,
+  Ducking. Each gets a one-line tooltip from the engine's `STRATEGIES.md` (at the engine root, not
+  under `docs/`), so the choice means something to a player who has never read the source.
+
+**What the dialog produces is a `GameSetup` with the human seat's `moveProvider` left null**, which
+`GameController::start()` fills with a `SeatProvider` (§4.2, §4.3). It does not build a
+`QtMoveProvider` and it does not touch the controller's ordering: the dialog answers questions, the
+controller does prepare → connect → start. And because `GameSetup` is move-only and spent by the
+move into `start()`, **Play again (§16) re-runs the dialog's `buildSetup()` rather than reusing a
+stashed copy** — including on the path where `start()` threw.
+
+Every string here goes through `tr()`, including the strategy names and the round-count sentence.
+§7 says why that is not a someday concern.
+
+## 14. The table
+
+The centrepiece, and the whole reason to build a GUI: the terminal renders the table as a list of
+"Ana played ♥K", and a card game is spatial.
+
+**Seats sit on an ellipse.** The human is always at bottom-centre; the others are distributed around
+the remaining arc **in seat order, clockwise**, so the play order on screen matches the play order
+in the game. A spectated game has no human, so all seats are distributed around the full ellipse and
+the bottom hand area is not drawn at all.
+
+The angles, which are worth writing down rather than deriving at each call site (this table is the
+one thing carried over from the third proposal, `qt_implementation_plan_proposal2_gemini_proposal.md`,
+which is otherwise retired — see Appendix B):
+
+| Seats | Placement |
+|---|---|
+| 2 | Human bottom; bot top |
+| 3 | Human bottom; bots top-left, top-right |
+| 4 | Human bottom; bots left, top, right |
+| 5 | Human bottom; bots bottom-left, top-left, top-right, bottom-right |
+| 6 | Human bottom; bots bottom-left, top-left, top, top-right, bottom-right |
+
+> **Seat positions are computed, never read off the artwork.** If the table surface ever becomes an
+> illustration that has players drawn into it, the seats must still come from this function, in
+> fractions of the view rect — otherwise the seat coordinates silently become properties of one
+> image's perspective and the background stops being replaceable. §18 is the general form of that
+> rule.
+
+Each seat is a small plaque showing:
+
+- the player's name, with **(you)** on your own;
+- **bid ▸ won** as a compact pair — `2 · 1` reads as "bid two, has one" — colour-coded once play is
+  under way: on target, still owing tricks, and over the bid are three different states and a player
+  should not have to subtract to see which one they are in;
+- how many cards are left in hand, drawn as a tiny stack rather than a number;
+- a **turn ring** — a soft highlight around the plaque of whoever is being asked to move, driven by
+  `turnChanged` (§4.1) and never by counting seats forward from the leader.
+
+**The trick grows in the middle.** Each card is placed just inside its owner's seat, rotated
+slightly toward the centre, in the order it was played. The card currently winning gets a raised
+shadow and a thin accent border — and that highlight is `PlayedCardView::isWinning`, which
+`refreshFromEngine()` fills from `getCurrentTrickLeader()`. **Never recomputed here.** It is the
+engine's own ranking of a partly played trick, so the highlight cannot disagree with the winner the
+engine eventually declares.
+
+**Seats come off the trick, not off arithmetic.** `PlayedCardView` carries `seatIndex` for exactly
+this reason: `getTrickLeaderSeat()` has already moved to the winner by the time `onTrickWon()`
+fires, so a table rebuilt as `(leader + i) % playerCount` draws the last trick of every round under
+the wrong names. `IGameObserver.h` says so in the `onTrickWon` comment, and the terminal's
+`rebuildTable()` carries the same note.
+
+**The lead card is marked** with a small pip under the first card played, because "which suit are we
+following" is the most-asked question at a whist table and the answer is otherwise implicit.
+
+**Your hand fans across the bottom**, in `layOutHand()`'s display order — trump suit first, then a
+fixed alternating-colour order, high rank first within a suit. Cards overlap by about 40% of their
+width and the fan is centred; at most eight cards ever need to fit, so nothing scrolls and nothing
+squeezes.
+
+> **The hand widget has two sources and the table has one.** §4.0 is the whole of this: between
+> turns the fan is drawn from `GameSnapshot::hand`, **disabled**; on your turn it is redrawn from
+> `PlayPrompt::entries`, with legality that means something and `handIndex` to translate a click
+> back. A fan that only ever reads the snapshot cannot be clicked and is empty for the last two
+> rounds of every default game. Nothing in this part changes that.
+
+## 15. Bidding, playing, and the end of a trick
+
+### 15.1 Bidding
+
+When it is your turn to bid, a strip rises over the bottom of the table:
+
+```
+              How many tricks will you win?
+
+        ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐
+        │ 0 │ │ 1 │ │ 2 │ │ 3 │ │ 4 │ │ 5 │ │ 6 │
+        └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘
+                                  ✕
+     You bid last — 3 would make the bids add up to 6,
+     and somebody has to be wrong.
+```
+
+- **One button per legal bid**, 0 through `BetPrompt::handSize`. Numbers, not a spinner: a spinner
+  asks you to think about a range, a row of buttons asks you to pick.
+- **The forbidden bid is disabled visibly, before you reach for it**, with the explanation
+  underneath. That is `BetPrompt::forbiddenBet`, which the engine filled from `getForbiddenBet()`:
+  exactly one value, only for the final bidder, and absent entirely once the bids so far already
+  exceed the trick count. The client asks; it does not reimplement the arithmetic.
+- **Your hand stays visible above the strip**, unnumbered and unlit — except in a blind round, where
+  `BetPrompt::hand` is empty and there is nothing to draw (§4.2, §17).
+- **Keyboard:** the digit keys bid directly, and a disabled digit is ignored.
+
+**This strip is `betPanel`, and it is not a `QDialog`.** §4.4 gives the reason at length and it is a
+shutdown decision rather than a taste one: `exec()` takes the close button with it for exactly as
+long as the game thread is parked in `makeBet()`, which is unbounded, and that is the one path phase
+B's shutdown test exists to exercise.
+
+Bots bid in turn with the same pacing as their plays, the bid appearing in the scoreboard row and
+briefly on the seat plaque. After the last bid the table holds for a beat on the completed bid table
+— `onBettingComplete()` already paces for this (§4.1), and the terminal added it deliberately,
+because otherwise the final bid is only ever seen when a bot made it.
+
+**The bid total gets a permanent home** in the scoreboard panel: *"Bids: 6 of 6 · total 6 for 6
+tricks — someone is going to be wrong."* `betsPlaced` and `betSum` are already on the snapshot. The
+over/under is the whole tension of the round and the terminal only implies it.
+
+### 15.2 Playing a card
+
+- **Legal cards are lit; illegal cards are dimmed and unclickable.** Legality is
+  `HandEntry::legal` off `PlayPrompt`, which `QtMoveProvider::playCard()` filled from
+  `CardValidator::getLegalCards()` — the engine's own rule, in priority order, including the part
+  clients get wrong: **overtrumping is not required**.
+- **Hovering a legal card lifts it. Clicking plays it.** No confirm step; a card game with an "are
+  you sure?" is a spreadsheet.
+- **The prompt bar says why**, when there is a why: *"You must follow ♠."* when the hand is
+  restricted, *"You lead."* when it is not.
+- **Keyboard:** ← → move a selection through the legal cards, Enter plays, and digits 1–8 select by
+  position in the fan — matching the terminal's numbering for anyone switching between the two.
+- **A played card animates from the hand to the table**, ~180 ms, ease-out, with the fan closing
+  behind it. This is the one animation that earns its keep on its own: it is what tells you *who*
+  played *what*, which is exactly the information the terminal has to spell out in words.
+
+**The click handler is §4.4's, unchanged.** Selection, hover and keyboard all resolve to a display
+slot, and the display slot goes through `activePrompt.handIndex[slot]` into
+`provider->submit(activePrompt.promptId, …)`. Nothing else is ever sent back, and no path skips the
+`promptId`.
+
+### 15.3 The end of a trick
+
+The winning card lifts and holds; the prompt bar says *"Ana wins the trick."*; the completed trick
+sits for a moment and then sweeps toward the winner's seat as it clears. `trickWon` (§4.1) is the
+signal, and `onTrickWon`'s `pace(trickDwell)` is the hold.
+
+Whether it dwells or waits for you is the **"Wait for me between tricks"** preference — the GUI's
+version of the terminal's `--auto`. A **Skip to end of round** button in the prompt bar runs the
+rest of the round at full speed, and like the terminal's Enter it only skips the round it was asked
+for.
+
+> **Both of those are §5's problem, not a widget's.** The game thread is inside `run()` for the whole
+> game, so its event loop never spins and **no slot call will ever reach it**. "Wait for me between
+> tricks" is `pace()` waiting on a condition variable with no timeout; "Skip to end of round" is a
+> second flag on the same variable, set from the GUI thread exactly as `submit()` and
+> `cancelPacing()` are. A `QTimer`, a queued signal or a slot on the bridge will all appear to work
+> in a spectator game and hang the moment the wait becomes indefinite.
+>
+> **And an indefinite `pace()` must be woken by `cancelPacing()`.** This is the one place this part
+> adds a hazard to §6: a `pace()` with a timeout ends on its own within `trickDwell` even if a close
+> is dropped, and a `pace()` waiting on a button does not. `requestStop()` cannot reach it — the
+> flag is only read at boundaries, and the thread is not at one — so a close during "your turn to
+> continue" hangs on `thread.wait()` forever unless `cancelPacing()` lands. §6 already calls it
+> unconditionally; this is what makes that call load-bearing rather than tidy.
+>
+> The terminal's `resetSkip()` placement comes with the skip flag: **the end of
+> `onBettingComplete()`, not `onRoundStarted()`** (§11, `TerminalRomanianWhist.cpp:166`).
+
+## 16. The end of a round, the end of the game, and the history
+
+### 16.1 The round sheet
+
+A sheet slides down over the table:
+
+```
+┌─ Round 7 · 6 cards · Normal ─────────────────────────────┐
+│                                                          │
+│   Name        Bid    Won      Round        Total         │
+│   ─────────────────────────────────────────────────────  │
+│   You           2      2        +7      34 → 41          │
+│   Ana           1      2        −1      34 → 33          │
+│   Bogdan        0      0        +5      23 → 28          │
+│   Carmen        3      1        −2      21 → 19          │
+│                                                          │
+│   Ana has missed four in a row — a fifth costs 10.       │
+│                                                          │
+│                                 [ Deal round 8 ]         │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **`34 → 41` is the honest rendering.** Inside `onRoundScored()` the round score is what this round
+  was worth and the total is the committed total it has **not yet** been folded into —
+  `IGameObserver.h` says so outright. A client that shows one without the other reads differently
+  either side of the commit; showing the arrow shows both and needs no explanation.
+- **The streak line is a genuine addition.** The engine awards ±10 on the fifth consecutive exact
+  bid or miss and one-card rounds count for neither, and a player has no way to see that coming
+  without counting rounds. `winStreak`/`lossStreak` are already on `SeatView`, so the scoreboard
+  carries streak pips and the sheet warns at four.
+- **[ Deal round 8 ] is an indefinite `pace()`**, per §15.3. The same button, the same condition
+  variable, the same requirement that `cancelPacing()` reach it.
+
+### 16.2 The end of the game
+
+```
+                       ROMANIAN WHIST
+
+                    1.   You        47   ★
+                    1.   Ana        47   ★
+                    3.   Bogdan     31
+                    4.   Carmen     28
+
+           You and Ana tie for first with 47 points.
+
+              [ Play again ]      [ Close ]
+```
+
+- **Places come from `Standing::place`**, so 47, 47, 31, 28 reads **1, 1, 3, 4** — a tie for first
+  consumes second. Not computed here.
+- **Every winner is starred**, from the `getWinners()` payload `gameOver` already carries (§4.1).
+  `standings.front()` names one winner of a drawn game; the terminal shipped that bug once, in
+  2.1.0, and it is why 4.1.0 added the call.
+- **The closing line names all of them**, in the terminal's wording: *"Ana wins with 47 points."* for
+  one, *"Ana and Bogdan tie for first with 47 points."* for two, *"Ana, Bogdan and Dan tie for
+  first…"* for three. Ported with its test (§21.4).
+- **Play again** reopens the setup dialog pre-filled with the same settings — which is §8 phase D's
+  second game, and therefore `stop()` → join → `prepare()` → reconnect → `start()`, with a freshly
+  built `GameSetup`. Nothing is reset in place.
+
+**This panel is drawn from `gameOver`, not after `run()` returns.** The terminal draws its game-over
+screen after the loop ends and a GUI cannot: `run()` returning happens on the game thread, inside a
+slot the GUI never sees. §4.1 publishes the final snapshot *before* emitting `gameOver` for exactly
+this reason — the panel is drawn over the final state.
+
+### 16.3 Round history
+
+`View ▸ Round history…` opens a scoresheet — the whole game, one row per round:
+
+| # | Cards | Type | Trump | You bid/won/pts | Ana bid/won/pts | … |
+|---|---|---|---|---|---|---|
+| 1 | 1 | Normal | ♦7 | 0 / 0 / +5 | 1 / 1 / +6 | … |
+| 2 | 1 | Normal | ♣K | 1 / 0 / −1 | 0 / 1 / −1 | … |
+
+Cheap for most of its width: the engine lays the whole schedule out at `start()`, so `getRound(i)`
+answers for every round including unplayed ones, and since v4 holds cards by value a finished round
+still reports the cards actually played in it.
+
+> **One column is not cheap, and it is the important one.** The engine does **not** store what a
+> round was worth — scoring writes into the players and folds into totals, and a `Round` carries
+> neither. So the points must be captured as they go past, and there is exactly one callback at
+> which that is possible: **`onRoundScored()`, the last one at which `getCurrentRoundIndex()` still
+> names the round being reported.** By `onRoundComplete()` the index has advanced and the row is
+> attributed to the next round.
+>
+> That makes `onRoundScored()` the one callback in §4.1 that does more than publish and emit. It
+> builds a `RoundResult` — index, trick count, round type, trump, and per seat the name, bid, tricks
+> won, `getRoundScore()`, `getTotalScore()` and their sum — appends it to a history the bridge owns,
+> and emits it. `roundScored()` as declared in §4.1 carries no payload; **it needs one.** Both the
+> round sheet and this dialog read it, and neither can be reconstructed later.
+
+## 17. Forehead and Hidden, drawn
+
+These are the two rounds where a GUI beats the terminal outright, because "you cannot see your own
+card but you can see everyone else's" is a *picture*.
+
+- **Forehead** — your own card is drawn face-down, held against your forehead in the classic pose;
+  every other seat's single card is drawn **face-up on their plaque**, by name. You bid on what
+  everyone else is holding.
+- **Hidden** — every card at the table, yours included, is face-down, for the **whole round**.
+  `canSeeHand()` is "nobody" in Hidden, not "nobody until the bids are in".
+- The info strip's round type reads **Forehead** or **Hidden** in an accent colour, so the round is
+  identifiable before the cards are dealt. Both names go through `tr()` (§7).
+
+**Where each of those pixels comes from**, because this is where §4.0 and §4.2 cash out:
+
+| Drawn | Source | Non-empty when |
+|---|---|---|
+| Other seats' cards | `SeatView::hand` on the snapshot | `canSeeHand(human, holder)` — a Forehead round |
+| Your own card, face-down, at the bid | nothing — `BetPrompt::hand` is **empty** | never in Forehead or Hidden |
+| Your own card, face-down, to play | `PlayPrompt::handIndex.size()` face-down backs | always; `entries` is empty and `blind` is true |
+
+The hand is **not sent and then not drawn** — it is not sent. The engine passes the real hand
+because it has no other one to give, and a prompt that never carries it cannot leak it through a
+tooltip, a debug overlay or a later refactor. §4.0 also records that the terminal is loose about
+this at the play prompt, and that the direction of any future alignment is the terminal moving to
+match this client.
+
+Play itself is unchanged: one card in hand, no decision, so it plays out with the usual pacing — but
+the face-down back is still a button, and clicking it is what unparks the engine. A widget that
+draws nothing here stalls the last two rounds of every default game (§8, phase C).
+
+## 18. Visual language
+
+**Not a skeuomorphic casino.** Flat, calm, high contrast; a felt-toned surface rather than a
+photograph of felt.
+
+| Element | Treatment |
+|---|---|
+| Table surface | A single desaturated green, subtly darker at the edges. No texture bitmap. |
+| Cards | The committed art under `:/cards/` (§7). Hearts and diamonds red, spades and clubs near-black. |
+| Card backs | One back for the whole table, drawn through the same seam as a face — see below. |
+| Dimmed (illegal) card | 45% opacity plus a slight desaturation — not grey-on-white, which is unreadable at card size. |
+| Active seat | A 3 px ring in the accent colour, animated in over 120 ms. **Never a colour-only cue**: the plaque also gains a small ▸ marker. |
+| Winning card | Raised shadow and an accent hairline. |
+| Typography | The platform UI font throughout. Card ranks in tabular figures so `10` and `4` occupy the same box. |
+| Scoreboard numbers | Tabular figures, right-aligned. Positive round scores green with a `+`, negative red with a `−`. |
+
+### 18.1 The two seams that make all of this replaceable
+
+The design above will change — the background, the seat art, the card faces and the backs are all
+things anyone building this will want to swap once they have seen them on screen. **What decides
+whether that is an afternoon or a week is how many places construct a colour, a pixmap or a
+coordinate**, and the answer has to be "one each" from the first widget, not retrofitted later.
+
+```cpp
+// paint/Theme.h - the only place a colour or a metric literal exists.
+struct Theme
+{
+    QColor tableSurface, seatPlaque, accent, textPrimary, dimmedOverlay;
+
+    // Solid, gradient or a photograph - no caller can tell which, which is
+    // what makes changing it one edit.
+    QPixmap background(QSize view) const;
+
+    // Stick figures today, portraits tomorrow. The BOX is what the seat
+    // plaque reserves, so replacing the art never reflows the layout.
+    QPixmap avatar(unsigned int seat, QSize box) const;
+
+    // One unit. Every other metric on the table derives from it, so new art
+    // with a different aspect ratio does not mean re-tuning the layout.
+    qreal cardHeightFor(QSize view) const;
+};
+
+// paint/CardRenderer.h - the only place that knows card art is a file.
+class CardRenderer
+{
+public:
+    QPixmap face(romanian_whist::Card card, QSize size, qreal dpr) const;
+
+    // A back is not a special case in three widgets. It is drawn in a
+    // Forehead round, in a Hidden round and on every opponent's stack, and a
+    // back that is drawn in three places is a back that gets changed in two.
+    QPixmap back(QSize size, qreal dpr) const;
+};
+```
+
+Three rules follow, and each one is a change that is cheap only if it was cheap from the start:
+
+- **No widget builds `":/cards/…"` itself.** §7's two `switch`es over rank and suit live inside
+  `CardRenderer` and nowhere else. `Card::toString()` is still not the filename — the files spell
+  ranks and suits out, `toString()` abbreviates them.
+- **Card geometry derives from the view rect**, and the pixmap cache is keyed on
+  `(card, size, state, dpr)`. That is what makes the art crisp on a HiDPI display and the card size
+  follow the window instead of the export resolution the PNGs happened to use. The SVG set is
+  rasterized through `QSvgRenderer`, because `CMakeLists.txt`'s deploy step drops the
+  `imageformats` plugins and `QPixmap(":/cards/x.svg")` comes back null in an installed build — the
+  build file's comments are the authority and say so.
+- **Stylesheets do not reach the table.** QSS styles `QWidget`s — the dialogs, the scoreboard, the
+  prompt bar. A `QGraphicsItem::paint()` override is invisible to it. Theme the scene through
+  `Theme`; use QSS only for the widgets around it.
+
+**Dark mode falls out of the palette object** rather than from hard-coded colours, and the surface
+changes tone rather than the cards changing colour — a card is white in the dark too.
+
+### 18.2 The animation budget
+
+All of it interruptible, all of it disabled by one **Reduce motion** preference (which also honours
+the platform setting where Qt exposes it):
+
+| Moment | Duration |
+|---|---|
+| Card hand → table | 180 ms, ease-out |
+| Trick sweep to winner | 220 ms, ease-in |
+| Bid strip in/out | 140 ms |
+| Round sheet in/out | 200 ms |
+| Turn ring | 120 ms fade |
+
+`QPropertyAnimation` on a `QGraphicsObject`'s `pos` covers the first two; the rest are geometry or
+opacity. **Animation targets go through the same layout function that places static items** — an
+animation that flies to a literal coordinate breaks every time the layout changes, which is exactly
+the coupling §14's seat rule exists to prevent.
+
+Bot **thinking time** is not an animation but a pace, and it is `Pacing::beat` /
+`Pacing::spectatorBeat` (§4.1) driven by the bot-speed slider: 0 ms at "Instant" through about
+900 ms at "Slow", defaulting to the terminal's 700 ms.
+
+> **Closing the animation loop is §8's "one place the threading tax grows".** `pace()` is open-loop
+> — the game thread sleeps for a guessed duration while the GUI animates, and nothing checks that
+> the card landed. That is fine for a dwell and wrong for "wait until the card has finished flying".
+> Closing it means a second condition variable notified from the animation's `finished()` signal, on
+> the model of `submit()` and `cancelPacing()` and for §5's reason. It arrives in the same phase as
+> the pacing controls, and for the same cause: shortening the beat is what first makes
+> `stateChanged`'s lack of coalescing visible.
+
+## 19. The clock, and what else does not belong in the snapshot
+
+The info strip carries **Elapsed 4:12**, and it is the one field up there that must not travel on
+the engine's channel.
+
+The terminal cannot do better than it does: its screen is repainted from inside observer callbacks,
+so between two engine events there is nothing running that could redraw, and the clock jumps from
+10:05 to 10:15 across ten seconds spent thinking about a bid. That is a terminal constraint.
+
+**This client has no such constraint, and can only reintroduce it deliberately.** The GUI thread is
+in `QApplication::exec()` for the whole game — that is what §2 bought — so a `QTimer` fires while
+the game thread is parked in `makeBet()`, and the clock ticks through a bid, through a bot's beat,
+and through an indefinite wait for **Deal round 8**.
+
+The way to break it is to put `elapsed` on `GameSnapshot`. It would then update only when the engine
+publishes, which is the terminal's stutter faithfully reproduced in a client that does not need it.
+**So it is not on the snapshot** — §4.0 leaves it out with the other terminal-only fields, and §9
+puts `elapsedMinutes` in the client-only column with the reason: *the engine has no wall clock*.
+
+```cpp
+// MainWindow members. GUI thread only; nothing here crosses the boundary.
+QElapsedTimer gameClock;    // monotonic - an NTP correction cannot run it backwards
+QTimer        clockTick;
+QString       shown;
+
+clockTick.setInterval(250);              // not 1000 - see below
+connect(&clockTick, &QTimer::timeout, this, &MainWindow::updateClock);
+
+// started when the game starts; stopped on gameOver / gameStopped / gameFailed,
+// which freezes the label on the final time.
+
+void MainWindow::updateClock()
+{
+    // Recomputed from the start time, never accumulated from ticks: a QTimer is
+    // not guaranteed to fire on schedule, and accumulated ticks drift visibly
+    // as a skipped or doubled second.
+    const qint64 seconds = gameClock.elapsed() / 1000;
+    const QString text = QStringLiteral("%1:%2")
+                             .arg(seconds / 60)
+                             .arg(seconds % 60, 2, 10, QLatin1Char('0'));
+
+    if(text != shown)                    // four wake-ups a second, at most one repaint
+    {
+        shown = text;
+        elapsedLabel->setText(text);
+    }
+}
+```
+
+Timers fire inside a nested event loop too, so the clock keeps running while a modal dialog is up.
+§4.4's objection to a modal *bet* panel is about the close button, not about repainting.
+
+**The general rule, because this recurs.** The client has two channels and they are not
+interchangeable:
+
+| | Channel | Driven by | Lives on |
+|---|---|---|---|
+| Game state | `GameSnapshot` over a queued signal | engine events | game thread → GUI thread |
+| Wall-clock state | `QTimer` | time passing | GUI thread only |
+
+The elapsed clock, the pulsing turn ring, a "thinking…" ellipsis on a bot's plaque, every hover lift
+and every animation are the second kind. None of them belongs on the snapshot and none of them needs
+the game thread's permission to run. The only way to stall them is to block the GUI thread yourself
+— a long loop in a slot, or building all 52 card pixmaps in one paint instead of lazily — and that
+is a bug, not a constraint.
+
+## 20. Keyboard, accessibility, preferences
+
+Everything playable is reachable from the keyboard: digits bid and select, arrows move the
+selection, Enter commits, Space advances between tricks and rounds, Esc closes a sheet.
+
+**No information is carried by colour alone.** Suits carry their glyph, the active seat carries a ▸
+marker as well as a ring, legal cards are lifted as well as lit, winners are starred as well as
+highlighted, and the bid/won pair reads as text as well as a colour. Every interactive element gets
+an accessible name, so a screen reader announces "Queen of spades, playable" rather than "button".
+
+**Preferences** (`View ▸ Preferences…`) persist through `QSettings`: bot speed, wait-between-tricks,
+reduce motion, theme (System / Light / Dark), card size, and the last-used setup so **New Game**
+opens where you left it. §8 phase E already lists window-state persistence through the same
+mechanism.
+
+Two of these are pacing controls and therefore §5's condition variables rather than settings a slot
+can apply mid-game: **bot speed** and **wait between tricks** are read by `pace()` on the game
+thread. Changing either while a game is in flight means writing a value the pacer reads under its
+own mutex — not emitting a signal at the bridge, which will not be delivered until the game ends.
+
+---
+
+## 21. Amendments to §§4–8
+
+Four things from the same source that are not visual and are worth taking anyway. They change types
+declared above, so they belong here rather than in Part II proper.
+
+**21.1 — Post the snapshot as `std::shared_ptr<const GameSnapshot>`, not by value.** §4.1 emits a
+whole `GameSnapshot` per publish — six names, six hands, the table — twelve times a trick, and §5
+already concedes this is affordable only because `pace()` blocks the game thread right afterwards
+and Phase E's pacing controls are what remove that. A `shared_ptr<const T>` makes the queued copy a
+refcount bump, and, more usefully, makes it *structurally impossible* for two threads to hold the
+same mutable snapshot. The rule in §3 is unchanged and so is `Q_DECLARE_METATYPE`; only the payload
+type changes:
+
+```cpp
+Q_DECLARE_METATYPE(std::shared_ptr<const GameSnapshot>)
+qRegisterMetaType<std::shared_ptr<const GameSnapshot>>();
+```
+
+`render()` then takes `const std::shared_ptr<const GameSnapshot>&` and the widgets read through it.
+Keep §4.0's rule that every member is copyable and default-constructible: the snapshot is built by
+value on the game thread and only wrapped on the way out.
+
+**21.2 — Declare the engine last, and say so in the header.** §4.3 already moves the provider's
+ownership out of the engine, which is the larger half of this hazard. The remainder is ordinary
+member destruction order: whatever the game thread's objects point at must outlive them, and members
+die in reverse declaration order. The terminal client's `TerminalRomanianWhist.h` declares its
+engine last for exactly this reason and says so. Do the same wherever the engine ends up owned, and
+write the comment — the symptom of getting it wrong is a use-after-free at shutdown that reproduces
+only on the machine that loses the race.
+
+**21.3 — `roundScored()` needs a payload.** §16.3 has the argument in full: the engine stores no
+per-round score, and `onRoundScored()` is the only callback at which one can be read against the
+right round index. The signal declared in §4.1 carries nothing and must carry a `RoundResult`.
+
+**21.4 — What ports from the terminal client, and what changes on the way.** §11 lists the files;
+this is what happens to each:
+
+| From `romanian_whist_terminal` | Becomes | What changes |
+|---|---|---|
+| `GameView.{h,cpp}` | `GameSnapshot` + `refreshFromEngine()` | Drop `message`, `hint`, `error`, `elapsedMinutes`, `Phase`, `HandEntry::choice`. Keep every comment about `canSeeHand()`, the lead seat, and rebuilding the hand each frame. §4.0, §9. |
+| `HandLayout.{h,cpp}` | `layOutHand()` + `HandLayout::positions` | `choices` goes with the typed number; `positions` — the local `ordered` it already computes and throws away — is kept and becomes `PlayPrompt::handIndex`. §4.0. |
+| `CardFormat::inDisplayOrder` / `sortForDisplay` / `suitPosition` | `paint/CardOrder` | Loses its `Terminal` member; becomes free functions. |
+| `CardFormat::suitGlyph` / `card` / `isRed` | `paint/CardRenderer` | Escape sequences → pixmaps. §18.1. |
+| `Pacer.{h,cpp}` | `GameBridge`'s pacing (§4.1) | `sleep` → an interruptible `wait_for` that **returns** on cancel (§6). Keeps the rule that a skip only skips the round it was asked for, and `resetSkip()`'s placement. |
+| `Renderer::winnerAnnouncement` | the game-over panel's closing line | Verbatim, plus `tr()`. **Its test comes with it.** |
+| `SetupWizard` | the New Game dialog (§13) | Same questions, same bounds, one screen. |
+| `TerminalRomanianWhist` | `GameBridge` (§4.1) | Same callbacks, same order, same comments. Publishes a snapshot instead of drawing a frame, and cannot draw the game-over screen after `run()` returns (§16.2). |
+| `AppOptions`, `Terminal`, `Input`, `Renderer` | — | Not ported. Terminal capability detection has no GUI meaning. |
+
+Each ported file keeps a header comment naming the repository and file it came from, so a fix that
+lands in one is findable in the other. That is the cheap half of §9's anti-drift mechanism; the
+seeded-snapshot test in §8 is the half that fails when someone forgets.
+
+**21.5 — Phase A's acceptance test is a transcript comparison. Taken, and §8 now carries it.**
+Recorded here as well because it is the one amendment that changed a phase rather than a type. Every
+other *verify* in §8 is something a person watches, which is the right check for a card table and the
+wrong one for a data path; running phase A seeded and **comparing the snapshot log against the
+terminal client's transcript for the same seed** is free, since the same engine on the same seed lays
+out the same schedule, and the two must then agree card for card. It is what makes phase A's
+deliberately ugly `QTextEdit` an assertion rather than a debugging aid.
+
 ---
 
 ## Appendix A. Corrections
@@ -1741,3 +2546,69 @@ wrong axis to argue on. A related draft prohibited re-sorting the hand and point
 `orderHandForDisplay()` on the engine side; **no such function exists**, and the prohibition was the
 wrong fix for the right worry — sorting for display is fine, and unsafe only when the way back is
 not carried with it.
+
+---
+
+## Appendix B. What was not taken from the design source, and why
+
+Part II is merged from `QT_GUI_PLAN_prproposal3_claude_opus_based_on_terminal_app.md`, whose Part I
+is adopted nearly whole. Its Part II covers the same ground as §§2–6 here and is broadly right about
+it, but it disagrees in six places. Each is recorded rather than silently dropped, on Appendix A's
+principle: **five of the six are things no compiler and no test will object to**, and a later reader
+comparing the two documents will otherwise assume the omission was an oversight.
+
+**B.1 — `EngineWorker`'s `public slots: submitBid / submitCard / skipRestOfRound / abandon`.
+Rejected; this is the dangerous one.** That object has game-thread affinity and its event loop is
+blocked inside `run()` for the entire game, so a `connect()` to any of those resolves to
+`QueuedConnection` and the call is delivered when the game ends — which is to say never. §5 states
+the rule (*nothing can be sent into the game thread by signal, ever*) and §4.2 routes `submit()`
+around Qt deliberately, for this reason and not for speed. The source acknowledges it only in a
+parenthetical — "queued; also sets the atomic flags directly" — which is the shape of a bug that
+works in testing and hangs in a real game. Everything inbound is a mutex and a condition variable:
+`submit()`, `abandon()`, `cancelPacing()`, and §15.3's skip and wait-for-me.
+
+**B.2 — A provider with no generation gate. Rejected.** Its `submitCard()` sets a pending value with
+no notion of which prompt it answers, and its wait predicate is `pendingCard || abandoned`. A
+double-click, or a click landing while nothing is parked, therefore arms the *next* prompt: the
+following `playCard()` returns immediately with an index chosen for a different hand, and the engine
+is handed a card the player did not choose. §4.2's `promptId` and the `std::exchange` that clears
+`answer` are both there for this, and §8 lists it as the headless test that otherwise gets found in
+a real game as *"it played a card I did not click"*.
+
+**B.3 — `std::chrono::seconds elapsed` on the snapshot. Rejected**, and §19 is the whole argument.
+The source puts a `steady_clock` start on the game thread and ships elapsed time in the snapshot,
+which means the clock advances only when the engine publishes — the terminal's stutter, reproduced
+in a client that has no reason to have it.
+
+**B.4 — Painting the cards with `QPainter` instead of shipping art. Overtaken.** Its reasoning was
+sound when written — no asset licensing, crisp at any DPI, a card size that follows the window —
+but the PNG and SVG sets are committed under `resources/images/cards/`, listed by `cards.qrc` and
+wired in `CMakeLists.txt`. What survives is the *interface* and the two properties that motivated
+it, both of which §18.1 keeps: a single `CardRenderer` seam, and a cache keyed on
+`(card, size, state, dpr)` with geometry derived from the view rect rather than from the export
+resolution.
+
+**B.5 — `getRound(index)` as the source for round history. Half-taken.** It is right that the
+schedule is laid out at `start()` and that cards have been held by value since v4, so the trump and
+the tricks of a finished round can be read back. It is wrong that this covers the scoresheet: the
+points column is not stored anywhere, which the source itself establishes two sections later.
+§16.3 takes both halves and says which is which.
+
+**B.6 — Its open questions, mostly closed.** A new repository (this one exists); Qt 6.5 versus 6.8
+(`find_package(Qt6 6.5 …)`, CI on 6.10.3); Widgets versus QML (Widgets, and the scaffold is already
+`MainWindow.ui`). Its file links are relative to `romanian_whist_terminal`, where it was written,
+and do not resolve from here — §11 names those files by repository-relative path instead, for the
+reason the header note gives. One question it leaves open is genuinely still open and worth keeping:
+**whether a spectator gets a "see everything" mode.** The terminal deliberately has none, because a
+spectator is not a seat and there is no viewer to ask `canSeeHand()` about, so showing every hand
+would be a *client policy* the engine has no opinion on. If it is ever added it must be an explicit,
+labelled toggle — never the default, and never applied to a seated player.
+
+**And one thing taken from the other retired proposal.** §14's seat-angle table is from
+`qt_implementation_plan_proposal2_gemini_proposal.md`, along with the colour-coded bid/won pill on
+the seat plaque. Nothing else from that document survives: it puts the client inside the engine
+repository as `src/gui/`, keeps a Qt 5 fallback, sends `BetContext` and `PlayContext` — both of
+which hold `const std::vector<Card>&` members — across a queued connection, proposes returning
+`std::nullopt` as a cancellation mechanism where `IMoveProvider` documents it as "no legal play",
+ships a joker in a 52-card set of which four are never dealt, and renders Hidden rounds as face-down
+"until bidding finishes" where `canSeeHand()` says nobody sees any hand for the whole round.
