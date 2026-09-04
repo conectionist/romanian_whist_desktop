@@ -25,14 +25,38 @@ GameController::~GameController()
 
 void GameController::prepare(std::optional<Seat> humanSeat, Pacing pacing)
 {
+    // FIRST, before a single member below is replaced, and this is what makes
+    // reuse safe rather than merely intended. Two separate failures live in
+    // skipping it, and neither is loud:
+    //
+    //   * assigning over gameBridge and movePlayer destroys the observer the
+    //     game thread is publishing through and the provider a parked seat is
+    //     blocked in - a use-after-free, not a race with a warning; and
+    //   * QThread::start() on a thread that is still running warns and RETURNS,
+    //     so game two never runs at all.
+    //
+    // The window is the ordinary one, not an exotic one: onGameOver() fires from
+    // inside the run slot, so a "play again" pressed while the standings are on
+    // screen lands squarely in it.
+    //
+    // stop() is exactly the right call here - it ends the game AND joins, is
+    // idempotent, and is a no-op on a controller that has never been used.
+    stop();
+
     {
-        // Before anything is built. The previous game's stop() set this, and a
-        // flag left latched is read back by the next game's run slot, which then
-        // stops it before the first card is dealt.
+        // AFTER stop(), which sets this. The previous game's stop() - or the one
+        // above - set the latch, and a flag left set is read back by the next
+        // game's run slot, which then stops it before the first card is dealt.
         std::lock_guard lock(engineMutex);
         stopRequested = false;
         engine = nullptr;
     }
+
+    // KEPT, because start() needs to know which seat the player drives - see
+    // there. Set with the provider below and engaged on exactly the same
+    // condition, so `movePlayer != nullptr` and `humanPlayerSeat.has_value()`
+    // are two spellings of one fact.
+    humanPlayerSeat = humanSeat;
 
     // ON THE GUI THREAD, both of them, and handed back so the caller can connect
     // before the thread exists.
@@ -49,18 +73,42 @@ void GameController::start(GameSetup setup)
 {
     Q_ASSERT_X(gameBridge != nullptr, "GameController::start", "prepare() must be called first");
 
+    // The other half of the contract, and worth asserting rather than working
+    // around: prepare() is the join, so a thread still running here means
+    // start() was called twice without one. Ending the running game from inside
+    // start() would be the wrong repair - that is stop()'s decision to make, not
+    // a side effect of starting the next game.
+    Q_ASSERT_X(!thread.isRunning(), "GameController::start",
+               "prepare() joins the previous game; a second start() without it is a silent no-op");
+
     // The human seat's provider is left null by the caller and filled in here -
     // with the non-owning forwarder, not the real provider, so that the engine
     // destroying its GameSetup on the game thread cannot take the object a click
     // handler still points at.
     if(movePlayer)
     {
-        for(romanian_whist::SeatSetup& seat : setup.seats)
-        {
-            if(!seat.moveProvider)
-                seat.moveProvider = std::make_unique<SeatProvider>(movePlayer.get());
-        }
+        // BY SEAT, not by "whichever slot happens to be empty". The seat the
+        // player drives has to be the seat the snapshot marks as theirs -
+        // GameBridge was handed the same optional in prepare() - and filling
+        // every empty slot only agrees with that while there is exactly one.
+        // Two, and the player silently drives a seat that is drawn as a bot's.
+        //
+        // .at(), not [], so a seat past the end of the table is an exception out
+        // of start() on the GUI thread rather than undefined behaviour. start()
+        // already documents that it can throw and that a retry needs a freshly
+        // built GameSetup.
+        romanian_whist::SeatSetup& seat = setup.seats.at(humanPlayerSeat->index);
+
+        Q_ASSERT_X(seat.moveProvider == nullptr, "GameController::start",
+                   "the human seat's provider is left null by the caller");
+
+        seat.moveProvider = std::make_unique<SeatProvider>(movePlayer.get());
     }
+
+    // Any OTHER seat left without a provider stays that way, and that is the
+    // point: GameEngine::start() rejects it by name, on the game thread, and the
+    // run slot's catch-all turns that into gameFailed. A caller who forgot a bot
+    // gets told so, rather than having the human quietly play that seat too.
 
     // The bridge belongs to the game thread from here on. Its signals are
     // AutoConnection, which now resolves to QueuedConnection for anything

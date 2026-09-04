@@ -58,10 +58,17 @@ public:
     // game, so a null provider is the first state this class is ever in, and
     // stop() null-checks it for exactly that reason.
     //
-    // Clears stopRequested, under engineMutex, before it builds anything. The
-    // previous game's stop set it; leaving it set stops the next one before it
-    // starts. Safe here and nowhere else: stop() has already joined the thread
-    // by the time a second prepare() is called, so there is no run slot to race.
+    // THE JOIN POINT FOR REUSE, and it performs that join rather than assuming
+    // one has happened: prepare() calls stop() first. A "play again" pressed
+    // over the standings arrives while the run slot is still inside
+    // onGameOver(), so without it this call frees the bridge that thread is
+    // publishing through, and the start() that follows returns silently on a
+    // QThread that is still running - a second game that never runs at all.
+    //
+    // That is also what makes the rest of this safe. Clears stopRequested, under
+    // engineMutex, after the stop and before it builds anything: the previous
+    // game's stop set it, leaving it set stops the next one before it starts,
+    // and by then there is no run slot left to race.
     void prepare(std::optional<romanian_whist::Seat> humanSeat, Pacing pacing);
 
     // GameSetup is MOVE-ONLY - it owns the seats' unique_ptr<IMoveProvider> - so
@@ -69,10 +76,18 @@ public:
     // into the run slot's captures. It cannot travel through a queued signal,
     // which is why it goes into the lambda rather than a slot argument.
     //
+    // REQUIRES AN IDLE THREAD, which prepare() is what provides. Asserted rather
+    // than repaired here: a start() that quietly ended the running game would be
+    // making stop()'s decision for the caller.
+    //
     // The human seat's moveProvider is left NULL by the caller and filled in
     // here with a SeatProvider - the non-owning forwarder, NOT the
     // QtMoveProvider itself, which this class keeps. GameEngine::start() rejects
     // a null provider, so the seat cannot simply be left empty.
+    //
+    // The seat filled is the one prepare() was given, addressed by index. Any
+    // OTHER empty seat is left for the engine to reject by name: a caller who
+    // forgot a bot is told so, rather than having the human play that seat too.
     //
     // The caller's GameSetup is gutted by the move whatever happens, so a
     // start() that throws needs a freshly built one to retry - not because the
@@ -119,6 +134,12 @@ private:
 
     std::unique_ptr<GameBridge> gameBridge;       // built on the GUI thread, then moveToThread()
     std::unique_ptr<QtMoveProvider> movePlayer;   // null in a spectator game
+
+    // WHICH seat that provider serves, kept because start() has no other way to
+    // know. The same optional GameBridge was handed, set beside movePlayer and
+    // engaged on exactly the same condition - so the seat the player drives and
+    // the seat a snapshot marks as theirs cannot drift apart.
+    std::optional<romanian_whist::Seat> humanPlayerSeat;
 
     // The engine is constructed, used and destroyed on the game thread, so the
     // GUI thread may not read this pointer unguarded - stop() would otherwise

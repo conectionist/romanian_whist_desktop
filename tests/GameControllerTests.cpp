@@ -80,24 +80,34 @@ public:
 // Records which of the two terminal signals fired, and lets the test thread
 // wait for either with a deadline.
 //
-// Connected with a CONTEXT-FREE lambda on purpose, so the handler runs on the
-// game thread as the signal is emitted. The alternative - a queued connection
-// into this thread - would need the event loop pumped to see anything, which is
-// what the last test in this file exercises deliberately and the rest have no
-// reason to.
+// Connected DIRECT, so the handler runs on the game thread as the signal is
+// emitted. The alternative - a queued connection into this thread - would need
+// the event loop pumped to see anything, which is what the last test in this
+// file exercises deliberately and the rest have no reason to.
+//
+// Through a context object rather than context-free, which is what disconnects
+// these when the Outcome dies. An Outcome is a scoped local while its sender is
+// not: `controller` outlives the reuse test's inner scope, so a context-free
+// lambda leaves a dangling `this` connected for game two.
+//
+// MUST NOT BE DESTROYED MID-EMIT. Qt's disconnect is thread-safe, but a slot
+// already entered runs to completion - so an Outcome goes out of scope only
+// after await() has returned and the game has been stopped or has ended.
 class Outcome
 {
 public:
     explicit Outcome(GameController& controller)
     {
-        QObject::connect(controller.bridge(), &GameBridge::gameOver,
+        QObject::connect(controller.bridge(), &GameBridge::gameOver, &context,
                          [this](std::vector<Standing>, std::vector<Standing>)
-                         { record(overCount); });
+                         { record(overCount); },
+                         Qt::DirectConnection);
 
-        QObject::connect(controller.bridge(), &GameBridge::gameStopped,
-                         [this]{ record(stoppedCount); });
+        QObject::connect(controller.bridge(), &GameBridge::gameStopped, &context,
+                         [this]{ record(stoppedCount); },
+                         Qt::DirectConnection);
 
-        QObject::connect(&controller, &GameController::gameFailed,
+        QObject::connect(&controller, &GameController::gameFailed, &context,
                          [this](QString what)
                          {
                              {
@@ -105,7 +115,8 @@ public:
                                  failure = what.toStdString();
                              }
                              record(failedCount);
-                         });
+                         },
+                         Qt::DirectConnection);
     }
 
     // Returns false on timeout rather than hanging.
@@ -142,6 +153,11 @@ private:
     std::condition_variable cv;
     bool finished = false;
     std::string failure;
+
+    // LAST, so it is destroyed FIRST: Qt drops every connection made with it as
+    // context before the mutex and the condition variable those handlers touch
+    // are gone.
+    QObject context;
 };
 }
 
@@ -341,6 +357,125 @@ TEST_CASE("prepare() clears the latch, so a second game is not stopped by the fi
     // Game two must finish on its own rather than stopping in its first round.
     REQUIRE(second.overCount == 1);
     REQUIRE(second.stoppedCount == 0);
+
+    controller.stop();
+}
+
+TEST_CASE("A controller is reused after a game that ended on its own", "[controller]")
+{
+    // THE ORDINARY "PLAY AGAIN" PATH, and the one with no stop() in it: the
+    // player reads the standings and presses the button. prepare() is the only
+    // thing between that and two separate failures - it frees the bridge and the
+    // provider the game thread may still be using, and then start()s a QThread
+    // whose `running` flag may still be set, which warns and RETURNS. The second
+    // is the quieter one by far: game two simply never runs.
+    //
+    // THE WINDOW IS HELD OPEN DELIBERATELY. await() returns from inside the
+    // gameOver emission, so the run slot is genuinely still executing - but only
+    // for microseconds, and a threading test that has to win a race to fail is a
+    // test that passes over the bug. The handler below parks the game thread
+    // mid-emission instead, which is the same state, held.
+    GameController controller;
+    controller.prepare(std::nullopt, instant());
+
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool released = false;
+
+    QObject holder;
+
+    {
+        // CONSTRUCTED FIRST, so its handler runs first: Qt invokes slots in
+        // connection order, and the holder below never returns until this thread
+        // has been woken by the one Outcome notifies.
+        Outcome first(controller);
+
+        QObject::connect(controller.bridge(), &GameBridge::gameOver, &holder,
+                         [&](std::vector<Standing>, std::vector<Standing>)
+                         {
+                             // Bounded, so a lost handshake fails the assertions
+                             // below rather than hanging the suite.
+                             std::unique_lock lock(mutex);
+                             cv.wait_for(lock, std::chrono::seconds(10), [&]{ return released; });
+                         },
+                         Qt::DirectConnection);
+
+        controller.start(buildSetup());
+
+        REQUIRE(first.await());
+        REQUIRE(first.overCount == 1);
+    }
+
+    // FROM ANOTHER THREAD, and on a timer, because the main thread is about to
+    // block in the very thread being held: prepare() joins, and a join nothing
+    // releases would sit until the holder's own bound expires - a pass that
+    // takes ten seconds to arrive.
+    std::thread releaser([&]
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        {
+            std::lock_guard lock(mutex);
+            released = true;
+        }
+
+        cv.notify_all();
+    });
+
+    controller.prepare(std::nullopt, instant());
+
+    Outcome second(controller);
+    controller.start(buildSetup(7u));
+
+    // AFTER start(), not before. Joining it earlier would let game one's thread
+    // finish on its own while the main thread waited - which is the state this
+    // test exists to avoid being in.
+    releaser.join();
+
+    REQUIRE(second.await());
+    REQUIRE(second.overCount == 1);
+    REQUIRE(second.stoppedCount == 0);
+    REQUIRE(second.failedCount == 0);
+
+    controller.stop();
+}
+
+TEST_CASE("The provider is attached to the human's seat and no other", "[controller]")
+{
+    // Which seat the player drives has to be the seat the snapshot marks as
+    // theirs - GameBridge was handed the same optional - and "fill every seat
+    // whose provider is null" only agrees with that while exactly one is.
+    //
+    // Here two are: seat 1 is the human's, and seat 2 has been left empty by
+    // mistake. Filling both hands the player two seats and the game plays on
+    // silently; filling only seat 1 leaves seat 2 for GameEngine::start() to
+    // reject, which is a failure with a name on it.
+    GameController controller;
+    controller.prepare(Seat{ 1u }, instant());
+
+    REQUIRE(controller.provider() != nullptr);
+
+    Outcome outcome(controller);
+
+    GameSetup setup;
+    setup.seats.push_back(SeatSetup{ "Ana",
+        std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()) });
+    setup.seats.push_back(SeatSetup{ "Bogdan", nullptr });   // the human
+    setup.seats.push_back(SeatSetup{ "Cristina", nullptr }); // the caller's mistake
+    setup.structure = GameStructure::S_181;
+    setup.shuffleSeed = 42u;
+
+    controller.start(std::move(setup));
+
+    REQUIRE(outcome.await());
+    REQUIRE(outcome.failedCount == 1);
+    REQUIRE(outcome.overCount == 0);
+
+    // NAMING THE SEAT IS THE TEST. "It failed" would also be true of a game that
+    // rejected the human's own seat; this pins that seat 1 was filled and seat 2
+    // was left exactly as the caller left it.
+    REQUIRE(outcome.failureMessage() ==
+            "GameEngine::start: seat 'Cristina' has no move provider");
 
     controller.stop();
 }
