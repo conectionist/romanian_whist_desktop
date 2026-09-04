@@ -30,7 +30,7 @@ Two rules travel with every step and are not repeated:
 
 | Phase | | Ends with |
 |---|---|---|
-| **0** | Skeleton — verify what is already committed | The window opens and a card pixmap is non-null |
+| **0** ✅ | Skeleton — verify what is already committed | The window opens and a card pixmap is non-null |
 | **A** | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
 | **B** | Cards on a table | A spectated game is watchable and legible |
 | **C** | The human plays | A full game is playable, Forehead and Hidden rounds included |
@@ -44,14 +44,14 @@ that up (§8, phase A).
 
 ---
 
-## Phase 0 — verify the skeleton
+## Phase 0 — verify the skeleton ✅ COMPLETE
 
 Already committed. This phase is confirming it, which takes minutes and saves an afternoon of
 blaming the wrong layer later.
 
-- [ ] `cmake --preset default && cmake --build build` — the engine submodule resolves and links.
-- [ ] The window opens.
-- [ ] **The card art is actually embedded.** `CMakeLists.txt` names three silent ways to end up with
+- [x] `cmake --preset default && cmake --build build` — the engine submodule resolves and links.
+- [x] The window opens.
+- [x] **The card art is actually embedded.** `CMakeLists.txt` names three silent ways to end up with
       nothing in the binary, and all three produce a build that succeeds. Put a temporary line in
       `main()`:
       ```cpp
@@ -59,9 +59,31 @@ blaming the wrong layer later.
       ```
       and one for the SVG through `QSvgRenderer` — not through `QPixmap`, which needs the
       `imageformats` plugin the deploy step strips (§18.1). Delete both once they pass.
-- [ ] CI is green on all three runners.
+- [x] CI is green on all three runners.
 
 **Done when:** all four boxes are ticked. Nothing below is worth starting otherwise.
+
+### What the run found
+
+Kept because the next person to run this — on another machine, or after a Qt bump — hits the same
+three things.
+
+- **Point the preset at Qt explicitly** if it is not on `PATH`, which is the normal case for a
+  `~/Qt` install: `cmake --preset default -DCMAKE_PREFIX_PATH=<qt>/gcc_64`. `which qmake6` finding
+  nothing does not mean Qt is missing.
+- **Run the card-art asserts against a bogus path first**, confirm they abort, *then* point them at
+  the real one. A passing `Q_ASSERT` proves nothing on its own — it compiles out under `QT_NO_DEBUG`,
+  so the `release` preset's binary checks nothing and passes exactly as loudly. Use the `default`
+  (Debug) preset, and prove the probe has teeth before trusting it.
+- **The diagnostic is cheaper than the run.** `build/qrc_cards.cpp` (~30 MB) is generated only if
+  rcc actually ran, so its absence catches all three silent-embedding failures without launching
+  anything. `CMakeLists.txt` says this; it is worth doing first rather than last.
+
+Two stale comments in `CMakeLists.txt` were fixed on the way past: a pointer to a
+`docs/QT_CLIENT_PLAN.md` that no longer exists, and a claim that `qt_standard_project_setup()` turns
+on AUTORCC — which it does not, and which the same file's card-art comment already refuted forty
+lines further down. That second one was the exact misconception this phase's card check exists to
+catch, asserted as true above the comment disproving it.
 
 ---
 

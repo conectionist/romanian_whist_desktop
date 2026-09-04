@@ -8,9 +8,9 @@ project(romanian_whist_desktop
 # ---------------------------------------------------------------------------
 # Qt
 # ---------------------------------------------------------------------------
-# Qt 6 only. The engine is C++20 and every line of docs/QT_CLIENT_PLAN.md is
-# written against Qt 6 APIs, so a Qt 5 fallback would only half-support a
-# configuration nothing is tested against.
+# Qt 6 only. The engine is C++20 and every line of
+# docs/QT_CLIENT_PLAN_proposal1.md is written against Qt 6 APIs, so a Qt 5
+# fallback would only half-support a configuration nothing is tested against.
 #
 # Svg is linked for QSvgRenderer, not for the qsvg imageformat plugin: the
 # deploy step below (see EXCLUDE_PLUGIN_TYPES / --skip-plugin-types) deliberately
@@ -20,8 +20,9 @@ project(romanian_whist_desktop
 # art can stay vector without reopening the plugin trimming above.
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets LinguistTools Svg)
 
-# Turns on AUTOMOC / AUTOUIC / AUTORCC and the rest of the modern defaults, so
-# they do not have to be set one at a time.
+# Turns on AUTOMOC and AUTOUIC and the rest of the modern defaults, so they do
+# not have to be set one at a time. NOT AUTORCC - see the card art below, where
+# that gap is the second of the three silent ways to embed no resources at all.
 qt_standard_project_setup(REQUIRES 6.5)
 
 # ---------------------------------------------------------------------------
