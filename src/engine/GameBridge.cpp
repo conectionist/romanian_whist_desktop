@@ -26,6 +26,11 @@ void GameBridge::publish(const GameEngine& engine)
     // -1 in a spectator game, which is the default and the correct answer.
     snapshot.humanSeat = humanSeat ? static_cast<int>(humanSeat->index) : -1;
 
+    // The other field refreshFromEngine() leaves to the caller. Unlike humanSeat
+    // above, nothing in the refresh reads it, so it could equally go after -
+    // it sits here because the two are set for the same reason.
+    snapshot.activeSeat = activeSeat;
+
     refreshFromEngine(snapshot, engine);
 
     // Wrapped only on the way out - built by value above, so GameSnapshot's rule
@@ -45,6 +50,9 @@ void GameBridge::onRoundStarted(const GameEngine& engine)
     // hand may be shown at all.
     roundType = engine.getCurrentRoundType();
 
+    // Dealt, but nobody asked for anything yet.
+    activeSeat = -1;
+
     publish(engine);
 }
 
@@ -52,12 +60,17 @@ void GameBridge::onBetRequested(const GameEngine& engine, Seat seat)
 {
     // Whose turn it is to bid. Drives the "waiting on Ana" indicator; the human
     // seat's own prompt comes from QtMoveProvider, not from here.
+    activeSeat = static_cast<int>(seat.index);
+
     publish(engine);
     emit turnChanged(seat.index);
 }
 
 void GameBridge::onBetPlaced(const GameEngine& engine, Seat seat, unsigned int bet)
 {
+    // activeSeat DELIBERATELY stays on this seat: the snapshot showing the bid
+    // that was just made should still highlight who made it. Clearing it here
+    // reads like the missing half of onBetRequested and is not.
     publish(engine);
     emit betPlaced(seat.index, bet);
 
@@ -69,6 +82,8 @@ void GameBridge::onBettingComplete(const GameEngine& engine)
 {
     // Hold on the completed bid table before the first card goes down. Without
     // this the last bid is only ever seen when a bot made it.
+    activeSeat = -1;
+
     publish(engine);
     pace(botBeat());
 
@@ -79,18 +94,25 @@ void GameBridge::onBettingComplete(const GameEngine& engine)
 
 void GameBridge::onTrickStarted(const GameEngine& engine, unsigned int trickNumber, Seat leader)
 {
+    // The leader has not been ASKED yet - onCardRequested is what says that -
+    // so this frame has nobody on turn.
+    activeSeat = -1;
+
     publish(engine);
     emit trickStarted(trickNumber, leader.index);
 }
 
 void GameBridge::onCardRequested(const GameEngine& engine, Seat seat)
 {
+    activeSeat = static_cast<int>(seat.index);
+
     publish(engine);
     emit turnChanged(seat.index);
 }
 
 void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& card)
 {
+    // Stays on this seat, for the reason onBetPlaced gives.
     publish(engine);
     emit cardPlayed(seat.index, card);
 
@@ -106,6 +128,11 @@ void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int tr
     // callback, so the snapshot carries the completed table rather than a blank
     // one. Note refreshFromEngine() reads the seats off that trick rather than
     // recomputing them from the leader, which has already moved to the winner.
+    //
+    // The trick is over and the next seat has not been asked, so nobody is on
+    // turn for the dwell below - which is the longest a frame stays up.
+    activeSeat = -1;
+
     publish(engine);
     emit trickWon(seat.index, trickNumber);
     pace(pacing.trickDwell);
@@ -116,6 +143,12 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // This callback and not onRoundComplete: it is the last one at which the
     // engine still names the round just scored, so a round sheet drawn from it
     // shows the right round's numbers.
+    //
+    // Cleared here rather than in onRoundComplete or onGameOver: this is the
+    // first callback after the round's last trick, so those two inherit -1 and
+    // need no line of their own.
+    activeSeat = -1;
+
     publish(engine);
     emit roundScored();
 }

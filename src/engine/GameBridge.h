@@ -161,6 +161,17 @@ private:
     // Game thread only: written in onRoundStarted, read by the provider.
     romanian_whist::RoundType roundType = romanian_whist::RoundType::Normal;
 
+    // Whose turn it is, or -1 for nobody - the encoding GameSnapshot uses, and
+    // the reason this is an int rather than a Seat. Snapshot.h names it as one
+    // of the two fields refreshFromEngine() leaves to the caller, because the
+    // engine does not model it.
+    //
+    // Set and cleared in the callbacks below and copied into every snapshot, so
+    // like roundType it is game-thread state and needs no locking. turnChanged()
+    // cannot stand in for it: it announces a turn starting and has no way to say
+    // that nobody is on turn.
+    int activeSeat = -1;
+
     // Woken by cancelPacing() so a close does not wait out a trick dwell.
     std::mutex pacingMutex;
     std::condition_variable pacingCv;

@@ -257,3 +257,69 @@ TEST_CASE("The round type is cached for the provider, which cannot read it itsel
     REQUIRE(bridge.currentRoundType() == RoundType::Forehead);
     REQUIRE(engine.getCurrentRoundTrickCount() == 1);
 }
+
+TEST_CASE("Every snapshot names the seat on turn, or nobody", "[bridge]")
+{
+    // The other half of what refreshFromEngine() leaves to the caller. The
+    // engine does not model whose turn it is, so a bridge that only fills
+    // humanSeat ships snapshots that all say "nobody is active" - and the turn
+    // highlight has nothing to draw from.
+    //
+    // turnChanged() is not a substitute and this is why: it announces a turn
+    // STARTING, and half the assertions below are about the frames where nobody
+    // is on turn, which that signal cannot express.
+    //
+    // Driven callback by callback rather than by running a game: the point is
+    // which callback sets what, and a real schedule would only reach them in
+    // one fixed order.
+    GameBridge bridge(std::nullopt, instant());
+
+    int active = -2;                 // neither a seat nor "nobody", so an
+                                     // unpublished frame cannot pass by accident
+    QObject::connect(&bridge, &GameBridge::stateChanged,
+                     [&active](std::shared_ptr<const GameSnapshot> snapshot)
+                     { active = snapshot->activeSeat; });
+
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    // Dealt, and nobody asked for anything yet.
+    bridge.onRoundStarted(engine);
+    REQUIRE(active == -1);
+
+    bridge.onBetRequested(engine, Seat{1});
+    REQUIRE(active == 1);
+
+    // Deliberately still 1: the frame showing a bid that was just made should
+    // still highlight who made it.
+    bridge.onBetPlaced(engine, Seat{1}, 0);
+    REQUIRE(active == 1);
+
+    bridge.onBettingComplete(engine);
+    REQUIRE(active == -1);
+
+    // The leader has not been ASKED yet, so this frame has nobody on turn.
+    bridge.onTrickStarted(engine, 1, Seat{0});
+    REQUIRE(active == -1);
+
+    bridge.onCardRequested(engine, Seat{0});
+    REQUIRE(active == 0);
+
+    // Stays on the player, for the reason onBetPlaced does.
+    bridge.onCardPlayed(engine, Seat{0}, Card(Rank::Ace, Suit::Spades));
+    REQUIRE(active == 0);
+
+    bridge.onTrickWon(engine, Seat{0}, 1);
+    REQUIRE(active == -1);
+
+    bridge.onRoundScored(engine);
+    REQUIRE(active == -1);
+
+    // onRoundComplete and onGameOver inherit the clear above rather than
+    // repeating it, so they are worth an assertion each.
+    bridge.onRoundComplete(engine);
+    REQUIRE(active == -1);
+
+    bridge.onGameOver(engine);
+    REQUIRE(active == -1);
+}

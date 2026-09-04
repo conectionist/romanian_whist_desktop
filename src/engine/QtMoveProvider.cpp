@@ -50,6 +50,13 @@ unsigned int QtMoveProvider::makeBet(const BetContext& context)
     // and is the whole fix when it is not.
     while(true)
     {
+        // BEFORE the prompt goes out, not only after the wait. abandon() only
+        // latches a flag, so it may already be set the first time through -
+        // raising first tells a GUI that is tearing down to ask for a bid, on
+        // the way to throwing out from under it.
+        if(abandoned)
+            throw GameAbandoned{};
+
         const unsigned int prompt = ++generation;
 
         // COPIED, not moved: the loop may raise this prompt again.
@@ -62,6 +69,9 @@ unsigned int QtMoveProvider::makeBet(const BetContext& context)
 
         cv.wait(lock, [this, prompt]{ return answeredPrompt == prompt || abandoned; });
 
+        // Still needed, and not made redundant by the check above: the wait
+        // returns on an abandon with `answer` empty, and falling through would
+        // dereference an empty optional.
         if(abandoned)
             throw GameAbandoned{};
 
@@ -70,16 +80,23 @@ unsigned int QtMoveProvider::makeBet(const BetContext& context)
         //
         // std::exchange clears it. Leaving it set means the next prompt returns
         // this same value without ever waiting.
-        const unsigned int bet =
-            static_cast<unsigned int>(*std::exchange(answer, std::nullopt));
+        //
+        // Kept as a size_t until it has been checked. Narrowing first makes a
+        // submitted 2^32+1 wrap to a legal bet of 1 and reach the engine, where
+        // re-prompting was the whole point; playCard() checks the untruncated
+        // value, and both take the same untrusted number from the same submit().
+        const std::size_t submitted = *std::exchange(answer, std::nullopt);
 
         // GameEngine::isBetLegal() is these two rules and nothing else - no more
         // tricks than there are cards, and never the bet that would make the
         // totals add up. Restated rather than called: this holds no engine
         // reference, and the engine is deliberately not reachable from here.
-        if(bet <= context.hand.size() &&
-           (!context.forbiddenBet || bet != *context.forbiddenBet))
-            return bet;
+        //
+        // Past them the value is at most the hand size, so the narrowing is
+        // provably lossless.
+        if(submitted <= context.hand.size() &&
+           (!context.forbiddenBet || submitted != *context.forbiddenBet))
+            return static_cast<unsigned int>(submitted);
     }
 }
 
@@ -111,6 +128,10 @@ std::optional<std::size_t> QtMoveProvider::playCard(const PlayContext& context)
     // against is already sitting in a local.
     while(true)
     {
+        // Before the prompt goes out, for the reason makeBet() gives.
+        if(abandoned)
+            throw GameAbandoned{};
+
         const unsigned int prompt = ++generation;
 
         bridge->raiseCardRequested(PlayPrompt{ prompt,

@@ -318,12 +318,20 @@ TEST_CASE("abandon() before the provider parks still throws, rather than hanging
     GameBridge bridge(Seat{0}, Pacing{});
     QtMoveProvider provider(&bridge, Seat{0});
 
+    // Counted on the way past, and the count is the point: a provider that
+    // raises before it checks the flag tells a GUI that is tearing down to ask
+    // for a card, then throws out from under the prompt it just sent.
+    std::atomic<int> prompts{0};
+    QObject::connect(&bridge, &GameBridge::cardRequested,
+                     [&prompts](PlayPrompt){ prompts++; });
+
     provider.abandon();
 
     ParkedPlay parked(bridge, provider, Hand);
     parked.join();
 
     REQUIRE(parked.threw);
+    REQUIRE(prompts.load() == 0);
 }
 
 TEST_CASE("A bet outside the legal range re-prompts", "[provider]")
@@ -362,6 +370,55 @@ TEST_CASE("A bet outside the legal range re-prompts", "[provider]")
     worker.join();
 
     REQUIRE(result == 1);
+}
+
+TEST_CASE("A bet that wraps on the way to unsigned int re-prompts", "[provider]")
+{
+    // submit() takes a size_t, because the other channel it feeds is a hand
+    // index. A bet has to be narrowed to reach the engine - and narrowing FIRST
+    // turns 2^32+1 into a legal bet of 1, which is the one input shape where
+    // the re-prompt loop stops defending against a bad widget and starts
+    // manufacturing an answer for it.
+    //
+    // playCard() checks the untruncated value. Both take the same untrusted
+    // number from the same submit(), so both have to apply the same rule.
+    if constexpr(sizeof(std::size_t) > sizeof(unsigned int))
+    {
+        GameBridge bridge(Seat{0}, Pacing{});
+        QtMoveProvider provider(&bridge, Seat{0});
+
+        BetContext context{ Hand, std::nullopt, false, std::nullopt, RoundType::Normal };
+
+        std::atomic<unsigned int> lastPrompt{0};
+        QObject::connect(&bridge, &GameBridge::betRequested,
+                         [&lastPrompt](BetPrompt prompt){ lastPrompt = prompt.promptId; });
+
+        std::atomic<bool> done{false};
+        unsigned int result = 0;
+
+        std::thread worker([&]
+        {
+            result = provider.makeBet(context);
+            done = true;
+        });
+
+        const unsigned int first = waitForPrompt(lastPrompt, 0);
+
+        // Low 32 bits are 1 - a bet this hand can legally make, and the value
+        // the old code returned. The whole number is far past three cards.
+        provider.submit(first, (std::size_t{1} << 32) + 1);
+
+        const unsigned int second = waitForPrompt(lastPrompt, first);
+        REQUIRE_FALSE(done);
+        provider.submit(second, 1);
+
+        worker.join();
+
+        // 1 because the SECOND submission asked for it, not because the first
+        // one wrapped into it.
+        REQUIRE(result == 1);
+        REQUIRE(second > first);
+    }
 }
 
 TEST_CASE("A normal round's prompt carries the cards and the way back", "[provider]")
