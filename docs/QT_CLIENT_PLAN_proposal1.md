@@ -408,6 +408,28 @@ public:
         emit trickWon(seat.index, trickNumber);
         pace(pacing.trickDwell);
     }
+    // TWO OPEN PACING QUESTIONS, both deliberately left as sketched until the
+    // client can actually be watched (A5 at the earliest, really B2). Neither is
+    // a correctness problem and neither is worth settling by reading.
+    //
+    // 1. The round dwell below is on the WRONG FRAME if you go by the terminal.
+    //    onRoundScored() publishes the only snapshot carrying the round result
+    //    and returns straight away, so that frame is never held; onRoundComplete()
+    //    publishes the advanced-index frame - a blank next round - and dwells on
+    //    THAT. TerminalRomanianWhist does the opposite: it draws in onRoundScored()
+    //    and calls pacer.roundPause() there, and does not override onRoundComplete()
+    //    at all. Note roundPause() sleeps for the same trickDwell option
+    //    trickPause() uses (Pacer.cpp), so matching it needs no new knob in Pacing.
+    //
+    // 2. onCardRequested() has NO BEAT before a bot's card, so the "waiting on
+    //    Ana" frame is superseded by onCardPlayed()'s microseconds later and
+    //    never renders. The terminal paces there - draws "X is thinking..." then
+    //    pacer.beat(), bots only.
+    //
+    //    Do not "fix" onBetRequested() to match: the terminal deliberately does
+    //    NOT beat there, taking it afterwards in onBetPlaced() instead, which is
+    //    what this sketch already does. Betting is right; only the card path is
+    //    missing its beat.
     void onRoundScored(const GameEngine& e) override { publish(e); emit roundScored(); }
     void onRoundComplete(const GameEngine& e) override { publish(e); pace(pacing.trickDwell); }
 
@@ -483,6 +505,16 @@ private:
         // no seat's hand is filled, and canSeeHand() is never asked a question
         // with no viewer to ask it about.
         snapshot.humanSeat = humanSeat ? static_cast<int>(humanSeat->index) : -1;
+
+        // The other field left to the caller, and ASKED OF THE ENGINE rather
+        // than tracked here. GameEngine::getActiveSeat() is engaged from just
+        // before a provider is asked until just after its answer is recorded,
+        // which is exactly the highlight this drives: it stays on the seat that
+        // just bid or just played, and empties between turns on its own. A
+        // bridge that maintains its own copy across the callbacks is a second
+        // state machine that can only drift from the one the engine keeps.
+        const std::optional<Seat> active = engine.getActiveSeat();
+        snapshot.activeSeat = active ? static_cast<int>(active->index) : -1;
 
         // This client's own refreshFromEngine(GameSnapshot&, const GameEngine&),
         // ported from the terminal's GameView.cpp - NOT a function the engine
@@ -589,7 +621,11 @@ And the provider itself:
 class QtMoveProvider : public romanian_whist::IMoveProvider
 {
 public:
-    QtMoveProvider(GameBridge* _bridge, Seat _seat);
+    // No seat parameter. The provider serves exactly one seat and every prompt
+    // it raises is implicitly that seat's, so nothing here ever reads one -
+    // GameController::prepare() is where the human seat lives, and the bridge
+    // holds it again for isHuman().
+    explicit QtMoveProvider(GameBridge* _bridge);
 
     // ---- called on the GAME thread. Blocks until the GUI answers. ----
     unsigned int makeBet(const BetContext& context) override

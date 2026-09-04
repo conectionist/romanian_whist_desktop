@@ -158,6 +158,11 @@ Tests (`tests/QtMoveProviderTests.cpp`), all headless:
 - `Pacing` takes the terminal's numbers: 700ms beat, **250ms spectator beat**, 1200ms trick dwell.
   The spectator split is not a detail — phase A *is* a spectator game, and 700ms a card makes a
   26-round schedule a very long sit.
+- The pacing **values** are settled; two of the **placements** are not, and are deliberately left as
+  §4.1 sketches them until there is something to watch — see the note beside that sketch, and the
+  A5/B2 checklist items. The round dwell sits on the blank next-round frame rather than the round
+  result, and a bot's card gets no beat before it. Both are cosmetic, neither is checkable by
+  reading, and A3 has no way to run a game at all.
 - `publish()` sets `humanSeat` **before** calling `refreshFromEngine`, then wraps the finished
   snapshot in `std::make_shared<const GameSnapshot>` on the way out.
 - Signals carry `unsigned int seat`, never `Seat` — it has no default constructor and so can never

@@ -11,6 +11,8 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(desktop_tests
     HandLayoutTests.cpp
     SnapshotTests.cpp
+    QtMoveProviderTests.cpp
+    GameBridgeTests.cpp
 )
 
 target_link_libraries(desktop_tests PRIVATE
