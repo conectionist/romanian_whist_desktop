@@ -33,6 +33,16 @@
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_CXX_COMPILER": "clang++"
             }
+        },
+        {
+            "name": "asan",
+            "displayName": "ASan/UBSan (Debug) - the APPLICATION, instrumented",
+            "binaryDir": "${sourceDir}/build-asan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
         }
     ],
     "buildPresets": [
@@ -49,6 +59,11 @@
         {
             "name": "clang",
             "configurePreset": "clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "asan",
+            "configurePreset": "asan",
             "configuration": "Debug"
         }
     ],
@@ -72,6 +87,14 @@
         {
             "name": "clang",
             "configurePreset": "clang",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "asan",
+            "configurePreset": "asan",
             "configuration": "Debug",
             "output": {
                 "outputOnFailure": true

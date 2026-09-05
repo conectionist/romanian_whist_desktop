@@ -210,12 +210,14 @@ something else.
 - [ ] The hand fan drawn from `GameSnapshot::hand`, **disabled**. It is not clickable until phase C
       and it cannot be (§4.0).
 
-- [ ] **Settle the two open pacing placements here.** This is the first time a table can be watched,
-      and pacing is only judgeable by watching it — which is why they were carried from A3 rather
-      than guessed at. Both are in `GameBridge`, both are a line each, and the §4.1 sketch note has
-      the terminal's answer for each: the round dwell wants to be in `onRoundScored()` rather than
-      `onRoundComplete()`, and `onCardRequested()` wants a `pace(botBeat())` for bots. Watch a full
-      round before changing either, then watch one after.
+- [ ] **Re-ask the one pacing question A5 left open.** The two carried from A3 are settled — the
+      round dwell moved to `onRoundScored()`, and `onCardRequested()` gained a bot beat — both
+      measured off A5's timestamped log rather than guessed at. What A5 could **not** judge is the
+      beat it *removed*: `onCardPlayed()` no longer paces, which diverges from the terminal, and the
+      argument for dropping it was that the two frames are identical **in a log**. On a table they
+      are not — the card landing and the highlight moving to the next seat become separate states,
+      and collapsing them may read as a card appearing under a highlight that has already left.
+      Watch a trick before deciding, and read the note beside `onCardPlayed()` in `GameBridge.cpp`.
 
 **Done when:** a spectated game is watchable and legible end to end; the window resizes without the
 layout breaking; the round result gets a beat you can actually read and no card lands on top of

@@ -1,0 +1,39 @@
+# AddressSanitizer suppressions for running the GUI under ASan.
+#
+# NOT for the test suite, which needs none of this - desktop_tests is clean.
+# This exists because the application links the XCB platform plugin, and
+# libxcb-cursor allocates a 21-byte buffer and then strchr()s past the end of
+# it while loading the window's cursor. The whole allocation and the whole read
+# are inside that library; our only frame in the report is w.show().
+#
+# Suppressed rather than investigated again: it is reached from
+# QWindowPrivate::applyCursor() on every show(), so without this every ASan run
+# of the application aborts before the window appears, and the one class of bug
+# ASan is here to find - ours - never gets a chance to show up.
+#
+# Usage, from the repository root, against the `asan` preset's build - NOT
+# ./build/romanian_whist_desktop, which links no sanitizer and would run this
+# command to a clean exit having checked nothing:
+#
+#   ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp:detect_leaks=0 ./build-asan/romanian_whist_desktop
+#
+# $PWD AND NOT A RELATIVE PATH: a relative suppressions= is not resolved against
+# the repository root, so it does not find this file. Measured - the previous
+# wording here, run from build/, died with
+#
+#   AddressSanitizer: failed to read suppressions file
+#   '.../build-asan/tools/asan.supp'
+#
+# and a run whose suppressions did not load is a run that aborts inside
+# libxcb-cursor before the window appears.
+#
+# NOTE WHAT detect_leaks=0 DOES THERE: it turns off leak detection ENTIRELY,
+# ours included - it is not narrowing anything to the bug this file suppresses,
+# which is what suppressions= is for. It is in the usual command because Qt and
+# XCB leak on exit by design and the report buries everything else. Drop it when
+# you are actually hunting a leak:
+#
+#   ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp ./build-asan/romanian_whist_desktop
+#
+# See docs/LOCAL_VERIFICATION.md, "Running the APPLICATION under ASan".
+interceptor_via_lib:libxcb-cursor

@@ -14,6 +14,7 @@ add_executable(desktop_tests
     QtMoveProviderTests.cpp
     GameBridgeTests.cpp
     GameControllerTests.cpp
+    SnapshotLogTests.cpp
     TestApp.cpp
 )
 

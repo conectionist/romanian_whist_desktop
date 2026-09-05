@@ -82,12 +82,53 @@ setarch -R cmake --build $S --target desktop_tests -j
 setarch -R $S/tests/desktop_tests --order rand
 ```
 
+**That builds the TEST SUITE only** — `--target desktop_tests` is the whole of it. The application
+is a separate target and gets nothing from this; for an instrumented `romanian_whist_desktop` use
+the `asan` preset in the next section.
+
 **`setarch -R` is required, not a nicety.** Kernel 6.8's ASLR entropy collides with
 ThreadSanitizer's shadow mappings, and without it TSan dies with "unexpected memory mapping" before
 running a line. That is an environment quirk, not a fault in this code.
 
 Swap `thread` for `address,undefined` for the ASan/UBSan pass, which needs no `setarch`. Run each
 several times with `--order rand`: a race that reproduces once in twenty is the normal case.
+
+## Running the APPLICATION under ASan
+
+The test suite needs nothing special. The application needs a build of its own — the `default`
+preset links no sanitizer, so running `./build/romanian_whist_desktop` under `ASAN_OPTIONS` checks
+nothing at all and exits cleanly, which reads exactly like a pass. `nm -C build/romanian_whist_desktop
+| grep -c asan` says `0`; that is the tell.
+
+```bash
+cmake --preset asan -DCMAKE_PREFIX_PATH=$QT && cmake --build --preset asan -j
+nm -C build-asan/romanian_whist_desktop | grep -c asan     # non-zero, unlike build/
+
+ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp:detect_leaks=0 ./build-asan/romanian_whist_desktop
+```
+
+Without the suppression every run aborts inside `w.show()` before the window appears —
+`libxcb-cursor` allocates a 21-byte buffer and `strchr`s past the end of it while loading the
+window's cursor, reached from `QWindowPrivate::applyCursor()`. The allocation and the read are both
+inside that library; the only frame of ours in the report is the `show()` that triggered it. It is
+a system-library bug, and suppressing it is what lets ASan get far enough to find one of ours.
+
+**`detect_leaks=0` switches off ALL leak detection, including ours.** It is not narrowing anything
+to the `libxcb-cursor` bug above — that is what `suppressions=` does. It is there because Qt and the
+XCB stack leak on exit by design and the report is long enough to bury anything, so the command
+above finds use-after-free and overflows only, and will never tell you about a leak in this
+project's own code.
+
+To actually look for one, drop the flag:
+
+```bash
+ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp ./build-asan/romanian_whist_desktop
+```
+
+and read past the Qt/XCB noise — the frames worth acting on are the ones naming a file in `src/`.
+If a leak of ours ever does turn up, that is the moment to add a `tools/lsan.supp` and an
+`LSAN_OPTIONS=suppressions=` alongside, suppressing the library noise by name. Writing one in
+advance, against leaks nobody has looked at yet, would only be guessing at which frames to silence.
 
 ## Stress, for the same reason
 

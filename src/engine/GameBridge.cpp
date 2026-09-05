@@ -109,6 +109,22 @@ void GameBridge::onCardRequested(const GameEngine& engine, Seat seat)
 {
     publish(engine);
     emit turnChanged(seat.index);
+
+    // A BEAT BEFORE A BOT'S CARD, so this frame is seen at all. Without it
+    // onCardPlayed() publishes microseconds later and supersedes it - measured
+    // in phase A's log, the gap was under a millisecond - so the seat on turn
+    // never renders and cards appear to teleport onto the table.
+    //
+    // The terminal does the same, drawing "X is thinking..." and then pacing.
+    // Not for the human: their own deliberation is the pause, and pausing
+    // before asking them would only delay the prompt.
+    //
+    // Note this is NOT wanted on onBetRequested(), which has the same shape.
+    // The terminal deliberately takes that beat afterwards in onBetPlaced()
+    // instead, which is what this class already does - so bidding is already
+    // right and only the card path was missing one.
+    if(!isHuman(seat))
+        pace(botBeat());
 }
 
 void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& card)
@@ -117,10 +133,26 @@ void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& c
     publish(engine);
     emit cardPlayed(seat.index, card);
 
-    // The human's own card needs no pause: the time they spent choosing it
-    // already served as one.
-    if(!isHuman(seat))
-        pace(botBeat());
+    // NOT PACED, and this is the second half of the beat onCardRequested takes.
+    // Pacing both spends two beats per card and the second one dwells on a
+    // table nothing has changed: the seats run back to back inside playTrick(),
+    // so the frame after this one is the next seat's onCardRequested, which
+    // already holds this card on screen for a beat while naming who is next.
+    // The last card of a trick is held by onTrickWon's longer dwell instead.
+    //
+    // THE TERMINAL KEEPS THIS BEAT, and the divergence is deliberate rather than
+    // overlooked. TerminalRomanianWhist paces in BOTH onCardRequested() and
+    // onCardPlayed(), and says why: the second "gives the card a moment on
+    // screen before another lands on top of it". That holds where the two
+    // frames differ - the terminal's request frame adds "X is thinking..." -
+    // and does not hold here, where the next frame names a different active
+    // seat over an identical table.
+    //
+    // RE-ASK IT AT B2, where it stops being the same question. A5 judged this
+    // off a text log, in which "the card landed" and "the highlight moved to
+    // the next seat" are one line. On a drawn table they are two states, and
+    // collapsing them may read as a card appearing under a highlight that has
+    // already left. A log cannot show that; a table can.
 }
 
 void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int trickNumber)
@@ -144,12 +176,26 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // shows the right round's numbers.
     publish(engine);
     emit roundScored();
+
+    // AND THE DWELL BELONGS HERE, on the frame that carries the result, not on
+    // the blank one after it. Measured in phase A's log with the two the other
+    // way round: onRoundScored published the result and returned, so that frame
+    // stood for 0ms, and the 1.2s landed on onRoundComplete's advanced-index
+    // frame - a next round with no trump, no bets and nothing played.
+    //
+    // TerminalRomanianWhist does it this way too: it draws in onRoundScored()
+    // and pauses there, and does not override onRoundComplete() at all. Its
+    // roundPause() waits out the same option trickPause() uses, so matching it
+    // needs no new knob here either.
+    pace(pacing.trickDwell);
 }
 
 void GameBridge::onRoundComplete(const GameEngine& engine)
 {
+    // Published but NOT paced - see onRoundScored above for where the dwell
+    // went. This frame is the next round before it is dealt, which is nothing
+    // anyone needs to read.
     publish(engine);
-    pace(pacing.trickDwell);
 }
 
 void GameBridge::onGameOver(const GameEngine& engine)

@@ -59,6 +59,9 @@ qt_add_library(desktop_core STATIC
     src/engine/GameController.cpp
     src/engine/MetaTypes.h
     src/engine/MetaTypes.cpp
+
+    src/ui/SnapshotLog.h
+    src/ui/SnapshotLog.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
