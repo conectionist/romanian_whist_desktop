@@ -408,28 +408,37 @@ public:
         emit trickWon(seat.index, trickNumber);
         pace(pacing.trickDwell);
     }
-    // TWO OPEN PACING QUESTIONS, both deliberately left as sketched until the
-    // client can actually be watched (A5 at the earliest, really B2). Neither is
-    // a correctness problem and neither is worth settling by reading.
+    // THE TWO PACING QUESTIONS THIS SKETCH LEFT OPEN WERE SETTLED IN A5, off a
+    // timestamped log rather than by reading, and both were wrong as sketched:
     //
-    // 1. The round dwell below is on the WRONG FRAME if you go by the terminal.
-    //    onRoundScored() publishes the only snapshot carrying the round result
-    //    and returns straight away, so that frame is never held; onRoundComplete()
-    //    publishes the advanced-index frame - a blank next round - and dwells on
-    //    THAT. TerminalRomanianWhist does the opposite: it draws in onRoundScored()
-    //    and calls pacer.roundPause() there, and does not override onRoundComplete()
-    //    at all. Note roundPause() sleeps for the same trickDwell option
-    //    trickPause() uses (Pacer.cpp), so matching it needs no new knob in Pacing.
+    // 1. The round dwell was on onRoundComplete(), which publishes the advanced
+    //    index - a blank next round - while onRoundScored() published the only
+    //    frame carrying the result and returned immediately. Measured: the
+    //    result frame stood for 0ms and the 1.2s landed on the blank one. The
+    //    dwell moved to onRoundScored(), where TerminalRomanianWhist has always
+    //    had it. Its roundPause() waits out the same option trickPause() uses
+    //    (Pacer.cpp), so matching it needed no new knob in Pacing.
     //
-    // 2. onCardRequested() has NO BEAT before a bot's card, so the "waiting on
-    //    Ana" frame is superseded by onCardPlayed()'s microseconds later and
-    //    never renders. The terminal paces there - draws "X is thinking..." then
-    //    pacer.beat(), bots only.
+    // 2. onCardRequested() had NO BEAT, so the "waiting on Ana" frame was
+    //    superseded under a millisecond later and never rendered. It paces for
+    //    bots now, as the terminal does.
     //
-    //    Do not "fix" onBetRequested() to match: the terminal deliberately does
-    //    NOT beat there, taking it afterwards in onBetPlaced() instead, which is
-    //    what this sketch already does. Betting is right; only the card path is
-    //    missing its beat.
+    //    onBetRequested() deliberately does NOT, and should not be "fixed" to
+    //    match: the terminal takes that beat afterwards in onBetPlaced()
+    //    instead, which is what this already does.
+    //
+    // ONE IS STILL OPEN, and it is the beat A5 REMOVED rather than one it
+    // added. onCardPlayed() no longer paces: with onCardRequested() pacing, two
+    // beats per card made a bot's card cost 500ms against a spectatorBeat that
+    // says 250, and the second dwelt on a table nothing had changed.
+    //
+    // The terminal paces both, on the stated grounds that the second "gives the
+    // card a moment on screen before another lands on top of it" - and that
+    // reasoning may return with a table. In a log, "the card landed" and "the
+    // highlight moved to the next seat" are one line; on a drawn board they are
+    // two states, and collapsing them may read as a card appearing under a
+    // highlight that has already left. B2 is where that can be judged, and the
+    // build order carries it as a checklist item there.
     void onRoundScored(const GameEngine& e) override { publish(e); emit roundScored(); }
     void onRoundComplete(const GameEngine& e) override { publish(e); pace(pacing.trickDwell); }
 

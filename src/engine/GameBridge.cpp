@@ -139,6 +139,20 @@ void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& c
     // so the frame after this one is the next seat's onCardRequested, which
     // already holds this card on screen for a beat while naming who is next.
     // The last card of a trick is held by onTrickWon's longer dwell instead.
+    //
+    // THE TERMINAL KEEPS THIS BEAT, and the divergence is deliberate rather than
+    // overlooked. TerminalRomanianWhist paces in BOTH onCardRequested() and
+    // onCardPlayed(), and says why: the second "gives the card a moment on
+    // screen before another lands on top of it". That holds where the two
+    // frames differ - the terminal's request frame adds "X is thinking..." -
+    // and does not hold here, where the next frame names a different active
+    // seat over an identical table.
+    //
+    // RE-ASK IT AT B2, where it stops being the same question. A5 judged this
+    // off a text log, in which "the card landed" and "the highlight moved to
+    // the next seat" are one line. On a drawn table they are two states, and
+    // collapsing them may read as a card appearing under a highlight that has
+    // already left. A log cannot show that; a table can.
 }
 
 void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int trickNumber)
