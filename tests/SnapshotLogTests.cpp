@@ -125,7 +125,18 @@ TEST_CASE("Bets and tricks won appear only once there are any", "[log]")
 
     REQUIRE(line.contains("bets 1/2"));
     REQUIRE(line.contains("sum 1"));
-    REQUIRE(line.contains("won[Ana:1]"));
+
+    // BOTH seats, once the block is on the line at all - Bogdan has won nothing
+    // and is still listed at 0. Printing only the winners makes seats appear
+    // one at a time as the round runs, so the entry a reader is following down
+    // the page moves under them; it is the same rule the scores[] block keeps,
+    // and it was worth having twice.
+    REQUIRE(line.contains("won[Ana:1 Bogdan:0]"));
+
+    // And the seat that pulls ahead does not reorder the list or drop the one
+    // behind it: this is the frame after Bogdan takes his first trick.
+    snapshot.seats[1].tricksWon = 1;
+    REQUIRE(snapshotlog::format(snapshot, kNoTime).contains("won[Ana:1 Bogdan:1]"));
 }
 
 TEST_CASE("The columns hold still when a field's numbers grow a digit", "[log]")
@@ -164,6 +175,43 @@ TEST_CASE("The columns hold still when a field's numbers grow a digit", "[log]")
     REQUIRE(narrowLine.indexOf("active=") == wideLine.indexOf("active="));
     REQUIRE(narrowLine.indexOf("bets ") == wideLine.indexOf("bets "));
     REQUIRE(narrowLine.length() == wideLine.length());
+}
+
+TEST_CASE("The columns hold still when the name on turn changes length", "[log]")
+{
+    // THE OTHER WAY THE COLUMNS MOVE, and the one the test above could not see
+    // because it varies only numbers. active= was padded to a fixed 15, which
+    // "Cristina" fills exactly - so a name of nine characters or more ran past
+    // the field and shoved bets=, won[] and scores[] sideways on every line
+    // that seat was on turn. Phase D's setup dialog is where the names stop
+    // being ours, so a name longer than anything hardcoded today is the case
+    // that matters.
+    GameSnapshot snapshot = twoSeats();
+    snapshot.seats[1].name = "Bartholomew-Ionescu";
+    snapshot.betsPlaced = 2;
+    snapshot.betSum = 4;
+
+    // The three states one seat set produces: nobody on turn, the short name on
+    // turn, the long one. Within a game the seats never change, so all three
+    // must agree - that is the whole comparison the padding exists to serve.
+    const QString idle = snapshotlog::format(snapshot, kNoTime);
+
+    snapshot.activeSeat = 0;
+    const QString shortName = snapshotlog::format(snapshot, kNoTime);
+
+    snapshot.activeSeat = 1;
+    const QString longName = snapshotlog::format(snapshot, kNoTime);
+
+    // The names really are there and really do differ in width, or this test
+    // would be comparing three lines that say the same thing.
+    REQUIRE(idle.contains("active=-"));
+    REQUIRE(shortName.contains("active=Ana"));
+    REQUIRE(longName.contains("active=Bartholomew-Ionescu"));
+
+    REQUIRE(idle.indexOf("bets ") == shortName.indexOf("bets "));
+    REQUIRE(idle.indexOf("bets ") == longName.indexOf("bets "));
+    REQUIRE(idle.length() == longName.length());
+    REQUIRE(shortName.length() == longName.length());
 }
 
 TEST_CASE("A scored round does not render as the trick that ended it", "[log]")

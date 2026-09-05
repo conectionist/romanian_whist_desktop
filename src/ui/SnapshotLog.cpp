@@ -2,6 +2,7 @@
 
 #include <QStringList>
 
+#include <algorithm>
 #include <cstddef>
 
 using romanian_whist::Card;
@@ -19,6 +20,34 @@ QString seatName(const GameSnapshot& snapshot, int seat)
         return QStringLiteral("-");
 
     return QString::fromStdString(snapshot.seats[static_cast<std::size_t>(seat)].name);
+}
+
+// How wide the active= field has to be for THIS game's names. Every seat is
+// measured, not just the one on turn, because the field has to hold whichever
+// of them takes a turn later in the same log - and "-" for nobody, which is
+// what a bidding frame prints, is the floor.
+//
+// DERIVED RATHER THAN A CONSTANT. This was 15, which "Cristina" fills exactly,
+// so the first 9-character name - phase D's setup dialog is where the names
+// stop being ours - pushed every column right of it sideways for the whole log.
+// Raising the constant only moves that cliff: a number big enough for any name
+// anyone might type spends those columns on every line of every log, and one
+// merely bigger than today's names is the same defect again, later. The seats
+// do not change within a game, so a width read off them is the same on every
+// line of one log, which is the only comparison this padding exists to serve.
+int activeWidth(const GameSnapshot& snapshot)
+{
+    int widest = 1;
+
+    for(const SeatView& seat : snapshot.seats)
+    {
+        // MEASURED AS A QString, not as the std::string it came from: a name
+        // with a diacritic - and this is a Romanian card game - is more bytes
+        // than it is columns.
+        widest = std::max(widest, static_cast<int>(QString::fromStdString(seat.name).size()));
+    }
+
+    return widest;
 }
 
 // A round score with its sign always shown. The plus is the point: what is
@@ -88,7 +117,10 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
     parts << QStringLiteral("trump=%1").arg(snapshot.hasTrump ? describe(snapshot.trump)
                                                               : QStringLiteral("-")).leftJustified(11);
 
-    parts << QStringLiteral("active=%1").arg(seatName(snapshot, snapshot.activeSeat)).leftJustified(15);
+    // The NAME is padded, not the whole field: "active=" is fixed width already,
+    // and padding inside makes the width above the only number in play.
+    parts << QStringLiteral("active=%1").arg(seatName(snapshot, snapshot.activeSeat)
+                                                 .leftJustified(activeWidth(snapshot)));
 
     // Padded as one field rather than per number: the sum runs from 0 to past
     // ten within a game, and it is the group's total width that decides where
@@ -125,18 +157,29 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
 
     // Tricks won, once anyone has taken one. Kept off the line until then so a
     // bidding frame is not padded with four zeroes.
-    QStringList wins;
+    bool anyWins = false;
+
     for(const SeatView& seat : snapshot.seats)
+        anyWins = anyWins || seat.tricksWon > 0;
+
+    if(anyWins)
     {
-        if(seat.tricksWon > 0)
+        QStringList wins;
+
+        // EVERY seat, including one that has won nothing yet - the same rule
+        // the scores[] block below states, for the same reason. Listing only
+        // the winners makes seats appear and disappear as the round runs
+        // (won[Cristina:1], then won[Cristina:1 Dan:1]), so the column a reader
+        // is following down the page moves under them and a seat stuck on zero
+        // is indistinguishable from a seat the log forgot.
+        for(const SeatView& seat : snapshot.seats)
         {
             wins << QStringLiteral("%1:%2").arg(QString::fromStdString(seat.name),
                                                 QString::number(seat.tricksWon));
         }
-    }
 
-    if(!wins.isEmpty())
         parts << QStringLiteral("won[%1]").arg(wins.join(QStringLiteral(" ")));
+    }
 
     // THE ROUND-BOUNDARY FRAMES, told apart. Without this block the frame
     // published from onRoundScored is byte-identical to the onTrickWon frame
