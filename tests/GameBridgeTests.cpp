@@ -73,8 +73,14 @@ TEST_CASE("pace() returns early on cancelPacing(), and does not throw", "[bridge
     const auto started = std::chrono::steady_clock::now();
 
     // pace() is private, so it is exercised the way the engine does - through a
-    // callback that ends in one. onRoundComplete() paces for the trick dwell,
+    // callback that ends in one. onRoundScored() paces for the trick dwell,
     // which is 30 seconds here.
+    //
+    // ON onRoundScored AND NOT onRoundComplete, and that is not interchangeable:
+    // the dwell moved between the two in A5, once the log showed it was landing
+    // on the blank next-round frame instead of the round result. Driving this
+    // through onRoundComplete now would pace for nothing and pass in about a
+    // microsecond, testing that cancelPacing() does not crash.
     GameEngine engine;
     engine.start(buildSetup());
 
@@ -82,7 +88,7 @@ TEST_CASE("pace() returns early on cancelPacing(), and does not throw", "[bridge
     {
         try
         {
-            bridge.onRoundComplete(engine);
+            bridge.onRoundScored(engine);
             returnedNormally = true;
         }
         catch(...)
@@ -105,6 +111,34 @@ TEST_CASE("pace() returns early on cancelPacing(), and does not throw", "[bridge
     REQUIRE(elapsed < std::chrono::seconds(20));
 }
 
+TEST_CASE("pace() actually waits when nothing has cancelled it", "[bridge]")
+{
+    // The counterweight to the two tests around it, and it was missing: both of
+    // them assert that pace() comes back promptly and does not throw, which a
+    // pace() that never waited at all would satisfy perfectly. Verified by
+    // neutering the wait - all seven bridge tests still passed.
+    //
+    // That gap is worth closing rather than shrugging at. Pacing is the whole
+    // difference between a watchable game and cards appearing all at once, and
+    // nothing else in the suite would notice it going away.
+    //
+    // A short dwell and a generous lower bound: the assertion is "it waited",
+    // not "it waited precisely", and a loaded machine must not be able to fail
+    // this.
+    GameBridge bridge(std::nullopt, Pacing{ std::chrono::milliseconds(0),
+                                            std::chrono::milliseconds(0),
+                                            std::chrono::milliseconds(200) });
+
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    const auto started = std::chrono::steady_clock::now();
+    bridge.onRoundScored(engine);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(elapsed >= std::chrono::milliseconds(100));
+}
+
 TEST_CASE("cancelPacing() latches, so later waits do not block either", "[bridge]")
 {
     // A close cancels once, but the game thread may pass through several more
@@ -122,9 +156,9 @@ TEST_CASE("cancelPacing() latches, so later waits do not block either", "[bridge
 
     const auto started = std::chrono::steady_clock::now();
 
-    bridge.onRoundComplete(engine);
-    bridge.onRoundComplete(engine);
-    bridge.onRoundComplete(engine);
+    bridge.onRoundScored(engine);
+    bridge.onRoundScored(engine);
+    bridge.onRoundScored(engine);
 
     const auto elapsed = std::chrono::steady_clock::now() - started;
 

@@ -6,20 +6,46 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
+    <width>900</width>
     <height>600</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Romanian Whist</string>
   </property>
-  <widget class="QWidget" name="centralwidget"/>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="centralLayout">
+    <item>
+     <!-- QPlainTextEdit rather than QTextEdit: it is the widget meant for large
+          append-only plain text, and a full game appends a few thousand lines.
+          Read-only because nothing here is editable, and monospace because the
+          log's columns are space-padded and only line up in a fixed pitch. -->
+     <widget class="QPlainTextEdit" name="log">
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
+      <property name="lineWrapMode">
+       <enum>QPlainTextEdit::NoWrap</enum>
+      </property>
+      <property name="font">
+       <font>
+        <family>monospace</family>
+        <pointsize>9</pointsize>
+       </font>
+      </property>
+      <property name="maximumBlockCount">
+       <number>0</number>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>800</width>
+     <width>900</width>
      <height>20</height>
     </rect>
    </property>

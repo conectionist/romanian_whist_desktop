@@ -1,0 +1,16 @@
+# AddressSanitizer suppressions for running the GUI under ASan.
+#
+# NOT for the test suite, which needs none of this - desktop_tests is clean.
+# This exists because the application links the XCB platform plugin, and
+# libxcb-cursor allocates a 21-byte buffer and then strchr()s past the end of
+# it while loading the window's cursor. The whole allocation and the whole read
+# are inside that library; our only frame in the report is w.show().
+#
+# Suppressed rather than investigated again: it is reached from
+# QWindowPrivate::applyCursor() on every show(), so without this every ASan run
+# of the application aborts before the window appears, and the one class of bug
+# ASan is here to find - ours - never gets a chance to show up.
+#
+# Usage:
+#   ASAN_OPTIONS=suppressions=tools/asan.supp:detect_leaks=0 ./romanian_whist_desktop
+interceptor_via_lib:libxcb-cursor

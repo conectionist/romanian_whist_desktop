@@ -89,6 +89,20 @@ running a line. That is an environment quirk, not a fault in this code.
 Swap `thread` for `address,undefined` for the ASan/UBSan pass, which needs no `setarch`. Run each
 several times with `--order rand`: a race that reproduces once in twenty is the normal case.
 
+## Running the APPLICATION under ASan
+
+The test suite needs nothing special. The application does:
+
+```bash
+ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp:detect_leaks=0 ./build/romanian_whist_desktop
+```
+
+Without the suppression every run aborts inside `w.show()` before the window appears —
+`libxcb-cursor` allocates a 21-byte buffer and `strchr`s past the end of it while loading the
+window's cursor, reached from `QWindowPrivate::applyCursor()`. The allocation and the read are both
+inside that library; the only frame of ours in the report is the `show()` that triggered it. It is
+a system-library bug, and suppressing it is what lets ASan get far enough to find one of ours.
+
 ## Stress, for the same reason
 
 ```bash
