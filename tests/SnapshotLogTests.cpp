@@ -128,6 +128,59 @@ TEST_CASE("Bets and tricks won appear only once there are any", "[log]")
     REQUIRE(line.contains("won[Ana:1]"));
 }
 
+TEST_CASE("A scored round does not render as the trick that ended it", "[log]")
+{
+    // THE ONE THIS FORMATTER EXISTS FOR. The frame published from onRoundScored
+    // differs from the onTrickWon frame before it in the round score and in
+    // nothing else, so a formatter that drops the score prints the same line
+    // twice - and the 1.2s dwell on the second one reads as a single 2.4s hold
+    // on unchanged text. What is asserted here is inequality, because two
+    // identical lines is the defect itself.
+    GameSnapshot snapshot = twoSeats();
+    snapshot.trickNumber = 1;
+    snapshot.seats[0].tricksWon = 1;
+
+    // Mid-round: nothing scored and nothing committed, so no block at all - a
+    // bidding frame is not padded with zeroes.
+    const QString beforeScoring = snapshotlog::format(snapshot, kNoTime);
+    REQUIRE_FALSE(beforeScoring.contains("scores["));
+
+    // Scored, not yet committed - the engine writes getRoundScore() here and
+    // folds it into getTotalScore() only on the commit that follows.
+    snapshot.seats[0].roundScore = 7;
+    snapshot.seats[1].roundScore = -1;
+
+    const QString scored = snapshotlog::format(snapshot, kNoTime);
+
+    REQUIRE(scored != beforeScoring);
+    REQUIRE(scored.contains("scores[Ana:+7=0 Bogdan:-1=0]"));
+
+    // Committed: the round score is cleared and the total carries it. Both
+    // seats are still listed, so the columns line up down the log.
+    snapshot.seats[0].roundScore = 0;
+    snapshot.seats[1].roundScore = 0;
+    snapshot.seats[0].totalScore = 7;
+    snapshot.seats[1].totalScore = -1;
+
+    const QString committed = snapshotlog::format(snapshot, kNoTime);
+
+    REQUIRE(committed.contains("scores[Ana:7 Bogdan:-1]"));
+    REQUIRE(committed != scored);
+}
+
+TEST_CASE("A seat that scored nothing is still listed, with a sign", "[log]")
+{
+    // +0 rather than dropped. A seat missing from the list is a seat a reader
+    // has to go looking for, and a bare 0 reads as no data rather than as a
+    // round that was worth nothing.
+    GameSnapshot snapshot = twoSeats();
+    snapshot.seats[0].roundScore = 5;
+    snapshot.seats[1].roundScore = 0;
+    snapshot.seats[1].totalScore = 3;
+
+    REQUIRE(snapshotlog::format(snapshot, kNoTime).contains("scores[Ana:+5=0 Bogdan:+0=3]"));
+}
+
 TEST_CASE("A seat index the snapshot cannot name renders as nobody", "[log]")
 {
     // -1 is the snapshot's way of saying "no seat", because Seat has no default

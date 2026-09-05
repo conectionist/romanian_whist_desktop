@@ -8,18 +8,6 @@ using romanian_whist::RoundType;
 namespace
 {
 
-QString roundTypeName(RoundType type)
-{
-    switch(type)
-    {
-        case RoundType::Normal:   return QStringLiteral("Normal");
-        case RoundType::Forehead: return QStringLiteral("Forehead");
-        case RoundType::Hidden:   return QStringLiteral("Hidden");
-    }
-
-    return QStringLiteral("?");
-}
-
 // The seat's name, or "-" for nobody. Both callers below need the same answer
 // for the same reason: -1 is the snapshot's way of saying no seat, because Seat
 // has no default constructor and no sentinel of its own.
@@ -31,6 +19,15 @@ QString seatName(const GameSnapshot& snapshot, int seat)
     return QString::fromStdString(snapshot.seats[static_cast<std::size_t>(seat)].name);
 }
 
+// A round score with its sign always shown. The plus is the point: what is
+// being read off this column is a delta against the total beside it, and "+0"
+// says a seat scored nothing this round where a bare "0" reads as no data.
+QString signedScore(int score)
+{
+    return score < 0 ? QString::number(score)
+                     : QStringLiteral("+%1").arg(score);
+}
+
 }
 
 namespace snapshotlog
@@ -39,6 +36,18 @@ namespace snapshotlog
 QString describe(const Card& card)
 {
     return QString::fromStdString(card.toString());
+}
+
+QString describe(RoundType type)
+{
+    switch(type)
+    {
+        case RoundType::Normal:   return QStringLiteral("Normal");
+        case RoundType::Forehead: return QStringLiteral("Forehead");
+        case RoundType::Hidden:   return QStringLiteral("Hidden");
+    }
+
+    return QStringLiteral("?");
 }
 
 QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
@@ -56,7 +65,7 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
     parts << QStringLiteral("R%1/%2").arg(snapshot.roundNumber).arg(snapshot.roundCount);
     parts << QStringLiteral("T%1/%2").arg(snapshot.trickNumber).arg(snapshot.trickCount);
 
-    parts << roundTypeName(snapshot.roundType).leftJustified(8);
+    parts << describe(snapshot.roundType).leftJustified(8);
 
     // No trump in an 8-card round, and none at all before the deal - hasTrump
     // is what says so, and printing snapshot.trump regardless would show the
@@ -100,6 +109,54 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
 
     if(!wins.isEmpty())
         parts << QStringLiteral("won[%1]").arg(wins.join(QStringLiteral(" ")));
+
+    // THE ROUND-BOUNDARY FRAMES, told apart. Without this block the frame
+    // published from onRoundScored is byte-identical to the onTrickWon frame
+    // before it - nothing else on the line changes between the two - so the
+    // 1.2s dwell that now sits on the scored frame reads as one 2.4s hold on
+    // unchanged text, and the pacing question phase A exists to answer cannot
+    // be answered from the log at all.
+    //
+    // roundScore is what says which of the two a frame is: the engine writes it
+    // when it scores the round and clears it when it commits, so it is non-zero
+    // on exactly the scored frame and zero everywhere else.
+    bool anyRoundScore = false;
+    bool anyScore = false;
+
+    for(const SeatView& seat : snapshot.seats)
+    {
+        anyRoundScore = anyRoundScore || seat.roundScore != 0;
+        anyScore = anyScore || seat.roundScore != 0 || seat.totalScore != 0;
+    }
+
+    // Kept off the line until there is a score to show, same as won[] above: a
+    // first-round bidding frame is not padded with four zeroes.
+    if(anyScore)
+    {
+        QStringList scores;
+
+        for(const SeatView& seat : snapshot.seats)
+        {
+            const QString name = QString::fromStdString(seat.name);
+
+            // EVERY seat spelled the same way once any of them has a round
+            // score, including one that scored +0 - the columns are being
+            // compared down the log, and a seat that silently drops out of the
+            // list is a seat a reader has to go looking for.
+            if(anyRoundScore)
+            {
+                scores << QStringLiteral("%1:%2=%3").arg(name)
+                                                    .arg(signedScore(seat.roundScore))
+                                                    .arg(seat.totalScore);
+            }
+            else
+            {
+                scores << QStringLiteral("%1:%2").arg(name).arg(seat.totalScore);
+            }
+        }
+
+        parts << QStringLiteral("scores[%1]").arg(scores.join(QStringLiteral(" ")));
+    }
 
     return parts.join(QStringLiteral("  "));
 }

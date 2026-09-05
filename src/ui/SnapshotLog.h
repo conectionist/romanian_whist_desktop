@@ -33,6 +33,12 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed);
 // hardcode the same strings twice.
 QString describe(const romanian_whist::Card& card);
 
+// The round type as this client spells it. Exposed for the same reason and for
+// one more: MainWindow's status bar names the round too, and two switches over
+// RoundType in one client is one of them going stale the day a fourth type is
+// added.
+QString describe(romanian_whist::RoundType type);
+
 } // namespace snapshotlog
 
 #endif
