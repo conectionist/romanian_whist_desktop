@@ -45,13 +45,16 @@ public:
 
     // TWO calls, not one, and the split is load-bearing. prepare() builds the
     // bridge - and a provider, if there is a human seat - on the GUI thread and
-    // hands them back; the caller connects; only then does start() spawn the
-    // thread.
+    // relays its signals to this object's mirrors; only then does start() spawn
+    // the thread.
     //
     // Doing it in one call cannot work: onGameStarted() fires from inside
     // GameEngine::start(), so the first stateChanged() is emitted before run()
-    // is entered, and a MainWindow that connects afterwards has already missed
-    // it. A queued connection made after the emit does not receive it.
+    // is entered. The relay has to be in place by then, and a relay made after
+    // the emit does not receive it.
+    //
+    // THE GUI DOES NOT CONNECT HERE. It connects to this object's signals once,
+    // before the first prepare(), and never again - see the signals block.
     //
     // A SPECTATOR GAME GETS NO PROVIDER: there is no human seat for one to
     // serve. That is not an edge case to bolt on later - phase A is a spectator
@@ -99,7 +102,13 @@ public:
     // game that never started, on one that already finished, and twice.
     void stop();
 
-    // Built by prepare(); connect to it BEFORE start().
+    // Built by prepare(), destroyed by the next one. NOT the GUI's seam: GUI code
+    // connects to this object's mirrored signals instead, which outlive a game -
+    // see the signals block for what connecting here across a "play again" costs.
+    //
+    // Public for the two callers that genuinely want the per-game object on the
+    // game thread: QtMoveProvider, which raises its prompts through it, and the
+    // tests, which connect DIRECT to run assertions on the game thread itself.
     GameBridge* bridge() const { return gameBridge.get(); }
 
     // NULL in a spectator game - see prepare(). Every caller checks.
@@ -112,11 +121,71 @@ public:
     // amount of stopping protects against.
     QtMoveProvider* provider() const { return movePlayer.get(); }
 
+    // Has a stop been asked for in the game currently set up? The same latch
+    // stop() raises and the run slot reads back, read under the same mutex.
+    //
+    // EXISTS BECAUSE THE ORDERING IS OTHERWISE UNOBSERVABLE. The test for a stop
+    // landing before the engine is published has to release the parked game
+    // thread only once the latch is genuinely set, and every other effect of
+    // stop() is either on an object with no state to read (cancelPacing(),
+    // abandon()) or on one that does not exist yet (the engine). Spinning on a
+    // flag the stopping thread sets BEFORE it calls stop() proves nothing: the
+    // release can beat the latch, and the test then passes by exercising the
+    // ordinary post-publish path it was written to avoid.
+    //
+    // Neither this nor stop() blocks while holding engineMutex, so a caller
+    // spinning on this cannot wedge the thread it is watching.
+    bool isStopRequested() const;
+
 signals:
+    // WHAT THE GUI CONNECTS TO. Every one of these is a mirror of the identically
+    // named GameBridge signal, relayed by prepare().
+    //
+    // The bridge does not survive a game and this object does, and that
+    // difference is the whole reason these exist. Qt purges a posted
+    // QMetaCallEvent when its RECEIVER is destroyed, never when its sender is -
+    // so destroying game one's bridge in prepare() leaves whatever the GUI
+    // connected to it holding game one's entire undelivered backlog. prepare()
+    // makes that backlog certain rather than unlikely, because it blocks the GUI
+    // thread in thread.wait() while the game thread runs on. Measured on a real
+    // game: 618 of 618 stateChanged events plus the gameOver arrived AFTER game
+    // two had started - a "play again" that repaints game one's final table over
+    // game two's deal and re-pops the standings over it.
+    //
+    // Relaying through this object fixes it because this object is the receiver.
+    // prepare() purges its own queue, and one statement there closes the whole
+    // class of bug.
+    //
+    // So: CONNECT TO THESE ONCE, EVER - in the window's constructor, before any
+    // prepare(). There is no per-game reconnection step, which is the second
+    // half of the point: a step that must be repeated after every prepare() is a
+    // step A5 can forget, and forgetting it silently shows a dead first frame.
+    //
+    // Parameter types are spelled exactly as GameBridge spells them, because moc
+    // normalises the names and a queued relay looks up the metatype by that
+    // name. Spell one differently and the hop fails at runtime with a line on
+    // stderr and no crash.
+    void stateChanged(std::shared_ptr<const GameSnapshot> snapshot);
+    void turnChanged(unsigned int seat);
+    void betPlaced(unsigned int seat, unsigned int bet);
+    void trickStarted(unsigned int trickNumber, unsigned int leader);
+    void cardPlayed(unsigned int seat, romanian_whist::Card card);
+    void trickWon(unsigned int seat, unsigned int trickNumber);
+    void roundScored();
+    void gameOver(std::vector<romanian_whist::Standing> standings,
+                  std::vector<romanian_whist::Standing> winners);
+    void gameStopped();
+    void betRequested(BetPrompt prompt);
+    void cardRequested(PlayPrompt prompt);
+
     // The run slot caught something. NEITHER onGameStopped() NOR onGameOver()
     // fires on that path, so this signal is the only way the GUI learns the game
     // ended - and without it the exception escapes a slot invoked from QThread's
     // event loop, which is std::terminate with no message.
+    //
+    // RELAYED like the rest, not emitted here. The run slot raises it on the
+    // bridge - see GameBridge::raiseGameFailed() for why that indirection is
+    // load-bearing rather than decorative.
     void gameFailed(QString what);
 
 private:
@@ -153,7 +222,9 @@ private:
     // last" has nothing to apply to here: the engine is a local in runGame(),
     // born and destroyed inside the slot, and this is only a borrowed pointer to
     // it that is withdrawn before it dies.
-    std::mutex engineMutex;
+    // MUTABLE so isStopRequested() can be const. Locking a mutex to read state
+    // is not a modification of the object as callers see it.
+    mutable std::mutex engineMutex;
     romanian_whist::GameEngine* engine = nullptr;
 
     // The stop that arrived before there was an engine to tell. Guarding the

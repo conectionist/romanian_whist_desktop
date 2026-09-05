@@ -180,16 +180,32 @@ entire shutdown story rests on it.
 - `src/engine/GameController.{h,cpp}` — `prepare()` / `start()` / `stop()`, the `engineMutex`, the
   `stopRequested` latch, and the run slot with its catch-all. Worker-object pattern, never a
   `QThread` subclass.
+- **`MainWindow` connects to the `GameController`, once, before the first `prepare()`** — never to
+  the bridge. The controller mirrors all twelve of the bridge's signals and `prepare()` relays them;
+  the bridge is per-game, the controller is not.
 - The ordering is load-bearing and three separate bugs live in getting it wrong: `prepare()` builds
-  the bridge on the GUI thread → `MainWindow` connects → `start()` moves it and starts the thread →
-  the run slot constructs the engine, `addObserver`, `start(std::move(setup))`, publishes the engine
-  pointer under `engineMutex` **and reads `stopRequested` back while still holding it**, then
-  `run()`.
+  the bridge on the GUI thread and relays it to the mirrors → `start()` moves it and starts the
+  thread → the run slot constructs the engine, `addObserver`, `start(std::move(setup))`, publishes
+  the engine pointer under `engineMutex` **and reads `stopRequested` back while still holding it**,
+  then `run()`.
+- **`prepare()` purges its own queued events** — `QCoreApplication::removePostedEvents(this,
+  QEvent::MetaCall)`, after the `stop()` that joins and before the new bridge. Qt purges a posted
+  `QMetaCallEvent` only when its *receiver* dies, never its sender, so destroying game one's bridge
+  purges nothing: a measured run delivered 618 of 618 of game one's snapshots plus its `gameOver`
+  *after* game two had started, repainting game one's final table over game two's deal. The purge
+  belongs in `prepare()` and **not** `stop()` — `stop()` is also the ordinary end of a game whose
+  `gameOver` the window has yet to draw.
+- The run slot raises `gameFailed` **on the bridge**, via `raiseGameFailed()`. The controller emits
+  nothing from the game thread itself, so every signal crosses the boundary exactly once, into the
+  object the purge above can reach.
 - `main.cpp` — `qRegisterMetaType` for every payload **before any `connect()`**, including
   `std::vector<romanian_whist::Standing>`, which is easy to miss because it is the one payload that
   is not one of our own types.
-- **Leave every bridge connection on `AutoConnection`.** A `DirectConnection` would run the slot on
-  the game thread while the provider's non-recursive mutex is held, and deadlock.
+- **Leave every bridge connection on `AutoConnection`** — the relays included. A `DirectConnection`
+  there would run the slot on the game thread while the provider's non-recursive mutex is held, and
+  deadlock. (`AutoConnection` resolves per emission, not at `connect()` time, so a relay made in
+  `prepare()` while the bridge is still GUI-affine becomes queued the moment `start()` moves it.)
+  The GUI's own connections to the controller are same-thread and carry no such hazard.
 - `GameEngine` is neither copyable nor movable, so the run slot owns it as a local. `start()`
   consumes the `GameSetup` even when it throws, so a retry needs a freshly built one.
 
@@ -197,7 +213,11 @@ Shutdown tests (`tests/GameControllerTests.cpp`): `stop()` before `prepare()`; `
 spectator game (null `movePlayer` — this is phase A's permanent state, not an edge case); `stop()`
 twice; `stop()` after the game finished on its own; and the hard one — `stop()` between `start()`
 and the engine being published, asserting the game ends through **`onGameStopped()`** rather than
-playing its schedule out. Asserting *which* of the two fired is the test: a spectator game with
+playing its schedule out — that last one releases the parked game thread only once
+`isStopRequested()` reads back true, because every other effect of `stop()` is either unobservable
+or on an object that does not exist yet, and a flag raised beside the call proves nothing. Plus two
+reuse tests: that a second game is handed neither game one's undelivered snapshots and `gameOver`
+nor its `gameFailed`. Asserting *which* of the two fired is the test: a spectator game with
 pacing cancelled finishes either way and quickly, so "it terminated" says nothing.
 
 These need a `QCoreApplication` (not `QApplication` — no display required) and a pumped event loop
@@ -210,8 +230,11 @@ for queued delivery. Pacing is set to zero in tests.
   that bot silently plays without a beat and `canSeeHand()` is asked about a viewer who is not
   there), `spectatorBeat`, a fixed `shuffleSeed`, `GameStructure::S_181`, four
   `AiMoveProvider`s.
-- Wire it `prepare()` → `connect()` → `start()`. `onGameStarted()` fires from inside
-  `GameEngine::start()`, so connecting after the thread starts misses the first snapshot outright.
+- Wire it `connect()` once in the constructor → `prepare()` → `start()`, connecting to the
+  **controller's** signals, not the bridge's. There is no per-game reconnection step and no way to
+  forget one. `onGameStarted()` fires from inside `GameEngine::start()`, which is why `prepare()`
+  makes the relay before `start()` spawns the thread — a relay made after that emit misses the
+  first snapshot outright.
 - Log lines are **event-shaped, not a state dump** — free at write time and far more readable.
 
 ### A6 — the invariant test

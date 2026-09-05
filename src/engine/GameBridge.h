@@ -12,6 +12,7 @@
 
 #include <QMetaType>
 #include <QObject>
+#include <QString>
 
 #include <chrono>
 #include <condition_variable>
@@ -106,6 +107,17 @@ signals:
     void betRequested(BetPrompt prompt);
     void cardRequested(PlayPrompt prompt);
 
+    // The run slot caught something. NEITHER onGameStopped() NOR onGameOver()
+    // fires on that path, so this is the only way the GUI learns the game ended
+    // - and without it the exception escapes a slot invoked from QThread's event
+    // loop, which is std::terminate with no message.
+    //
+    // NOT an IGameObserver callback: no engine reports its own failure, and this
+    // is raised by GameController's catch-alls rather than by the engine. It
+    // lives here anyway, and that placement is the fix for a real bug rather
+    // than tidiness - see raiseGameFailed() below.
+    void gameFailed(QString what);
+
 public:
     // The seam QtMoveProvider raises its prompts through. Both are called on the
     // GAME thread, from inside the provider.
@@ -116,6 +128,18 @@ public:
     // forwarder is somewhere to say which thread the call arrives on.
     void raiseBetRequested(BetPrompt prompt) { emit betRequested(std::move(prompt)); }
     void raiseCardRequested(PlayPrompt prompt) { emit cardRequested(std::move(prompt)); }
+
+    // Same seam, same thread, a different game-thread caller: GameController's
+    // run slot, from its catch-alls.
+    //
+    // ROUTED THROUGH HERE rather than emitted by the controller directly, and
+    // that is what makes the rule uniform: THE CONTROLLER EMITS NOTHING FROM THE
+    // GAME THREAD ITSELF. Everything the GUI hears crosses the thread boundary
+    // exactly once, into the controller, which is the object prepare() purges.
+    // A gameFailed emitted by the controller would instead post straight to the
+    // GUI's receivers, where that purge cannot reach it - and a failure from
+    // game one would then be reported over game two.
+    void raiseGameFailed(QString what) { emit gameFailed(std::move(what)); }
 
     // Read by QtMoveProvider, on the GAME thread. PlayContext carries no round
     // type the way BetContext does, so it is cached on the way past in

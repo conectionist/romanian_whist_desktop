@@ -2,6 +2,8 @@
 
 #include "GameAbandoned.h"
 
+#include <QCoreApplication>
+#include <QEvent>
 #include <QtGlobal>
 
 #include <exception>
@@ -52,15 +54,71 @@ void GameController::prepare(std::optional<Seat> humanSeat, Pacing pacing)
         engine = nullptr;
     }
 
+    // THE PREVIOUS GAME'S UNDELIVERED SIGNALS, dropped on the floor - and this
+    // one statement is the whole reason the signals above are mirrored here.
+    //
+    // Qt purges a posted QMetaCallEvent when its RECEIVER is destroyed, never
+    // when its sender is. Destroying game one's bridge below therefore purges
+    // nothing, and the backlog is not a rare case: stop() above blocks this
+    // thread in thread.wait() while the game thread publishes to the last card,
+    // so a "play again" pressed over the standings arrives with a whole game
+    // queued. Measured: 618 of 618 snapshots plus the gameOver, all delivered
+    // after game two had started, repainting game one's final table over game
+    // two's deal.
+    //
+    // AFTER stop(), which is what makes it sufficient rather than merely
+    // helpful: the game thread is joined by then, so nothing can post behind the
+    // purge. prepare() calls stop() first, so that holds by construction.
+    //
+    // NOT IN stop(), and that is the sharp edge. stop() is also the ORDINARY end
+    // of a game the player is still reading - the standings are on screen and
+    // the window has yet to draw the gameOver that produced them. Purging there
+    // deletes the ending. A new game is the only moment at which the old game's
+    // queue is genuinely worthless.
+    //
+    // MetaCall ONLY. DeferredDelete is a different event type and must survive;
+    // so must anything a future caller queues at this object for its own sake,
+    // which is why this names an event type rather than passing 0.
+    //
+    // ~GameController needs no equivalent: ~QObject already purges its own.
+    QCoreApplication::removePostedEvents(this, QEvent::MetaCall);
+
     // KEPT, because start() needs to know which seat the player drives - see
     // there. Set with the provider below and engaged on exactly the same
     // condition, so `movePlayer != nullptr` and `humanPlayerSeat.has_value()`
     // are two spellings of one fact.
     humanPlayerSeat = humanSeat;
 
-    // ON THE GUI THREAD, both of them, and handed back so the caller can connect
-    // before the thread exists.
+    // ON THE GUI THREAD, both of them. The bridge is relayed below and moved to
+    // the game thread by start().
     gameBridge = std::make_unique<GameBridge>(humanSeat, pacing);
+
+    // THE RELAY. Every signal the game thread raises crosses into this object,
+    // exactly once, and the GUI hears it from here - see the signals block for
+    // why the GUI must not connect to the bridge itself.
+    //
+    // NEVER DISCONNECTED, and deliberately so: the bridge is the SENDER of all
+    // twelve, so every one of them dies with the object the next prepare()
+    // destroys. That is the exact opposite of runConnection, whose sender is the
+    // long-lived `thread` and which therefore has to be replaced by hand - and
+    // getting the two confused in either direction is a bug: connections leaked
+    // onto a second game here, or a bridge relayed twice.
+    //
+    // MADE WHILE THE BRIDGE IS STILL GUI-AFFINE, which costs nothing.
+    // AutoConnection resolves per emission rather than at connect time, so these
+    // become queued the moment start() moves the bridge to the game thread.
+    connect(gameBridge.get(), &GameBridge::stateChanged,  this, &GameController::stateChanged);
+    connect(gameBridge.get(), &GameBridge::turnChanged,   this, &GameController::turnChanged);
+    connect(gameBridge.get(), &GameBridge::betPlaced,     this, &GameController::betPlaced);
+    connect(gameBridge.get(), &GameBridge::trickStarted,  this, &GameController::trickStarted);
+    connect(gameBridge.get(), &GameBridge::cardPlayed,    this, &GameController::cardPlayed);
+    connect(gameBridge.get(), &GameBridge::trickWon,      this, &GameController::trickWon);
+    connect(gameBridge.get(), &GameBridge::roundScored,   this, &GameController::roundScored);
+    connect(gameBridge.get(), &GameBridge::gameOver,      this, &GameController::gameOver);
+    connect(gameBridge.get(), &GameBridge::gameStopped,   this, &GameController::gameStopped);
+    connect(gameBridge.get(), &GameBridge::betRequested,  this, &GameController::betRequested);
+    connect(gameBridge.get(), &GameBridge::cardRequested, this, &GameController::cardRequested);
+    connect(gameBridge.get(), &GameBridge::gameFailed,    this, &GameController::gameFailed);
 
     // A spectator game gets no provider at all: there is no human seat for one
     // to serve, and stop() is written knowing this pointer is null for the whole
@@ -178,11 +236,17 @@ void GameController::runGame(GameSetup setup)
         // engine's re-entrancy guards, a std::bad_alloc - all of them unwind
         // run() exactly as GameAbandoned does, and any of them escaping this
         // slot is std::terminate rather than a message.
-        emit gameFailed(QString::fromUtf8(e.what()));
+        //
+        // RAISED ON THE BRIDGE, not emitted here, even though the signal the GUI
+        // hears is this object's. This runs on the game thread, and routing it
+        // through the bridge is what keeps that one hop the ONLY one - so the
+        // event lands in this object's queue, where prepare() can purge it, and
+        // game one's failure is never reported over game two.
+        gameBridge->raiseGameFailed(QString::fromUtf8(e.what()));
     }
     catch(...)
     {
-        emit gameFailed(QStringLiteral("the game thread failed"));
+        gameBridge->raiseGameFailed(QStringLiteral("the game thread failed"));
     }
 
     // Withdrawn before the local dies, so the GUI thread cannot find a pointer
@@ -251,4 +315,10 @@ void GameController::stop()
     // only re-set flags that are already set, and quit()/wait() on a finished
     // thread return at once. So there is deliberately no `stopped` guard here;
     // there would be nothing for it to guard.
+}
+
+bool GameController::isStopRequested() const
+{
+    std::lock_guard lock(engineMutex);
+    return stopRequested;
 }

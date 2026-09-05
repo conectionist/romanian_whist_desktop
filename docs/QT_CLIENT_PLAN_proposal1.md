@@ -944,12 +944,41 @@ public:
     // outlives the thread.
     QtMoveProvider* provider() const;
 
+    // Has a stop been asked for in the game currently set up? The same latch
+    // stop() raises and the run slot reads back, under the same mutex. Exists
+    // because that ordering is otherwise unobservable from outside: every other
+    // effect of stop() is on an object with no state to read or on one that
+    // does not exist yet, so the test for a stop landing before the engine is
+    // published has nothing else to wait on (section 8).
+    bool isStopRequested() const;
+
 signals:
+    // WHAT THE WINDOW CONNECTS TO: a mirror of every GameBridge signal, relayed
+    // by prepare(). The bridge does not survive a game and this object does, so
+    // these are the connections that can be made once and left alone - see the
+    // end of this section for the bug that makes them mandatory rather than
+    // convenient.
+    void stateChanged(std::shared_ptr<const GameSnapshot> snapshot);
+    void turnChanged(unsigned int seat);
+    void betPlaced(unsigned int seat, unsigned int bet);
+    void trickStarted(unsigned int trickNumber, unsigned int leader);
+    void cardPlayed(unsigned int seat, romanian_whist::Card card);
+    void trickWon(unsigned int seat, unsigned int trickNumber);
+    void roundScored();
+    void gameOver(std::vector<romanian_whist::Standing> standings,
+                  std::vector<romanian_whist::Standing> winners);
+    void gameStopped();
+    void betRequested(BetPrompt prompt);
+    void cardRequested(PlayPrompt prompt);
+
     // The run slot caught something. NEITHER onGameStopped() NOR onGameOver()
     // fires on that path (section 6), so this signal is the only way the GUI
     // learns the game ended - and without it the exception escapes a slot
     // invoked from QThread's event loop, which is std::terminate with no
     // message. See the catch in step 4 below.
+    //
+    // Relayed like the rest: the run slot raises it on the BRIDGE, and this
+    // object re-emits it here.
     void gameFailed(QString what);
 
 private:
@@ -1055,11 +1084,11 @@ catch(const GameAbandoned&)
 }
 catch(const std::exception& error)
 {
-    emit gameFailed(QString::fromUtf8(error.what()));
+    bridge->raiseGameFailed(QString::fromUtf8(error.what()));
 }
 catch(...)
 {
-    emit gameFailed(tr("the game thread failed"));
+    bridge->raiseGameFailed(tr("the game thread failed"));
 }
 // then, on every path: withdraw the engine pointer under the lock and destroy it
 ```
@@ -1077,25 +1106,74 @@ dialog and a silent abort.
 that safe to do late: a `QObject` may be connected before it has been moved to its final thread, and
 the connection type is resolved per emission, not at connect time.
 
+Note that `gameFailed` is raised **on the bridge**, not emitted by the controller, even though the
+signal the window connects to is the controller's. That indirection is the subject of the next
+subsection, and it is load-bearing.
+
+#### The controller mirrors the bridge, and the window connects to the controller
+
+`GameBridge` is per-game: `prepare()` destroys the old one and builds a new one. `GameController` is
+not. So **the controller declares a mirror of every one of the bridge's signals, `prepare()` relays
+bridge → controller, and the window connects to the controller once, in its constructor.**
+
+This is not an ergonomic preference. Qt purges a posted `QMetaCallEvent` when its **receiver** is
+destroyed — never when its sender is. A window connected directly to game one's bridge is therefore
+handed game one's entire undelivered backlog *after* game two has started, because destroying that
+bridge purges nothing. And the backlog is guaranteed rather than unlikely: `prepare()` blocks the
+GUI thread in `thread.wait()` while the game thread publishes on, and a "play again" is clicked and
+handled without the event loop running in between. Measured on a real game: **618 of 618 snapshots
+plus the `gameOver`**, all delivered after game two's `start()` — game one's final table repainted
+over game two's deal, and its standings popped a second time.
+
+With the controller as the sole receiver of everything that crosses the thread boundary, one
+statement in `prepare()` closes it:
+
+```cpp
+// After the stop() that joins - so nothing can post behind it - and before the
+// new bridge is built.
+QCoreApplication::removePostedEvents(this, QEvent::MetaCall);
+```
+
+Three things about that line are worth stating outright, because each is a bug if reversed:
+
+- **It belongs in `prepare()`, not `stop()`.** `stop()` is also the *ordinary* end of a game the
+  player is still reading — the standings are up and the window has yet to draw the `gameOver` that
+  produced them. Purging there deletes the ending. A new game is the only moment at which the old
+  game's queue is genuinely worthless.
+- **`MetaCall` only.** `DeferredDelete` is a different event type and must survive.
+- **Every game-thread emission must go through the bridge**, which is why the catch-alls above call
+  `raiseGameFailed()` rather than emitting. A signal the controller emits itself from the game
+  thread posts straight to the window, where this purge cannot reach it — and game one's failure is
+  then reported over game two.
+
+The relays are made in `prepare()` and never disconnected. The bridge is their *sender*, so all
+twelve die with the object the next `prepare()` destroys — the exact opposite of the
+`QThread::started` connection, whose sender is the long-lived thread and which must therefore be
+replaced by hand.
+
 ### 4.4 `MainWindow`
 
 ```cpp
-// All of this runs between GameController::prepare() and GameController::start(),
-// on the GUI thread, while the bridge still lives here. Connecting after the
-// thread is running loses onGameStarted's snapshot - see section 4.3.
-connect(bridge, &GameBridge::stateChanged,  this, &MainWindow::render);
-connect(bridge, &GameBridge::betRequested,  this, &MainWindow::showBetPrompt);
-connect(bridge, &GameBridge::cardRequested, this, &MainWindow::showPlayPrompt);
-connect(bridge, &GameBridge::trickWon,      this, &MainWindow::flashTrickWinner);
-connect(bridge, &GameBridge::gameOver,      this, &MainWindow::showStandings);
+// All of this runs ONCE, in the constructor, before the first prepare() - and to
+// the CONTROLLER, never to the bridge. The controller mirrors every one of the
+// bridge's signals and prepare() relays them, so these connections outlive a
+// game and there is no reconnection step to forget. See the end of 4.3 for why
+// connecting to the bridge instead is a bug rather than a preference.
+connect(controller, &GameController::stateChanged,  this, &MainWindow::render);
+connect(controller, &GameController::betRequested,  this, &MainWindow::showBetPrompt);
+connect(controller, &GameController::cardRequested, this, &MainWindow::showPlayPrompt);
+connect(controller, &GameController::trickWon,      this, &MainWindow::flashTrickWinner);
+connect(controller, &GameController::gameOver,      this, &MainWindow::showStandings);
 // NOT MainWindow::close directly: closing the window is what calls stop(),
 // stop() is what produces gameStopped, and close() would then re-enter
 // closeEvent(). The slot checks a `closing` flag first and only forces the
 // close when the stop came from somewhere else.
-connect(bridge, &GameBridge::gameStopped,   this, &MainWindow::onGameStopped);
-// From the CONTROLLER, not the bridge: the throw happens outside run(), so no
-// observer callback fires and nothing on the bridge knows about it (4.3, 6).
-connect(controller, &GameController::gameFailed, this, &MainWindow::showFailure);
+connect(controller, &GameController::gameStopped,   this, &MainWindow::onGameStopped);
+// Raised by the run slot rather than by any observer callback: the throw happens
+// outside run(), so nothing the engine reports knows about it (4.3, 6). It is
+// still raised ON THE BRIDGE, so that it crosses into the controller like every
+// other signal - see the end of 4.3.
+connect(controller, &GameController::gameFailed,    this, &MainWindow::showFailure);
 
 // Field names follow the terminal's GameView (src/GameView.h), which is what
 // this type is modelled on - see section 9.
@@ -1631,8 +1709,10 @@ idea, which is worth isolating:
   break a game.
 
 The second game is not a special path so much as §4.3's ordering run again from the top: `stop()`
-and join, then a fresh `GameBridge` and `QtMoveProvider` from `prepare()`, then reconnect
-`MainWindow`, then `start()`. Nothing is reset in place. `QtMoveProvider::abandoned` in particular
+and join, then a fresh `GameBridge` and `QtMoveProvider` from `prepare()`, then `start()`. Nothing
+is reset in place, and `MainWindow` reconnects nothing — its connections are to the controller and
+outlive every game (§4.3). What `prepare()` must do besides rebuilding is purge the controller's own
+queue, or game one's undelivered signals arrive over game two. `QtMoveProvider::abandoned` in particular
 is latched and never cleared, so a reused provider refuses every prompt of the second game
 instantly, which looks like the bots playing a game by themselves at full speed.
 `GameController::stopRequested` (§4.3) is the same hazard one level up and the one thing here that
@@ -2225,8 +2305,8 @@ A sheet slides down over the table:
   one, *"Ana and Bogdan tie for first with 47 points."* for two, *"Ana, Bogdan and Dan tie for
   first…"* for three. Ported with its test (§21.4).
 - **Play again** reopens the setup dialog pre-filled with the same settings — which is §8 phase D's
-  second game, and therefore `stop()` → join → `prepare()` → reconnect → `start()`, with a freshly
-  built `GameSetup`. Nothing is reset in place.
+  second game, and therefore `stop()` → join → `prepare()` → `start()`, with a freshly
+  built `GameSetup`. Nothing is reset in place, and nothing is reconnected (§4.3).
 
 **This panel is drawn from `gameOver`, not after `run()` returns.** The terminal draws its game-over
 screen after the loop ends and a GUI cannot: `run()` returning happens on the game thread, inside a

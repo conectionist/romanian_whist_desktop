@@ -12,6 +12,7 @@
 
 #include <QCoreApplication>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -82,8 +83,14 @@ public:
 //
 // Connected DIRECT, so the handler runs on the game thread as the signal is
 // emitted. The alternative - a queued connection into this thread - would need
-// the event loop pumped to see anything, which is what the last test in this
-// file exercises deliberately and the rest have no reason to.
+// the event loop pumped to see anything, which is what the last tests in this
+// file exercise deliberately and the rest have no reason to.
+//
+// ON THE BRIDGE, all three, which is the seam that reaches the game thread.
+// GameController's identically named signals are the GUI's seam: mirrors,
+// re-emitted on this thread once the event loop runs. A test that wants to
+// watch a game as it happens wants the bridge; a test that wants to see what a
+// window would see wants the controller.
 //
 // Through a context object rather than context-free, which is what disconnects
 // these when the Outcome dies. An Outcome is a scoped local while its sender is
@@ -107,7 +114,11 @@ public:
                          [this]{ record(stoppedCount); },
                          Qt::DirectConnection);
 
-        QObject::connect(&controller, &GameController::gameFailed, &context,
+        // ON THE BRIDGE, like the two above, and it has to be: GameController's
+        // gameFailed is a MIRROR now, re-emitted from a queued relay on this
+        // thread. A direct connection to the mirror never fires without the
+        // event loop pumped, and await() below would simply time out.
+        QObject::connect(controller.bridge(), &GameBridge::gameFailed, &context,
                          [this](QString what)
                          {
                              {
@@ -273,6 +284,15 @@ TEST_CASE("A stop landing before the engine is published still ends the game", "
     // the game thread is the one being held in the gap: calling it from here
     // deadlocks until the handler's own wait times out, which reads as a pass
     // and takes ten seconds to do it.
+    //
+    // AND THE RELEASE MUST WAIT FOR THE LATCH ITSELF, which is what
+    // isStopRequested() is for. Spinning on a flag the stopper thread sets
+    // before it enters stop() proves nothing: the store happens before the latch
+    // is raised, so this thread can release the game thread first, and with
+    // instant() pacing the game then runs to onGameOver() and fails the
+    // assertions at the bottom. That is a flake in the safe direction, but a
+    // test that passes by exercising the ordinary post-publish path is not
+    // testing the gap it was written for.
     GameController controller;
     controller.prepare(std::nullopt, instant());
 
@@ -280,11 +300,16 @@ TEST_CASE("A stop landing before the engine is published still ends the game", "
     std::condition_variable cv;
     bool inTheGap = false;
     bool released = false;
-    std::atomic<bool> stopping{false};
+
+    // Counted at the TOP, before the released check, so it counts every
+    // published snapshot rather than only the parked one.
+    std::atomic<int> snapshots{0};
 
     QObject::connect(controller.bridge(), &GameBridge::stateChanged,
                      [&](std::shared_ptr<const GameSnapshot>)
                      {
+                         snapshots++;
+
                          std::unique_lock lock(mutex);
 
                          if(released)
@@ -308,14 +333,20 @@ TEST_CASE("A stop landing before the engine is published still ends the game", "
 
     // The engine exists but its pointer is not published, so this can only land
     // in the latch. It blocks in thread.wait() until the handler lets go.
-    std::thread stopper([&]
-    {
-        stopping = true;
-        controller.stop();
-    });
+    std::thread stopper([&]{ controller.stop(); });
 
-    while(!stopping)
+    // SPUN ON THE LATCH, not on a flag beside it. Deadlined like every other
+    // wait in this file: a broken handshake fails the REQUIRE below rather than
+    // spinning the suite forever.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+
+    while(!controller.isStopRequested() && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // THE HANDSHAKE, ASSERTED rather than assumed. Past this line the game
+    // thread is still parked inside onGameStarted() and the latch is set, so the
+    // run slot's read-back under engineMutex is the only ordering left to test.
+    REQUIRE(controller.isStopRequested());
 
     {
         std::lock_guard lock(mutex);
@@ -328,6 +359,13 @@ TEST_CASE("A stop landing before the engine is published still ends the game", "
     REQUIRE(outcome.await());
     REQUIRE(outcome.stoppedCount == 1);
     REQUIRE(outcome.overCount == 0);
+
+    // ONE snapshot, onGameStarted's, and this is the sharper half of the test:
+    // playRound() calls honourStopIfRequested() BEFORE dealRound(), and
+    // onGameStopped() deliberately publishes nothing - so a game that honoured
+    // the latch stopped before the deal rather than merely stopping. Read after
+    // the join, so the game thread is done writing it.
+    REQUIRE(snapshots == 1);
 }
 
 TEST_CASE("prepare() clears the latch, so a second game is not stopped by the first", "[controller]")
@@ -553,4 +591,131 @@ TEST_CASE("Snapshots cross the thread boundary as queued events", "[controller]"
     // The first is onGameStarted's, which fires before the deal.
     REQUIRE(seen.front()->roundNumber == 1);
     REQUIRE_FALSE(seen.front()->hasTrump);
+}
+
+TEST_CASE("A second game is not handed the first game's undelivered events", "[controller]")
+{
+    // THE REUSE LEAK, from the GUI's side of the seam.
+    //
+    // prepare() destroys game one's bridge, but Qt purges a posted
+    // QMetaCallEvent only when its RECEIVER dies - never its sender. So without
+    // the purge in prepare(), everything game one queued is still addressed to a
+    // very much alive receiver, and it lands after game two has started: game
+    // one's final table painted over game two's deal, and its standings popped a
+    // second time.
+    //
+    // The backlog is guaranteed rather than lucky. This thread never pumps its
+    // event loop while game one runs - which is exactly the state a "play again"
+    // button is pressed in, since the click is handled and prepare() called
+    // without returning to the loop in between.
+    GameController controller;
+
+    // CONNECTED ONCE, BEFORE THE FIRST prepare(), to the controller's mirrors -
+    // which is the whole point of them. A receiver living on this thread, so
+    // AutoConnection resolves to a queued connection.
+    QObject receiver;
+
+    std::vector<std::shared_ptr<const GameSnapshot>> delivered;
+    int overCount = 0;
+
+    QObject::connect(&controller, &GameController::stateChanged, &receiver,
+                     [&delivered](std::shared_ptr<const GameSnapshot> snapshot)
+                     { delivered.push_back(std::move(snapshot)); });
+
+    QObject::connect(&controller, &GameController::gameOver, &receiver,
+                     [&overCount](std::vector<Standing>, std::vector<Standing>)
+                     { overCount++; });
+
+    controller.prepare(std::nullopt, instant());
+
+    // Game one's snapshots, collected DIRECT on the game thread and KEPT ALIVE -
+    // held so the identity check at the bottom cannot be fooled by a fresh
+    // snapshot landing on a recycled allocation.
+    //
+    // Written on the game thread, read on this one only after the second
+    // prepare() below has joined that thread.
+    std::vector<std::shared_ptr<const GameSnapshot>> gameOne;
+    QObject::connect(controller.bridge(), &GameBridge::stateChanged,
+                     [&gameOne](std::shared_ptr<const GameSnapshot> snapshot)
+                     { gameOne.push_back(std::move(snapshot)); });
+
+    {
+        // Direct, so this knows the game ended without the loop being pumped -
+        // which is the state the assertions below need.
+        Outcome first(controller);
+        controller.start(buildSetup());
+        REQUIRE(first.await());
+        REQUIRE(first.overCount == 1);
+    }
+
+    // A whole game is sitting in this thread's queue, undelivered.
+    REQUIRE(delivered.empty());
+    REQUIRE(gameOne.size() > 1);
+
+    controller.prepare(std::nullopt, instant());   // joins, then purges
+
+    // THE ASSERTION THE PURGE EXISTS FOR. Without it the entirety of game one
+    // arrives here, before game two has emitted a single frame.
+    QCoreApplication::processEvents();
+    REQUIRE(delivered.empty());
+    REQUIRE(overCount == 0);
+
+    Outcome second(controller);
+    controller.start(buildSetup(7u));
+    REQUIRE(second.await());
+    controller.stop();
+
+    QCoreApplication::processEvents();
+
+    REQUIRE_FALSE(delivered.empty());
+
+    // TWO would re-pop the standings over the new game.
+    REQUIRE(overCount == 1);
+
+    // And not one of the delivered snapshots is game one's - by identity, since
+    // two spectator games of the same structure look alike frame for frame.
+    for(const auto& snapshot : delivered)
+        REQUIRE(std::find(gameOne.begin(), gameOne.end(), snapshot) == gameOne.end());
+}
+
+TEST_CASE("A second game is not handed the first game's failure", "[controller]")
+{
+    // The mirror image of the test above, and the reason gameFailed is raised on
+    // the bridge rather than emitted by the controller. Emitted there, it would
+    // post straight to this receiver instead of into the controller's own queue,
+    // and the purge in prepare() could not reach it - so game one's "bot
+    // exploded" would be reported over game two.
+    GameController controller;
+
+    QObject receiver;
+    int failedCount = 0;
+
+    QObject::connect(&controller, &GameController::gameFailed, &receiver,
+                     [&failedCount](QString){ failedCount++; });
+
+    controller.prepare(std::nullopt, instant());
+
+    {
+        Outcome first(controller);
+
+        GameSetup setup;
+        setup.seats.push_back(SeatSetup{ "Ana", std::make_unique<ThrowingProvider>() });
+        setup.seats.push_back(SeatSetup{ "Bogdan", std::make_unique<ThrowingProvider>() });
+        setup.structure = GameStructure::S_181;
+        setup.shuffleSeed = 42u;
+
+        controller.start(std::move(setup));
+
+        REQUIRE(first.await());
+        REQUIRE(first.failedCount == 1);
+    }
+
+    // Queued at the controller and never pumped, exactly as a "play again"
+    // pressed on the failure dialog would leave it.
+    REQUIRE(failedCount == 0);
+
+    controller.prepare(std::nullopt, instant());
+
+    QCoreApplication::processEvents();
+    REQUIRE(failedCount == 0);
 }
