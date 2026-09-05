@@ -15,6 +15,7 @@ add_executable(desktop_tests
     GameBridgeTests.cpp
     GameControllerTests.cpp
     SnapshotLogTests.cpp
+    SnapshotSequenceTests.cpp
     TestApp.cpp
 )
 

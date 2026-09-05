@@ -31,7 +31,7 @@ Two rules travel with every step and are not repeated:
 | Phase | | Ends with |
 |---|---|---|
 | **0** ✅ | Skeleton — verify what is already committed | The window opens and a card pixmap is non-null |
-| **A** | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
+| **A** ✅ | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
 | **B** | Cards on a table | A spectated game is watchable and legible |
 | **C** | The human plays | A full game is playable, Forehead and Hidden rounds included |
 | **D** | The game around the game | No command line, no restart between games |
@@ -87,7 +87,7 @@ catch, asserted as true above the comment disproving it.
 
 ---
 
-## Phase A — the seam
+## Phase A — the seam ✅ COMPLETE
 
 **Goal.** The engine runs a full game on a worker thread, every frame arrives on the GUI thread as a
 value, and closing the window mid-game ends it cleanly.
@@ -101,13 +101,13 @@ where reading ahead actually pays.
 
 ### A1 — the snapshot, standing alone
 
-- [ ] `src/core/GameSnapshot.h` — `HandEntry`, `SeatView`, `PlayedCardView`, `GameSnapshot` exactly
+- [x] `src/core/GameSnapshot.h` — `HandEntry`, `SeatView`, `PlayedCardView`, `GameSnapshot` exactly
       as §4.0 declares them. Copyable, default-constructible, no references, no `unique_ptr`.
-- [ ] `src/core/HandLayout.{h,cpp}` — ported from the terminal's, **keeping `positions`** (the local
+- [x] `src/core/HandLayout.{h,cpp}` — ported from the terminal's, **keeping `positions`** (the local
       it computes and throws away) and dropping `choices` (§4.0).
-- [ ] `src/core/Snapshot.{h,cpp}` — `refreshFromEngine(GameSnapshot&, const GameEngine&)`, ported
+- [x] `src/core/Snapshot.{h,cpp}` — `refreshFromEngine(GameSnapshot&, const GameEngine&)`, ported
       from the terminal's `GameView.cpp`. Keep its comments about `canSeeHand()` and the lead seat.
-- [ ] `tests/` — CMake, Catch2, and the snapshot test: drive a real `GameEngine` with
+- [x] `tests/` — CMake, Catch2, and the snapshot test: drive a real `GameEngine` with
       `AiMoveProvider`s and a fixed `shuffleSeed`, assert the snapshot at four points against
       literals (§8, "the snapshot, against a seeded engine").
 
@@ -116,9 +116,9 @@ in a Forehead or Hidden round. Both are §4.0, and both are silent when wrong.
 
 ### A2 — the provider, headless
 
-- [ ] `src/engine/GameAbandoned.h`.
-- [ ] `src/engine/QtMoveProvider.{h,cpp}` + `SeatProvider` (§4.2).
-- [ ] Headless tests: the generation gate drops a stale `submit()`, drops a second `submit()` for
+- [x] `src/engine/GameAbandoned.h`.
+- [x] `src/engine/QtMoveProvider.{h,cpp}` + `SeatProvider` (§4.2).
+- [x] Headless tests: the generation gate drops a stale `submit()`, drops a second `submit()` for
       the same prompt, and a `submit()` with nothing parked does **not** answer the next prompt;
       `abandon()` throws whether the provider is parked or not yet parked (§8).
 
@@ -129,37 +129,37 @@ in a Forehead or Hidden round. Both are §4.0, and both are silent when wrong.
 
 ### A3 — the bridge
 
-- [ ] `src/engine/GameBridge.{h,cpp}` — all thirteen `IGameObserver` callbacks, the `Pacing` struct,
+- [x] `src/engine/GameBridge.{h,cpp}` — all thirteen `IGameObserver` callbacks, the `Pacing` struct,
       `publish()`, the signals, `pace()` and `cancelPacing()` (§4.1).
-- [ ] Test: `pace()` returns early on `cancelPacing()` and **does not throw**. One assertion, and
+- [x] Test: `pace()` returns early on `cancelPacing()` and **does not throw**. One assertion, and
       §6's entire shutdown story rests on it.
 
 ### A4 — the thread
 
-- [ ] `src/engine/GameController.{h,cpp}` — `prepare()` / `start()` / `stop()`, the `engineMutex`,
+- [x] `src/engine/GameController.{h,cpp}` — `prepare()` / `start()` / `stop()`, the `engineMutex`,
       the `stopRequested` latch, the run slot with its catch-all (§4.3).
-- [ ] The controller **mirrors the bridge's twelve signals** and `prepare()` relays them, so the GUI
+- [x] The controller **mirrors the bridge's twelve signals** and `prepare()` relays them, so the GUI
       connects to the controller once and never re-connects. `prepare()` then purges its own queue
       with `removePostedEvents(this, QEvent::MetaCall)` after the join — Qt purges posted events for
       a dead *receiver* only, so the per-game bridge dying takes none of its backlog with it.
-- [ ] `main.cpp` — `qRegisterMetaType` for every payload, **before any `connect()`** (§5).
-- [ ] Shutdown tests: `stop()` before `prepare()`; `stop()` on a spectator game (null `movePlayer`);
+- [x] `main.cpp` — `qRegisterMetaType` for every payload, **before any `connect()`** (§5).
+- [x] Shutdown tests: `stop()` before `prepare()`; `stop()` on a spectator game (null `movePlayer`);
       `stop()` twice; `stop()` after the game finished on its own; and the hard one — `stop()`
       between `start()` and the engine being published, asserting the game ends through
       `onGameStopped()` rather than playing its schedule out (§8). That last one spins on
       `isStopRequested()` before releasing the parked game thread; nothing else about a landed
       `stop()` is observable from outside.
-- [ ] Reuse tests: a second game sees neither game one's undelivered snapshots and `gameOver`, nor
+- [x] Reuse tests: a second game sees neither game one's undelivered snapshots and `gameOver`, nor
       its `gameFailed`.
 
 ### A5 — a window that logs
 
-- [ ] `MainWindow` with a `QTextEdit` and nothing else. `render()` appends a line per snapshot.
-- [ ] Hardcoded spectator setup: `humanSeat = std::nullopt`, `spectatorBeat`, a fixed `shuffleSeed`.
-- [ ] Wire it `connect()` once in the constructor → `prepare()` → `start()`, connecting to the
+- [x] `MainWindow` with a `QTextEdit` and nothing else. `render()` appends a line per snapshot.
+- [x] Hardcoded spectator setup: `humanSeat = std::nullopt`, `spectatorBeat`, a fixed `shuffleSeed`.
+- [x] Wire it `connect()` once in the constructor → `prepare()` → `start()`, connecting to the
       **controller**, not the bridge. `prepare()` makes the relay before the thread starts, which is
       what keeps `onGameStarted`'s snapshot (§4.3).
-- [ ] **First chance to check the two open pacing placements** — carried forward from A3, where
+- [x] **First chance to check the two open pacing placements** — carried forward from A3, where
       nothing could run. Even a text log shows them in the gaps between appended lines: the 1.2s
       dwell should land on the round-result frame and not the blank next-round one, and a bot's card
       should be preceded by a beat rather than appearing instantly after "waiting on Ana". See the
@@ -168,8 +168,23 @@ in a Forehead or Hidden round. Both are §4.0, and both are silent when wrong.
 
 ### A6 — the acceptance test
 
-- [ ] Run the same seed through the terminal client and diff the transcripts. They must agree card
-      for card (§21.5).
+- [x] `tests/SnapshotSequenceTests.cpp` — invariants over the snapshot **sequence** a seeded game
+      produces, collected through `GameBridge` so `publish()`'s own work is covered too. Nine of
+      them, each carrying the mutation that must make it fail, all nine proven by applying it.
+
+> **This replaces the transcript diff §21.5 specifies, and that amendment is superseded.** Three
+> reasons, in `docs/PHASE_A_PLAN.md`: the two outputs are structurally incompatible (the terminal
+> redraws the whole screen per event — 19,040 lines against this client's ~1,300), it couples two
+> clients the plan documents as *meant* to diverge (§4.0's `PlayPrompt::blind`), and the desktop
+> repository has no access to the terminal at run time — not a submodule, not in CI — so it could
+> never have been a gate.
+>
+> **Two facts about the stream cost a failing run each, and are worth knowing before writing
+> anything that walks it.** A completed trick is still standing at `onRoundScored`, because the
+> trick is not cleared until the *next* round's deal. And on the **final** round the index does not
+> advance, so `onRoundComplete` and `onGameOver` publish that same round number *after* the scores
+> are committed — making its last frame the only one in the game reporting `roundScore == 0` after
+> a round was scored rather than before.
 
 **Done when:** a seeded bot game logs start to finish; the window stays responsive throughout;
 closing it mid-game exits through **`onGameStopped()`** with no leaked thread; and the transcript

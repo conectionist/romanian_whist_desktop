@@ -1,13 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CardStringMaker.h"
+#include "GameFixtures.h"
 
 #include "engine/GameController.h"
 
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/IMoveProvider.h>
-#include <romanian_whist/strategies/DuckingStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 
 #include <QCoreApplication>
@@ -37,29 +37,17 @@ using namespace romanian_whist;
 
 namespace
 {
-// Zero pacing, so a whole 26-round game runs in milliseconds. Every publish is
-// followed by one of these waits, and at 700ms a card a full schedule would be
-// a very long test.
+// Both come from tests/GameFixtures.h now, which A6 needed a four-seat variant
+// of. Kept as thin local names so the call sites below - including the one that
+// passes a different SEED - read exactly as they did.
 Pacing instant()
 {
-    return Pacing{ std::chrono::milliseconds(0),
-                   std::chrono::milliseconds(0),
-                   std::chrono::milliseconds(0) };
+    return fixtures::instant();
 }
 
 GameSetup buildSetup(std::optional<std::uint32_t> seed = 42u)
 {
-    GameSetup setup;
-
-    setup.seats.push_back(SeatSetup{ "Ana",
-        std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()) });
-    setup.seats.push_back(SeatSetup{ "Bogdan",
-        std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()) });
-
-    setup.structure = GameStructure::S_181;
-    setup.shuffleSeed = seed;
-
-    return setup;
+    return fixtures::buildSetup(2, seed);
 }
 
 // A provider that throws something the client never wraps, to reach the run
