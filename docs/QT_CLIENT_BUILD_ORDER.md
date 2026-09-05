@@ -138,18 +138,27 @@ in a Forehead or Hidden round. Both are §4.0, and both are silent when wrong.
 
 - [ ] `src/engine/GameController.{h,cpp}` — `prepare()` / `start()` / `stop()`, the `engineMutex`,
       the `stopRequested` latch, the run slot with its catch-all (§4.3).
+- [ ] The controller **mirrors the bridge's twelve signals** and `prepare()` relays them, so the GUI
+      connects to the controller once and never re-connects. `prepare()` then purges its own queue
+      with `removePostedEvents(this, QEvent::MetaCall)` after the join — Qt purges posted events for
+      a dead *receiver* only, so the per-game bridge dying takes none of its backlog with it.
 - [ ] `main.cpp` — `qRegisterMetaType` for every payload, **before any `connect()`** (§5).
 - [ ] Shutdown tests: `stop()` before `prepare()`; `stop()` on a spectator game (null `movePlayer`);
       `stop()` twice; `stop()` after the game finished on its own; and the hard one — `stop()`
       between `start()` and the engine being published, asserting the game ends through
-      `onGameStopped()` rather than playing its schedule out (§8).
+      `onGameStopped()` rather than playing its schedule out (§8). That last one spins on
+      `isStopRequested()` before releasing the parked game thread; nothing else about a landed
+      `stop()` is observable from outside.
+- [ ] Reuse tests: a second game sees neither game one's undelivered snapshots and `gameOver`, nor
+      its `gameFailed`.
 
 ### A5 — a window that logs
 
 - [ ] `MainWindow` with a `QTextEdit` and nothing else. `render()` appends a line per snapshot.
 - [ ] Hardcoded spectator setup: `humanSeat = std::nullopt`, `spectatorBeat`, a fixed `shuffleSeed`.
-- [ ] Wire it in `prepare()` → `connect()` → `start()` order. Connecting after the thread starts
-      loses `onGameStarted`'s snapshot (§4.3).
+- [ ] Wire it `connect()` once in the constructor → `prepare()` → `start()`, connecting to the
+      **controller**, not the bridge. `prepare()` makes the relay before the thread starts, which is
+      what keeps `onGameStarted`'s snapshot (§4.3).
 - [ ] **First chance to check the two open pacing placements** — carried forward from A3, where
       nothing could run. Even a text log shows them in the gaps between appended lines: the 1.2s
       dwell should land on the round-result frame and not the blank next-round one, and a bot's card
@@ -255,9 +264,12 @@ Forehead and Hidden rounds that end the default schedule.**
 - [ ] **Play again**, which is the first thing in the client that reuses a `GameController`.
 
 > The second game is §4.3's ordering run again from the top: `stop()` and join, a fresh bridge and
-> provider from `prepare()`, reconnect, `start()`. **Nothing is reset in place.** Two latches will
+> provider from `prepare()`, `start()`. **Nothing is reset in place**, and there is no reconnection
+> step — the window's connections are to the controller and outlive every game. Two latches will
 > bite here if they were written wrong in A — `QtMoveProvider::abandoned` (game two plays itself at
-> full speed) and `GameController::stopRequested` (game two deals one round and stops).
+> full speed) and `GameController::stopRequested` (game two deals one round and stops) — and a
+> third thing would, if `prepare()` did not purge: game one's queued signals, which arrive after
+> game two has started and repaint its deal with game one's final table.
 
 ### D2 — the read-only panels
 

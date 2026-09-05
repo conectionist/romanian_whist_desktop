@@ -13,6 +13,8 @@ add_executable(desktop_tests
     SnapshotTests.cpp
     QtMoveProviderTests.cpp
     GameBridgeTests.cpp
+    GameControllerTests.cpp
+    TestApp.cpp
 )
 
 target_link_libraries(desktop_tests PRIVATE
@@ -23,6 +25,14 @@ target_link_libraries(desktop_tests PRIVATE
 target_include_directories(desktop_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# The same warnings the client is built with, set in the parent CMakeLists.txt.
+# The test suite is where a signature gets used, so it catches a different set
+# of mistakes than compiling the library alone does.
+#
+# Note C++20 is not requested here: it arrives through desktop_core's PUBLIC
+# cxx_std_20, and stating it twice would let the two drift.
+target_compile_options(desktop_tests PRIVATE ${WHIST_DESKTOP_WARNINGS})
 
 # Cards are compared by value here as they are in the engine's suite, and half
 # of those comparisons are on an optional. Catch2 renders those "{?}" whatever

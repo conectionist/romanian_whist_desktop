@@ -55,6 +55,10 @@ qt_add_library(desktop_core STATIC
     src/engine/QtMoveProvider.cpp
     src/engine/GameBridge.h
     src/engine/GameBridge.cpp
+    src/engine/GameController.h
+    src/engine/GameController.cpp
+    src/engine/MetaTypes.h
+    src/engine/MetaTypes.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
@@ -66,6 +70,26 @@ qt_add_library(desktop_core STATIC
 target_compile_features(desktop_core PUBLIC cxx_std_20)
 
 target_include_directories(desktop_core PUBLIC src)
+
+# ---------------------------------------------------------------------------
+# Warnings
+# ---------------------------------------------------------------------------
+# On OUR targets only. The engine submodule and Catch2 are compiled as they
+# come: warnings we cannot fix are warnings we would learn to scroll past, and
+# the point of turning these on is that the output stays empty.
+#
+# NOT -Werror. A compiler upgrade would then break the build over a warning
+# nobody chose, on a machine that has no other way to build the client. If this
+# ever wants enforcing, CI is where the flag belongs.
+#
+# /W4 for MSVC is written now rather than when it is next reachable: with the
+# Actions quota spent, Windows is currently the platform nothing checks, so the
+# flag should already be in place for the first build that runs there.
+set(WHIST_DESKTOP_WARNINGS
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Wpedantic>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>)
+
+target_compile_options(desktop_core PRIVATE ${WHIST_DESKTOP_WARNINGS})
 
 target_link_libraries(desktop_core PUBLIC Qt6::Widgets Qt6::Svg)
 
