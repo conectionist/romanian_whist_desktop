@@ -82,6 +82,10 @@ setarch -R cmake --build $S --target desktop_tests -j
 setarch -R $S/tests/desktop_tests --order rand
 ```
 
+**That builds the TEST SUITE only** — `--target desktop_tests` is the whole of it. The application
+is a separate target and gets nothing from this; for an instrumented `romanian_whist_desktop` use
+the `asan` preset in the next section.
+
 **`setarch -R` is required, not a nicety.** Kernel 6.8's ASLR entropy collides with
 ThreadSanitizer's shadow mappings, and without it TSan dies with "unexpected memory mapping" before
 running a line. That is an environment quirk, not a fault in this code.
@@ -91,10 +95,16 @@ several times with `--order rand`: a race that reproduces once in twenty is the 
 
 ## Running the APPLICATION under ASan
 
-The test suite needs nothing special. The application does:
+The test suite needs nothing special. The application needs a build of its own — the `default`
+preset links no sanitizer, so running `./build/romanian_whist_desktop` under `ASAN_OPTIONS` checks
+nothing at all and exits cleanly, which reads exactly like a pass. `nm -C build/romanian_whist_desktop
+| grep -c asan` says `0`; that is the tell.
 
 ```bash
-ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp:detect_leaks=0 ./build/romanian_whist_desktop
+cmake --preset asan -DCMAKE_PREFIX_PATH=$QT && cmake --build --preset asan -j
+nm -C build-asan/romanian_whist_desktop | grep -c asan     # non-zero, unlike build/
+
+ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp:detect_leaks=0 ./build-asan/romanian_whist_desktop
 ```
 
 Without the suppression every run aborts inside `w.show()` before the window appears —
@@ -112,7 +122,7 @@ project's own code.
 To actually look for one, drop the flag:
 
 ```bash
-ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp ./build/romanian_whist_desktop
+ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp ./build-asan/romanian_whist_desktop
 ```
 
 and read past the Qt/XCB noise — the frames worth acting on are the ones naming a file in `src/`.

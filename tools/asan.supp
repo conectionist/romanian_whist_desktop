@@ -11,8 +11,21 @@
 # of the application aborts before the window appears, and the one class of bug
 # ASan is here to find - ours - never gets a chance to show up.
 #
-# Usage:
-#   ASAN_OPTIONS=suppressions=tools/asan.supp:detect_leaks=0 ./romanian_whist_desktop
+# Usage, from the repository root, against the `asan` preset's build - NOT
+# ./build/romanian_whist_desktop, which links no sanitizer and would run this
+# command to a clean exit having checked nothing:
+#
+#   ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp:detect_leaks=0 ./build-asan/romanian_whist_desktop
+#
+# $PWD AND NOT A RELATIVE PATH: a relative suppressions= is not resolved against
+# the repository root, so it does not find this file. Measured - the previous
+# wording here, run from build/, died with
+#
+#   AddressSanitizer: failed to read suppressions file
+#   '.../build-asan/tools/asan.supp'
+#
+# and a run whose suppressions did not load is a run that aborts inside
+# libxcb-cursor before the window appears.
 #
 # NOTE WHAT detect_leaks=0 DOES THERE: it turns off leak detection ENTIRELY,
 # ours included - it is not narrowing anything to the bug this file suppresses,
@@ -20,7 +33,7 @@
 # XCB leak on exit by design and the report buries everything else. Drop it when
 # you are actually hunting a leak:
 #
-#   ASAN_OPTIONS=suppressions=tools/asan.supp ./romanian_whist_desktop
+#   ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp ./build-asan/romanian_whist_desktop
 #
 # See docs/LOCAL_VERIFICATION.md, "Running the APPLICATION under ASan".
 interceptor_via_lib:libxcb-cursor
