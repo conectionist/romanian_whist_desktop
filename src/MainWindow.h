@@ -58,12 +58,31 @@ private slots:
 private:
     void appendLine(const QString& line);
 
+    // Prepares the controller and starts a game, and - the reason this is a
+    // function rather than two calls in the constructor - clears the elapsed
+    // origin first. That origin belongs to a GAME, not to the window: leaving
+    // it set would make a second game's elapsed column continue from the first
+    // one's start. Phase A never starts a second game, so this is the one place
+    // phase D's setup dialog has to go through for that to stay true.
+    void startGame(romanian_whist::GameSetup setup);
+
+    // The status bar, from the snapshot - but only when it would actually
+    // change. See the shown* members below.
+    void updateStatus(const GameSnapshot& snapshot);
+
     Ui::MainWindow *ui;
 
     // Zero until the first snapshot arrives, which is what the log's elapsed
-    // column is measured from.
+    // column is measured from. Cleared by startGame() above.
     std::chrono::steady_clock::time_point started;
     bool haveStarted = false;
+
+    // What the status bar was last told, so it is rewritten only when the round
+    // or the trick moves rather than on every one of a game's ~1300 frames.
+    // haveShownStatus is what tells "round 0" apart from "nothing shown yet".
+    bool haveShownStatus = false;
+    unsigned int shownRound = 0;
+    unsigned int shownTrick = 0;
 
     // Set by closeEvent() before it stops the game, so onGameStopped() can tell
     // a stop it caused from one it did not.
