@@ -13,4 +13,14 @@
 #
 # Usage:
 #   ASAN_OPTIONS=suppressions=tools/asan.supp:detect_leaks=0 ./romanian_whist_desktop
+#
+# NOTE WHAT detect_leaks=0 DOES THERE: it turns off leak detection ENTIRELY,
+# ours included - it is not narrowing anything to the bug this file suppresses,
+# which is what suppressions= is for. It is in the usual command because Qt and
+# XCB leak on exit by design and the report buries everything else. Drop it when
+# you are actually hunting a leak:
+#
+#   ASAN_OPTIONS=suppressions=tools/asan.supp ./romanian_whist_desktop
+#
+# See docs/LOCAL_VERIFICATION.md, "Running the APPLICATION under ASan".
 interceptor_via_lib:libxcb-cursor

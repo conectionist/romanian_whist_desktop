@@ -103,6 +103,23 @@ window's cursor, reached from `QWindowPrivate::applyCursor()`. The allocation an
 inside that library; the only frame of ours in the report is the `show()` that triggered it. It is
 a system-library bug, and suppressing it is what lets ASan get far enough to find one of ours.
 
+**`detect_leaks=0` switches off ALL leak detection, including ours.** It is not narrowing anything
+to the `libxcb-cursor` bug above — that is what `suppressions=` does. It is there because Qt and the
+XCB stack leak on exit by design and the report is long enough to bury anything, so the command
+above finds use-after-free and overflows only, and will never tell you about a leak in this
+project's own code.
+
+To actually look for one, drop the flag:
+
+```bash
+ASAN_OPTIONS=suppressions=$PWD/tools/asan.supp ./build/romanian_whist_desktop
+```
+
+and read past the Qt/XCB noise — the frames worth acting on are the ones naming a file in `src/`.
+If a leak of ours ever does turn up, that is the moment to add a `tools/lsan.supp` and an
+`LSAN_OPTIONS=suppressions=` alongside, suppressing the library noise by name. Writing one in
+advance, against leaks nobody has looked at yet, would only be guessing at which frames to silence.
+
 ## Stress, for the same reason
 
 ```bash
