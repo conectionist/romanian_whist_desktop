@@ -133,10 +133,12 @@ void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& c
     publish(engine);
     emit cardPlayed(seat.index, card);
 
-    // The human's own card needs no pause: the time they spent choosing it
-    // already served as one.
-    if(!isHuman(seat))
-        pace(botBeat());
+    // NOT PACED, and this is the second half of the beat onCardRequested takes.
+    // Pacing both spends two beats per card and the second one dwells on a
+    // table nothing has changed: the seats run back to back inside playTrick(),
+    // so the frame after this one is the next seat's onCardRequested, which
+    // already holds this card on screen for a beat while naming who is next.
+    // The last card of a trick is held by onTrickWon's longer dwell instead.
 }
 
 void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int trickNumber)

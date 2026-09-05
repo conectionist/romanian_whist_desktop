@@ -115,28 +115,119 @@ TEST_CASE("pace() actually waits when nothing has cancelled it", "[bridge]")
 {
     // The counterweight to the two tests around it, and it was missing: both of
     // them assert that pace() comes back promptly and does not throw, which a
-    // pace() that never waited at all would satisfy perfectly. Verified by
-    // neutering the wait - all seven bridge tests still passed.
+    // pace() that never waited at all would satisfy perfectly.
     //
     // That gap is worth closing rather than shrugging at. Pacing is the whole
     // difference between a watchable game and cards appearing all at once, and
     // nothing else in the suite would notice it going away.
     //
-    // A short dwell and a generous lower bound: the assertion is "it waited",
-    // not "it waited precisely", and a loaded machine must not be able to fail
-    // this.
+    // TWO DWELLS, NOT ONE, and this is the part a lower bound alone does not
+    // say: "it waited 100ms" is also satisfied by a pace() that ignores its
+    // argument and sleeps a fixed amount. Running the same callback at 200ms and
+    // at 0 and requiring the two land on opposite sides of the same threshold is
+    // what pins that the argument is READ, which is what every other pacing knob
+    // in this class depends on.
+    //
+    // A short dwell and a generous split: the assertion is "it waited", not "it
+    // waited precisely", and a loaded machine must not be able to fail this.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge paced(std::nullopt, Pacing{ std::chrono::milliseconds(0),
+                                           std::chrono::milliseconds(0),
+                                           std::chrono::milliseconds(200) });
+
+    auto started = std::chrono::steady_clock::now();
+    paced.onRoundScored(engine);
+    const auto waited = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(waited >= std::chrono::milliseconds(100));
+
+    GameBridge instantly(std::nullopt, instant());
+
+    started = std::chrono::steady_clock::now();
+    instantly.onRoundScored(engine);
+    const auto immediate = std::chrono::steady_clock::now() - started;
+
+    // The same callback, the same engine, the same publish - only the dwell
+    // differs, so this is the dwell and nothing else.
+    REQUIRE(immediate < std::chrono::milliseconds(100));
+}
+
+TEST_CASE("A bot is given a beat before it is asked for a card", "[bridge]")
+{
+    // THE BEAT THAT MAKES THE SEAT ON TURN VISIBLE. onCardRequested publishes
+    // the frame that names who is thinking, and onCardPlayed supersedes it
+    // microseconds later - measured under a millisecond - so without this wait
+    // that frame is never seen and cards teleport onto the table.
+    //
+    // Nothing asserted it before: the suite's pacing tests all drove
+    // onRoundScored, so deleting this beat left every one of them green.
     GameBridge bridge(std::nullopt, Pacing{ std::chrono::milliseconds(0),
-                                            std::chrono::milliseconds(0),
-                                            std::chrono::milliseconds(200) });
+                                            std::chrono::milliseconds(200),
+                                            std::chrono::milliseconds(0) });
 
     GameEngine engine;
     engine.start(buildSetup());
 
     const auto started = std::chrono::steady_clock::now();
-    bridge.onRoundScored(engine);
+    bridge.onCardRequested(engine, Seat{ 0u });
     const auto elapsed = std::chrono::steady_clock::now() - started;
 
     REQUIRE(elapsed >= std::chrono::milliseconds(100));
+}
+
+TEST_CASE("The human is not made to wait before being asked for a card", "[bridge]")
+{
+    // Their own deliberation is the pause. Pacing before the prompt would only
+    // delay the prompt, which is the one thing a player is waiting for.
+    GameBridge bridge(Seat{ 0u }, Pacing{ std::chrono::seconds(30),
+                                          std::chrono::seconds(30),
+                                          std::chrono::seconds(30) });
+
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    const auto started = std::chrono::steady_clock::now();
+    bridge.onCardRequested(engine, Seat{ 0u });
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(elapsed < std::chrono::seconds(5));
+}
+
+TEST_CASE("The frames after a card and after a round take no dwell of their own", "[bridge]")
+{
+    // BOTH HALVES OF WHERE THE PACING IS NOT, as assertions, because both were
+    // reached by measuring a real game's log and both are invisible to every
+    // other test in this file.
+    //
+    // onCardPlayed: the beat belongs to onCardRequested above. Pacing here as
+    // well spends two per card, and the second one dwells on a table that has
+    // not changed since the first - the seats run back to back inside
+    // playTrick(), so the very next frame is the next seat being asked.
+    //
+    // onRoundComplete: the dwell belongs to onRoundScored, the last callback at
+    // which the engine still names the round just scored. Paced here it lands on
+    // an advanced-index frame instead - a next round with no trump, no bets and
+    // nothing played, which is nothing anyone needs to read.
+    //
+    // Thirty seconds apiece, so a wait that came back would not be mistaken for
+    // a slow machine.
+    GameBridge bridge(std::nullopt, Pacing{ std::chrono::seconds(30),
+                                            std::chrono::seconds(30),
+                                            std::chrono::seconds(30) });
+
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    const auto started = std::chrono::steady_clock::now();
+
+    bridge.onCardPlayed(engine, Seat{ 0u }, Card(Rank::Ace, Suit::Spades));
+    bridge.onRoundComplete(engine);
+
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    REQUIRE(elapsed < std::chrono::seconds(5));
 }
 
 TEST_CASE("cancelPacing() latches, so later waits do not block either", "[bridge]")
