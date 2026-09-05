@@ -155,9 +155,22 @@ private:
         {
             std::lock_guard lock(mutex);
             finished = true;
-        }
 
-        cv.notify_all();
+            // NOTIFIED UNDER THE LOCK, which is not the usual advice and is
+            // required here. await() returning is what lets the test destroy
+            // this Outcome, and several tests scope one tightly so it dies
+            // before the next prepare(). Notify after releasing and the waiter
+            // can return, run its assertions, leave the scope and reach
+            // ~condition_variable while this thread is still inside
+            // notify_all() - destroying a condition variable out from under a
+            // notifier is undefined behaviour, and ThreadSanitizer reports it
+            // as pthread_cond_destroy racing pthread_cond_broadcast.
+            //
+            // Holding the mutex across the notify closes it: the waiter cannot
+            // return from wait_for() until it reacquires the mutex, and it
+            // cannot do that until this scope ends.
+            cv.notify_all();
+        }
     }
 
     std::mutex mutex;
