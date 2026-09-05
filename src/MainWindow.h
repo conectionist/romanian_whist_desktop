@@ -70,6 +70,15 @@ private:
     // change. See the shown* members below.
     void updateStatus(const GameSnapshot& snapshot);
 
+    // The round type as a PLAYER reads it, which is why it is here and not
+    // shared with the log's spelling of the same three words. A second switch
+    // over RoundType is a real cost - it is one more thing to remember the day a
+    // fourth type is added - but the alternative is worse: the log's words are
+    // fixed ASCII that tests assert on and saved logs are read with, and this
+    // one has to go through tr() like every other string a user sees, or a
+    // Romanian status bar reads "Runda 3/26 - levata 2/4 (Forehead)".
+    QString roundTypeText(romanian_whist::RoundType type) const;
+
     Ui::MainWindow *ui;
 
     // Zero until the first snapshot arrives, which is what the log's elapsed

@@ -11,7 +11,6 @@
 
 #include <QCloseEvent>
 #include <QPlainTextEdit>
-#include <QScrollBar>
 #include <QStatusBar>
 #include <QStringList>
 
@@ -83,7 +82,16 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&controller, &GameController::gameOver,     this, &MainWindow::onGameOver);
     connect(&controller, &GameController::gameFailed,   this, &MainWindow::showFailure);
 
-    setWindowTitle(tr("Romanian Whist - spectating"));
+    // NO UNDO HISTORY. The log is read-only and append-only, and a full game
+    // appends about 1300 lines - each one recorded as an undo command nothing in
+    // this window can ever replay. The unlimited maximumBlockCount in the .ui is
+    // deliberate (a whole game has to stay scrollable), so capping the blocks is
+    // not the lever here even though a cap would disable undo as a side effect.
+    ui->log->setUndoRedoEnabled(false);
+
+    // The title lives in MainWindow.ui, not here. Setting it in both puts a
+    // string in the translation catalogue that no one can ever see the effect of
+    // translating, because whichever runs second wins.
 
     // Replaced by the first snapshot, which arrives from inside start() below -
     // so this is on screen only for as long as the deal takes.
@@ -99,6 +107,13 @@ void MainWindow::startGame(GameSetup setup)
     // starts a game rather than once by whatever builds the window.
     haveStarted = false;
     haveShownStatus = false;
+
+    // AND THE LOG WITH IT, for the same reason. The elapsed column only means
+    // anything against the origin it was measured from, so leaving the previous
+    // game's lines in place puts a [ 412.900] immediately above a [   0.000]
+    // with nothing to say the clock restarted - and reading a gap across that
+    // boundary is the one thing the column exists for.
+    ui->log->clear();
 
     // std::nullopt, NOT an arbitrary seat. Pass one and that bot silently plays
     // without a beat, and canSeeHand() is asked about a viewer who is not
@@ -120,23 +135,19 @@ MainWindow::~MainWindow()
 
 void MainWindow::appendLine(const QString& line)
 {
-    QScrollBar* bar = ui->log->verticalScrollBar();
-
-    // READ BEFORE THE APPEND, because appending is what moves maximum(). A
-    // reader sitting at the bottom is following the game; one who has scrolled
-    // up is reading something, and a log that yanks them back to the tail
-    // within half a second cannot be read at all during a game this long.
-    const bool following = bar->value() == bar->maximum();
-
     // append() rather than setPlainText(): the document grows to a few thousand
-    // lines over a full game and rebuilding it every frame would be the one
-    // slow thing in the process.
+    // lines over a full game and rebuilding it every frame would be the one slow
+    // thing in the process.
+    //
+    // AND IT ALREADY FOLLOWS THE TAIL. QPlainTextEdit::appendPlainText() notes
+    // whether the view was at the bottom before inserting and scrolls only if it
+    // was, which is exactly the behaviour wanted here: a reader sitting at the
+    // bottom is following the game, and one who has scrolled up is reading
+    // something and must not be yanked back within half a second. Doing it again
+    // around this call is the same logic written twice, on a slightly different
+    // test - Qt's also requires the widget to be visible, and this window starts
+    // its game before main() calls show().
     ui->log->appendPlainText(line);
-
-    // Follow the tail, but only for a reader who was already there - a log that
-    // stops following after the first screen is a log nobody reads either.
-    if(following)
-        bar->setValue(bar->maximum());
 }
 
 void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
@@ -185,10 +196,25 @@ void MainWindow::updateStatus(const GameSnapshot& snapshot)
                                                  .arg(snapshot.trickCount);
 
     statusBar()->showMessage(tr("Round %1/%2 - %3 (%4)")
-                                 .arg(snapshot.roundNumber)
-                                 .arg(snapshot.roundCount)
-                                 .arg(trick)
-                                 .arg(snapshotlog::describe(snapshot.roundType)));
+                                 .arg(QString::number(snapshot.roundNumber),
+                                      QString::number(snapshot.roundCount),
+                                      trick,
+                                      roundTypeText(snapshot.roundType)));
+}
+
+QString MainWindow::roundTypeText(RoundType type) const
+{
+    // Its own switch rather than the log's - see the header for why the
+    // duplication is the lesser cost. No default case, so adding a fourth type
+    // is a warning here rather than a silent "?" in the status bar.
+    switch(type)
+    {
+        case RoundType::Normal:   return tr("normal");
+        case RoundType::Forehead: return tr("forehead");
+        case RoundType::Hidden:   return tr("hidden");
+    }
+
+    return tr("unknown");
 }
 
 void MainWindow::onGameStopped()
@@ -212,10 +238,13 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
 
     for(const Standing& row : standings)
     {
+        // One arg() taking three, not three chained: a player who names
+        // themselves "%3" would otherwise have their own name swallow the score
+        // that follows it. Same reason as SnapshotLog.cpp's table entries.
         appendLine(tr("   %1. %2  %3")
-                       .arg(row.place)
-                       .arg(QString::fromStdString(row.name))
-                       .arg(row.score));
+                       .arg(QString::number(row.place),
+                            QString::fromStdString(row.name),
+                            QString::number(row.score)));
     }
 
     // getWinners(), not standings.front(). A drawn game has more than one

@@ -2,6 +2,8 @@
 
 #include <QStringList>
 
+#include <cstddef>
+
 using romanian_whist::Card;
 using romanian_whist::RoundType;
 
@@ -28,16 +30,17 @@ QString signedScore(int score)
                      : QStringLiteral("+%1").arg(score);
 }
 
-}
-
-namespace snapshotlog
-{
-
+// The card as this log spells it - rank then suit, no separator, matching
+// Card::toString().
 QString describe(const Card& card)
 {
     return QString::fromStdString(card.toString());
 }
 
+// FIXED ASCII, not user-facing text: these three words are asserted on by the
+// log tests and read out of saved logs, so they must not move when a translation
+// is loaded. The status bar's own names go through tr() - see
+// MainWindow::roundTypeText().
 QString describe(RoundType type)
 {
     switch(type)
@@ -49,6 +52,11 @@ QString describe(RoundType type)
 
     return QStringLiteral("?");
 }
+
+}
+
+namespace snapshotlog
+{
 
 QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
 {
@@ -62,8 +70,15 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
     // Both 1-based, as the snapshot already holds them - roundNumber is
     // getCurrentRoundIndex() + 1, and trickNumber is 0 only between the deal
     // and the first trick, which is a real state rather than an off-by-one.
-    parts << QStringLiteral("R%1/%2").arg(snapshot.roundNumber).arg(snapshot.roundCount);
-    parts << QStringLiteral("T%1/%2").arg(snapshot.trickNumber).arg(snapshot.trickCount);
+    //
+    // PADDED, like every field below that can change width. R1/26 is five
+    // characters and R10/26 is six, so without this every field to the right of
+    // it steps sideways at round ten and stays there - in a log whose whole
+    // point is comparing a column down the page.
+    parts << QStringLiteral("R%1/%2").arg(snapshot.roundNumber)
+                                     .arg(snapshot.roundCount).leftJustified(6);
+    parts << QStringLiteral("T%1/%2").arg(snapshot.trickNumber)
+                                     .arg(snapshot.trickCount).leftJustified(5);
 
     parts << describe(snapshot.roundType).leftJustified(8);
 
@@ -75,9 +90,12 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
 
     parts << QStringLiteral("active=%1").arg(seatName(snapshot, snapshot.activeSeat)).leftJustified(15);
 
+    // Padded as one field rather than per number: the sum runs from 0 to past
+    // ten within a game, and it is the group's total width that decides where
+    // lead=, table=, won[] and scores[] sit on the line.
     parts << QStringLiteral("bets %1/%2 sum %3").arg(snapshot.betsPlaced)
                                                 .arg(snapshot.seats.size())
-                                                .arg(snapshot.betSum);
+                                                .arg(snapshot.betSum).leftJustified(15);
 
     if(!snapshot.table.empty())
     {
@@ -86,12 +104,19 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
         // In PLAY order, which is the order the engine holds the trick in - not
         // seat order, and not rebuilt from the leader. The winning card is
         // starred from isWinning, which is the engine's own ranking.
+        //
+        // ONE arg() TAKING THREE, not three chained. arg() fills the lowest
+        // placeholder still standing, including one that arrived inside a string
+        // it just substituted - so a player who names themselves "50%2" has the
+        // card land inside their own name and the real %2 left empty. Every
+        // player name below is spelled this way for the same reason; phase D's
+        // setup dialog is where the names stop being ours.
         for(const PlayedCardView& entry : snapshot.table)
         {
             played << QStringLiteral("%1 %2%3")
-                          .arg(seatName(snapshot, static_cast<int>(entry.seatIndex)))
-                          .arg(describe(entry.card))
-                          .arg(entry.isWinning ? QStringLiteral("*") : QString());
+                          .arg(seatName(snapshot, static_cast<int>(entry.seatIndex)),
+                               describe(entry.card),
+                               entry.isWinning ? QStringLiteral("*") : QString());
         }
 
         parts << QStringLiteral("lead=%1").arg(seatName(snapshot, static_cast<int>(snapshot.leadSeat)));
@@ -104,7 +129,10 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
     for(const SeatView& seat : snapshot.seats)
     {
         if(seat.tricksWon > 0)
-            wins << QStringLiteral("%1:%2").arg(QString::fromStdString(seat.name)).arg(seat.tricksWon);
+        {
+            wins << QStringLiteral("%1:%2").arg(QString::fromStdString(seat.name),
+                                                QString::number(seat.tricksWon));
+        }
     }
 
     if(!wins.isEmpty())
@@ -120,6 +148,19 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
     // roundScore is what says which of the two a frame is: the engine writes it
     // when it scores the round and clears it when it commits, so it is non-zero
     // on exactly the scored frame and zero everywhere else.
+    //
+    // AND THAT LAST SENTENCE IS AN ASSUMPTION ABOUT THE ENGINE, not something
+    // this repository pins. It holds because calculateRoundScore() returns
+    // 5 + bid on a made bid and -|bid - actual| on a missed one, neither of
+    // which can be 0 - but nothing here tests that, and a scoring change that
+    // can yield 0 for a seat would quietly bring the identical-lines defect
+    // back.
+    //
+    // The durable answer is for the snapshot to record which callback published
+    // it, rather than the formatter reverse-engineering that from state. That
+    // also answers "where does the dwell land" outright, which is phase A's
+    // actual open question - so it belongs with whichever phase first needs
+    // frame provenance for its own sake, not bolted on here.
     bool anyRoundScore = false;
     bool anyScore = false;
 
@@ -145,13 +186,13 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
             // list is a seat a reader has to go looking for.
             if(anyRoundScore)
             {
-                scores << QStringLiteral("%1:%2=%3").arg(name)
-                                                    .arg(signedScore(seat.roundScore))
-                                                    .arg(seat.totalScore);
+                scores << QStringLiteral("%1:%2=%3").arg(name,
+                                                         signedScore(seat.roundScore),
+                                                         QString::number(seat.totalScore));
             }
             else
             {
-                scores << QStringLiteral("%1:%2").arg(name).arg(seat.totalScore);
+                scores << QStringLiteral("%1:%2").arg(name, QString::number(seat.totalScore));
             }
         }
 

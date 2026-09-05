@@ -28,16 +28,16 @@ namespace snapshotlog
 // numbers harder to subtract by eye.
 QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed);
 
-// The card as this log spells it - rank then suit, no separator, matching
-// Card::toString(). Exposed for the tests, which would otherwise have to
-// hardcode the same strings twice.
-QString describe(const romanian_whist::Card& card);
-
-// The round type as this client spells it. Exposed for the same reason and for
-// one more: MainWindow's status bar names the round too, and two switches over
-// RoundType in one client is one of them going stale the day a fourth type is
-// added.
-QString describe(romanian_whist::RoundType type);
+// ONE FUNCTION, deliberately. Both halves of the line's spelling - the card and
+// the round type - were exported from here once: the card for tests that turned
+// out to hardcode the strings anyway, and the round type so MainWindow's status
+// bar could share it. The status bar cannot share it, because everything a user
+// reads goes through tr() and this log's words are fixed ASCII a test asserts
+// on; that is now two switches over RoundType in one client, and the comment on
+// MainWindow::roundTypeText() says why it is the right two.
+//
+// What is left is a formatter with one entry point, which is all a caller has
+// ever needed.
 
 } // namespace snapshotlog
 

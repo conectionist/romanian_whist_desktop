@@ -128,6 +128,44 @@ TEST_CASE("Bets and tricks won appear only once there are any", "[log]")
     REQUIRE(line.contains("won[Ana:1]"));
 }
 
+TEST_CASE("The columns hold still when a field's numbers grow a digit", "[log]")
+{
+    // THE POINT OF THE PADDING, and the reason it is asserted rather than
+    // eyeballed. Everything else in this file checks with contains(), which
+    // cannot tell a padded field from an unpadded one - so R1/26 growing into
+    // R10/26 and shoving every column after it one place to the right passed
+    // the whole suite. In a log whose entire use is reading a value down the
+    // page against the lines above it, that is the defect, not a detail.
+    GameSnapshot narrow = twoSeats();
+    narrow.betsPlaced = 2;
+    narrow.betSum = 4;
+
+    GameSnapshot wide = narrow;
+
+    // One more digit in each of the two fields that grow one during a game: the
+    // round number after round nine, and the bet sum once the seats bid past
+    // nine tricks between them.
+    wide.roundNumber = 10;
+    wide.betSum = 13;
+
+    const QString narrowLine = snapshotlog::format(narrow, kNoTime);
+    const QString wideLine = snapshotlog::format(wide, kNoTime);
+
+    // Both really are wider by a digit, or this test would pass on two
+    // identical lines.
+    REQUIRE(narrowLine.contains("R1/26"));
+    REQUIRE(wideLine.contains("R10/26"));
+    REQUIRE(narrowLine.contains("sum 4"));
+    REQUIRE(wideLine.contains("sum 13"));
+
+    // And every field after them starts at the same offset regardless.
+    REQUIRE(narrowLine.indexOf("Normal") == wideLine.indexOf("Normal"));
+    REQUIRE(narrowLine.indexOf("trump=") == wideLine.indexOf("trump="));
+    REQUIRE(narrowLine.indexOf("active=") == wideLine.indexOf("active="));
+    REQUIRE(narrowLine.indexOf("bets ") == wideLine.indexOf("bets "));
+    REQUIRE(narrowLine.length() == wideLine.length());
+}
+
 TEST_CASE("A scored round does not render as the trick that ended it", "[log]")
 {
     // THE ONE THIS FORMATTER EXISTS FOR. The frame published from onRoundScored
