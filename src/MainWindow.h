@@ -17,16 +17,26 @@ class MainWindow;
 }
 QT_END_NAMESPACE
 
-class CardArtWindow;
+QT_BEGIN_NAMESPACE
+class QDockWidget;
+QT_END_NAMESPACE
 
-// Phase A's window: a QTextEdit and nothing else.
+class CardArtWindow;
+class TableScene;
+class TableView;
+
+// Phase B's window: the table, with phase A's log demoted behind View > Log.
 //
-// That is not a placeholder to apologise for, it is what makes the phase
-// diagnostic. With no scene, no card art and no layout in the process, a wrong
-// card in the log MUST be a snapshot bug - there is nothing else it could be.
-// Phase B draws the table and demotes this widget behind a View menu rather
-// than deleting it, because it is the thing to reach for when something looks
-// wrong on that table later.
+// The log is kept rather than deleted, which A5 asked for and B2 does: it is the
+// thing to reach for when something looks wrong on the table, and it is the only
+// place the gaps BETWEEN frames are recorded - which is what settled two of
+// phase A's pacing questions and what B2 uses to settle the third.
+//
+// Both read the same snapshot, in that order, in render(). That is what makes
+// the log a diagnostic for the table rather than a second opinion about it: a
+// card drawn in the wrong place whose log line is right is a layout bug and
+// nothing else, which is the property phase A's ugliness bought and phase B
+// spends.
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -60,10 +70,17 @@ private slots:
 private:
     void appendLine(const QString& line);
 
-    // Builds the View menu, which in B1 holds one action. The log's own View
-    // toggle that A5 asked for is NOT here yet and waits for B2: the log is
-    // still the only thing in this window, and an action that empties the
-    // window is not a diagnostic, it is a way to lose one.
+    // The scene and its view, into the central widget. Phase B is this.
+    void buildTable();
+
+    // Moves the .ui's log into a dock, hidden by default. B2's half of A5's
+    // "keep the QTextEdit, put it behind a View menu" - which could not be done
+    // in B1, because the log was still the only thing in the window and an
+    // action that empties the window is not a diagnostic.
+    void buildLogDock();
+
+    // Builds the View menu. Must run AFTER buildLogDock(), which owns the
+    // action this adds.
     void buildViewMenu();
 
     // Shows the card-art window, creating it the first time. Parented to this
@@ -93,6 +110,14 @@ private:
     QString roundTypeText(romanian_whist::RoundType type) const;
 
     Ui::MainWindow *ui;
+
+    // The table. Qt owns both - the scene is parented to this window and the
+    // view is the central widget - so these are handles, not ownership.
+    TableScene* scene = nullptr;
+    TableView* table = nullptr;
+
+    // Holds the .ui's log widget from buildLogDock() onward.
+    QDockWidget* logDock = nullptr;
 
     // Null until View > Card art is first chosen. Qt owns it through the parent,
     // so this is a handle for raising the existing window rather than opening a

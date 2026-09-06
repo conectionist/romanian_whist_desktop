@@ -23,10 +23,10 @@
 // cards do not, because a card is white in the dark too. That is why nothing
 // about a card face or a card back is in this struct.
 //
-// The palette is the five names section 18.1 declares and no more. Section 14's
-// colour-coded bid/won pill and section 18's +/- score colours are real and are
-// not here, because they are added when B2 and D2 need them - to THIS struct,
-// which is the rule that matters, rather than to the widget that wants them.
+// The palette is the five names section 18.1 declares, plus section 14's
+// bid/won pill - added in B2, when the seat plaque that needs it was written,
+// and added HERE rather than in that widget, which is the rule that matters.
+// Section 18's +/- score colours are still owed and arrive with the scoreboard.
 struct Theme
 {
     // Qt's own type rather than an enum of ours, because the caller that
@@ -43,6 +43,17 @@ struct Theme
     QColor accent;
     QColor textPrimary;
     QColor dimmedOverlay;
+
+    // Section 14's bid/won pill, which is colour-coded because "on target",
+    // "still owing tricks" and "over the bid" are three different states and a
+    // player should not have to subtract to see which one they are in.
+    //
+    // NEVER THE ONLY CUE. Section 18's rule is that colour never carries meaning
+    // alone, and it does not here: the pill always reads "2 - 1" as well, so the
+    // colour is what makes the state quick rather than what makes it knowable.
+    QColor bidOnTarget;
+    QColor bidOwing;
+    QColor bidOver;
 
     // Solid, gradient or a photograph - no caller can tell which, which is what
     // makes changing it one edit. It is a gradient today only because there is

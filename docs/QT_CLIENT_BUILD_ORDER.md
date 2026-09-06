@@ -266,14 +266,19 @@ four, and two of them cost a failing build each.
 - [ ] The hand fan drawn from `GameSnapshot::hand`, **disabled**. It is not clickable until phase C
       and it cannot be (§4.0).
 
-- [ ] **Re-ask the one pacing question A5 left open.** The two carried from A3 are settled — the
-      round dwell moved to `onRoundScored()`, and `onCardRequested()` gained a bot beat — both
-      measured off A5's timestamped log rather than guessed at. What A5 could **not** judge is the
-      beat it *removed*: `onCardPlayed()` no longer paces, which diverges from the terminal, and the
-      argument for dropping it was that the two frames are identical **in a log**. On a table they
-      are not — the card landing and the highlight moving to the next seat become separate states,
-      and collapsing them may read as a card appearing under a highlight that has already left.
-      Watch a trick before deciding, and read the note beside `onCardPlayed()` in `GameBridge.cpp`.
+- [x] **The one pacing question A5 left open, asked on a table and answered: `onCardPlayed()` stays
+      unpaced.** Measured, not judged by feel. Without the beat the middle state — card down, its
+      player still ringed — lasts **one millisecond**, so the card landing and the ring moving are a
+      single visual event; with it that becomes a real 250 ms state and every card costs 500 ms
+      instead of 250, which is half the speed of a 26-round spectator game.
+      **What settles it is the thing a table has and a log does not: a card lands at its owner's
+      seat and stays there for the whole trick**, so who played it is carried by position rather
+      than by wherever the ring happens to be at the instant it appears. The worry this step
+      recorded — "a card appearing under a highlight that has already left" — cannot happen on the
+      drawn table, because the ring is on a plaque at the edge and the card is in the middle. The
+      terminal keeps its beat for a reason that does not port: its only cue for who played what is a
+      line of text that scrolls away. The full reasoning is beside `onCardPlayed()` in
+      `GameBridge.cpp`.
 
 **Done when:** a spectated game is watchable and legible end to end; the window resizes without the
 layout breaking; the round result gets a beat you can actually read and no card lands on top of
