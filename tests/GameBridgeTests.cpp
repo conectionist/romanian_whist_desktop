@@ -1,13 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CardStringMaker.h"
+#include "GameFixtures.h"
 
 #include "engine/GameBridge.h"
 
-#include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/GameEngine.h>
-#include <romanian_whist/strategies/DuckingStrategy.h>
-#include <romanian_whist/strategies/LowRiskStrategy.h>
 
 #include <atomic>
 #include <chrono>
@@ -22,29 +20,19 @@ using namespace romanian_whist;
 
 namespace
 {
-GameSetup buildSetup(std::optional<std::uint32_t> seed = 42u)
-{
-    GameSetup setup;
-
-    setup.seats.push_back(SeatSetup{ "Ana",
-        std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()) });
-    setup.seats.push_back(SeatSetup{ "Bogdan",
-        std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()) });
-
-    setup.structure = GameStructure::S_181;
-    setup.shuffleSeed = seed;
-
-    return setup;
-}
-
-// Pacing fast enough that a whole game runs in a test, since every publish is
-// followed by one of these waits.
+// Both come from tests/GameFixtures.h now, which A6 needed a four-seat variant
+// of. Kept as thin local names so the call sites below - including the one that
+// passes a different SEED - read exactly as they did.
 Pacing instant()
 {
-    return Pacing{ std::chrono::milliseconds(0),
-                   std::chrono::milliseconds(0),
-                   std::chrono::milliseconds(0) };
+    return fixtures::instant();
 }
+
+GameSetup buildSetup(std::optional<std::uint32_t> seed = 42u)
+{
+    return fixtures::buildSetup(2, seed);
+}
+
 }
 
 TEST_CASE("pace() returns early on cancelPacing(), and does not throw", "[bridge]")

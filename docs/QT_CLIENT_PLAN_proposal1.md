@@ -2623,13 +2623,27 @@ Each ported file keeps a header comment naming the repository and file it came f
 lands in one is findable in the other. That is the cheap half of §9's anti-drift mechanism; the
 seeded-snapshot test in §8 is the half that fails when someone forgets.
 
-**21.5 — Phase A's acceptance test is a transcript comparison. Taken, and §8 now carries it.**
+**21.5 — Phase A's acceptance test is a transcript comparison. SUPERSEDED IN A6 — see below.**
 Recorded here as well because it is the one amendment that changed a phase rather than a type. Every
 other *verify* in §8 is something a person watches, which is the right check for a card table and the
 wrong one for a data path; running phase A seeded and **comparing the snapshot log against the
 terminal client's transcript for the same seed** is free, since the same engine on the same seed lays
 out the same schedule, and the two must then agree card for card. It is what makes phase A's
 deliberately ugly `QTextEdit` an assertion rather than a debugging aid.
+
+> **What A6 actually built, and why not this.** The two outputs are structurally incompatible: the
+> terminal redraws the whole screen per event, 19,040 lines for one seeded game against this
+> client's ~1,300, so `diff` reports every line as differing and the comparison needs a
+> normalisation step this amendment does not mention. Worse, it makes permanent tooling out of a
+> coupling that is supposed to expire — §4.0 already documents a case where this client is
+> deliberately right and the terminal loose, and says the terminal should move to match. And the
+> desktop repository has no access to the terminal at run time, so it could never have been a gate.
+>
+> A6 asserts **invariants over the snapshot sequence** instead: nine of them, over a real seeded
+> game, each carrying the mutation that must make it fail. It needs no second repository, runs in
+> CI, and survives into the phases where the two clients are meant to differ. The one thing it gives
+> up is an independent oracle — an invariant cannot catch a misunderstanding that is self-consistent
+> — which A1's literals against a seeded engine cover instead.
 
 ---
 
