@@ -45,14 +45,18 @@ constexpr int seatHueStep = 47;
 
 }
 
-// Keyed on the colour it was painted with as well as the size, because the
+// Keyed on the PALETTE it was painted from as well as the size, because the
 // palette members above are public and a caller is free to assign one. Without
 // the tint in the key, a recoloured Theme would keep serving the old pixmap and
 // look like the assignment had not taken.
+//
+// The whole palette rather than the colours the painter beneath it reads today:
+// see paletteKey(). A per-colour key was how the avatar cache came to miss
+// accent, which paintAvatar() reads and seatPlaque alone did not cover.
 struct Theme::Cache
 {
     QSize backgroundSize;
-    QRgb backgroundTint = 0;
+    quint64 backgroundTint = 0;
     QPixmap background;
 
     // ONE BOX SIZE AT A TIME, rather than a growing map keyed on the size. Every
@@ -63,9 +67,18 @@ struct Theme::Cache
     // its sizes genuinely differ from each other within one frame; here they do
     // not, and discarding the old set is both simpler and more complete.
     QSize avatarBox;
-    QRgb avatarTint = 0;
+    quint64 avatarTint = 0;
     QHash<unsigned int, QPixmap> avatars;
 };
+
+// Cheap enough to call on every lookup - five rgba() reads and a hash - which is
+// what lets both caches ask "is this the palette I was painted from?" without
+// either of them knowing what its painter reads.
+quint64 Theme::paletteKey() const
+{
+    return qHashMulti(0, tableSurface.rgba(), seatPlaque.rgba(), accent.rgba(),
+                      textPrimary.rgba(), dimmedOverlay.rgba());
+}
 
 Theme Theme::light()
 {
@@ -129,11 +142,11 @@ QPixmap Theme::background(QSize view) const
 
     if(cache->background.isNull()
         || cache->backgroundSize != view
-        || cache->backgroundTint != tableSurface.rgba())
+        || cache->backgroundTint != paletteKey())
     {
         cache->background = paintBackground(view);
         cache->backgroundSize = view;
-        cache->backgroundTint = tableSurface.rgba();
+        cache->backgroundTint = paletteKey();
     }
 
     return cache->background;
@@ -147,11 +160,11 @@ QPixmap Theme::avatar(unsigned int seat, QSize box) const
     if(!cache)
         return paintAvatar(seat, box);
 
-    if(cache->avatarBox != box || cache->avatarTint != seatPlaque.rgba())
+    if(cache->avatarBox != box || cache->avatarTint != paletteKey())
     {
         cache->avatars.clear();
         cache->avatarBox = box;
-        cache->avatarTint = seatPlaque.rgba();
+        cache->avatarTint = paletteKey();
     }
 
     auto found = cache->avatars.constFind(seat);

@@ -69,6 +69,13 @@ private:
     QPixmap paintBackground(QSize view) const;
     QPixmap paintAvatar(unsigned int seat, QSize box) const;
 
+    // EVERY colour, not the ones today's painters happen to read. Which members
+    // a painter depends on is not visible from the cache lookup, and the answer
+    // changes: paintAvatar() reads seatPlaque AND accent, and the bid/won pill
+    // and score colours section 18 still owes this struct will read others. A
+    // key that has to be updated alongside a painter is a key that will not be.
+    quint64 paletteKey() const;
+
     // SHARED ACROSS COPIES, not per-copy. Theme is a copyable value that widgets
     // will hold by value, and a plain QPixmap member would mean each copy
     // repainting the same background independently. QPixmap is itself

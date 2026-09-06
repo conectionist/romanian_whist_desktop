@@ -138,3 +138,27 @@ TEST_CASE("Recolouring a theme invalidates its cached background", "[theme]")
 
     REQUIRE(theme.background(view).cacheKey() != before.cacheKey());
 }
+
+// The same rule for the avatar, and it is the one that was actually wrong: the
+// avatar cache was keyed on seatPlaque, but paintAvatar() derives its per-seat
+// tint from ACCENT as well, so this assignment used to hand back the identical
+// pixmap. WHICH COLOURS A PAINTER READS IS NOT VISIBLE FROM THE LOOKUP, which is
+// why the key is the whole palette rather than the members named at the top of
+// the painter beneath it.
+TEST_CASE("Recolouring the accent invalidates the cached avatars", "[theme]")
+{
+    Theme theme = Theme::light();
+    const QSize box(48, 48);
+
+    const QPixmap before = theme.avatar(0, box);
+
+    theme.accent = Theme::dark().accent;
+
+    const QPixmap after = theme.avatar(0, box);
+
+    REQUIRE(after.cacheKey() != before.cacheKey());
+
+    // Repainted AND different: a cache miss that produced the same picture would
+    // pass the line above and still mean the accent had not been read.
+    REQUIRE(after.toImage() != before.toImage());
+}
