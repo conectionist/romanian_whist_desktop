@@ -15,6 +15,8 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <string>
+#include <utility>
 #include <vector>
 
 using namespace romanian_whist;
@@ -50,9 +52,11 @@ constexpr std::size_t kSeats = 4;
 // Every snapshot the bridge publishes over a whole game, in order.
 //
 // COLLECTED THROUGH THE BRIDGE rather than by calling refreshFromEngine
-// directly, which is what puts publish()'s own work - humanSeat and activeSeat
-// - under test alongside the projection. It is also the stream the window
-// actually sees.
+// directly, which is what puts publish()'s own work - humanSeat - under test
+// alongside the projection. It is also the stream the window actually sees.
+// (activeSeat is publish()'s other job and is NOT asserted here; the whole-game
+// agreement between it and the engine is GameBridgeTests' "Every snapshot names
+// the seat on turn, or nobody".)
 //
 // No thread anywhere: the engine runs on this thread, and the bridge is an
 // observer like any other. A6 adds no concurrency.
@@ -70,6 +74,17 @@ std::vector<GameSnapshot> playAndCollect(std::optional<Seat> humanSeat = std::nu
     engine.addObserver(&bridge);
     engine.start(fixtures::buildSetup(kSeats));
     engine.run();
+
+    // THE FLOOR EVERY CASE STANDS ON, asserted here rather than trusted ten
+    // times over. The cases below index frames.front(), scored.back() and
+    // seats[seat] directly, so a stream that came back empty or short has to
+    // fail with a message rather than read off the end - including when one
+    // case is run on its own or under --order rand, where no other case has
+    // gone first to notice.
+    REQUIRE(frames.size() > 500);
+    REQUIRE(std::all_of(frames.begin(), frames.end(),
+                        [](const GameSnapshot& frame)
+                        { return frame.seats.size() == kSeats; }));
 
     return frames;
 }
@@ -136,8 +151,12 @@ TEST_CASE("A game publishes a stream at all", "[sequence]")
     // The floor every case below stands on. If the stream were empty or a
     // handful of frames, every "for every frame ..." assertion in this file
     // would pass by iterating nothing - which is exactly the failure mode this
-    // suite exists to avoid, so it is asserted once, here, rather than assumed
-    // nine times.
+    // suite exists to avoid.
+    //
+    // playAndCollect() now enforces the same floor for every case, so no case
+    // depends on this one having run first. It is restated here because this is
+    // where a reader looks for it, and because the full-schedule check below
+    // belongs nowhere else.
     const std::vector<GameSnapshot> frames = playAndCollect();
 
     REQUIRE(frames.size() > 500);
@@ -527,15 +546,44 @@ TEST_CASE("A seated player's hand and their played cards partition the deal", "[
     std::set<std::pair<unsigned int, unsigned int>> counted;
     std::optional<std::set<std::string>> dealtToSeatZero;
 
+    // ON THE ROUND'S LAST FRAME, not somewhere inside it: by the time the round
+    // ends the hand is empty and every card dealt to seat 0 has been played.
+    //
+    // Counting per ROUND is the point. An increment inside the loop below fires
+    // on every frame after seat 0's last card - the final onCardPlayed, the
+    // onTrickWon, the onRoundScored - which turns the tally into a frame count
+    // that no per-round expectation can be written against.
+    const auto closeRound = [&](const GameSnapshot& last)
+    {
+        // A blind round, or one whose hand never came into view: nothing was
+        // dealt to partition, and there is nothing to close.
+        if(!dealtToSeatZero)
+            return;
+
+        REQUIRE(last.hand.empty());
+        REQUIRE(playedBySeatZero.size() == dealtToSeatZero->size());
+
+        roundsChecked++;
+    };
+
+    const GameSnapshot* previous = nullptr;
+
     for(const GameSnapshot& frame : frames)
     {
         if(frame.roundNumber != currentRound)
         {
+            if(previous)
+                closeRound(*previous);
+
             currentRound = frame.roundNumber;
             playedBySeatZero.clear();
             counted.clear();
             dealtToSeatZero.reset();
         }
+
+        // Recorded here rather than at the end of the body, because the blind
+        // round below continues past it.
+        previous = &frame;
 
         REQUIRE(frame.humanSeat == 0);
 
@@ -582,13 +630,15 @@ TEST_CASE("A seated player's hand and their played cards partition the deal", "[
         union_.insert(playedBySeatZero.begin(), playedBySeatZero.end());
 
         REQUIRE(union_ == *dealtToSeatZero);
-
-        if(inHand.empty() && playedBySeatZero.size() == frame.trickCount)
-            roundsChecked++;
     }
 
-    // The Normal rounds all reached the point where the hand was empty and
-    // every dealt card had been played.
-    REQUIRE(roundsChecked > 0);
+    if(previous)
+        closeRound(*previous);
+
+    // EVERY Normal round reached that point, not merely one of them: 26 rounds
+    // less the two appended blind ones, which carry no visible hand. Spelled
+    // out rather than left as "> 0" for the reason the trick counts above are -
+    // a lower bound here would pass on a projection that broke 23 of the 24.
+    REQUIRE(roundsChecked == 24);
 }
 

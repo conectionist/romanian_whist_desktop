@@ -9,7 +9,9 @@
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -47,7 +49,12 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
 {
     using namespace romanian_whist;
 
-    static const std::string names[] = { "Ana", "Bogdan", "Cristina", "Dan", "Elena", "Florin" };
+    // Six, which is the most seats the engine accepts. A caller asking for more
+    // is a test bug, and the fallback is what lets the ENGINE say so: indexing
+    // past the end here would be undefined behaviour reached before
+    // GameEngine::start() ever gets to validate the count.
+    static const std::array<std::string, 6> names =
+        { "Ana", "Bogdan", "Cristina", "Dan", "Elena", "Florin" };
 
     GameSetup setup;
 
@@ -62,7 +69,8 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
             default: strategy = std::make_unique<FirstCardStrategy>();  break;
         }
 
-        setup.seats.push_back(SeatSetup{ names[i],
+        setup.seats.push_back(SeatSetup{ i < names.size() ? names[i]
+                                                          : "Seat " + std::to_string(i + 1),
                                          std::make_unique<AiMoveProvider>(std::move(strategy)) });
     }
 
