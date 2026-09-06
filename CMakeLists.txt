@@ -60,8 +60,15 @@ qt_add_library(desktop_core STATIC
     src/engine/MetaTypes.h
     src/engine/MetaTypes.cpp
 
+    src/paint/Theme.h
+    src/paint/Theme.cpp
+    src/paint/CardRenderer.h
+    src/paint/CardRenderer.cpp
+
     src/ui/SnapshotLog.h
     src/ui/SnapshotLog.cpp
+    src/ui/CardArtWindow.h
+    src/ui/CardArtWindow.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
@@ -133,6 +140,23 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # build tree - no such file means nothing was embedded.
 qt_add_resources(CARD_RESOURCES resources/cards.qrc)
 target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
+
+# The TESTS need the same blob, and it is not inherited. CardRenderer lives in
+# desktop_core, but resources are not a library property: the generated
+# qrc_cards.cpp is a translation unit, and this executable is the only target it
+# was put into. So desktop_tests would link a CardRenderer whose art is not
+# there, and every card would come back null - the same symptom as all three
+# failures above, from a fourth cause.
+#
+# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc,
+# for its own target. That looks redundant and is not - see the comment there,
+# which records the two ways of sharing this one that were tried and failed.
+#
+# NOT by moving this into desktop_core, which is the obvious-looking fix. A
+# static library's qrc_*.cpp is a translation unit nothing references - the
+# resource registers itself from a static initializer - and a linker is entitled
+# to drop it. That is silent-embedding failure number four, and it would be
+# hidden behind a build that still worked for the executable.
 
 # ---------------------------------------------------------------------------
 # Translations

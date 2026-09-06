@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 
+#include "ui/CardArtWindow.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/AiMoveProvider.h>
@@ -10,6 +11,8 @@
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 
 #include <QCloseEvent>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QStatusBar>
 #include <QStringList>
@@ -93,11 +96,40 @@ MainWindow::MainWindow(QWidget *parent)
     // string in the translation catalogue that no one can ever see the effect of
     // translating, because whichever runs second wins.
 
+    buildViewMenu();
+
     // Replaced by the first snapshot, which arrives from inside start() below -
     // so this is on screen only for as long as the deal takes.
     statusBar()->showMessage(tr("Dealing..."));
 
     startGame(buildSpectatorSetup());
+}
+
+void MainWindow::buildViewMenu()
+{
+    // The menu bar is in MainWindow.ui and is empty; this is the first thing put
+    // into it. In code rather than in the .ui because the action needs a
+    // connection either way, and a designer-declared action that is only ever
+    // reached from here would be split across two files for nothing.
+    QMenu* view = menuBar()->addMenu(tr("&View"));
+
+    QAction* cardArtAction = view->addAction(tr("&Card art..."));
+    connect(cardArtAction, &QAction::triggered, this, &MainWindow::showCardArt);
+}
+
+void MainWindow::showCardArt()
+{
+    if(!cardArt)
+        cardArt = new CardArtWindow(this);
+
+    cardArt->show();
+
+    // Both, and in this order: show() on an already-open window that is behind
+    // another one does nothing visible, and a minimized one needs the state
+    // cleared before raising means anything.
+    cardArt->setWindowState(cardArt->windowState() & ~Qt::WindowMinimized);
+    cardArt->raise();
+    cardArt->activateWindow();
 }
 
 void MainWindow::startGame(GameSetup setup)
