@@ -1,0 +1,160 @@
+name: CI (self-hosted)
+
+# Temporary replacement for ci.yml while GitHub-hosted runner minutes are
+# exhausted. Targets the two self-hosted runners (Linux + Windows).
+# macOS and the release job are omitted intentionally.
+#
+# When the monthly limit resets:
+#   1. Re-enable ci.yml (restore its push/pull_request trigger block).
+#   2. Delete or disable this file.
+
+on:
+  push:
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+
+# See ci.yml for the full rationale behind this version pin.
+env:
+  QT_VERSION: '6.10.3'
+
+jobs:
+  build-linux:
+    name: Build (Linux)
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # qt_deploy_runtime_dependencies() rewrites RPATHs with patchelf so the
+      # archived binary finds the Qt libraries shipped beside it rather than
+      # whatever the host happens to have.
+      - name: Install patchelf
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+
+      # QT_ROOT_DIR is exported by install-qt-action, but it does not set
+      # CMAKE_PREFIX_PATH, and find_package(Qt6) does not read QT_ROOT_DIR.
+      # See ci.yml for the full explanation.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset release
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-linux"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\/}/staging/$name" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
+
+      - name: Deploy
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
+
+      - name: Verify the deploy
+        run: |
+          if [ -z "$(find staging -name 'libQt6Widgets*' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - the deploy script did nothing."
+            find staging
+            exit 1
+          fi
+          if [ -z "$(find staging -name 'libqxcb.so' -print -quit)" ]; then
+            echo "::error::No platform plugin in the staging tree - the app cannot start."
+            find staging
+            exit 1
+          fi
+
+      - name: Archive
+        working-directory: staging
+        run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.tar.gz
+          archive: false
+
+  build-windows:
+    name: Build (Windows)
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # See ci.yml for the full explanation.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset release
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-windows"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\/}/staging/$name" >> "$GITHUB_OUTPUT"
+
+      # The default generator here is multi-config Visual Studio, which ignores
+      # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
+      # actually selects Release.
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
+
+      - name: Deploy
+        shell: bash
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
+
+      - name: Verify the deploy
+        shell: bash
+        run: |
+          if [ -z "$(find staging -name 'Qt6Widgets.dll' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - windeployqt did nothing."
+            find staging
+            exit 1
+          fi
+          if [ -z "$(find staging -name 'qwindows.dll' -print -quit)" ]; then
+            echo "::error::No platform plugin in the staging tree - the app cannot start."
+            find staging
+            exit 1
+          fi
+
+      - name: Archive
+        shell: bash
+        working-directory: staging
+        run: cmake -E tar cf "../${{ steps.version.outputs.name }}.zip" --format=zip "${{ steps.version.outputs.name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.zip
+          archive: false   # see the note in build-linux above

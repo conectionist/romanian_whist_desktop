@@ -1,12 +1,23 @@
 name: CI
 
+# ─── TEMPORARILY DISABLED ────────────────────────────────────────────────────
+# GitHub-hosted runner minutes are exhausted for this billing period.
+# ci2.yml uses self-hosted runners in the meantime (Linux + Windows only).
+#
+# To re-enable, replace the trigger block below with the original:
+#
+#   on:
+#     push:
+#       paths-ignore:
+#         - '**/*.md'
+#     pull_request:
+#       paths-ignore:
+#         - '**/*.md'
+#
+# ─────────────────────────────────────────────────────────────────────────────
 on:
-  push:
-    paths-ignore:
-      - '**/*.md'
-  pull_request:
-    paths-ignore:
-      - '**/*.md'
+  workflow_dispatch:  # manual trigger only – does not run on push/PR
+
 
 # Qt is not on any runner in a usable version - ubuntu-latest's apt Qt6 is 6.4,
 # below the 6.5 floor in find_package(Qt6 6.5 REQUIRED ...) - so every build job
