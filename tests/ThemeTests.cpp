@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "paint/Theme.h"
 
+#include <QImage>
 #include <QPixmap>
 #include <QSize>
 
@@ -71,13 +73,13 @@ TEST_CASE("The background and the avatar fill the box they are given", "[theme]"
 {
     const Theme theme = Theme::light();
 
-    REQUIRE(theme.background(QSize(320, 200)).size() == QSize(320, 200));
-    REQUIRE(theme.avatar(0, QSize(48, 48)).size() == QSize(48, 48));
+    REQUIRE(theme.background(QSize(320, 200), 1.0).size() == QSize(320, 200));
+    REQUIRE(theme.avatar(0, QSize(48, 48), 1.0).size() == QSize(48, 48));
 
     // An empty request is an empty pixmap rather than a QPixmap of undefined
     // size, which is what a widget asks for on its first layout pass.
-    REQUIRE(theme.background(QSize()).isNull());
-    REQUIRE(theme.avatar(0, QSize()).isNull());
+    REQUIRE(theme.background(QSize(), 1.0).isNull());
+    REQUIRE(theme.avatar(0, QSize(), 1.0).isNull());
 }
 
 // THE PROPERTY THAT MATTERS WHEN THE ART ARRIVES. Theme is a copyable value that
@@ -89,16 +91,16 @@ TEST_CASE("Copies of a theme share one background cache", "[theme]")
     const Theme theme = Theme::light();
     const QSize view(320, 200);
 
-    const QPixmap first = theme.background(view);
+    const QPixmap first = theme.background(view, 1.0);
 
     // Identity, not equality: the same pixels, so no second paint happened.
-    REQUIRE(theme.background(view).cacheKey() == first.cacheKey());
+    REQUIRE(theme.background(view, 1.0).cacheKey() == first.cacheKey());
 
     const Theme copy = theme;
-    REQUIRE(copy.background(view).cacheKey() == first.cacheKey());
+    REQUIRE(copy.background(view, 1.0).cacheKey() == first.cacheKey());
 
     // And a different size is genuinely repainted rather than served stale.
-    REQUIRE(theme.background(QSize(640, 400)).cacheKey() != first.cacheKey());
+    REQUIRE(theme.background(QSize(640, 400), 1.0).cacheKey() != first.cacheKey());
 }
 
 // The avatars are cached for ONE box size, and a second size discards the first
@@ -109,19 +111,19 @@ TEST_CASE("Avatars are cached, and a new box size replaces the set", "[theme]")
 {
     const Theme theme = Theme::light();
 
-    const QPixmap first = theme.avatar(0, QSize(48, 48));
+    const QPixmap first = theme.avatar(0, QSize(48, 48), 1.0);
 
     // Same seat, same box: the stored pixels, not a second paint.
-    REQUIRE(theme.avatar(0, QSize(48, 48)).cacheKey() == first.cacheKey());
+    REQUIRE(theme.avatar(0, QSize(48, 48), 1.0).cacheKey() == first.cacheKey());
 
     // A different seat at the same box is a different avatar, not the same one
     // handed back - the seat has to be in the key at all.
-    REQUIRE(theme.avatar(1, QSize(48, 48)).cacheKey() != first.cacheKey());
+    REQUIRE(theme.avatar(1, QSize(48, 48), 1.0).cacheKey() != first.cacheKey());
 
     // A different box repaints, and then the original size repaints again
     // because the set it was in was discarded.
-    REQUIRE(theme.avatar(0, QSize(64, 64)).size() == QSize(64, 64));
-    REQUIRE(theme.avatar(0, QSize(48, 48)).cacheKey() != first.cacheKey());
+    REQUIRE(theme.avatar(0, QSize(64, 64), 1.0).size() == QSize(64, 64));
+    REQUIRE(theme.avatar(0, QSize(48, 48), 1.0).cacheKey() != first.cacheKey());
 }
 
 // The palette members are public, so a caller may assign one. Keying the cache
@@ -132,11 +134,11 @@ TEST_CASE("Recolouring a theme invalidates its cached background", "[theme]")
     Theme theme = Theme::light();
     const QSize view(320, 200);
 
-    const QPixmap before = theme.background(view);
+    const QPixmap before = theme.background(view, 1.0);
 
     theme.tableSurface = Theme::dark().tableSurface;
 
-    REQUIRE(theme.background(view).cacheKey() != before.cacheKey());
+    REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
 }
 
 // The same rule for the avatar, and it is the one that was actually wrong: the
@@ -150,15 +152,61 @@ TEST_CASE("Recolouring the accent invalidates the cached avatars", "[theme]")
     Theme theme = Theme::light();
     const QSize box(48, 48);
 
-    const QPixmap before = theme.avatar(0, box);
+    const QPixmap before = theme.avatar(0, box, 1.0);
 
     theme.accent = Theme::dark().accent;
 
-    const QPixmap after = theme.avatar(0, box);
+    const QPixmap after = theme.avatar(0, box, 1.0);
 
     REQUIRE(after.cacheKey() != before.cacheKey());
 
     // Repainted AND different: a cache miss that produced the same picture would
     // pass the line above and still mean the accent had not been read.
     REQUIRE(after.toImage() != before.toImage());
+}
+
+// THE SAME CONTRACT CardRenderer HAS, and it has to be the same one: the table
+// and the cards are drawn beside each other in one frame, so a Theme that
+// rasterizes at the logical size is a soft background behind crisp cards, which
+// is the half of "cards soften on a HiDPI display" that the card cache's own dpr
+// key does not cover.
+TEST_CASE("The background and the avatar are rasterized at the device pixel ratio", "[theme]")
+{
+    const Theme theme = Theme::light();
+    const QSize view(320, 200);
+    const QSize box(48, 48);
+
+    const QPixmap background = theme.background(view, 2.0);
+
+    REQUIRE(background.size() == QSize(640, 400));
+    REQUIRE(background.devicePixelRatio() == Catch::Approx(2.0));
+
+    // And still laid out at the size that was asked for, which is the point of
+    // stamping the ratio on rather than handing the caller a bigger pixmap.
+    REQUIRE(background.deviceIndependentSize().toSize() == view);
+
+    const QPixmap avatar = theme.avatar(0, box, 2.0);
+
+    REQUIRE(avatar.size() == QSize(96, 96));
+    REQUIRE(avatar.devicePixelRatio() == Catch::Approx(2.0));
+    REQUIRE(avatar.deviceIndependentSize().toSize() == box);
+}
+
+// Rasterizing at the ratio is only half of it: without the ratio in the KEY, a
+// window dragged from a retina screen to a plain one - or the reverse - keeps
+// the pixmap painted for the screen it left.
+TEST_CASE("The theme's caches are keyed on the device pixel ratio", "[theme]")
+{
+    const Theme theme = Theme::light();
+    const QSize view(320, 200);
+    const QSize box(48, 48);
+
+    REQUIRE(theme.background(view, 1.0).cacheKey() != theme.background(view, 2.0).cacheKey());
+    REQUIRE(theme.avatar(0, box, 1.0).cacheKey() != theme.avatar(0, box, 2.0).cacheKey());
+
+    // A ratio of zero or less is not a screen; it is a caller with an
+    // uninitialised value, and it must not divide the layout by it or paint a
+    // one-pixel table. Same guard CardRenderer::face() has.
+    REQUIRE(theme.background(view, 0.0).isNull());
+    REQUIRE(theme.avatar(0, box, -1.0).isNull());
 }

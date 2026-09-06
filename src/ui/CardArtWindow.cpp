@@ -52,7 +52,7 @@ void CardArtCanvas::paintEvent(QPaintEvent*)
     const qreal dpr = devicePixelRatioF();
     emit devicePixelRatioSeen(dpr);
 
-    painter.drawPixmap(rect(), theme.background(size()));
+    painter.drawPixmap(rect(), theme.background(size(), dpr));
 
     // THE UNIT, from Theme, and every position below derived from it. Nothing in
     // this file picks a card size of its own - which is the same rule the table
@@ -103,7 +103,7 @@ void CardArtCanvas::paintEvent(QPaintEvent*)
     // avatar is whether it reads at the size a seat plaque will actually give it.
     const QSize box(qRound(unit * 0.6), qRound(unit * 0.6));
 
-    painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(0, box));
+    painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(0, box, dpr));
     painter.drawText(QRectF(x, baseline + 4.0, box.width() * 2.0, captionHeight),
                      Qt::AlignLeft | Qt::AlignVCenter, tr("Avatar"));
 }

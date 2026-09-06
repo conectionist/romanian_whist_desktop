@@ -33,8 +33,9 @@ constexpr qreal fanWidthFraction = 0.55;
 constexpr qreal fanSpanInCardHeights = 3.58;
 
 // Below the floor a rank pip stops being readable; above the ceiling a card
-// stops looking like a card and starts looking like a poster. Both are logical
-// pixels - the device pixel ratio is CardRenderer's business, not the layout's.
+// stops looking like a card and starts looking like a poster. Both are LOGICAL
+// pixels: a metric is what the layout reserves, and the ratio it is rasterized
+// at never changes what the table looks like, only how sharp it is.
 constexpr qreal minimumCardHeight = 44.0;
 constexpr qreal maximumCardHeight = 220.0;
 
@@ -42,6 +43,24 @@ constexpr qreal maximumCardHeight = 220.0;
 // without six literals. 47 degrees is a step that does not repeat or collide
 // within the six seats the engine allows.
 constexpr int seatHueStep = 47;
+
+// A duplicate of CardRenderer's, floor included, and deliberately not shared
+// with it: Theme must not acquire a dependency on the card art to be able to
+// scale a rectangle. Three lines is the cheaper of the two.
+QSize physicalSize(QSize size, qreal dpr)
+{
+    return QSize(std::max(1, qRound(size.width() * dpr)),
+                 std::max(1, qRound(size.height() * dpr)));
+}
+
+// Quantized to hundredths rather than compared as a float, for the reason
+// CardRenderer's cache key gives: the ratio arrives as 1, 1.25, 1.5 or 2 in
+// practice, and two bit patterns that differ in the last place are the same
+// ratio for this purpose.
+int dprKey(qreal dpr)
+{
+    return qRound(dpr * 100.0);
+}
 
 }
 
@@ -56,6 +75,7 @@ constexpr int seatHueStep = 47;
 struct Theme::Cache
 {
     QSize backgroundSize;
+    int backgroundDpr = 0;
     quint64 backgroundTint = 0;
     QPixmap background;
 
@@ -67,6 +87,7 @@ struct Theme::Cache
     // its sizes genuinely differ from each other within one frame; here they do
     // not, and discarding the old set is both simpler and more complete.
     QSize avatarBox;
+    int avatarDpr = 0;
     quint64 avatarTint = 0;
     QHash<unsigned int, QPixmap> avatars;
 };
@@ -130,40 +151,59 @@ qreal Theme::cardHeightFor(QSize view) const
     return std::clamp(std::min(fromHeight, fromWidth), minimumCardHeight, maximumCardHeight);
 }
 
-QPixmap Theme::background(QSize view) const
+// BOTH HALVES OF THE HiDPI STORY ON ONE PATH, which is the discipline
+// CardRenderer::finish() spells out: rasterizing at size * dpr without setting
+// the ratio produces a pixmap drawn at dpr times the size it should be, and
+// setting the ratio without rasterizing larger produces one that is the right
+// size and soft. Neither can be done alone from here.
+QPixmap Theme::rasterize(QPixmap pixmap, qreal dpr)
 {
-    if(view.isEmpty())
+    pixmap.setDevicePixelRatio(dpr);
+    return pixmap;
+}
+
+QPixmap Theme::background(QSize view, qreal dpr) const
+{
+    if(view.isEmpty() || dpr <= 0.0)
         return QPixmap();
 
     // No cache at all rather than a wrong one: a default-constructed Theme has
     // no Cache, and painting is still the right answer for it.
     if(!cache)
-        return paintBackground(view);
+        return rasterize(paintBackground(physicalSize(view, dpr)), dpr);
 
     if(cache->background.isNull()
         || cache->backgroundSize != view
+        || cache->backgroundDpr != dprKey(dpr)
         || cache->backgroundTint != paletteKey())
     {
-        cache->background = paintBackground(view);
+        cache->background = rasterize(paintBackground(physicalSize(view, dpr)), dpr);
         cache->backgroundSize = view;
+        cache->backgroundDpr = dprKey(dpr);
         cache->backgroundTint = paletteKey();
     }
 
     return cache->background;
 }
 
-QPixmap Theme::avatar(unsigned int seat, QSize box) const
+QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
 {
-    if(box.isEmpty())
+    if(box.isEmpty() || dpr <= 0.0)
         return QPixmap();
 
     if(!cache)
-        return paintAvatar(seat, box);
+        return rasterize(paintAvatar(seat, physicalSize(box, dpr)), dpr);
 
-    if(cache->avatarBox != box || cache->avatarTint != paletteKey())
+    // A changed ratio discards the set exactly as a changed box does, and for
+    // the same reason: the window moved to another screen, so every avatar in
+    // the old set is one nothing will ask for again.
+    if(cache->avatarBox != box
+        || cache->avatarDpr != dprKey(dpr)
+        || cache->avatarTint != paletteKey())
     {
         cache->avatars.clear();
         cache->avatarBox = box;
+        cache->avatarDpr = dprKey(dpr);
         cache->avatarTint = paletteKey();
     }
 
@@ -171,25 +211,30 @@ QPixmap Theme::avatar(unsigned int seat, QSize box) const
     if(found != cache->avatars.constEnd())
         return found.value();
 
-    return *cache->avatars.insert(seat, paintAvatar(seat, box));
+    return *cache->avatars.insert(seat,
+                                  rasterize(paintAvatar(seat, physicalSize(box, dpr)), dpr));
 }
 
 // A single desaturated green, subtly darker at the edges (section 18). No
 // texture bitmap, and no photograph - but the caller cannot tell, which is the
 // property that matters.
-QPixmap Theme::paintBackground(QSize view) const
+//
+// PHYSICAL PIXELS. Every coordinate below is a fraction of the box, so this is
+// the same picture at whatever resolution it is handed and needs to know
+// nothing about a device pixel ratio.
+QPixmap Theme::paintBackground(QSize physical) const
 {
-    QPixmap pixmap(view);
+    QPixmap pixmap(physical);
     pixmap.fill(tableSurface);
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    const QPointF centre(view.width() / 2.0, view.height() / 2.0);
+    const QPointF centre(physical.width() / 2.0, physical.height() / 2.0);
 
     // Reaching past the corners, so the darkening is a vignette rather than a
     // visible disc with a rim.
-    const qreal radius = std::hypot(view.width(), view.height()) * 0.62;
+    const qreal radius = std::hypot(physical.width(), physical.height()) * 0.62;
 
     QRadialGradient gradient(centre, radius, centre);
     gradient.setColorAt(0.0, tableSurface.lighter(112));
@@ -204,17 +249,19 @@ QPixmap Theme::paintBackground(QSize view) const
 // A flat silhouette in a disc, filling the box it was given. Deliberately plain:
 // section 18 is a calm table rather than a skeuomorphic casino, and this is the
 // element most likely to be the first thing replaced by real art.
-QPixmap Theme::paintAvatar(unsigned int seat, QSize box) const
+//
+// PHYSICAL PIXELS, as paintBackground() above and for the same reason.
+QPixmap Theme::paintAvatar(unsigned int seat, QSize physical) const
 {
-    QPixmap pixmap(box);
+    QPixmap pixmap(physical);
     pixmap.fill(Qt::transparent);
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
 
-    const qreal width = box.width();
-    const qreal height = box.height();
+    const qreal width = physical.width();
+    const qreal height = physical.height();
 
     painter.setBrush(seatPlaque);
     painter.drawEllipse(QRectF(0.0, 0.0, width, height));

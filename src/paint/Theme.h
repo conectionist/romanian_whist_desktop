@@ -47,13 +47,21 @@ struct Theme
     // Solid, gradient or a photograph - no caller can tell which, which is what
     // makes changing it one edit. It is a gradient today only because there is
     // no art committed to point it at.
-    QPixmap background(QSize view) const;
+    //
+    // `view` is in LOGICAL pixels and `dpr` is the target device pixel ratio,
+    // the same contract CardRenderer::face() states: the returned pixmap is
+    // rasterized at view * dpr physical pixels and carries the ratio, so it is
+    // crisp on a HiDPI display and is still laid out at `view`. Without it the
+    // table is visibly soft beside cards that are not.
+    QPixmap background(QSize view, qreal dpr) const;
 
     // Stick figures today, portraits tomorrow. THE BOX IS WHAT THE SEAT PLAQUE
     // RESERVES, which is the whole reason this takes a QSize rather than a
     // scale: replacing the art then never reflows the layout, because the
     // layout never asked how big the art wanted to be.
-    QPixmap avatar(unsigned int seat, QSize box) const;
+    //
+    // Same logical-size-and-dpr contract as background() above.
+    QPixmap avatar(unsigned int seat, QSize box, qreal dpr) const;
 
     // One unit. Every other metric on the table derives from it, so new art with
     // a different aspect ratio does not mean re-tuning the layout.
@@ -66,8 +74,18 @@ private:
     // layout touched. Keeping the cache lookup out of them is what makes that
     // true - an image load is far more expensive than a gradient, so the cache
     // has to already be in the right place when the art arrives.
-    QPixmap paintBackground(QSize view) const;
-    QPixmap paintAvatar(unsigned int seat, QSize box) const;
+    //
+    // These take PHYSICAL pixels, as CardRenderer's rasterizeFace() does. Every
+    // coordinate in both is a fraction of the box it was handed, so a larger box
+    // is the same picture at more pixels and nothing here has to know about a
+    // ratio. Attaching the ratio is the caller's half, done above.
+    QPixmap paintBackground(QSize physical) const;
+    QPixmap paintAvatar(unsigned int seat, QSize physical) const;
+
+    // The other half: stamping the ratio onto what a painter returned. Static
+    // and shared by both, so neither public method can rasterize large and then
+    // forget to say so.
+    static QPixmap rasterize(QPixmap pixmap, qreal dpr);
 
     // EVERY colour, not the ones today's painters happen to read. Which members
     // a painter depends on is not visible from the cache lookup, and the answer

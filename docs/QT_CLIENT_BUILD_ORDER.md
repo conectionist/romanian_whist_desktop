@@ -227,8 +227,11 @@ four, and two of them cost a failing build each.
   `Theme::background()` and `Theme::avatar()` are all painted rather than loaded. That agrees with
   §18 (a desaturated green, "no texture bitmap"; "stick figures today, portraits tomorrow") and is
   cheap to reverse: each is one private helper behind a signature that already takes the size an
-  image would be scaled to, so committing real art later is three function bodies and some `<file>`
-  lines, with no caller and no layout touched. **Placeholder art now would be work done twice** —
+  image would be scaled to *and the ratio to scale it at*, so committing real art later is three
+  function bodies and some `<file>` lines, with no caller and no layout touched. The ratio is part
+  of that only because B1's own review put it there — the two `Theme` signatures shipped without it
+  and would have had to change on the day the art arrived, which is the one thing the seam exists
+  to prevent. **Placeholder art now would be work done twice** —
   and the avatar box and vignette cannot be judged until B2 puts a table on screen.
 - **The card art reaches the executable only, and `tests/CMakeLists.txt` needs its own
   `qt_add_resources` on the same `.qrc`.** Resources belong to a binary, not to the `desktop_core`
@@ -399,6 +402,7 @@ Symptom first, because that is what you have.
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
+| The table or an avatar is soft while the cards beside it are crisp | `Theme::background()`/`avatar()` were handed a logical size and never told the ratio — both halves (rasterize at `size * dpr`, then `setDevicePixelRatio`) have to be on one path | §18.1 |
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |
 
 ---

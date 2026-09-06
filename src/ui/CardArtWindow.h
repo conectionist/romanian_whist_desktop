@@ -24,8 +24,14 @@ QT_END_NAMESPACE
 // It reads the live devicePixelRatio back to the user rather than assuming one.
 // "Check it on a HiDPI display now, not later" is a done-condition for this
 // phase, and a number on screen is what makes that a check rather than a squint:
-// with QT_SCALE_FACTOR=2 the label must say 2 before anything about the cards
+// with QT_SCALE_FACTOR=2 the label must say 2 before anything about the art
 // being crisp means anything at all.
+//
+// ALL FOUR THINGS ON SCREEN, not just the cards, which is what makes this window
+// the check it is meant to be: the ratio goes to Theme::background() and
+// Theme::avatar() as well as to the renderer, and a table that is soft behind
+// crisp cards is only visible when both are drawn in one frame. B1's review
+// found exactly that, because the seam had shipped without it.
 class CardArtCanvas : public QWidget
 {
     Q_OBJECT
