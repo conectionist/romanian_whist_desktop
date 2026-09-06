@@ -31,16 +31,31 @@ constexpr qreal dimmedDesaturation = 0.35;
 // seen and the oldest entries are the ones that will never be asked for again.
 constexpr int cacheBudgetKb = 32 * 1024;
 
-// 52 is the back. Giving it a slot in the same space as the faces is the same
-// argument section 18.1 makes for back() existing at all: a back that is a
-// special case in the cache is a back that gets evicted by different rules than
-// the cards it is drawn beside.
-constexpr unsigned int backIndex = 52;
-
 unsigned int indexOf(Card card)
 {
     return static_cast<unsigned int>(card.rank) * 4u + static_cast<unsigned int>(card.suit);
 }
+
+// The back gets A BIT OF ITS OWN rather than a spare index in the face space.
+//
+// It used to be index 52, one past the last card, and that is a slot only while
+// the engine has exactly 13 ranks and 4 suits: indexOf() is rank * 4 + suit, so
+// a fourteenth Rank makes some real card's index 52 as well, and it is served
+// the back's art out of the cache. THE FAILURE IS SILENT AND IT IS WRONG PIXELS,
+// which is worse than the missing-file failure the switches below guard against.
+//
+// A static_assert cannot close it. C++ has no way to name "the last enumerator",
+// so an assert has to spell Rank::Ace - and Rank::Ace is still 12 after a Joker
+// is appended after it, which is exactly the edit that breaks this. Tried, and
+// it compiled clean with the collision present. The engine has no Count
+// sentinel either, and adding one would break the deliberate no-default switches
+// below, which are the guard that does work.
+//
+// So the collision is removed instead of detected: a separate bit cannot be
+// reached by any arithmetic over the enums, whatever the engine does to them.
+// The back still lives in the same QCache under the same budget and the same
+// eviction, which is what section 18.1's argument for back() was actually about.
+constexpr int backBit = 56;
 
 // ALL FOUR COMPONENTS section 18.1 names: card, size, state and dpr. Dropping
 // any one of them is a real bug with a real symptom - dpr is the one the build
@@ -54,11 +69,15 @@ unsigned int indexOf(Card card)
 // dpr is quantized to hundredths rather than hashed as a float. It arrives from
 // QWindow::devicePixelRatio() as 1, 1.25, 1.5 or 2 in practice, and two bit
 // patterns that differ in the last place are the same ratio for this purpose.
-quint64 cacheKey(unsigned int cardIndex, CardRenderer::State state, QSize size, qreal dpr)
+//
+// Bit layout: back@56, state@55, card@48-54, dpr@32-47, height@16-31, width@0-15.
+quint64 cacheKey(unsigned int cardIndex, bool isBack, CardRenderer::State state, QSize size,
+                 qreal dpr)
 {
     const quint64 dprKey = static_cast<quint64>(qRound(dpr * 100.0)) & 0xFFFF;
 
-    return (static_cast<quint64>(state == CardRenderer::State::Dimmed ? 1 : 0) << 55)
+    return (static_cast<quint64>(isBack ? 1 : 0) << backBit)
+         | (static_cast<quint64>(state == CardRenderer::State::Dimmed ? 1 : 0) << 55)
          | (static_cast<quint64>(cardIndex & 0x7F) << 48)
          | (dprKey << 32)
          | (static_cast<quint64>(size.height() & 0xFFFF) << 16)
@@ -179,7 +198,7 @@ QPixmap CardRenderer::face(Card card, QSize size, qreal dpr, State state) const
     if(size.isEmpty() || dpr <= 0.0)
         return QPixmap();
 
-    const quint64 key = cacheKey(indexOf(card), state, size, dpr);
+    const quint64 key = cacheKey(indexOf(card), false, state, size, dpr);
 
     // A copy rather than the pointer: the next insert may evict what this points
     // at, and a caller holding a dangling QPixmap* would find out about it a
@@ -202,7 +221,9 @@ QPixmap CardRenderer::back(QSize size, qreal dpr) const
     if(size.isEmpty() || dpr <= 0.0)
         return QPixmap();
 
-    const quint64 key = cacheKey(backIndex, State::Normal, size, dpr);
+    // The card index is unused when the back bit is set, so it is 0 rather than
+    // a sentinel that would have to stay out of the faces' way.
+    const quint64 key = cacheKey(0, true, State::Normal, size, dpr);
 
     if(const QPixmap* cached = cache.object(key))
         return *cached;
