@@ -209,12 +209,53 @@ is the diagnostic you will want every time something looks wrong on the table la
 Nothing in B1 touches the engine, which makes it the thing to work on when you are blocked on
 something else.
 
-- [ ] `src/paint/Theme.{h,cpp}` — palette, `background()`, `avatar()`, `cardHeightFor()` (§18.1).
+- [x] `src/paint/Theme.{h,cpp}` — palette, `background()`, `avatar()`, `cardHeightFor()` (§18.1).
       Light and dark from the start; retrofitting a palette is the expensive version.
-- [ ] `src/paint/CardRenderer.{h,cpp}` — `face()` and `back()`, rasterizing the SVG set through
+- [x] `src/paint/CardRenderer.{h,cpp}` — `face()` and `back()`, rasterizing the SVG set through
       `QSvgRenderer`, cached on `(card, size, state, dpr)`. **The two `switch`es over rank and suit
       live here and nowhere else**, and `Card::toString()` is not the filename (§7).
-- [ ] A scratch widget drawing one card at three sizes. Check it on a HiDPI display now, not later.
+- [x] A scratch widget drawing one card at three sizes. Check it on a HiDPI display now, not later.
+      Kept, as `View ▸ Card art…`, on A5's precedent rather than deleted.
+
+### What the B1 run found
+
+Kept for the same reason phase 0's list is: the next person to build on these two seams hits all
+four, and two of them cost a failing build each.
+
+- **There is no card back, no table background and no avatar art.** `resources/images/cards/` is 52
+  faces as PNG and the same 52 as SVG, and nothing else — so `CardRenderer::back()`,
+  `Theme::background()` and `Theme::avatar()` are all painted rather than loaded. That agrees with
+  §18 (a desaturated green, "no texture bitmap"; "stick figures today, portraits tomorrow") and is
+  cheap to reverse: each is one private helper behind a signature that already takes the size an
+  image would be scaled to *and the ratio to scale it at*, so committing real art later is three
+  function bodies and some `<file>` lines, with no caller and no layout touched. The ratio is part
+  of that only because B1's own review put it there — the two `Theme` signatures shipped without it
+  and would have had to change on the day the art arrived, which is the one thing the seam exists
+  to prevent. **Placeholder art now would be work done twice** —
+  and the avatar box and vignette cannot be judged until B2 puts a table on screen.
+- **The card art reaches the executable only, and `tests/CMakeLists.txt` needs its own
+  `qt_add_resources` on the same `.qrc`.** Resources belong to a binary, not to the `desktop_core`
+  both binaries link. Two tidier arrangements were tried and both are wrong: attaching the parent's
+  generated file to `desktop_tests` **builds fine under `cmake --build build` and then fails under
+  `cmake --build build --target desktop_tests`** with *"No rule to make target `qrc_cards.cpp`"* —
+  the rule that generates it belongs to the scope that declared it — and that by-target form is
+  what every sanitizer run in `LOCAL_VERIFICATION.md` uses. Moving the resources into
+  `desktop_core` is the other, and the root `CMakeLists.txt` already refuses it: a static library's
+  `qrc_*.cpp` is a translation unit nothing references, which a linker may drop. The `.qrc` is
+  consumed twice, and ~30 MB of generated source compiles twice with it.
+- **`QPixmap` is fatal without a `QGuiApplication`, so `tests/TestApp.cpp` is no longer a
+  `QCoreApplication`.** Its old comment argued a GUI application "would need a display that CI does
+  not have", which was the right instinct and the wrong conclusion — `offscreen` is exactly the
+  display-free platform, it ships inside qtbase rather than being one of the plugins the deploy step
+  trims, and it needs no xvfb. It is set with `qputenv` from inside `TestApp` and only when unset,
+  because the suite is run both through `ctest` and as a bare `./tests/desktop_tests`, and a ctest
+  `ENVIRONMENT` property would have covered only the first.
+- **The `QPixmap(":/cards/x.svg")` trap is invisible while developing, which none of the plan says.**
+  §18.1 is right that it returns null in an installed build, but the `qsvg` imageformat plugin is
+  present in a normal Qt install — so loading a card the obvious way *works on the machine it is
+  written on* and produces blank cards only once deployed. **No test can catch it**: the suite would
+  have to assert that a legitimately installed plugin is absent. `CardRenderer` being the only
+  caller is the entire defence, which is a stronger argument for the seam than the one §18.1 gives.
 
 ### B2 — the scene
 
@@ -329,6 +370,13 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
 ## Phase F — ship
 
 - [ ] `lupdate`, fill in `ro_RO.ts`, `lrelease`. Every missed `tr()` surfaces here.
+- [ ] **Drop the PNG card set from `resources/cards.qrc`.** B1 settled on the SVGs (§18.1), and
+      `CardRenderer` is the only thing in the client that opens a card file — so the 52 PNGs are
+      4.3 MB that nothing loads, carried in **two** binaries now that the test suite consumes the
+      same `.qrc`. Confirm `qrc_cards.cpp` shrinks in both build trees and that a card still draws;
+      the build file's own diagnostic is unchanged. *(Noted in B1 rather than discovered here: the
+      PNGs were left embedded deliberately, because dropping them is a packaging decision and B1
+      was not the phase to take it.)*
 - [ ] Icons per platform; About box printing the client and engine versions.
 - [ ] `windeployqt` / `macdeployqt` / `linuxdeploy` through the existing workflow.
 - [ ] README, CHANGELOG, `v1.0.0`.
@@ -354,6 +402,8 @@ Symptom first, because that is what you have.
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
+| The table or an avatar is soft while the cards beside it are crisp | `Theme::background()`/`avatar()` were handed a logical size and never told the ratio — both halves (rasterize at `size * dpr`, then `setDevicePixelRatio`) have to be on one path | §18.1 |
+| A new rank is drawn as the card back | The back shared the faces' index space (`indexOf` is `rank * 4 + suit`, the back was 52). It has its own key bit now — and note a `static_assert` **cannot** catch this: C++ cannot name "the last enumerator", so the assert has to spell `Rank::Ace`, which is still 12 after a rank is appended after it | §18.1 |
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |
 
 ---

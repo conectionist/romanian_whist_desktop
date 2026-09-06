@@ -17,6 +17,8 @@ class MainWindow;
 }
 QT_END_NAMESPACE
 
+class CardArtWindow;
+
 // Phase A's window: a QTextEdit and nothing else.
 //
 // That is not a placeholder to apologise for, it is what makes the phase
@@ -58,6 +60,17 @@ private slots:
 private:
     void appendLine(const QString& line);
 
+    // Builds the View menu, which in B1 holds one action. The log's own View
+    // toggle that A5 asked for is NOT here yet and waits for B2: the log is
+    // still the only thing in this window, and an action that empties the
+    // window is not a diagnostic, it is a way to lose one.
+    void buildViewMenu();
+
+    // Shows the card-art window, creating it the first time. Parented to this
+    // window with Qt::Window, so it is a top-level window that still dies with
+    // its owner rather than outliving the client.
+    void showCardArt();
+
     // Prepares the controller and starts a game, and - the reason this is a
     // function rather than two calls in the constructor - clears the elapsed
     // origin first. That origin belongs to a GAME, not to the window: leaving
@@ -80,6 +93,11 @@ private:
     QString roundTypeText(romanian_whist::RoundType type) const;
 
     Ui::MainWindow *ui;
+
+    // Null until View > Card art is first chosen. Qt owns it through the parent,
+    // so this is a handle for raising the existing window rather than opening a
+    // second one - not an ownership claim.
+    CardArtWindow* cardArt = nullptr;
 
     // Zero until the first snapshot arrives, which is what the log's elapsed
     // column is measured from. Cleared by startGame() above.
