@@ -32,7 +32,7 @@ Two rules travel with every step and are not repeated:
 |---|---|---|
 | **0** ✅ | Skeleton — verify what is already committed | The window opens and a card pixmap is non-null |
 | **A** ✅ | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
-| **B** | Cards on a table | A spectated game is watchable and legible |
+| **B** ✅ | Cards on a table | A spectated game is watchable and legible |
 | **C** | The human plays | A full game is playable, Forehead and Hidden rounds included |
 | **D** | The game around the game | No command line, no restart between games |
 | **E** | Polish | Part II is on screen |
@@ -259,12 +259,23 @@ four, and two of them cost a failing build each.
 
 ### B2 — the scene
 
-- [ ] `CardItem`, `SeatItem`, `TrickItem`, `HandItem`, `TableScene`, `TableView`.
-- [ ] Seat layout from §14's angle table, **in fractions of the view rect**. Computed, never read
+- [x] `CardItem`, `SeatItem`, `TrickItem`, `TableScene`, `TableView`. **`HandItem` is not here** —
+      see the hand-fan box below, which is the finding that moved it.
+- [x] Seat layout from §14's angle table, **in fractions of the view rect**. Computed, never read
       off the artwork — that is what keeps the background replaceable.
-- [ ] `InfoStrip` and a static `ScoreboardWidget`.
-- [ ] The hand fan drawn from `GameSnapshot::hand`, **disabled**. It is not clickable until phase C
-      and it cannot be (§4.0).
+- [x] `InfoStrip` and a static `ScoreboardWidget`.
+- [ ] ~~The hand fan drawn from `GameSnapshot::hand`, **disabled**.~~ **MOVED TO C3, AND IT COULD
+      NEVER HAVE BEEN DONE HERE.** In a spectator game `GameSnapshot::hand` is empty on every frame:
+      `Snapshot.cpp` returns early when `humanSeat < 0`, and gates every `seats[i].hand` the same
+      way, saying outright that *"a spectator sees everything" stays a client policy nothing here
+      implements*. §3 forbids a widget filling the gap from the engine itself.
+      **And `humanSeat` is not a viewer flag.** `GameController::prepare()` builds a
+      `QtMoveProvider` from it and `start()` then asserts the seat's provider is null before
+      replacing it with a `SeatProvider` — so seating a viewer to populate the hand either aborts in
+      Debug or, in Release, swaps a bot for a forwarder that parks forever waiting for a click phase
+      C has not built. This phase's own goal is *"no interaction, no engine changes"*, and a phase
+      defined as spectator-only cannot draw a hand because a spectator has none. C1 seats a human for
+      real, and the fan is one snapshot field away from there.
 
 - [x] **The one pacing question A5 left open, asked on a table and answered: `onCardPlayed()` stays
       unpaced.** Measured, not judged by feel. Without the beat the middle state — card down, its
@@ -280,7 +291,36 @@ four, and two of them cost a failing build each.
       line of text that scrolls away. The full reasoning is beside `onCardPlayed()` in
       `GameBridge.cpp`.
 
-**Done when:** a spectated game is watchable and legible end to end; the window resizes without the
+### What the B2 run found
+
+Three things, in the pattern phase 0 and B1 set. The fourth — that the hand fan belongs to C — is in
+its own box above, because it changed what this phase is.
+
+- **A ring laid along the seat directions bunches at six seats.** The trick was first placed a fixed
+  fraction of the way from the middle toward each owner, which is what §14's wording suggests; on a
+  window wider than it is tall the seat ellipse crowds adjacent directions toward the horizontal and
+  two cards land in one place. The trick has a ring of its own now — the same ordering function over
+  a circle whose radius comes from `2·r·sin(π/n)` inverted, i.e. from the card and the seat count
+  and not from the window. **Sizing that ring off a constant multiple of the card height is not
+  enough either**: a card tilted six degrees is 1.067 card heights tall, so the obvious constant
+  left a three-pixel gap that reads as touching. It is measured off the item that does the rotating.
+- **A centre inside a rect is not a plaque inside it.** `seatlayout` places centres, and at the two
+  side seats the plaque hangs half its width further — off the edge of the window. The scene insets
+  by half a plaque before laying out, which keeps the layout free of any knowledge of what is drawn
+  at the points it returns.
+- **Theme's card height is derived from the hand fan and is the wrong constraint at six seats**,
+  where the same card must also pass between two plaques a side. `TableScene::fitsOnTable()` builds
+  both rings and compares rectangles, and the scene shrinks from Theme's answer only when they
+  collide — rather than re-tuning the one unit for the worst case and leaving every four-seat table
+  smaller than it needs to be.
+
+And one from the panels: **a column sized in digit widths is sized for its numbers and not for the
+word above them.** "Round" over a four-digit column drew straight across "Won" beside it. Widths are
+measured from the headings actually being drawn, which is what keeps a Romanian build from finding
+the same defect again.
+
+**Done when:** a spectated game is watchable and legible end to end — which for a *spectated* game
+means no hand at the bottom, per the box above; the window resizes without the
 layout breaking; the round result gets a beat you can actually read and no card lands on top of
 another; and the winning-card highlight always agrees with the trick the engine awards — because it
 comes from `isWinning` and is never recomputed.
@@ -298,10 +338,14 @@ comes from `isWinning` and is never recomputed.
 - [ ] **C2 — bidding.** `BidStrip` as a **panel, not a `QDialog`** (§4.4 — this is a shutdown
       decision, and C4 is the test it exists for). One button per bid, `forbiddenBet` disabled with
       the explanation underneath.
-- [ ] **C3 — playing.** `PlayPrompt` into the hand: legality lighting, hover, click →
+- [ ] **C3 — playing.** `HandItem` itself, which B2 could not build — the fan from
+      `GameSnapshot::hand` between turns, drawn disabled, and the bottom strip the table reserves for
+      it. Then `PlayPrompt` into the hand: legality lighting, hover, click →
       `handIndex[slot]` → `submit(promptId, …)`. Never a fan position, never a cached snapshot.
 - [ ] **C4 — blind rounds.** Forehead and Hidden: `handIndex.size()` face-down backs, clickable;
-      other seats' cards from `SeatView::hand` (§17).
+      other seats' cards from `SeatView::hand` (§17). **Both halves land here now**, including the
+      one that is pure rendering — `seats[i].hand` is empty for the whole of phase B for the same
+      reason the fan is, so C is the first phase in which §17 can be drawn at all.
 - [ ] **C5 — shutdown while parked.** Close the window with the bid panel open. This is the
       `GameAbandoned` path and the only one that should produce it.
 

@@ -243,3 +243,42 @@ TEST_CASE("The theme's caches are keyed on the device pixel ratio", "[theme]")
     REQUIRE(theme.background(view, 0.0).isNull());
     REQUIRE(theme.avatar(0, box, -1.0).isNull());
 }
+
+// The same rule the bid colours needed in B2a, for the two the scoreboard added
+// in B2b. Nothing in Theme's own painters reads either one - they are drawn by
+// the scoreboard, which has a palette of its own to consult - so this is the
+// rule holding for colours no painter here touches, which is exactly the case
+// it exists for.
+TEST_CASE("Recolouring a score colour invalidates the cached background", "[theme]")
+{
+    const QSize view(320, 200);
+
+    {
+        Theme theme = Theme::light();
+        const QPixmap before = theme.background(view, 1.0);
+
+        theme.scorePositive = Theme::dark().scorePositive;
+
+        REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
+    }
+
+    {
+        Theme theme = Theme::light();
+        const QPixmap before = theme.background(view, 1.0);
+
+        theme.scoreNegative = Theme::dark().scoreNegative;
+
+        REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
+    }
+}
+
+// Section 18 asks for green and red by name, and dark mode must keep them the
+// same two colours a player has already learned rather than recolouring them.
+TEST_CASE("The score colours are a green and a red in both palettes", "[theme]")
+{
+    for(const Theme& theme : { Theme::light(), Theme::dark() })
+    {
+        REQUIRE(theme.scorePositive.green() > theme.scorePositive.red());
+        REQUIRE(theme.scoreNegative.red() > theme.scoreNegative.green());
+    }
+}

@@ -82,6 +82,10 @@ qt_add_library(desktop_core STATIC
     src/ui/SnapshotLog.cpp
     src/ui/CardArtWindow.h
     src/ui/CardArtWindow.cpp
+    src/ui/InfoStrip.h
+    src/ui/InfoStrip.cpp
+    src/ui/ScoreboardWidget.h
+    src/ui/ScoreboardWidget.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
