@@ -165,6 +165,39 @@ TEST_CASE("Recolouring the accent invalidates the cached avatars", "[theme]")
     REQUIRE(after.toImage() != before.toImage());
 }
 
+// THE KEY LEADS ITS PAINTERS, which is the half of the rule above that only a
+// colour NOTHING READS YET can assert. B2 added the three bid/won colours to the
+// struct and left paletteKey() hashing the five that came before them - the
+// identical omission the accent case above records, caught this time before a
+// painter existed to make it visible.
+//
+// Deliberately no toImage() companion assertion, unlike that case: nothing
+// paints a bid colour today, so the two pictures ARE the same and the pixels
+// prove nothing. The cacheKey is the whole assertion - it says the cache would
+// already have noticed, so section 14's pill can start reading bidOwing without
+// this file or Theme.cpp needing a matching edit.
+TEST_CASE("Recolouring a bid colour invalidates the cached background", "[theme]")
+{
+    Theme theme = Theme::light();
+    const Theme other = Theme::dark();
+    const QSize view(320, 200);
+
+    // One at a time, because they were added together and a key maintained by
+    // hand is a key that ends up with two of the three.
+    const QPixmap before = theme.background(view, 1.0);
+
+    theme.bidOwing = other.bidOwing;
+    const QPixmap afterOwing = theme.background(view, 1.0);
+    REQUIRE(afterOwing.cacheKey() != before.cacheKey());
+
+    theme.bidOnTarget = other.bidOnTarget;
+    const QPixmap afterOnTarget = theme.background(view, 1.0);
+    REQUIRE(afterOnTarget.cacheKey() != afterOwing.cacheKey());
+
+    theme.bidOver = other.bidOver;
+    REQUIRE(theme.background(view, 1.0).cacheKey() != afterOnTarget.cacheKey());
+}
+
 // THE SAME CONTRACT CardRenderer HAS, and it has to be the same one: the table
 // and the cards are drawn beside each other in one frame, so a Theme that
 // rasterizes at the logical size is a soft background behind crisp cards, which

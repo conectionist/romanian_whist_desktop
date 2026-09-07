@@ -148,11 +148,29 @@ void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& c
     // and does not hold here, where the next frame names a different active
     // seat over an identical table.
     //
-    // RE-ASK IT AT B2, where it stops being the same question. A5 judged this
-    // off a text log, in which "the card landed" and "the highlight moved to
-    // the next seat" are one line. On a drawn table they are two states, and
-    // collapsing them may read as a card appearing under a highlight that has
-    // already left. A log cannot show that; a table can.
+    // ASKED AGAIN AT B2, ON A TABLE, AND ANSWERED: it stays unpaced.
+    //
+    // A5 could only judge this off a text log, in which "the card landed" and
+    // "the highlight moved to the next seat" are one line, and left the question
+    // open for a phase that could draw both. B2 measured it. Without the beat
+    // the middle state - card down, its player still ringed - lasts ONE
+    // MILLISECOND, so the card landing and the ring moving are a single visual
+    // event. With the beat it becomes a real 250ms state and every card costs
+    // 500ms instead of 250, which is half the speed of a 26-round spectator
+    // game.
+    //
+    // The reason it does not need the beat is the thing a table has and a log
+    // does not: A CARD LANDS AT ITS OWNER'S SEAT AND STAYS THERE for the whole
+    // trick. Who played it is carried by position - permanently, and by
+    // TrickItem reading PlayedCardView::seatIndex - rather than by whoever the
+    // ring happens to be on at the instant it appears. The worry this comment
+    // recorded was "a card appearing under a highlight that has already left",
+    // and on the drawn table it cannot: the ring is on a plaque out at the edge
+    // and the card is in the middle, so it never appears under the ring at all.
+    //
+    // The terminal keeps its beat for the same reason it always did, and that
+    // reason does not port: its only cue for who played what is a line of text
+    // that scrolls away.
 }
 
 void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int trickNumber)

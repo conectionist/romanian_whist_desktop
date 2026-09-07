@@ -1,6 +1,9 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 
+#include "paint/Theme.h"
+#include "table/TableScene.h"
+#include "table/TableView.h"
 #include "ui/CardArtWindow.h"
 #include "ui/SnapshotLog.h"
 
@@ -11,11 +14,14 @@
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 
 #include <QCloseEvent>
+#include <QDockWidget>
+#include <QGuiApplication>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QStatusBar>
 #include <QStringList>
+#include <QStyleHints>
 
 #include <cstdint>
 #include <memory>
@@ -96,6 +102,8 @@ MainWindow::MainWindow(QWidget *parent)
     // string in the translation catalogue that no one can ever see the effect of
     // translating, because whichever runs second wins.
 
+    buildTable();
+    buildLogDock();
     buildViewMenu();
 
     // Replaced by the first snapshot, which arrives from inside start() below -
@@ -105,6 +113,50 @@ MainWindow::MainWindow(QWidget *parent)
     startGame(buildSpectatorSetup());
 }
 
+// The table takes the central widget, which is what phase B is.
+//
+// The scene is parented to the view and the view to the window, so Qt owns both
+// and neither is a member that has to be destroyed in an order.
+void MainWindow::buildTable()
+{
+    scene = new TableScene(this);
+    table = new TableView(scene, this);
+
+    scene->setTheme(Theme::forScheme(QGuiApplication::styleHints()->colorScheme()));
+
+    setCentralWidget(table);
+}
+
+// THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
+// outright: it is the thing to reach for when something looks wrong on the
+// table, and the elapsed column in it is the only record of the gaps between
+// frames - which is what settled two pacing questions in A5 and is about to be
+// asked to settle a third.
+//
+// A QDockWidget rather than a widget in the central layout, for one reason worth
+// the class: toggleViewAction() IS the View menu's Log entry. It is already
+// checkable, already named, already keeps itself in sync with the dock being
+// closed from its own title bar, and it means this window holds no "is the log
+// showing" state of its own to get wrong.
+void MainWindow::buildLogDock()
+{
+    logDock = new QDockWidget(tr("Log"), this);
+    logDock->setObjectName(QStringLiteral("logDock"));
+    logDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+
+    // Reparented out of the .ui's central layout and into the dock. Every
+    // existing `ui->log` call site keeps working, which is the point of moving
+    // the widget rather than replacing it.
+    logDock->setWidget(ui->log);
+
+    addDockWidget(Qt::BottomDockWidgetArea, logDock);
+
+    // Hidden by default: section 12's window is four regions and a log is not
+    // one of them. It is a diagnostic, and a diagnostic that is always on screen
+    // is just furniture.
+    logDock->hide();
+}
+
 void MainWindow::buildViewMenu()
 {
     // The menu bar is in MainWindow.ui and is empty; this is the first thing put
@@ -112,6 +164,13 @@ void MainWindow::buildViewMenu()
     // connection either way, and a designer-declared action that is only ever
     // reached from here would be split across two files for nothing.
     QMenu* view = menuBar()->addMenu(tr("&View"));
+
+    // Qt's own action for the dock, not one of ours - see buildLogDock().
+    QAction* logAction = logDock->toggleViewAction();
+    logAction->setText(tr("&Log"));
+    view->addAction(logAction);
+
+    view->addSeparator();
 
     QAction* cardArtAction = view->addAction(tr("&Card art..."));
     connect(cardArtAction, &QAction::triggered, this, &MainWindow::showCardArt);
@@ -201,6 +260,13 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - started);
 
     appendLine(snapshotlog::format(*snapshot, elapsed));
+
+    // THE TABLE AND THE LOG READ THE SAME FRAME, which is what makes the log a
+    // diagnostic for the table rather than a second opinion about it: a card in
+    // the wrong place with the right card in the log is a layout bug, and the
+    // two being on one line together is what says so.
+    scene->setSnapshot(snapshot);
+
     updateStatus(*snapshot);
 }
 
