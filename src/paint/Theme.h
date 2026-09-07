@@ -100,9 +100,14 @@ private:
 
     // EVERY colour, not the ones today's painters happen to read. Which members
     // a painter depends on is not visible from the cache lookup, and the answer
-    // changes: paintAvatar() reads seatPlaque AND accent, and the bid/won pill
-    // and score colours section 18 still owes this struct will read others. A
-    // key that has to be updated alongside a painter is a key that will not be.
+    // changes: paintAvatar() reads seatPlaque AND accent, and the score colours
+    // section 18 still owes this struct will read others. A key that has to be
+    // updated alongside a painter is a key that will not be.
+    //
+    // The bid colours above are IN the key while nothing paints them, which is
+    // the rule working rather than an oversight: section 14's pill can start
+    // reading bidOwing without an edit here. They were added to the struct in B2
+    // and to the key in B2a, and that gap is the whole argument for the rule.
     quint64 paletteKey() const;
 
     // SHARED ACROSS COPIES, not per-copy. Theme is a copyable value that widgets

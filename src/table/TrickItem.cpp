@@ -65,7 +65,15 @@ void TrickItem::setTrick(const GameSnapshot& snapshot,
         // scene cannot draw, and skipping it is better than indexing past the
         // end of the vector.
         if(played.seatIndex >= positions.size())
+        {
+            // HIDDEN, not merely skipped. The item at this index may already be
+            // on the table from a previous frame, and the hide pass below starts
+            // past the end of THIS table - so an index inside it is one nothing
+            // else reaches, and a bare `continue` leaves the last frame's card
+            // sitting there with its face, its tilt and its winning highlight.
+            cardAt(i)->hide();
             continue;
+        }
 
         CardItem* item = cardAt(i);
 

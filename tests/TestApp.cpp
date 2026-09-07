@@ -4,11 +4,11 @@
 
 #include "engine/MetaTypes.h"
 
-#include <QGuiApplication>
+#include <QApplication>
 
 #include <memory>
 
-// One QGuiApplication for the whole test binary, the offscreen platform it runs
+// One QApplication for the whole test binary, the offscreen platform it runs
 // on, and the metatype registration that goes with it.
 //
 // WHY THIS EXISTS: a queued connection is delivered by the receiving thread's
@@ -16,17 +16,31 @@
 // name - without a QCoreApplication. The tests that cross the thread boundary
 // need both. Catch2WithMain owns main(), so a listener is the hook.
 //
-// WHY QGuiApplication AND NOT QCoreApplication, which is what this was through
-// phase A: QPixmap is not constructible without a QGuiApplication - it aborts,
-// it does not degrade - and phase B1's CardRenderer returns one. The old comment
-// here argued that a GUI application "would need a display that CI does not
-// have", which was the right instinct and the wrong conclusion: the offscreen
-// platform plugin is exactly the display-free case, it ships inside qtbase on
-// all three platforms rather than being one of the plugins the deploy step
-// trims, and it needs no X server, no Wayland socket and no xvfb wrapper.
+// THE TYPE HAS BEEN WIDENED TWICE, EACH TIME BY SOMETHING THAT ABORTS RATHER
+// THAN DEGRADES - which is the pattern worth knowing before writing a test that
+// touches a new part of Qt here:
 //
-// Still NOT QApplication: nothing here constructs a QWidget, and QtWidgets would
-// only add a dependency the suite does not use.
+//   - QCoreApplication through phase A, until B1's CardRenderer returned a
+//     QPixmap. QPixmap is not constructible without a QGuiApplication. The
+//     comment that stood here argued a GUI application "would need a display
+//     that CI does not have", which was the right instinct and the wrong
+//     conclusion: the offscreen platform plugin is exactly the display-free
+//     case, it ships inside qtbase on all three platforms rather than being one
+//     of the plugins the deploy step trims, and it needs no X server, no
+//     Wayland socket and no xvfb wrapper.
+//
+//   - QGuiApplication until B2a's TableSceneTests constructed a QGraphicsScene.
+//     QtWidgets reads QApplication's style and its widget-level state during
+//     that constructor, and with only a QGuiApplication it does not warn or
+//     return an empty scene - it SEGFAULTS inside libQt6Widgets, from a stack
+//     that names nothing but the scene's own constructor.
+//
+// So the rule the old comment stated - "nothing here constructs a QWidget, and
+// QtWidgets would only add a dependency the suite does not use" - was already
+// half wrong when it was written: the dependency arrives with the first
+// QtWidgets CLASS, and QGraphicsScene is one without being a widget. QtWidgets
+// is linked either way, through desktop_core, so this costs the suite nothing it
+// was not already paying.
 //
 // The platform is set here rather than in tests/CMakeLists.txt's test properties
 // because the suite is run BOTH ways: ctest, and the bare ./tests/desktop_tests
@@ -57,8 +71,8 @@ public:
 
         // Must outlive every test and be constructed before any QObject that
         // cares about thread affinity. argc is held by value because
-        // QGuiApplication takes it by reference and keeps the reference.
-        app = std::make_unique<QGuiApplication>(argc, argv);
+        // QApplication takes it by reference and keeps the reference.
+        app = std::make_unique<QApplication>(argc, argv);
 
         registerMetaTypes();
     }
@@ -73,7 +87,7 @@ private:
     char programName[16] = "desktop_tests";
     char* argv[2] = { programName, nullptr };
 
-    std::unique_ptr<QGuiApplication> app;
+    std::unique_ptr<QApplication> app;
 };
 }
 

@@ -260,5 +260,23 @@ void TableScene::drawBackground(QPainter* painter, const QRectF& rect)
 
     // Only the exposed part, which is what `rect` is for: a card moving in the
     // middle of the table must not repaint the whole surface behind it.
-    painter->drawPixmap(rect, background, rect.translated(-scene.topLeft()));
+    //
+    // THE TARGET RECT IS LOGICAL AND THE SOURCE RECT IS NOT. Qt reads a
+    // drawPixmap source rect in the PIXMAP's own pixels, and background() above
+    // rasterized this one at view * dpr - so passing the same logical rect as
+    // both samples the top-left 1/dpr of the surface and stretches it over the
+    // whole viewport, with each partial repaint reading from a different wrong
+    // place besides.
+    //
+    // Only this overload needs the conversion, which is why the cards were right
+    // while the table behind them was not: CardItem::paint() draws its pixmap at
+    // a POINT, and that form divides by the ratio itself.
+    //
+    // QRectF throughout - rounding here would put a seam in the surface at the
+    // fractional ratios (1.25, 1.5) that most Linux and Windows screens use.
+    const qreal ratio = background.devicePixelRatio();
+    const QRectF source = rect.translated(-scene.topLeft());
+
+    painter->drawPixmap(rect, background,
+                        QRectF(source.topLeft() * ratio, source.size() * ratio));
 }

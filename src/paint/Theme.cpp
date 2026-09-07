@@ -92,13 +92,20 @@ struct Theme::Cache
     QHash<unsigned int, QPixmap> avatars;
 };
 
-// Cheap enough to call on every lookup - five rgba() reads and a hash - which is
-// what lets both caches ask "is this the palette I was painted from?" without
+// Cheap enough to call on every lookup - eight rgba() reads and a hash - which
+// is what lets both caches ask "is this the palette I was painted from?" without
 // either of them knowing what its painter reads.
+//
+// EVERY MEMBER OF THE STRUCT, including the three no painter reads yet. B2 added
+// the bid colours here and left this at five, which is the same omission
+// paintAvatar() made with accent one phase earlier - so the rule is restated
+// rather than relied on: a colour added above is added here in the same edit,
+// whether or not anything paints it today.
 quint64 Theme::paletteKey() const
 {
     return qHashMulti(0, tableSurface.rgba(), seatPlaque.rgba(), accent.rgba(),
-                      textPrimary.rgba(), dimmedOverlay.rgba());
+                      textPrimary.rgba(), dimmedOverlay.rgba(),
+                      bidOnTarget.rgba(), bidOwing.rgba(), bidOver.rgba());
 }
 
 Theme Theme::light()
