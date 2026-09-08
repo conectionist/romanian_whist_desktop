@@ -114,6 +114,62 @@ std::vector<scoreboard::Row> scoreboard::rowsFor(const GameSnapshot& snapshot)
     return rows;
 }
 
+QFont ScoreboardWidget::numberFont() const
+{
+    QFont numbers = font();
+
+    // TABULAR FIGURES (section 18), so a 1 and a 0 occupy the same box and a
+    // column of scores lines up on its own without being monospaced.
+    //
+    // GUARDED, BECAUSE CMakeLists.txt DECLARES A FLOOR OF 6.5 and QFont::Tag
+    // and setFeature arrived in 6.7. This comment said the feature was "simply
+    // not applied" on anything older, which was the intent and was not true of
+    // the code beneath it: an unguarded call does not degrade on 6.5 or 6.6, it
+    // fails to compile. The version this is built against is not the version it
+    // promises to build against, and only the promise is checkable from here.
+    //
+    // The fallback is proportional digits - a cosmetic difference, and the
+    // reason a guard is the right answer rather than raising the floor for a
+    // refinement. Appendix B.6 records 6.5 as a decision taken, not a default
+    // left lying around.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    numbers.setFeature(QFont::Tag("tnum"), 1);
+#endif
+
+    return numbers;
+}
+
+qreal ScoreboardWidget::widestNameWidth(const QFont& base) const
+{
+    QFont strong = base;
+    strong.setBold(true);
+
+    const QFontMetricsF plain(base);
+    const QFontMetricsF bold(strong);
+
+    // THE FLOOR BEFORE THE FIRST SNAPSHOT, in digit widths - the same floor
+    // minimumSizeHint() shows, because a panel with no rows is not yet sized for
+    // anyone. It was a name once, and a name here is the constant the comment
+    // below argues against: "Cristina" is exactly a width big enough for today's
+    // players, which is the defect one game later.
+    qreal widest = plain.horizontalAdvance(QLatin1Char('0')) * minimumNameInDigits;
+
+    // The widest name this game has, so the panel is sized for the players who
+    // are actually at the table. SnapshotLog derives its own column width the
+    // same way and for the same reason: a constant big enough for any name
+    // spends the space on every game, and one merely bigger than today's names
+    // is the same defect again, later.
+    //
+    // Each name in ITS OWN WEIGHT, because paintEvent() draws the human's bold
+    // and bold is wider. Measured plain, the panel asked for a width at which
+    // its own paint then elided that name - the one name at the table a player
+    // is most sure of.
+    for(const scoreboard::Row& row : rows)
+        widest = std::max(widest, (row.isHuman ? bold : plain).horizontalAdvance(row.name));
+
+    return widest;
+}
+
 ScoreboardWidget::Columns ScoreboardWidget::columnsFor(const QFontMetricsF& metrics) const
 {
     const qreal digit = metrics.horizontalAdvance(QLatin1Char('0'));
@@ -133,7 +189,13 @@ ScoreboardWidget::Columns ScoreboardWidget::columnsFor(const QFontMetricsF& metr
 
     // No heading of its own - the pips speak for themselves and a word over them
     // would be the widest thing in the panel for the least information in it.
-    columns.streak = digit * streakColumnInDigits;
+    //
+    // The padding is added by hand for exactly that reason: every other column
+    // gets it from wide(), which cannot be called without a heading to measure.
+    // Without it this was the one column with no breathing room, and the Total
+    // digits ended up two pixels from the leftmost pip - which renders as
+    // touching.
+    columns.streak = digit * streakColumnInDigits + padding;
 
     return columns;
 }
@@ -167,24 +229,17 @@ void ScoreboardWidget::setSnapshot(const GameSnapshot& snapshot)
 
 QSize ScoreboardWidget::sizeHint() const
 {
-    const QFontMetricsF metrics(font());
+    // numberFont(), not font(): the width asked for here is the width
+    // paintEvent() then lays its columns out in. See the header.
+    const QFont numbers = numberFont();
+    const QFontMetricsF metrics(numbers);
 
     const qreal digit = metrics.horizontalAdvance(QLatin1Char('0'));
     const qreal margin = metrics.height() * marginInLines;
 
-    // The widest name this game has, so the panel is sized for the players who
-    // are actually at the table. SnapshotLog derives its own column width the
-    // same way and for the same reason: a constant big enough for any name
-    // spends the space on every game, and one merely bigger than today's names
-    // is the same defect again, later.
-    qreal widestName = metrics.horizontalAdvance(QStringLiteral("Cristina"));
-
-    for(const scoreboard::Row& row : rows)
-        widestName = std::max(widestName, metrics.horizontalAdvance(row.name));
-
     const qreal width = margin * 2.0
                         + digit * orderColumnInDigits
-                        + widestName + digit
+                        + widestNameWidth(numbers) + digit
                         + columnsFor(metrics).sum();
 
     const qreal height = margin * 2.0
@@ -196,7 +251,7 @@ QSize ScoreboardWidget::sizeHint() const
 
 QSize ScoreboardWidget::minimumSizeHint() const
 {
-    const QFontMetricsF metrics(font());
+    const QFontMetricsF metrics(numberFont());
 
     const qreal digit = metrics.horizontalAdvance(QLatin1Char('0'));
     const qreal margin = metrics.height() * marginInLines;
@@ -219,25 +274,9 @@ void ScoreboardWidget::paintEvent(QPaintEvent*)
 
     painter.fillRect(rect(), theme.seatPlaque);
 
-    QFont numbers = font();
-
-    // TABULAR FIGURES (section 18), so a 1 and a 0 occupy the same box and a
-    // column of scores lines up on its own without being monospaced.
-    //
-    // GUARDED, BECAUSE CMakeLists.txt DECLARES A FLOOR OF 6.5 and QFont::Tag
-    // and setFeature arrived in 6.7. This comment said the feature was "simply
-    // not applied" on anything older, which was the intent and was not true of
-    // the code beneath it: an unguarded call does not degrade on 6.5 or 6.6, it
-    // fails to compile. The version this is built against is not the version it
-    // promises to build against, and only the promise is checkable from here.
-    //
-    // The fallback is proportional digits - a cosmetic difference, and the
-    // reason a guard is the right answer rather than raising the floor for a
-    // refinement. Appendix B.6 records 6.5 as a decision taken, not a default
-    // left lying around.
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    numbers.setFeature(QFont::Tag("tnum"), 1);
-#endif
+    // Tabular figures, and the one font both size hints measure in - the
+    // argument for that is on numberFont() in the header.
+    const QFont numbers = numberFont();
 
     const QFontMetricsF metrics(numbers);
 

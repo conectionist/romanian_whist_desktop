@@ -91,6 +91,12 @@ InfoStrip::InfoStrip(QWidget* parent)
     trumpLabel = new QLabel(this);
     trumpCard = new QLabel(this);
 
+    // The slot before anything is in it, so the strip is its full height from
+    // the first paint and stays there - through the eight-card round, which has
+    // no trump, and through the frames before any snapshot has arrived.
+    trumpSlot = cards.sizeForHeight(trumpCardHeight());
+    trumpCard->setFixedSize(trumpSlot);
+
     auto* layout = new QHBoxLayout(this);
 
     const qreal margin = QFontMetricsF(font()).height() * marginInLines;
@@ -182,19 +188,24 @@ void InfoStrip::refresh()
         // a rule of the game and one of the five things this strip exists to
         // say; an empty space says the client forgot.
         trumpLabel->setText(tr("No trump"));
+
+        // EMPTIED, NOT HIDDEN. Hiding it collapsed the strip to the height of a
+        // line of text, so entering and leaving the eight-card round jumped the
+        // table and the scoreboard beneath it by some fifty pixels - twice in
+        // every game. The slot keeps its size and holds nothing, and the words
+        // beside it say why it is empty.
         trumpCard->clear();
-        trumpCard->hide();
         return;
     }
 
     trumpLabel->setText(tr("Trump"));
 
-    const QSize size = cards.sizeForHeight(trumpCardHeight());
-
     // devicePixelRatioF() of the widget, so a strip on a HiDPI screen gets a
     // card rasterized for it. QLabel lays a pixmap out at its device-independent
     // size, so the strip's geometry does not change with the ratio - which is
     // the whole of B1's contract, arriving here for free.
-    trumpCard->setPixmap(cards.face(fields.trump, size, devicePixelRatioF()));
-    trumpCard->show();
+    //
+    // trumpSlot rather than a size worked out here: it is the size the label is
+    // fixed at, and a pixmap that disagreed with it would be clipped.
+    trumpCard->setPixmap(cards.face(fields.trump, trumpSlot, devicePixelRatioF()));
 }

@@ -6,6 +6,7 @@
 #include "paint/Theme.h"
 
 #include <QCoreApplication>
+#include <QSize>
 #include <QString>
 #include <QWidget>
 
@@ -92,6 +93,19 @@ private:
     // its rank is not legible. Derived from the font so it follows a user who
     // has set a larger one.
     qreal trumpCardHeight() const;
+
+    // THE SLOT THE TRUMP SITS IN, RESERVED FOR THE WHOLE GAME. Held rather than
+    // recomputed at each use, for two reasons: the fixed size of the label and
+    // the size the pixmap is rasterized at must be the same number - a QLabel
+    // clips a pixmap larger than itself rather than scaling it - and the strip's
+    // height must not depend on whether this round has a trump. The eight-card
+    // round has none, and hiding the label took the strip from 77 pixels to 29,
+    // moving the table and the scoreboard beneath it twice a game.
+    //
+    // Derived from the font at construction, which is where the layout's margins
+    // come from too - and is the same gap docs/KNOWN_ISSUES.md records: neither
+    // follows a font or a screen that changes under a running window.
+    QSize trumpSlot;
 
     Theme theme = Theme::light();
 

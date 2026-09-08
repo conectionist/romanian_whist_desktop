@@ -4,6 +4,7 @@
 
 #include "ui/InfoStrip.h"
 
+#include <QFontMetricsF>
 #include <QString>
 
 using romanian_whist::Card;
@@ -113,6 +114,44 @@ TEST_CASE("The round type is named for a player, not for a log", "[info-strip]")
     // Capitalised, unlike the status bar's old lowercase words - these are
     // labels in a strip rather than a fragment inside a sentence.
     REQUIRE(infostrip::roundTypeText(RoundType::Normal) == QStringLiteral("Normal"));
+}
+
+// THE ONE ASSERTION HERE THAT NEEDS A WIDGET, and the reason is that this is
+// geometry rather than wording - the split the header of ScoreboardTests.cpp
+// argues for, on the side where there IS a right answer. A strip whose height
+// depends on the round moves everything laid out beneath it: hiding the trump
+// label took the strip from 77 pixels to 29, so the table and the scoreboard
+// jumped some fifty pixels on entering the eight-card round and back on leaving
+// it, twice in every game. GameBridgeTests proves real games produce those
+// frames.
+//
+// It constructs a QWidget, which the suite can do because TestApp is a
+// QApplication on the offscreen platform - see the type's history there.
+TEST_CASE("The strip is the same height with and without a trump", "[info-strip]")
+{
+    InfoStrip strip;
+
+    GameSnapshot withTrump = roundOf(7, 24, 6);
+
+    withTrump.hasTrump = true;
+    withTrump.trump = Card(Rank::Queen, Suit::Spades);
+
+    strip.setSnapshot(withTrump);
+
+    const int tall = strip.sizeHint().height();
+
+    // Card-sized rather than text-sized, asserted separately because the
+    // equality below would hold just as well if the strip had collapsed in both
+    // rounds.
+    REQUIRE(tall > qRound(QFontMetricsF(strip.font()).height() * 2.0));
+
+    GameSnapshot noTrump = roundOf(8, 24, 8);
+
+    noTrump.hasTrump = false;
+
+    strip.setSnapshot(noTrump);
+
+    REQUIRE(strip.sizeHint().height() == tall);
 }
 
 // A default snapshot is what the strip holds before the first frame arrives.

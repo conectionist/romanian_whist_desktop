@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QString>
+#include <QFont>
 #include <QFontMetricsF>
 #include <QWidget>
 
@@ -109,6 +110,24 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
+    // THE FONT THE PANEL IS BOTH MEASURED AND DRAWN IN. Section 18's tabular
+    // figures are applied here and nowhere else.
+    //
+    // ONE FONT for the same reason there is one columnsFor(): the function was
+    // already shared between paintEvent() and the two size hints, and it was
+    // still being handed two different fonts - tabular metrics when painting,
+    // the plain widget font when measuring. A shared function fed different
+    // inputs is the same defect as two copies of the arithmetic, wearing a
+    // tidier shape. Where the two fonts differ in digit width the painted
+    // columns overrun the width the hint reserved, and the name column - which
+    // is whatever is left after them - is what pays for it.
+    QFont numberFont() const;
+
+    // The widest name at the table, measured IN THE WEIGHT IT WILL BE DRAWN IN.
+    // The human's row is bold, and measuring it plain made the panel ask for a
+    // width its own paint then elided the name inside.
+    qreal widestNameWidth(const QFont& base) const;
+
     // How wide each numeric column has to be, for THIS font and THESE headings.
     //
     // Derived rather than constant, and that is a translation requirement rather

@@ -149,6 +149,36 @@ TEST_CASE("Every row carries its own seat's numbers", "[scoreboard]")
     REQUIRE(rows[3].bidOrder == 4);
 }
 
+// THE EXCEPTION TO THE HEADER'S RULE, and it is worth saying why. "Whether the
+// columns line up is a thing to look at" holds for the columns; this is not
+// that. The human's row is drawn bold and bold is wider, so a panel that
+// measured every name plain asked for a width at which its own paintEvent then
+// elided that name - the one name at the table a player is most sure of. That
+// has a right answer and no eye is needed to check it.
+//
+// Stated as an invariant rather than as a pixel count: a different font moves
+// every number here, and what must stay true is that the panel is sized for the
+// weight it draws in.
+TEST_CASE("The panel is sized for the weight it draws in", "[scoreboard]")
+{
+    GameSnapshot snapshot = fourSeats();
+
+    // Longer than every other name at the table, so it is the one the panel is
+    // sized for either way and the only variable left is its weight.
+    snapshot.seats[2].name = "Alexandrina-Maria";
+
+    ScoreboardWidget panel;
+
+    panel.setSnapshot(snapshot);
+
+    const int asABot = panel.sizeHint().width();
+
+    snapshot.seats[2].isHuman = true;
+    panel.setSnapshot(snapshot);
+
+    REQUIRE(panel.sizeHint().width() > asABot);
+}
+
 // A widget's first paint, before any frame has arrived. MainWindow builds the
 // panels in its constructor and the first snapshot does not land until start().
 TEST_CASE("A snapshot with no seats produces no rows", "[scoreboard]")

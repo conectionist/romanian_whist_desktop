@@ -319,6 +319,43 @@ word above them.** "Round" over a four-digit column drew straight across "Won" b
 measured from the headings actually being drawn, which is what keeps a Romanian build from finding
 the same defect again.
 
+### What the review of the panels found
+
+Four more, all of them measurement rather than wording — and the reason they are worth a section of
+their own is that **every one is a widget measuring itself with something other than what it later
+draws with.** That is the shape to look for in the panels phase C and D add.
+
+- **A widget whose size depends on the round moves everything laid out beneath it.** The eight-card
+  round has no trump, and hiding the trump label took the info strip from 77 pixels to 29 — so the
+  table and the scoreboard jumped some fifty pixels on entering that round and back on leaving it,
+  twice in every game. The slot is reserved for the whole game now and holds nothing in that round,
+  with "No trump" beside it saying why. The strip is also full height before the first snapshot
+  arrives, so the first frame no longer moves anything either.
+- **A shared function fed different inputs is the same defect as two copies of it, wearing a tidier
+  shape.** `columnsFor()` was already the one place the column widths are worked out — B2b's own
+  finding — and it was still being handed tabular-figure metrics when painting and the plain widget
+  font when measuring. Where the two differ in digit width the painted columns overrun the width the
+  hint reserved, and the name column, which is whatever is left after them, is what pays. There is
+  one `numberFont()` now and all three callers measure in it.
+- **A name measured in one weight and drawn in another elides at the panel's own preferred width.**
+  The human's row is bold, bold is wider, and `sizeHint()` measured every name plain — so a long
+  human name was cut off at a width the panel had just asked for. Names are measured in the weight
+  they are drawn in.
+- **The one column with no heading was the one column with no padding.** Every other width picks the
+  padding up from the lambda that measures a heading; the streak pips have no heading to measure, so
+  they never got it, and the Total digits sat two pixels from the leftmost pip — which renders as
+  touching.
+
+The two with a right answer no eye is needed for — the strip's height, and the name width — are
+regression tests in `InfoStripTests.cpp` and `ScoreboardTests.cpp`. Both construct a real widget,
+which the suite can do because `TestApp` is a `QApplication` on the offscreen platform. The other
+two are a constant and a structure, and are asserted by neither.
+
+**A fifth was deferred rather than fixed** — the trump card going stale when the window changes
+screen or font — and it is the entry in `KNOWN_ISSUES.md`, which exists because of it. The fix needs
+a way past a change guard that is there for a good reason, and phase E owns the rest of §18.1's
+device-pixel-ratio work anyway.
+
 **Done when:** a spectated game is watchable and legible end to end — which for a *spectated* game
 means no hand at the bottom, per the box above; the window resizes without the
 layout breaking; the round result gets a beat you can actually read and no card lands on top of
@@ -411,6 +448,9 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
       same layout function that places static items.**
 - [ ] `RoundHistoryDialog` (§16.3), `PreferencesDialog` + `QSettings` (§20), dark mode, reduce
       motion, streak pips, keyboard map.
+- [ ] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
+      `KNOWN_ISSUES.md`, deferred out of B2b and belonging here because it is §18.1's
+      device-pixel-ratio work rather than anything about the strip.
 
 **Done when:** Part II is on screen.
 
@@ -451,6 +491,7 @@ Symptom first, because that is what you have.
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
+| The trump card is soft after the window moves to another screen | Known and deferred — `InfoStrip` rasterizes only inside `refresh()`, which the change guard skips when the round has not moved | `KNOWN_ISSUES.md` |
 | The table or an avatar is soft while the cards beside it are crisp | `Theme::background()`/`avatar()` were handed a logical size and never told the ratio — both halves (rasterize at `size * dpr`, then `setDevicePixelRatio`) have to be on one path | §18.1 |
 | A new rank is drawn as the card back | The back shared the faces' index space (`indexOf` is `rank * 4 + suit`, the back was 52). It has its own key bit now — and note a `static_assert` **cannot** catch this: C++ cannot name "the last enumerator", so the assert has to spell `Rank::Ace`, which is still 12 after a rank is appended after it | §18.1 |
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |
