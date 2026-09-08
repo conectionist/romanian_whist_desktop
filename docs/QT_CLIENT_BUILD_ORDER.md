@@ -32,7 +32,7 @@ Two rules travel with every step and are not repeated:
 |---|---|---|
 | **0** ✅ | Skeleton — verify what is already committed | The window opens and a card pixmap is non-null |
 | **A** ✅ | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
-| **B** | Cards on a table | A spectated game is watchable and legible |
+| **B** ✅ | Cards on a table | A spectated game is watchable and legible |
 | **C** | The human plays | A full game is playable, Forehead and Hidden rounds included |
 | **D** | The game around the game | No command line, no restart between games |
 | **E** | Polish | Part II is on screen |
@@ -259,12 +259,23 @@ four, and two of them cost a failing build each.
 
 ### B2 — the scene
 
-- [ ] `CardItem`, `SeatItem`, `TrickItem`, `HandItem`, `TableScene`, `TableView`.
-- [ ] Seat layout from §14's angle table, **in fractions of the view rect**. Computed, never read
+- [x] `CardItem`, `SeatItem`, `TrickItem`, `TableScene`, `TableView`. **`HandItem` is not here** —
+      see the hand-fan box below, which is the finding that moved it.
+- [x] Seat layout from §14's angle table, **in fractions of the view rect**. Computed, never read
       off the artwork — that is what keeps the background replaceable.
-- [ ] `InfoStrip` and a static `ScoreboardWidget`.
-- [ ] The hand fan drawn from `GameSnapshot::hand`, **disabled**. It is not clickable until phase C
-      and it cannot be (§4.0).
+- [x] `InfoStrip` and a static `ScoreboardWidget`.
+- [ ] ~~The hand fan drawn from `GameSnapshot::hand`, **disabled**.~~ **MOVED TO C3, AND IT COULD
+      NEVER HAVE BEEN DONE HERE.** In a spectator game `GameSnapshot::hand` is empty on every frame:
+      `Snapshot.cpp` returns early when `humanSeat < 0`, and gates every `seats[i].hand` the same
+      way, saying outright that *"a spectator sees everything" stays a client policy nothing here
+      implements*. §3 forbids a widget filling the gap from the engine itself.
+      **And `humanSeat` is not a viewer flag.** `GameController::prepare()` builds a
+      `QtMoveProvider` from it and `start()` then asserts the seat's provider is null before
+      replacing it with a `SeatProvider` — so seating a viewer to populate the hand either aborts in
+      Debug or, in Release, swaps a bot for a forwarder that parks forever waiting for a click phase
+      C has not built. This phase's own goal is *"no interaction, no engine changes"*, and a phase
+      defined as spectator-only cannot draw a hand because a spectator has none. C1 seats a human for
+      real, and the fan is one snapshot field away from there.
 
 - [x] **The one pacing question A5 left open, asked on a table and answered: `onCardPlayed()` stays
       unpaced.** Measured, not judged by feel. Without the beat the middle state — card down, its
@@ -280,7 +291,73 @@ four, and two of them cost a failing build each.
       line of text that scrolls away. The full reasoning is beside `onCardPlayed()` in
       `GameBridge.cpp`.
 
-**Done when:** a spectated game is watchable and legible end to end; the window resizes without the
+### What the B2 run found
+
+Three things, in the pattern phase 0 and B1 set. The fourth — that the hand fan belongs to C — is in
+its own box above, because it changed what this phase is.
+
+- **A ring laid along the seat directions bunches at six seats.** The trick was first placed a fixed
+  fraction of the way from the middle toward each owner, which is what §14's wording suggests; on a
+  window wider than it is tall the seat ellipse crowds adjacent directions toward the horizontal and
+  two cards land in one place. The trick has a ring of its own now — the same ordering function over
+  a circle whose radius comes from `2·r·sin(π/n)` inverted, i.e. from the card and the seat count
+  and not from the window. **Sizing that ring off a constant multiple of the card height is not
+  enough either**: a card tilted six degrees is 1.067 card heights tall, so the obvious constant
+  left a three-pixel gap that reads as touching. It is measured off the item that does the rotating.
+- **A centre inside a rect is not a plaque inside it.** `seatlayout` places centres, and at the two
+  side seats the plaque hangs half its width further — off the edge of the window. The scene insets
+  by half a plaque before laying out, which keeps the layout free of any knowledge of what is drawn
+  at the points it returns.
+- **Theme's card height is derived from the hand fan and is the wrong constraint at six seats**,
+  where the same card must also pass between two plaques a side. `TableScene::fitsOnTable()` builds
+  both rings and compares rectangles, and the scene shrinks from Theme's answer only when they
+  collide — rather than re-tuning the one unit for the worst case and leaving every four-seat table
+  smaller than it needs to be.
+
+And one from the panels: **a column sized in digit widths is sized for its numbers and not for the
+word above them.** "Round" over a four-digit column drew straight across "Won" beside it. Widths are
+measured from the headings actually being drawn, which is what keeps a Romanian build from finding
+the same defect again.
+
+### What the review of the panels found
+
+Four more, all of them measurement rather than wording — and the reason they are worth a section of
+their own is that **every one is a widget measuring itself with something other than what it later
+draws with.** That is the shape to look for in the panels phase C and D add.
+
+- **A widget whose size depends on the round moves everything laid out beneath it.** The eight-card
+  round has no trump, and hiding the trump label took the info strip from 77 pixels to 29 — so the
+  table and the scoreboard jumped some fifty pixels on entering that round and back on leaving it,
+  twice in every game. The slot is reserved for the whole game now and holds nothing in that round,
+  with "No trump" beside it saying why. The strip is also full height before the first snapshot
+  arrives, so the first frame no longer moves anything either.
+- **A shared function fed different inputs is the same defect as two copies of it, wearing a tidier
+  shape.** `columnsFor()` was already the one place the column widths are worked out — B2b's own
+  finding — and it was still being handed tabular-figure metrics when painting and the plain widget
+  font when measuring. Where the two differ in digit width the painted columns overrun the width the
+  hint reserved, and the name column, which is whatever is left after them, is what pays. There is
+  one `numberFont()` now and all three callers measure in it.
+- **A name measured in one weight and drawn in another elides at the panel's own preferred width.**
+  The human's row is bold, bold is wider, and `sizeHint()` measured every name plain — so a long
+  human name was cut off at a width the panel had just asked for. Names are measured in the weight
+  they are drawn in.
+- **The one column with no heading was the one column with no padding.** Every other width picks the
+  padding up from the lambda that measures a heading; the streak pips have no heading to measure, so
+  they never got it, and the Total digits sat two pixels from the leftmost pip — which renders as
+  touching.
+
+The two with a right answer no eye is needed for — the strip's height, and the name width — are
+regression tests in `InfoStripTests.cpp` and `ScoreboardTests.cpp`. Both construct a real widget,
+which the suite can do because `TestApp` is a `QApplication` on the offscreen platform. The other
+two are a constant and a structure, and are asserted by neither.
+
+**A fifth was deferred rather than fixed** — the trump card going stale when the window changes
+screen or font — and it is the entry in `KNOWN_ISSUES.md`, which exists because of it. The fix needs
+a way past a change guard that is there for a good reason, and phase E owns the rest of §18.1's
+device-pixel-ratio work anyway.
+
+**Done when:** a spectated game is watchable and legible end to end — which for a *spectated* game
+means no hand at the bottom, per the box above; the window resizes without the
 layout breaking; the round result gets a beat you can actually read and no card lands on top of
 another; and the winning-card highlight always agrees with the trick the engine awards — because it
 comes from `isWinning` and is never recomputed.
@@ -298,10 +375,14 @@ comes from `isWinning` and is never recomputed.
 - [ ] **C2 — bidding.** `BidStrip` as a **panel, not a `QDialog`** (§4.4 — this is a shutdown
       decision, and C4 is the test it exists for). One button per bid, `forbiddenBet` disabled with
       the explanation underneath.
-- [ ] **C3 — playing.** `PlayPrompt` into the hand: legality lighting, hover, click →
+- [ ] **C3 — playing.** `HandItem` itself, which B2 could not build — the fan from
+      `GameSnapshot::hand` between turns, drawn disabled, and the bottom strip the table reserves for
+      it. Then `PlayPrompt` into the hand: legality lighting, hover, click →
       `handIndex[slot]` → `submit(promptId, …)`. Never a fan position, never a cached snapshot.
 - [ ] **C4 — blind rounds.** Forehead and Hidden: `handIndex.size()` face-down backs, clickable;
-      other seats' cards from `SeatView::hand` (§17).
+      other seats' cards from `SeatView::hand` (§17). **Both halves land here now**, including the
+      one that is pure rendering — `seats[i].hand` is empty for the whole of phase B for the same
+      reason the fan is, so C is the first phase in which §17 can be drawn at all.
 - [ ] **C5 — shutdown while parked.** Close the window with the bid panel open. This is the
       `GameAbandoned` path and the only one that should produce it.
 
@@ -367,6 +448,9 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
       same layout function that places static items.**
 - [ ] `RoundHistoryDialog` (§16.3), `PreferencesDialog` + `QSettings` (§20), dark mode, reduce
       motion, streak pips, keyboard map.
+- [ ] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
+      `KNOWN_ISSUES.md`, deferred out of B2b and belonging here because it is §18.1's
+      device-pixel-ratio work rather than anything about the strip.
 
 **Done when:** Part II is on screen.
 
@@ -407,6 +491,7 @@ Symptom first, because that is what you have.
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
+| The trump card is soft after the window moves to another screen | Known and deferred — `InfoStrip` rasterizes only inside `refresh()`, which the change guard skips when the round has not moved | `KNOWN_ISSUES.md` |
 | The table or an avatar is soft while the cards beside it are crisp | `Theme::background()`/`avatar()` were handed a logical size and never told the ratio — both halves (rasterize at `size * dpr`, then `setDevicePixelRatio`) have to be on one path | §18.1 |
 | A new rank is drawn as the card back | The back shared the faces' index space (`indexOf` is `rank * 4 + suit`, the back was 52). It has its own key bit now — and note a `static_assert` **cannot** catch this: C++ cannot name "the last enumerator", so the assert has to spell `Rank::Ace`, which is still 12 after a rank is appended after it | §18.1 |
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |

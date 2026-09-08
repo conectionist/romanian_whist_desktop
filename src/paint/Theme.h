@@ -24,9 +24,9 @@
 // about a card face or a card back is in this struct.
 //
 // The palette is the five names section 18.1 declares, plus section 14's
-// bid/won pill - added in B2, when the seat plaque that needs it was written,
-// and added HERE rather than in that widget, which is the rule that matters.
-// Section 18's +/- score colours are still owed and arrive with the scoreboard.
+// bid/won pill and section 18's +/- score colours - each added in the phase
+// whose widget needed it, and each added HERE rather than in that widget, which
+// is the rule that matters. Nothing in section 18 is owed to this struct now.
 struct Theme
 {
     // Qt's own type rather than an enum of ours, because the caller that
@@ -54,6 +54,17 @@ struct Theme
     QColor bidOnTarget;
     QColor bidOwing;
     QColor bidOver;
+
+    // Section 18's scoreboard numbers: a positive round score green with a `+`,
+    // a negative one red with a `-`. Added in B2b, with the scoreboard that
+    // reads them, which is what the note above this struct promised.
+    //
+    // The SIGN is what carries the meaning and the colour is what makes it
+    // quick, the same way round as the pill above - section 18 allows no cue
+    // that is colour alone, and a round score is a number that already says
+    // which way it went.
+    QColor scorePositive;
+    QColor scoreNegative;
 
     // Solid, gradient or a photograph - no caller can tell which, which is what
     // makes changing it one edit. It is a gradient today only because there is
@@ -100,14 +111,17 @@ private:
 
     // EVERY colour, not the ones today's painters happen to read. Which members
     // a painter depends on is not visible from the cache lookup, and the answer
-    // changes: paintAvatar() reads seatPlaque AND accent, and the score colours
-    // section 18 still owes this struct will read others. A key that has to be
-    // updated alongside a painter is a key that will not be.
+    // changes: paintAvatar() reads seatPlaque AND accent, and nothing about that
+    // is visible from avatar()'s side of the call. A key that has to be updated
+    // alongside a painter is a key that will not be.
     //
-    // The bid colours above are IN the key while nothing paints them, which is
-    // the rule working rather than an oversight: section 14's pill can start
-    // reading bidOwing without an edit here. They were added to the struct in B2
-    // and to the key in B2a, and that gap is the whole argument for the rule.
+    // The bid and score colours are in the key while NEITHER of this struct's
+    // two painters reads one - they are drawn by the seat plaque and the
+    // scoreboard, which have palettes of their own to consult. That is the rule
+    // working rather than an oversight, and it is why the rule is "every
+    // colour" and not "every colour a painter here reads": the bid colours were
+    // added to the struct in B2 and to the key only in B2a, and that gap is the
+    // whole argument.
     quint64 paletteKey() const;
 
     // SHARED ACROSS COPIES, not per-copy. Theme is a copyable value that widgets

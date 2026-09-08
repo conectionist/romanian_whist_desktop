@@ -92,8 +92,8 @@ struct Theme::Cache
     QHash<unsigned int, QPixmap> avatars;
 };
 
-// Cheap enough to call on every lookup - eight rgba() reads and a hash - which
-// is what lets both caches ask "is this the palette I was painted from?" without
+// Cheap enough to call on every lookup - ten rgba() reads and a hash - which is
+// what lets both caches ask "is this the palette I was painted from?" without
 // either of them knowing what its painter reads.
 //
 // EVERY MEMBER OF THE STRUCT, including the three no painter reads yet. B2 added
@@ -105,7 +105,8 @@ quint64 Theme::paletteKey() const
 {
     return qHashMulti(0, tableSurface.rgba(), seatPlaque.rgba(), accent.rgba(),
                       textPrimary.rgba(), dimmedOverlay.rgba(),
-                      bidOnTarget.rgba(), bidOwing.rgba(), bidOver.rgba());
+                      bidOnTarget.rgba(), bidOwing.rgba(), bidOver.rgba(),
+                      scorePositive.rgba(), scoreNegative.rgba());
 }
 
 Theme Theme::light()
@@ -119,6 +120,8 @@ Theme Theme::light()
     theme.bidOnTarget = QColor(0x2E, 0x7D, 0x4F);
     theme.bidOwing = QColor(0x8A, 0x6D, 0x1E);
     theme.bidOver = QColor(0xA8, 0x3F, 0x2C);
+    theme.scorePositive = QColor(0x1E, 0x6B, 0x3F);
+    theme.scoreNegative = QColor(0x9C, 0x2F, 0x22);
     theme.cache = std::make_shared<Cache>();
     return theme;
 }
@@ -141,6 +144,8 @@ Theme Theme::dark()
     theme.bidOnTarget = QColor(0x4C, 0xB3, 0x7B);
     theme.bidOwing = QColor(0xD1, 0xA6, 0x3E);
     theme.bidOver = QColor(0xE0, 0x6A, 0x53);
+    theme.scorePositive = QColor(0x5F, 0xC1, 0x88);
+    theme.scoreNegative = QColor(0xE8, 0x76, 0x5F);
     theme.cache = std::make_shared<Cache>();
     return theme;
 }

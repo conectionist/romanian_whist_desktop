@@ -5,6 +5,8 @@
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "ui/CardArtWindow.h"
+#include "ui/InfoStrip.h"
+#include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/AiMoveProvider.h>
@@ -13,6 +15,7 @@
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 
+#include <QBoxLayout>
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QGuiApplication>
@@ -21,8 +24,10 @@
 #include <QPlainTextEdit>
 #include <QStatusBar>
 #include <QStringList>
+#include <QResizeEvent>
 #include <QStyleHints>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -113,18 +118,65 @@ MainWindow::MainWindow(QWidget *parent)
     startGame(buildSpectatorSetup());
 }
 
-// The table takes the central widget, which is what phase B is.
+// Section 12's four regions, minus the two that are not B2b's: the prompt bar,
+// which has no prompts to carry until phase C, and the elapsed clock, which
+// section 19 keeps off the snapshot and phase E puts on a QTimer.
 //
-// The scene is parented to the view and the view to the window, so Qt owns both
-// and neither is a member that has to be destroyed in an order.
+// THE PALETTE IS RESOLVED ONCE, here, and handed to all three. Each widget
+// asking QGuiApplication for the scheme itself would work today and would be
+// three places to change when section 20's preference arrives.
 void MainWindow::buildTable()
 {
+    theme = Theme::forScheme(QGuiApplication::styleHints()->colorScheme());
+
     scene = new TableScene(this);
     table = new TableView(scene, this);
+    infoStrip = new InfoStrip(this);
+    scoreboard = new ScoreboardWidget(this);
 
-    scene->setTheme(Theme::forScheme(QGuiApplication::styleHints()->colorScheme()));
+    scene->setTheme(theme);
+    infoStrip->setTheme(theme);
+    scoreboard->setTheme(theme);
 
-    setCentralWidget(table);
+    // The strip full width across the top, then the table and the scoreboard
+    // side by side. The table takes the stretch: the scoreboard is as wide as
+    // its widest name and no wider, and everything left over is green.
+    auto* body = new QHBoxLayout;
+    body->setContentsMargins(0, 0, 0, 0);
+    body->setSpacing(0);
+    body->addWidget(table, 1);
+    body->addWidget(scoreboard);
+
+    auto* central = new QWidget(this);
+
+    auto* stack = new QVBoxLayout(central);
+    stack->setContentsMargins(0, 0, 0, 0);
+    stack->setSpacing(0);
+    stack->addWidget(infoStrip);
+    stack->addLayout(body, 1);
+
+    setCentralWidget(central);
+}
+
+void MainWindow::capScoreboard()
+{
+    if(!scoreboard)
+        return;
+
+    // A THIRD OF THE WINDOW at most, which is about what section 12's mockup
+    // gives it. Never below the panel's own minimum, which is the numbers in
+    // full plus enough name to elide - past that the panel would be lying
+    // rather than merely cramped.
+    const int wanted = width() / 3;
+    const int floor = scoreboard->minimumSizeHint().width();
+
+    scoreboard->setMaximumWidth(std::max(wanted, floor));
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+    capScoreboard();
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -266,6 +318,8 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     // the wrong place with the right card in the log is a layout bug, and the
     // two being on one line together is what says so.
     scene->setSnapshot(snapshot);
+    infoStrip->setSnapshot(*snapshot);
+    scoreboard->setSnapshot(*snapshot);
 
     updateStatus(*snapshot);
 }
@@ -293,26 +347,16 @@ void MainWindow::updateStatus(const GameSnapshot& snapshot)
                               : tr("trick %1/%2").arg(snapshot.trickNumber)
                                                  .arg(snapshot.trickCount);
 
+    // THE ROUND TYPE COMES FROM infostrip, not from a switch of its own. This
+    // window had a third spelling of the same three words until B2b: the log's
+    // fixed ASCII, the info strip's, and this. Two is the right number and the
+    // comment on snapshotlog says why - one for machines, one for people - so
+    // the people-facing one is shared and the log's stays separate.
     statusBar()->showMessage(tr("Round %1/%2 - %3 (%4)")
                                  .arg(QString::number(snapshot.roundNumber),
                                       QString::number(snapshot.roundCount),
                                       trick,
-                                      roundTypeText(snapshot.roundType)));
-}
-
-QString MainWindow::roundTypeText(RoundType type) const
-{
-    // Its own switch rather than the log's - see the header for why the
-    // duplication is the lesser cost. No default case, so adding a fourth type
-    // is a warning here rather than a silent "?" in the status bar.
-    switch(type)
-    {
-        case RoundType::Normal:   return tr("normal");
-        case RoundType::Forehead: return tr("forehead");
-        case RoundType::Hidden:   return tr("hidden");
-    }
-
-    return tr("unknown");
+                                      infostrip::roundTypeText(snapshot.roundType)));
 }
 
 void MainWindow::onGameStopped()

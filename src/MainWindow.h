@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "engine/GameController.h"
+#include "paint/Theme.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -22,6 +23,8 @@ class QDockWidget;
 QT_END_NAMESPACE
 
 class CardArtWindow;
+class InfoStrip;
+class ScoreboardWidget;
 class TableScene;
 class TableView;
 
@@ -50,6 +53,9 @@ protected:
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
 
+    // Caps the scoreboard's share of the window - see capScoreboard().
+    void resizeEvent(QResizeEvent* event) override;
+
 private slots:
     void render(std::shared_ptr<const GameSnapshot> snapshot);
 
@@ -70,7 +76,11 @@ private slots:
 private:
     void appendLine(const QString& line);
 
-    // The scene and its view, into the central widget. Phase B is this.
+    // Section 12's window: the info strip across the top, the table and the
+    // scoreboard side by side beneath it. Phase B is this.
+    //
+    // The central widget was the bare TableView until B2b, with no layout at
+    // all, so this introduces the container the other two hang off.
     void buildTable();
 
     // Moves the .ui's log into a dock, hidden by default. B2's half of A5's
@@ -82,6 +92,13 @@ private:
     // Builds the View menu. Must run AFTER buildLogDock(), which owns the
     // action this adds.
     void buildViewMenu();
+
+    // HOW THE WINDOW DIVIDES, which is this window's decision and not the
+    // panel's. ScoreboardWidget asks for the width its widest name and its
+    // headings need, and that is right of it - but at a small window that width
+    // is half the screen, and section 12 has the table as the region everything
+    // else is arranged around. The panel yields; the green does not.
+    void capScoreboard();
 
     // Shows the card-art window, creating it the first time. Parented to this
     // window with Qt::Window, so it is a top-level window that still dies with
@@ -100,21 +117,19 @@ private:
     // change. See the shown* members below.
     void updateStatus(const GameSnapshot& snapshot);
 
-    // The round type as a PLAYER reads it, which is why it is here and not
-    // shared with the log's spelling of the same three words. A second switch
-    // over RoundType is a real cost - it is one more thing to remember the day a
-    // fourth type is added - but the alternative is worse: the log's words are
-    // fixed ASCII that tests assert on and saved logs are read with, and this
-    // one has to go through tr() like every other string a user sees, or a
-    // Romanian status bar reads "Runda 3/26 - levata 2/4 (Forehead)".
-    QString roundTypeText(romanian_whist::RoundType type) const;
-
     Ui::MainWindow *ui;
 
-    // The table. Qt owns both - the scene is parented to this window and the
-    // view is the central widget - so these are handles, not ownership.
+    // ONE PALETTE, owned here and handed to all three, rather than each widget
+    // resolving the system scheme for itself. Phase E's preference is a single
+    // setter on this member and three calls out of it.
+    Theme theme = Theme::light();
+
+    // The table and the two panels. Qt owns every one of them through the
+    // widget tree, so these are handles rather than ownership.
     TableScene* scene = nullptr;
     TableView* table = nullptr;
+    InfoStrip* infoStrip = nullptr;
+    ScoreboardWidget* scoreboard = nullptr;
 
     // Holds the .ui's log widget from buildLogDock() onward.
     QDockWidget* logDock = nullptr;
