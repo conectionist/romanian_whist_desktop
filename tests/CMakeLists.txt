@@ -16,6 +16,8 @@ add_executable(desktop_tests
     GameControllerTests.cpp
     SnapshotLogTests.cpp
     SnapshotSequenceTests.cpp
+    HumanSeatTests.cpp
+    PromptStandInTests.cpp
     ThemeTests.cpp
     CardRendererTests.cpp
     SeatLayoutTests.cpp

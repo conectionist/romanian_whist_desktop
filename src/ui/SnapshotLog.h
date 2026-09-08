@@ -2,6 +2,7 @@
 #define SNAPSHOT_LOG_H
 
 #include "core/GameSnapshot.h"
+#include "engine/Prompts.h"
 
 #include <QString>
 
@@ -28,16 +29,32 @@ namespace snapshotlog
 // numbers harder to subtract by eye.
 QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed);
 
-// ONE FUNCTION, deliberately. Both halves of the line's spelling - the card and
-// the round type - were exported from here once: the card for tests that turned
-// out to hardcode the strings anyway, and the round type so MainWindow's status
-// bar could share it. The status bar cannot share it, because everything a user
-// reads goes through tr() and this log's words are fixed ASCII a test asserts
-// on; that is now two switches over RoundType in one client, and the comment on
-// MainWindow::roundTypeText() says why it is the right two.
+// THE OTHER HALF OF PHASE C'S RECORD, and the more informative one. A snapshot's
+// hand carries no legality and is empty in a blind round; the prompt carries
+// both the legal set and the way back to the engine's own hand positions, and it
+// is the only object in the program that ever does (see engine/Prompts.h). So
+// what a player was actually asked is logged from the prompt, and
+// format(GameSnapshot) is deliberately left alone rather than grown a hand
+// column that would be a worse copy of this one.
 //
-// What is left is a formatter with one entry point, which is all a caller has
-// ever needed.
+// No elapsed argument: a prompt is raised BETWEEN snapshots, and what a reader
+// wants from these lines is which question was asked, not how long the gap
+// before it was. The snapshot lines either side already carry the clock.
+QString format(const BetPrompt& prompt);
+QString format(const PlayPrompt& prompt);
+
+// THREE ENTRY POINTS, AND THAT IS THE WHOLE LIST. This said "one function,
+// deliberately" until C1, and the argument it was making survives unchanged:
+// what must not be exported from here are the two SPELLINGS - the card and the
+// round type - which were exported once and taken back. The card because tests
+// hardcoded the strings anyway, the round type because MainWindow's status bar
+// cannot share fixed ASCII a log test asserts on with text that has to go
+// through tr(); the comment on infostrip::roundTypeText() says why two switches
+// over RoundType is the right number.
+//
+// The three formatters below share both spellings and export neither, which is
+// the property that comment was protecting. A fourth would be welcome on the
+// same terms.
 
 } // namespace snapshotlog
 

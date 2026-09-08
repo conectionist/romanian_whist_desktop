@@ -11,7 +11,13 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Romanian Whist - spectating</string>
+   <!-- "- spectating" until C1, which is when it stopped being true. Plain from
+        here: phase D's dialog offers watching AND playing, so a title naming
+        either is one more thing to keep in step with the game actually running,
+        and this one is right for both. Set HERE and not in code - setting it in
+        both puts a string in the catalogue whose translation no one can see the
+        effect of, because whichever runs second wins. -->
+   <string>Romanian Whist</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="centralLayout">

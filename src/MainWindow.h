@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "engine/GameController.h"
+#include "engine/Prompts.h"
 #include "paint/Theme.h"
 
 #include <QMainWindow>
@@ -28,6 +29,13 @@ class ScoreboardWidget;
 class TableScene;
 class TableView;
 
+// Phase C1's window: phase B's table, with a human in one of the seats.
+//
+// The seat is the whole of C1. Everything the human needs to ANSWER a prompt -
+// the bid strip and the clickable hand - is C2 and C3, so between here and there
+// the two slots below answer for them: see src/ui/PromptStandIn.h for why that
+// is a step rather than a shortcut.
+//
 // Phase B's window: the table, with phase A's log demoted behind View > Log.
 //
 // The log is kept rather than deleted, which A5 asked for and B2 does: it is the
@@ -72,6 +80,21 @@ private slots:
     // The run slot caught something. Neither onGameStopped() nor onGameOver()
     // fires on that path, so this is the only report the window gets.
     void showFailure(QString what);
+
+    // THE ENGINE IS PARKED IN THE PROVIDER WHILE EITHER OF THESE RUNS, waiting
+    // on the submit() at the end of it. Both take their prompt BY VALUE, which
+    // is what a queued signal delivers and what C2 and C3 will cache.
+    //
+    // C1 answers inline and caches nothing, so there is no activePrompt member
+    // here yet. That is not an omission: nothing in this phase can answer LATER
+    // than the signal, and a cached prompt with no click to outlive is a member
+    // that could only be stale. C3 adds it with the widget that needs it.
+    //
+    // Answering from inside the emission is sanctioned rather than merely
+    // tolerated - QtMoveProvider drops its lock across the emit precisely so
+    // that submit() can be called on the emitting thread. See its header.
+    void onBetRequested(BetPrompt prompt);
+    void onCardRequested(PlayPrompt prompt);
 
 private:
     void appendLine(const QString& line);

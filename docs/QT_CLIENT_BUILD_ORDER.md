@@ -370,15 +370,22 @@ comes from `isWinning` and is never recomputed.
 
 **Read first:** §§4.2, 4.4, 15, 17.
 
-- [ ] **C1 — the seat.** `prepare()` with a real `humanSeat`; the human seat's `moveProvider` filled
+- [x] **C1 — the seat.** `prepare()` with a real `humanSeat`; the human seat's `moveProvider` filled
       with a `SeatProvider` in `start()`. The bots keep `AiMoveProvider`.
+- [x] **…and the prompt seam under it, answered by a stand-in.** Not in the step as written, and the
+      reason for it is the reason this document has an order at all — see the box below. C2 deletes
+      half of `src/ui/PromptStandIn.{h,cpp}` and C3 the rest.
 - [ ] **C2 — bidding.** `BidStrip` as a **panel, not a `QDialog`** (§4.4 — this is a shutdown
       decision, and C4 is the test it exists for). One button per bid, `forbiddenBet` disabled with
-      the explanation underneath.
+      the explanation underneath. **Stop calling `promptstandin::chooseBet()`** — the bet half of
+      `MainWindow::onBetRequested()` becomes the panel; the logging and the null guard stay.
 - [ ] **C3 — playing.** `HandItem` itself, which B2 could not build — the fan from
       `GameSnapshot::hand` between turns, drawn disabled, and the bottom strip the table reserves for
       it. Then `PlayPrompt` into the hand: legality lighting, hover, click →
       `handIndex[slot]` → `submit(promptId, …)`. Never a fan position, never a cached snapshot.
+      **Then delete `src/ui/PromptStandIn.{h,cpp}`, `tests/PromptStandInTests.cpp` and their two
+      `CMakeLists.txt` entries** — and note `tests/HumanSeatTests.cpp` calls the same two functions,
+      so it needs a scripted answerer of its own at that point rather than deleting with them.
 - [ ] **C4 — blind rounds.** Forehead and Hidden: `handIndex.size()` face-down backs, clickable;
       other seats' cards from `SeatView::hand` (§17). **Both halves land here now**, including the
       one that is pure rendering — `seats[i].hand` is empty for the whole of phase B for the same
@@ -394,6 +401,99 @@ Forehead and Hidden rounds that end the default schedule.**
 > default the last two rounds are exactly where a snapshot-driven hand shows nothing and the engine
 > parks on a card it will never be given. A run that stalls there has the prompt/snapshot split
 > wrong, not the blind rendering (§4.0, §8).
+
+### Why C1 landed the whole prompt seam, and not only the seat
+
+**The step as written is two lines of `MainWindow` and it ends in a game that parks forever.**
+`GameController` already took a real `humanSeat`, already built a `QtMoveProvider` from it and
+already filled that seat with a `SeatProvider` in `start()`; the bridge already skipped the human's
+thinking-beat and already stamped `humanSeat` onto the snapshot before the refresh. All of it was
+written in A2 and A4 and tested there. The only thing missing was the caller — `MainWindow` passed
+`std::nullopt`. Change that and the engine deals round one, asks the human for a bid, and stops,
+because C2 and C3 are what answer.
+
+That is legal by this document's own rule — a *phase* ends in something runnable, a *step* is
+roughly a commit — so C1 could have ended parked. It does not, for the rule the ordering actually
+exists for: **one plausible cause.** C3 and C4 are otherwise the first moment anyone learns whether
+the prompt/snapshot split works, and a stall in the Hidden round would then have two explanations —
+the hand widget drew nothing, or the prompt never arrived. Answering the prompts before any widget
+exists removes one of them. It is the argument that puts A before B, applied inside C.
+
+So C1 answers its own prompts: the lowest legal bid, the first legal card, submitted through
+`handIndex[slot]` exactly as C3's click handler will. **A full game now plays to `onGameOver()`
+through the Forehead and Hidden rounds**, which is phase C's own "done when" — reached in the step
+with the least UI standing on top of it rather than the most.
+
+**What it is not** is a bot. It picks the first thing it is allowed to pick, and the engine already
+has strategies for anything better; a stand-in that played well would be one somebody kept.
+
+### What the C1 run found
+
+- **`GameController` needed no change at all, and that is worth knowing before opening it.** A4
+  built the seat-filling and A2 the provider, both against tests, and both were correct on the first
+  seated game. The whole of the change is in `MainWindow` — the seat it prepares with, and the seat it
+  leaves null in the setup. If something is wrong at this step, look at the window before the
+  controller.
+- **Nothing yet proved the POSITIVE path through `start()`.** Every controller test was a spectator
+  game or a setup the engine was meant to reject by name — so "the seat is filled and the game then
+  finishes" was untested, and it is the assertion a broken `prepare(Seat)` would fail. It is
+  `HumanSeatTests`' first case, on a real thread, and the rest of that file runs the engine
+  synchronously the way A6 does, because which prompt carried what is not a threading question.
+- **A stand-in that answers wrongly HANGS the suite rather than failing it, and the ceiling that
+  fixes it was found by mutation.** `makeBet()` and `playCard()` both re-prompt rather than pass an
+  illegal answer on, which is right — but it means an answerer that keeps giving the same wrong one
+  is asked again forever, the game never ends, and every assertion after it is unreachable. Mutating
+  `chooseSlot()` to ignore legality did not fail `HumanSeatTests` — the run had to be killed, and
+  printed nothing at all. `kPromptCeiling` now abandons the provider past a bound no real game reaches, and the same
+  mutation reports `!transcript.looped` on every case. **This is the shape to expect from any future
+  test that answers a prompt**, and `GameControllerTests` already states the rule it breaks: nothing
+  waits without a deadline.
+- **A whole-game count can police a rule it never exercises.** `getForbiddenBet()` is engaged for the
+  final bidder only, so mutating `chooseBet()` to ignore `forbiddenBet` was caught by the unit test
+  and *not* by the prompt-count assertion the count exists for — the human simply never bid last with
+  a forbidden value in that seeded game. The count now carries an `any_of` proving at least one
+  prompt arrived with one. Worth looking for wherever a case asserts over a whole game: the assertion
+  can be right, and reached, and still be about nothing.
+- **Seating seat 0 would have hidden the whole feature.** `seatlayout` puts seat 0 at bottom-centre
+  when `humanSeat` is `-1`, so a client that dropped the human entirely draws a table identical to a
+  spectator's. `kHumanSeat` is 1 in the window and in the tests for that reason, which makes "the
+  bottom plaque reads Bogdan (you)" a real assertion rather than a coincidence.
+- **Bots got slower, correctly.** `Pacing{}` is unchanged, but `botBeat()` picks `beat` (700 ms) over
+  `spectatorBeat` (250 ms) the moment a seat is filled — §4.1's split, which phases A and B only ever
+  saw one side of.
+- **The window title still said "spectating", and only running it found that.** It lives in
+  `MainWindow.ui` and had been right since phase A. Nothing compiles differently when it goes false,
+  no test reads it, and it is the first thing on screen. It is plain "Romanian Whist" now rather than
+  "playing", because phase D's dialog offers both and a title naming either is one more thing to keep
+  in step with the game actually running. **Worth a look every phase that changes what the client
+  is** — the .ui holds several strings of that kind and none of them is under test.
+- **The relay `MainWindow` depends on entirely could be deleted with the suite green** — found by
+  review, confirmed by deleting it. `prepare()` relays `betRequested` and `cardRequested` from the
+  bridge to the controller, and the window connects to nothing else; remove either `connect()` and
+  the human is never asked, the game parks forever, and **137 tests still passed**. The first
+  `HumanSeatTests` case looked like cover and was not: it answers DIRECT on the bridge, on the game
+  thread, so nothing crosses the relay. A seated game answered from the *test* thread now pins both.
+  **The shape to look for is a test that connects to the bridge where the window connects to the
+  controller** — the two are one hop apart and only one of them is what ships.
+- **A seated game cannot use `Outcome::await()`, and the reason generalises.** The game thread parks
+  inside the prompt waiting for an answer only the GUI thread can give, and the GUI thread can only
+  give it by running its event loop — so a blocking wait on the condition variable holds the thread
+  that has to do the unblocking, and the test times out instead of passing. Every other controller
+  test can `await()` because a bot game needs nothing from the main thread. **Anything answering a
+  prompt has to pump, not wait**, which is the same asymmetry `kPromptCeiling` exists for from the
+  other direction.
+- **The two `qRegisterMetaType` calls for the prompts cannot be guarded by a test, and now say so.**
+  Removing them *and* both `Q_DECLARE_METATYPE` lines leaves the queued relay working and every test
+  passing: Qt 6 builds a `QMetaType` from any complete type. So the registrations are belt-and-braces
+  for a build where auto-registration does not reach, the defence is that all four declarations sit
+  in two named places, and a test written to pin them would be asserting that a working mechanism
+  does not work. Same shape as B1's `QPixmap(":/cards/x.svg")` trap — recorded in `MetaTypes.cpp`
+  where someone would otherwise delete them as dead.
+- **TSan is not silent on a clean tree**, which is worth knowing before reading a report as a
+  verdict: `master` produces ~83 warnings and passes every test, all of them bottoming out in Qt's
+  own uninstrumented libraries. C1 adds none — measured against a `master` worktree rather than
+  assumed. The method, and what a *real* finding would look like, is now a section in
+  `LOCAL_VERIFICATION.md`.
 
 ---
 
@@ -485,6 +585,7 @@ Symptom first, because that is what you have.
 | A close is silently ignored, game plays itself out | `stopRequested` not latched, or not read back under `engineMutex` | §4.3 |
 | The card played is not the card clicked | A fan position was submitted instead of `handIndex[slot]` | §4.4 |
 | "It played a card I did not click" | No `promptId` gate; a stray click armed the next prompt | §4.2 |
+| A seated game never ends and the log stops moving, with no hang in the window | An answer the provider will not accept. `makeBet()` and `playCard()` re-prompt rather than pass an illegal one on, so a widget that keeps sending it is asked again forever | §4.2 |
 | Nothing to click in the last two rounds | The hand is being driven by the snapshot instead of `PlayPrompt` | §4.0, §17 |
 | Game two plays itself at full speed | `QtMoveProvider::abandoned` latched and reused | §8, phase D |
 | Game two deals one round and stops | `prepare()` did not clear `GameController::stopRequested` | §4.3 |
