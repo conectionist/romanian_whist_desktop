@@ -46,6 +46,29 @@ public:
     // fraction of the scene rect, so this is the only thing a resize has to do.
     void relayout();
 
+    // WHAT AN OVERLAY MAY COVER: everything above the lowest seat's plaque.
+    // Section 15.1's bid strip is bottom-aligned in it, and phase C3's hand will
+    // be.
+    //
+    // IT HAS TO COME FROM HERE because the lowest plaque is the HUMAN'S - the
+    // seated player is drawn at bottom-centre - so "the bottom of the table" and
+    // "where the strip goes" are different places. A strip pinned to the
+    // viewport's bottom edge draws straight through the player's own name, which
+    // is what C2's first run did.
+    //
+    // AND IT REACHES UP OVER THE TRICK, which is not a compromise. Measured on a
+    // 1000x700 table: the trick ring's cards end 565 pixels down and the bottom
+    // plaque starts at 578, so the gap between them is thirteen pixels and no
+    // strip fits in it - there is no free band to find. What makes covering the
+    // middle harmless is WHEN this is used: bidding finishes before the first
+    // card of the round is played, so the trick area is empty for the whole time
+    // the strip is up. Phase C3's hand is the case to re-ask this for, because a
+    // hand IS on screen while cards are down.
+    //
+    // Empty before the first snapshot; the caller falls back rather than being
+    // handed a negative rect.
+    QRectF overlayBand() const;
+
 protected:
     // The table surface, through Theme - which is what keeps it replaceable
     // (section 18.1). NOT a QGraphicsRectItem with a brush, which would put a

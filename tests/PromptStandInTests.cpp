@@ -6,21 +6,23 @@
 #include <romanian_whist/RoundType.h>
 
 #include <cstddef>
-#include <optional>
 #include <vector>
 
 using namespace romanian_whist;
-using promptstandin::chooseBet;
 using promptstandin::chooseSlot;
 
-// The stand-in that unparks the engine until C2 and C3 build the widgets that
-// will. It is temporary and these tests go with it - but while it is what
-// answers every prompt in a run of the client, its two rules are what decide
-// whether a game plays out or loops, so they are worth the four assertions.
+// The stand-in that unparks the engine until C3 builds the hand that will. It is
+// temporary and these tests go with it - but while it is what answers every card
+// in a run of the client, its one rule decides whether a game plays out or
+// loops, so it is worth the two assertions.
+//
+// HALF THE FILE LEFT IN C2. The bet cases moved to BidStripTests, beside the
+// widget that answers a bid now, and the function they covered moved to
+// fixtures::lowestLegalBid() - see tests/GameFixtures.h for why it did not stay
+// in src/.
 //
 // No thread, no engine, no widget: this is the part of C1 with a right answer,
-// which is the reason it is a pair of free functions rather than logic inside a
-// slot.
+// which is the reason it is a free function rather than logic inside a slot.
 
 namespace
 {
@@ -50,41 +52,6 @@ PlayPrompt playPrompt(std::vector<bool> legality)
 
     return prompt;
 }
-}
-
-TEST_CASE("The stand-in bids zero when zero is allowed", "[standin]")
-{
-    BetPrompt prompt;
-    prompt.handSize = 8;
-    prompt.forbiddenBet = 3;
-
-    REQUIRE(chooseBet(prompt) == 0);
-}
-
-TEST_CASE("The stand-in bids one when zero is the forbidden bet", "[standin]")
-{
-    // The whole reason chooseBet() is a function rather than a literal 0. The
-    // engine forbids exactly one value and only for the final bidder, and a
-    // stand-in that ignored it would not crash: QtMoveProvider::makeBet() checks
-    // the same two rules and RE-PROMPTS, so the visible symptom would be the
-    // client bidding forever in some rounds and not in others.
-    BetPrompt prompt;
-    prompt.handSize = 8;
-    prompt.forbiddenBet = 0;
-
-    REQUIRE(chooseBet(prompt) == 1);
-}
-
-TEST_CASE("A bet with nothing forbidden is still the lowest one", "[standin]")
-{
-    // Every bidder but the last, and the last one once the bids already exceed
-    // the trick count - getForbiddenBet() is disengaged in both.
-    BetPrompt prompt;
-    prompt.handSize = 1;
-    prompt.forbiddenBet = std::nullopt;
-    prompt.roundType = RoundType::Forehead;
-
-    REQUIRE(chooseBet(prompt) == 0);
 }
 
 TEST_CASE("The stand-in picks the first LEGAL slot, not the first slot", "[standin]")

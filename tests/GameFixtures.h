@@ -111,6 +111,37 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
     return setup;
 }
 
+// The lowest bid a prompt permits: 0, or 1 where 0 is the forbidden one.
+//
+// IN THE TEST TREE SINCE C2, and it used to be promptstandin::chooseBet() beside
+// the client's own stand-in. BidStrip took its only production caller, and a
+// function in src/ that only tests call is worse than one that lives with them -
+// so it moved here, where the seated-game tests still need something to answer a
+// bid with. C3 does the same to chooseSlot() and deletes that file.
+//
+// NEVER prompt.forbiddenBet. QtMoveProvider::makeBet() re-prompts rather than
+// handing an illegal bet to the engine, so getting this wrong is a prompt LOOP
+// rather than a failure - the game never ends and the assertions after it are
+// unreachable. That is the hazard kPromptCeiling in HumanSeatTests exists for.
+//
+// Walked rather than written as `forbidden == 0 ? 1 : 0`, which is the same
+// answer everywhere it is defined and undefined in the one place it is not: a
+// 0-card round would have that bid 1 against a hand of none.
+inline unsigned int lowestLegalBid(const BetPrompt& prompt)
+{
+    for(std::size_t bet = 0 ; bet <= prompt.handSize ; bet++)
+    {
+        const unsigned int candidate = static_cast<unsigned int>(bet);
+
+        if(!prompt.forbiddenBet || candidate != *prompt.forbiddenBet)
+            return candidate;
+    }
+
+    // Unreachable: forbiddenBet is one value and the range holds at least one
+    // more, every round the engine schedules having at least one card.
+    return 0;
+}
+
 // Records which of the three terminal signals fired, and lets the test thread
 // wait for any of them with a deadline.
 //

@@ -142,6 +142,99 @@ TEST_CASE("stop() after the game finished on its own is safe", "[controller]")
     REQUIRE(outcome.stoppedCount == 0);
 }
 
+TEST_CASE("A stop while the game is parked on a prompt ends it", "[controller]")
+{
+    // C5'S PATH, AND THE ONLY ONE THAT SHOULD PRODUCE GameAbandoned. C2's bid
+    // strip is what makes it reachable in the running client: the engine sits in
+    // makeBet() for as long as the player takes to decide, which is unbounded,
+    // and the window has to stay closable throughout. That is the whole reason
+    // section 4.4 insists the strip is a panel rather than a QDialog - exec()
+    // would take the close button with it and this could not be performed at
+    // all.
+    //
+    // NOTHING COVERED IT UNTIL NOW. Every other shutdown case here is a
+    // spectator or an all-bot game, and neither ever parks: they are asleep in
+    // pace(), which cancelPacing() returns from. A parked PROVIDER is the other
+    // half of section 6 and is woken by abandon(), which THROWS.
+    GameController controller;
+    controller.prepare(Seat{ 1u }, instant());
+
+    REQUIRE(controller.provider() != nullptr);
+
+    // Answers nothing, which is the point - it only reports that the engine has
+    // actually reached the prompt. Stopping before it gets there would exercise
+    // the latch instead, which the case below already covers.
+    std::atomic<bool> parked{false};
+
+    QObject prompts;
+
+    QObject::connect(controller.bridge(), &GameBridge::betRequested, &prompts,
+                     [&parked](BetPrompt){ parked = true; },
+                     Qt::DirectConnection);
+
+    Outcome outcome(controller);
+
+    controller.start(fixtures::buildSetup(2, 42u, 1));
+
+    // Spun on rather than slept past: the deal has to happen first, and how long
+    // that takes is not something to guess at. Deadlined, because a test that
+    // hangs prints nothing.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+
+    while(!parked)
+    {
+        REQUIRE(std::chrono::steady_clock::now() < deadline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    // THE JOIN IS THE ASSERTION, and it is made on another thread because
+    // stop() is the thing that can fail here and it fails by NEVER RETURNING.
+    // If abandon() does not reach the parked provider, stop() sits in
+    // thread.wait() for good - requestStop() cannot help, because the game
+    // thread is not at a boundary, it is inside a condition variable. Deleting
+    // that one line from stop() was measured: this case does not fail, it hangs,
+    // and the run has to be killed with no output at all.
+    //
+    // So the wait gets a deadline like every other in this file, and the rescue
+    // below turns the hang into a message. Same shape as kPromptCeiling in
+    // HumanSeatTests, from the other side of the same seam.
+    std::atomic<bool> returned{false};
+
+    std::thread stopper([&controller, &returned]
+                        {
+                            controller.stop();
+                            returned = true;
+                        });
+
+    const auto stopDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+
+    while(!returned && std::chrono::steady_clock::now() < stopDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    const bool joined = returned.load();
+
+    // THE RESCUE, and it is what stop() was supposed to do. Only a latch and a
+    // notify, so it is safe to call while stop() is blocked in the join - and
+    // without it the stopper thread never finishes, ~thread calls std::terminate
+    // and the failure below is never printed.
+    if(!joined)
+        controller.provider()->abandon();
+
+    stopper.join();
+
+    REQUIRE(joined);
+
+    // AND WHICH ENDING, which is the half that says the throw was caught rather
+    // than the game merely finishing. GameAbandoned unwinds run() before any
+    // observer callback, so NONE of the three fires: not onGameOver, not
+    // onGameStopped, and not gameFailed - the run slot's GameAbandoned arm is
+    // the one that reports nothing, because the window is closing and there is
+    // nobody left to tell.
+    REQUIRE(outcome.overCount == 0);
+    REQUIRE(outcome.failedCount == 0);
+    REQUIRE(outcome.stoppedCount == 0);
+}
+
 TEST_CASE("A stop with no engine to tell is latched and honoured", "[controller]")
 {
     // The latch, at its simplest and with no threading in the test at all:

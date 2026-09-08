@@ -18,11 +18,13 @@ add_executable(desktop_tests
     SnapshotSequenceTests.cpp
     HumanSeatTests.cpp
     PromptStandInTests.cpp
+    BidStripTests.cpp
     ThemeTests.cpp
     CardRendererTests.cpp
     SeatLayoutTests.cpp
     TrickItemTests.cpp
     TableSceneTests.cpp
+    TableViewTests.cpp
     InfoStripTests.cpp
     ScoreboardTests.cpp
     TestApp.cpp

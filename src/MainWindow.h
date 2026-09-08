@@ -23,6 +23,7 @@ QT_BEGIN_NAMESPACE
 class QDockWidget;
 QT_END_NAMESPACE
 
+class BidStrip;
 class CardArtWindow;
 class InfoStrip;
 class ScoreboardWidget;
@@ -96,6 +97,10 @@ private slots:
     void onBetRequested(BetPrompt prompt);
     void onCardRequested(PlayPrompt prompt);
 
+    // The bid strip was clicked, or a digit was pressed on it. Answers the
+    // prompt cached by onBetRequested().
+    void onBidChosen(unsigned int bet);
+
 private:
     void appendLine(const QString& line);
 
@@ -153,6 +158,21 @@ private:
     TableView* table = nullptr;
     InfoStrip* infoStrip = nullptr;
     ScoreboardWidget* scoreboard = nullptr;
+
+    // Section 15.1's strip, floated over the bottom of the table rather than
+    // laid out beneath it - see TableView::setBottomOverlay() for why. Hidden
+    // except while the engine is parked waiting for your bid.
+    BidStrip* bidStrip = nullptr;
+
+    // THE PROMPT THE STRIP IS CURRENTLY SHOWING, held by value.
+    //
+    // C1 deliberately had no such member, because it answered inline from inside
+    // the signal and nothing could be a turn out of date. C2 answers whenever
+    // the player clicks, which is exactly when a cached promptId starts earning
+    // its keep - and it is the promptId, not the widget being hidden, that
+    // actually gates a stale submission (section 4.2). C3 adds the play-side
+    // twin on the same reasoning.
+    BetPrompt activeBetPrompt;
 
     // Holds the .ui's log widget from buildLogDock() onward.
     QDockWidget* logDock = nullptr;
