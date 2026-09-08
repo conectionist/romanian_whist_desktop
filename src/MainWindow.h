@@ -10,6 +10,7 @@
 #include <QString>
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -25,19 +26,23 @@ QT_END_NAMESPACE
 
 class BidStrip;
 class CardArtWindow;
+class HandItem;
 class InfoStrip;
+class PromptBar;
 class ScoreboardWidget;
 class TableScene;
 class TableView;
 
-// Phase C1's window: phase B's table, with a human in one of the seats.
+// Phase C's window: phase B's table with a human in one of the seats, and the
+// two things that let them answer for themselves - section 15.1's bid strip and
+// section 14's hand fan.
 //
-// The seat is the whole of C1. Everything the human needs to ANSWER a prompt -
-// the bid strip and the clickable hand - is C2 and C3, so between here and there
-// the two slots below answer for them: see src/ui/PromptStandIn.h for why that
-// is a step rather than a shortcut.
+// THE TWO PROMPTS ARE THE SHAPE OF THIS CLASS. Everything else here draws a
+// snapshot and forgets it; the prompts are cached, because the engine is parked
+// in the provider until a click answers, and the answer arrives long after the
+// signal that asked for it.
 //
-// Phase B's window: the table, with phase A's log demoted behind View > Log.
+// Phase B's table, with phase A's log demoted behind View > Log.
 //
 // The log is kept rather than deleted, which A5 asked for and B2 does: it is the
 // thing to reach for when something looks wrong on the table, and it is the only
@@ -58,6 +63,17 @@ public:
     ~MainWindow() override;
 
 protected:
+    // Section 15.2's digit keys: 1-8 play by position in the fan, matching the
+    // terminal's numbering for anyone switching between the two clients.
+    //
+    // ON THE WINDOW rather than on the fan, unlike the bid strip's digits. A
+    // QGraphicsObject has no focus of its own worth building here, and the fan is
+    // not the only thing on screen that could want a key - so this is the one
+    // place a play key is read, and it forwards to the item's own rule rather
+    // than re-deciding what is playable. Arrows and Enter need a selection to
+    // move, which is phase E's keyboard map.
+    void keyPressEvent(QKeyEvent* event) override;
+
     // Closing the window is what ends the game. Sets `closing` first, then
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
@@ -82,20 +98,22 @@ private slots:
     // fires on that path, so this is the only report the window gets.
     void showFailure(QString what);
 
-    // THE ENGINE IS PARKED IN THE PROVIDER WHILE EITHER OF THESE RUNS, waiting
-    // on the submit() at the end of it. Both take their prompt BY VALUE, which
-    // is what a queued signal delivers and what C2 and C3 will cache.
+    // THE ENGINE IS PARKED IN THE PROVIDER FROM EITHER OF THESE UNTIL ITS ANSWER,
+    // which is as long as the player takes. Both take their prompt BY VALUE -
+    // what a queued signal delivers - and both cache it, because the answer
+    // arrives from a click rather than from inside the emission.
     //
-    // C1 answers inline and caches nothing, so there is no activePrompt member
-    // here yet. That is not an omission: nothing in this phase can answer LATER
-    // than the signal, and a cached prompt with no click to outlive is a member
-    // that could only be stale. C3 adds it with the widget that needs it.
-    //
-    // Answering from inside the emission is sanctioned rather than merely
-    // tolerated - QtMoveProvider drops its lock across the emit precisely so
-    // that submit() can be called on the emitting thread. See its header.
+    // C1 answered inline and cached nothing, which was right while nothing could
+    // answer later than the signal. C2 added activeBetPrompt with the panel that
+    // needed it and C3 activePrompt with the fan, and in both the cached promptId
+    // is what actually gates a stale submission - not the widget being disabled.
     void onBetRequested(BetPrompt prompt);
     void onCardRequested(PlayPrompt prompt);
+
+    // A card in the fan was clicked, or a digit was pressed. Answers the prompt
+    // cached by onCardRequested(), through the one mapping that decides whether
+    // the card played is the card clicked.
+    void onCardPicked(std::size_t slot);
 
     // The bid strip was clicked, or a digit was pressed on it. Answers the
     // prompt cached by onBetRequested().
@@ -164,6 +182,15 @@ private:
     // except while the engine is parked waiting for your bid.
     BidStrip* bidStrip = nullptr;
 
+    // Section 12's fourth region, and the last to be built.
+    PromptBar* promptBar = nullptr;
+
+    // THE FAN, owned by the scene rather than by this window - it is a
+    // QGraphicsObject in the table, not a widget. Held as a handle because this
+    // is what drives its second source: the snapshot reaches it through
+    // TableScene, and the PROMPT reaches it from here.
+    HandItem* hand = nullptr;
+
     // THE PROMPT THE STRIP IS CURRENTLY SHOWING, held by value.
     //
     // C1 deliberately had no such member, because it answered inline from inside
@@ -173,6 +200,14 @@ private:
     // actually gates a stale submission (section 4.2). C3 adds the play-side
     // twin on the same reasoning.
     BetPrompt activeBetPrompt;
+
+    // THE PLAY-SIDE TWIN, and the second cached prompt in the client. Same
+    // reasoning as the bet one: the answer arrives whenever the player clicks, so
+    // the promptId and - decisively - handIndex have to survive until then.
+    //
+    // NEVER READ FROM A SNAPSHOT INSTEAD. A snapshot's hand carries no legality
+    // and is empty in a blind round, so it cannot supply either (section 4.0).
+    PlayPrompt activePrompt;
 
     // Holds the .ui's log widget from buildLogDock() onward.
     QDockWidget* logDock = nullptr;
@@ -186,6 +221,15 @@ private:
     // column is measured from. Cleared by startGame() above.
     std::chrono::steady_clock::time_point started;
     bool haveStarted = false;
+
+    // THE LAST FRAME, kept because the prompt bar needs a fact from it that the
+    // prompt does not carry: which suit is being followed. Legality lives only on
+    // the prompt and the lead suit only on the snapshot, so the bar is the one
+    // thing in the client that has to read both at once.
+    //
+    // By shared_ptr, which is what crosses the boundary - so this is a refcount
+    // bump rather than a copy of six hands.
+    std::shared_ptr<const GameSnapshot> lastSnapshot;
 
     // What the status bar was last told, so it is rewritten only when the round
     // or the trick moves rather than on every one of a game's ~1300 frames.

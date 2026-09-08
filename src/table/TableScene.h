@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 
+class HandItem;
 class SeatItem;
 class TrickItem;
 
@@ -40,11 +41,35 @@ public:
     // to blank the table by dropping one.
     void setSnapshot(std::shared_ptr<const GameSnapshot> snapshot);
 
+    // THE FAN, which has a second source the snapshot cannot supply. Everything
+    // else on this table is drawn from the snapshot and only the snapshot, and
+    // the hand is the documented exception (section 4.0): between turns it
+    // follows setSnapshot() like the rest, and on your turn MainWindow redraws it
+    // from the prompt through here.
+    HandItem* handItem() const { return hand; }
+
     void setTheme(const Theme& theme);
 
     // Called by TableView when the viewport changes size. Everything below is a
     // fraction of the scene rect, so this is the only thing a resize has to do.
     void relayout();
+
+    // THE TABLE PROPER: the scene minus the strip reserved for the human's hand.
+    //
+    // Section 14's rule expressed as a shorter rect rather than as a second
+    // layout - "a spectated game has no human, so all seats are distributed
+    // around the full ellipse and the bottom hand area is not drawn at all". So
+    // this IS the scene rect whenever nobody is seated, and SeatLayout.h has been
+    // waiting for it since B2: "no bottom strip is reserved for a hand, and that
+    // is the caller's business: it passes a shorter rect."
+    //
+    // Everything the table lays out goes through here - the seat ellipse, the
+    // trick's ring and its centre - so the hand cannot be drawn over.
+    QRectF tableRect(qreal cardHeight) const;
+
+    // The strip itself, across the bottom. Empty in a spectator game, which is
+    // the same fact as tableRect() being the whole scene.
+    QRectF handRect(qreal cardHeight) const;
 
     // WHAT AN OVERLAY MAY COVER: everything above the lowest seat's plaque.
     // Section 15.1's bid strip is bottom-aligned in it, and phase C3's hand will
@@ -57,13 +82,17 @@ public:
     // is what C2's first run did.
     //
     // AND IT REACHES UP OVER THE TRICK, which is not a compromise. Measured on a
-    // 1000x700 table: the trick ring's cards end 565 pixels down and the bottom
-    // plaque starts at 578, so the gap between them is thirteen pixels and no
-    // strip fits in it - there is no free band to find. What makes covering the
-    // middle harmless is WHEN this is used: bidding finishes before the first
-    // card of the round is played, so the trick area is empty for the whole time
-    // the strip is up. Phase C3's hand is the case to re-ask this for, because a
-    // hand IS on screen while cards are down.
+    // 1000x700 table before C3: the trick ring's cards ended 565 pixels down and
+    // the bottom plaque started at 578, so there was no free band to find. What
+    // makes covering the middle harmless is WHEN this is used: bidding finishes
+    // before the first card of the round is played, so the trick area is empty
+    // for the whole time the strip is up.
+    //
+    // C3 ASKED THE SAME QUESTION FOR THE HAND AND ANSWERED IT DIFFERENTLY, which
+    // is why the hand is not an overlay: cards ARE on the table while you choose
+    // one, so the fan cannot borrow the middle. It got a reserved strip instead -
+    // tableRect() above - and the plaques moved up with it, so this band grew
+    // without a line here changing.
     //
     // Empty before the first snapshot; the caller falls back rather than being
     // handed a negative rect.
@@ -87,8 +116,9 @@ private:
     QRectF trickRingRect(std::size_t seatCount, qreal cardHeight) const;
     std::vector<QPointF> trickRing(std::size_t seatCount, qreal cardHeight) const;
 
-    // The rect a plaque's CENTRE may occupy: the scene inset by half a plaque,
-    // so the plaque itself lands inside the window.
+    // The rect a plaque's CENTRE may occupy: the TABLE rect - not the scene -
+    // inset by half a plaque, so the plaque lands inside the window and above the
+    // hand rather than on it.
     QRectF seatRingRect(qreal cardHeight) const;
 
     // Theme's card height is what the table wants; this is what it can have.
@@ -108,6 +138,11 @@ private:
 
     std::vector<SeatItem*> seats;
     TrickItem* trick = nullptr;
+
+    // The human's fan. Built for every game and simply empty in a spectator one,
+    // which is what handRect() being empty already says - so there is no "is
+    // there a hand" branch anywhere but there.
+    HandItem* hand = nullptr;
 };
 
 #endif

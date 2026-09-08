@@ -142,6 +142,32 @@ inline unsigned int lowestLegalBid(const BetPrompt& prompt)
     return 0;
 }
 
+// The first legal slot in a play prompt, and 0 in a blind round where every slot
+// is playable and there are no entries to walk.
+//
+// IN THE TEST TREE SINCE C3, where HandItem took its production caller. It was
+// promptstandin::chooseSlot(), the second and last half of the stand-in that
+// unparked the engine from C1 until the widgets existed - see
+// fixtures::lowestLegalBid() above, which made the same move in C2.
+//
+// FIRST LEGAL, NOT FIRST. playCard() re-prompts rather than handing the engine an
+// illegal card, so answering with slot 0 regardless is a prompt LOOP rather than
+// a failure: the game never ends and every assertion after it is unreachable.
+// That is the hazard kPromptCeiling in HumanSeatTests exists for.
+inline std::size_t firstLegalSlot(const PlayPrompt& prompt)
+{
+    for(std::size_t slot = 0 ; slot < prompt.entries.size() ; slot++)
+    {
+        if(prompt.entries[slot].legal)
+            return slot;
+    }
+
+    // Two ways here, and both mean 0: a blind round, where entries is empty and
+    // handIndex still carries the one position; and a hand with entries but
+    // nothing legal, which playCard() never raises a prompt for at all.
+    return 0;
+}
+
 // Records which of the three terminal signals fired, and lets the test thread
 // wait for any of them with a deadline.
 //

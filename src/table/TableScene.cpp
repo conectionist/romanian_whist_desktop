@@ -1,5 +1,7 @@
 #include "TableScene.h"
 
+#include "table/CardItem.h"
+#include "table/HandItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
 #include "table/TrickItem.h"
@@ -16,6 +18,48 @@ namespace
 // zero, because two cards that merely touch look like a mistake.
 constexpr qreal trickGap = 0.14;
 
+}
+
+QRectF TableScene::handRect(qreal cardHeight) const
+{
+    // NOBODY SEATED, NO STRIP. Section 14 again: a spectated table uses the whole
+    // ellipse and draws no hand area, so this is the one branch that tells the
+    // two layouts apart - and it is a rect rather than a flag, so nothing
+    // downstream needs to know which kind of game it is drawing.
+    if(!snapshot || snapshot->humanSeat < 0 || cardHeight <= 0.0)
+        return QRectF();
+
+    // THE CARD, THE LIFT ABOVE IT, AND THE SAME AGAIN BELOW.
+    //
+    // The lift number comes from the item that does the lifting rather than from
+    // a copy here - a second constant is one that drifts, and the day it did the
+    // strip would stop being tall enough for the hover it was reserved for.
+    //
+    // The margin beneath is the same fraction rather than a constant of its own,
+    // which keeps this to one number: without it the fan sits flush against the
+    // bottom of the window, which reads as a hand falling off the table rather
+    // than one held at it.
+    const qreal height = cardHeight * (1.0 + 2.0 * HandItem::liftFraction());
+
+    const QRectF scene = sceneRect();
+
+    // Clamped, so a window too short for a card does not hand back a strip taller
+    // than the table it is being cut from. The seats then have nothing left and
+    // fitsOnTable() is what refuses that, one level up.
+    if(height >= scene.height())
+        return QRectF();
+
+    return QRectF(scene.left(), scene.bottom() - height, scene.width(), height);
+}
+
+QRectF TableScene::tableRect(qreal cardHeight) const
+{
+    const QRectF hand = handRect(cardHeight);
+
+    if(hand.isEmpty())
+        return sceneRect();
+
+    return sceneRect().adjusted(0.0, 0.0, 0.0, -hand.height());
 }
 
 // A CIRCLE SIZED SO THE CARDS DO NOT TOUCH, which is a question about the card
@@ -53,7 +97,10 @@ QRectF TableScene::trickRingRect(std::size_t seatCount, qreal cardHeight) const
     const qreal spacing = occupies * (1.0 + trickGap);
     const qreal radius = spacing / (2.0 * std::sin(M_PI / static_cast<qreal>(seatCount)));
 
-    return seatlayout::ringRect(sceneRect().center(), radius);
+    // THE TABLE'S CENTRE, not the scene's. With a hand strip reserved the two
+    // differ by half its height, and a trick centred on the scene drifts down
+    // into the fan while the seats sit above it.
+    return seatlayout::ringRect(tableRect(cardHeight).center(), radius);
 }
 
 std::vector<QPointF> TableScene::trickRing(std::size_t seatCount, qreal cardHeight) const
@@ -74,8 +121,11 @@ QRectF TableScene::seatRingRect(qreal cardHeight) const
     // its width further, off the edge of the window.
     const QSizeF plaque = SeatItem::plaqueSize(cardHeight);
 
-    return sceneRect().adjusted(plaque.width() / 2.0, plaque.height() / 2.0,
-                                -plaque.width() / 2.0, -plaque.height() / 2.0);
+    // OFF THE TABLE RECT, so the bottom plaque lands above the hand rather than
+    // on it. This is the line that actually makes room: everything else about
+    // the seat ring is unchanged.
+    return tableRect(cardHeight).adjusted(plaque.width() / 2.0, plaque.height() / 2.0,
+                                          -plaque.width() / 2.0, -plaque.height() / 2.0);
 }
 
 // Whether a table of this many seats can be drawn at this card size without a
@@ -166,6 +216,14 @@ TableScene::TableScene(QObject* parent)
 {
     trick = new TrickItem(&cards);
     addItem(trick);
+
+    // ABOVE THE TRICK, so a hovered card lifts over the table rather than under
+    // it. The two never overlap once the strip is reserved, but the fan's
+    // bounding rect includes the lift and a stacking order left to chance is one
+    // that changes when items are added.
+    hand = new HandItem(&cards);
+    hand->setZValue(1.0);
+    addItem(hand);
 }
 
 void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
@@ -180,6 +238,8 @@ void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
 void TableScene::setTheme(const Theme& palette)
 {
     theme = palette;
+
+    hand->setTheme(theme);
 
     // The background is drawn by drawBackground() rather than held in an item,
     // so this has to say so - nothing else would repaint it.
@@ -282,7 +342,34 @@ void TableScene::relayout()
     }
 
     trick->setTrick(*snapshot, trickRing(snapshot->seats.size(), cardHeight),
-                    sceneRect().center(), cardHeight, theme);
+                    tableRect(cardHeight).center(), cardHeight, theme);
+
+    // THE FAN FOLLOWS THE SNAPSHOT HERE AND NOWHERE ELSE. Between turns that is
+    // the whole of it - drawn, never playable, since a snapshot carries no
+    // legality and is empty in a blind round (section 4.0). MainWindow redraws it
+    // from the prompt when it is your turn, which is the second source and the
+    // only one that can be clicked.
+    //
+    // Sized and placed even when it is empty, so the strip it sits in is the one
+    // TableScene reserved rather than wherever the last hand happened to leave
+    // it.
+    const QRectF strip = handRect(cardHeight);
+
+    hand->setCardHeight(cardHeight);
+    hand->setHand(snapshot->hand);
+    // BOTTOM-ALIGNED IN THE STRIP, one margin up - not centred in it. The lift
+    // only goes UP, so centring splits the room it needs between above and below
+    // and leaves half of it under the card doing nothing: measured at 1000x700,
+    // that put a hovered card seven pixels into the plaque above it. Sitting the
+    // card a margin off the bottom puts the whole of the lift where the lift will
+    // use it, and leaves the margin where it is visible.
+    const qreal margin = cardHeight * HandItem::liftFraction();
+
+    hand->setPos(strip.isEmpty()
+                     ? sceneRect().center()
+                     : QPointF(strip.center().x(),
+                               strip.bottom() - margin - cardHeight / 2.0));
+    hand->setVisible(!strip.isEmpty());
 }
 
 void TableScene::drawBackground(QPainter* painter, const QRectF& rect)
