@@ -5,6 +5,8 @@
 #include "ui/SnapshotLog.h"
 
 #include <chrono>
+#include <cstddef>
+#include <optional>
 #include <vector>
 
 using namespace romanian_whist;
@@ -277,4 +279,94 @@ TEST_CASE("A seat index the snapshot cannot name renders as nobody", "[log]")
     snapshot.activeSeat = 99;
 
     REQUIRE(snapshotlog::format(snapshot, kNoTime).contains("active=-"));
+}
+
+// ---- the prompt half, added in C1 ----
+//
+// What a player was ASKED, which the snapshot line cannot say: a snapshot's hand
+// carries no legality and is empty in a blind round, and the prompt is the only
+// object in the program holding legality, display order and the way back to the
+// engine's hand positions at once. So these three cases pin the two things the
+// line exists to record and the one it must never record.
+
+TEST_CASE("A bet prompt shows the range and the forbidden bid", "[log]")
+{
+    BetPrompt prompt;
+    prompt.promptId = 12;
+    prompt.handSize = 8;
+    prompt.forbiddenBet = 3;
+    prompt.isFirstPlayer = false;
+    prompt.hand.push_back(HandEntry{ Card(Rank::Ace, Suit::Spades), true });
+
+    const QString line = snapshotlog::format(prompt);
+
+    REQUIRE(line.contains("bet?"));
+    REQUIRE(line.contains("#12"));
+    REQUIRE(line.contains("0..8"));
+    REQUIRE(line.contains("forbidden=3"));
+    REQUIRE(line.contains("hand=[AS]"));
+
+    // Padded to the width of a timestamp, so the fields line up with the
+    // snapshot lines either side rather than stepping sideways.
+    REQUIRE(line.startsWith("[   ask  ]"));
+}
+
+TEST_CASE("A bet prompt with nothing forbidden says so rather than printing a bid", "[log]")
+{
+    // Disengaged for every bidder but the last, and for the last one once the
+    // bids already exceed the trick count. Printing *forbiddenBet regardless
+    // would show 0, which is a real and legal bid a reader would believe.
+    BetPrompt prompt;
+    prompt.handSize = 1;
+    prompt.forbiddenBet = std::nullopt;
+
+    const QString line = snapshotlog::format(prompt);
+
+    REQUIRE(line.contains("forbidden=-"));
+    REQUIRE_FALSE(line.contains("forbidden=0"));
+}
+
+TEST_CASE("A play prompt marks the illegal slots and carries the way back", "[log]")
+{
+    // LEGALITY IS THE WHOLE POINT of this line. It is the one thing a snapshot's
+    // hand can never show - HandEntry::legal is always true on a snapshot - so a
+    // log that dropped the parentheses would be recording the one field it was
+    // added for and losing the reason.
+    PlayPrompt prompt;
+    prompt.promptId = 13;
+    prompt.entries.push_back(HandEntry{ Card(Rank::Ace, Suit::Spades), true });
+    prompt.entries.push_back(HandEntry{ Card(Rank::King, Suit::Hearts), false });
+    prompt.handIndex = { 2, 0 };
+
+    const QString line = snapshotlog::format(prompt);
+
+    REQUIRE(line.contains("card?"));
+    REQUIRE(line.contains("#13"));
+    REQUIRE(line.contains("hand=[AS (KH)]"));
+
+    // Display slot -> the engine's hand position. Deliberately not the identity
+    // in this fixture: a formatter printing the slot numbers instead would agree
+    // with the identity and with nothing else.
+    REQUIRE(line.contains("->[2 0]"));
+}
+
+TEST_CASE("A blind play prompt counts backs and shows no card", "[log]")
+{
+    // The hand is NOT SENT AND THEN NOT DRAWN - it is not sent. A prompt that
+    // never carried the card cannot leak it through a log line either, and this
+    // is the case that says the log did not invent one from the positions it
+    // does carry.
+    PlayPrompt prompt;
+    prompt.promptId = 14;
+    prompt.blind = true;
+    prompt.handIndex = { 0 };
+
+    const QString line = snapshotlog::format(prompt);
+
+    REQUIRE(line.contains("blind"));
+    REQUIRE(line.contains("backs=1"));
+    REQUIRE(line.contains("->[0]"));
+
+    // No hand section at all, rather than an empty one: there is nothing to say.
+    REQUIRE_FALSE(line.contains("hand="));
 }

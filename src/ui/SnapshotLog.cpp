@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <vector>
 
 using romanian_whist::Card;
 using romanian_whist::RoundType;
@@ -80,6 +81,50 @@ QString describe(RoundType type)
     }
 
     return QStringLiteral("?");
+}
+
+// The hand as a prompt carries it: display order, with an illegal slot in
+// parentheses. That is the log's version of the dimming section 18 specifies,
+// and it is the one thing a snapshot's hand can never show - HandEntry::legal is
+// always true on a snapshot, and means something only here.
+//
+// Empty in a blind round, where the prompt carries no cards at all. The caller
+// prints the count of face-down backs instead; this returns an empty list rather
+// than deciding that for it.
+QString describeEntries(const std::vector<HandEntry>& entries)
+{
+    QStringList cards;
+
+    for(const HandEntry& entry : entries)
+    {
+        cards << (entry.legal ? describe(entry.card)
+                              : QStringLiteral("(%1)").arg(describe(entry.card)));
+    }
+
+    return cards.join(QStringLiteral(" "));
+}
+
+// Display slot -> the engine's own hand position, which is the mapping a click
+// handler translates through and the one place "the card played is not the card
+// clicked" comes from. Logged because it is otherwise invisible: it is carried
+// even in a blind round, where nothing else about the hand is.
+QString describeIndex(const std::vector<std::size_t>& handIndex)
+{
+    QStringList positions;
+
+    for(std::size_t position : handIndex)
+        positions << QString::number(position);
+
+    return positions.join(QStringLiteral(" "));
+}
+
+// WHERE A TIME WOULD BE, and exactly as wide, so the fields right of it line up
+// with the snapshot lines either side. A prompt is raised between snapshots and
+// has no elapsed time of its own; a column of blanks would let the eye slide
+// past the one line on the page that says what the player was asked.
+QString askPrefix()
+{
+    return QStringLiteral("[   ask  ]");
 }
 
 }
@@ -241,6 +286,68 @@ QString format(const GameSnapshot& snapshot, std::chrono::milliseconds elapsed)
 
         parts << QStringLiteral("scores[%1]").arg(scores.join(QStringLiteral(" ")));
     }
+
+    return parts.join(QStringLiteral("  "));
+}
+
+QString format(const BetPrompt& prompt)
+{
+    QStringList parts;
+
+    parts << askPrefix();
+    parts << QStringLiteral("bet?").leftJustified(6);
+
+    // The generation, which is what a submission has to name to be accepted at
+    // all. Printed because a prompt raised twice for one decision - the shape a
+    // rejected answer takes, since makeBet() re-prompts rather than passing an
+    // illegal bet on - is two lines here with different numbers on them, and is
+    // otherwise a repeat that reads like a redraw.
+    parts << QStringLiteral("#%1").arg(prompt.promptId).leftJustified(5);
+
+    // The legal range, which is 0 through the hand size: BetContext carries no
+    // trick count of its own, and the hand's size IS that number.
+    parts << QStringLiteral("0..%1").arg(prompt.handSize).leftJustified(6);
+
+    // One value or none, never a range. The engine fills it from
+    // getForbiddenBet() for the final bidder only, and leaves it empty once the
+    // bids already exceed the trick count.
+    parts << QStringLiteral("forbidden=%1")
+                 .arg(prompt.forbiddenBet ? QString::number(*prompt.forbiddenBet)
+                                          : QStringLiteral("-")).leftJustified(13);
+
+    parts << describe(prompt.roundType).leftJustified(8);
+    parts << (prompt.isFirstPlayer ? QStringLiteral("first") : QStringLiteral("-")).leftJustified(5);
+
+    // EMPTY IN A FOREHEAD OR HIDDEN ROUND, and the empty list is the point
+    // rather than a gap in the log: the bidder is not entitled to their own
+    // hand, so the prompt never carried it. A line showing cards in a blind
+    // round is the leak the prompt shape exists to prevent, and it would show
+    // up right here.
+    parts << QStringLiteral("hand=[%1]").arg(describeEntries(prompt.hand));
+
+    return parts.join(QStringLiteral("  "));
+}
+
+QString format(const PlayPrompt& prompt)
+{
+    QStringList parts;
+
+    parts << askPrefix();
+    parts << QStringLiteral("card?").leftJustified(6);
+    parts << QStringLiteral("#%1").arg(prompt.promptId).leftJustified(5);
+
+    parts << (prompt.blind ? QStringLiteral("blind") : QStringLiteral("-")).leftJustified(5);
+
+    // The two halves of a blind prompt, spelled as what they are. `entries` is
+    // empty and `handIndex` is not, so the hand is described by how many backs
+    // to draw - which is handIndex.size(), and is what section 17 says the
+    // widget clicks.
+    if(prompt.blind)
+        parts << QStringLiteral("backs=%1").arg(prompt.handIndex.size());
+    else
+        parts << QStringLiteral("hand=[%1]").arg(describeEntries(prompt.entries));
+
+    parts << QStringLiteral("->[%1]").arg(describeIndex(prompt.handIndex));
 
     return parts.join(QStringLiteral("  "));
 }

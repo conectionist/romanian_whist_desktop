@@ -6,6 +6,7 @@
 #include "table/TableView.h"
 #include "ui/CardArtWindow.h"
 #include "ui/InfoStrip.h"
+#include "ui/PromptStandIn.h"
 #include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
 
@@ -43,7 +44,30 @@ namespace
 // can be looked at twice.
 constexpr std::uint32_t kSeed = 42;
 
-GameSetup buildSpectatorSetup()
+// WHICH CHAIR THE PLAYER SITS IN. A literal for the same reason the seed above
+// is one and with the same life: section 13's setup dialog is what asks for both,
+// and phase D is where it is written. Neither is a fact about the game - the
+// engine is never told that a seat is a human's, and could not use it if it were.
+// A SeatSetup is a name and an IMoveProvider, and the human's is a SeatProvider
+// forwarding to QtMoveProvider, which is the same "a move comes from somewhere"
+// every bot seat has.
+//
+// What this index IS for is three questions the CLIENT has to answer and the
+// engine has no opinion on: which seat's provider GameController::start() fills,
+// who canSeeHand(viewer, holder) is asked on behalf of - it needs a viewer, and a
+// spectator game has none - and who is drawn at the bottom of the table in bold
+// with no thinking-beat before their turn. It is a VIEWER, not a player type.
+//
+// NON-ZERO DELIBERATELY. seatlayout puts seat 0 at bottom-centre when there is no
+// human at all, so seating seat 0 would draw a table identical to phase B's and a
+// client that dropped humanSeat on the floor would look correct. At seat 1 the
+// bottom plaque reading "Bogdan (you)" is a real assertion, and so is the
+// scoreboard bolding the second row. Bottom-centre is DERIVED from this index
+// rather than equal to it - seatlayout::seatCentres() places whichever seat it is
+// told about at the bottom and runs the rest clockwise from there.
+constexpr unsigned int kHumanSeat = 1;
+
+GameSetup buildSetup()
 {
     GameSetup setup;
 
@@ -53,23 +77,40 @@ GameSetup buildSpectatorSetup()
     // located difference into "something changed somewhere".
     setup.seats.push_back(SeatSetup{ "Ana",
         std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()) });
-    setup.seats.push_back(SeatSetup{ "Bogdan",
-        std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()) });
+
+    // THE HUMAN'S SEAT, left null on purpose. GameController::start() fills
+    // exactly this one, addressed by the index prepare() was given, with a
+    // SeatProvider forwarding to the QtMoveProvider the controller keeps - not
+    // with the provider itself, which would then be destroyed with the engine on
+    // the game thread while a click handler still pointed at it.
+    //
+    // Any OTHER null seat stays null and GameEngine::start() rejects it BY NAME,
+    // which is the behaviour worth preserving: a forgotten bot is reported
+    // rather than quietly handed to the player as a second seat.
+    setup.seats.push_back(SeatSetup{ "Bogdan", nullptr });
+
     setup.seats.push_back(SeatSetup{ "Cristina",
         std::make_unique<AiMoveProvider>(std::make_unique<FirstCardStrategy>()) });
+    // Ducking rather than LowRisk since C1, only so that the three deterministic
+    // strategies are all represented now that the seat holding this one has a
+    // person in it.
     setup.seats.push_back(SeatSetup{ "Dan",
-        std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()) });
+        std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()) });
 
     setup.structure = GameStructure::S_181;
 
     // Left at its default deliberately: it appends a Forehead round and then a
-    // Hidden one. In THIS phase they differ only in the round-type column - the
-    // log prints no hand, and a spectator game fills none for anyone anyway
-    // (Snapshot.cpp populates seat hands only once a human is seated). So the
-    // reason to keep them is narrower than a hand: a client that called every
-    // round Normal would hide the two rounds phase C stalls in, and the column
-    // is where that would show. Whether a hand survives them is phase B's
-    // question, asked once there is a table to draw one on.
+    // Hidden one. Through phase B they differed only in the round-type column,
+    // because a spectator game fills no hand for anyone - Snapshot.cpp populates
+    // seat hands only once a human is seated - so the reason to keep them was
+    // narrower than a hand: a client that called every round Normal would hide
+    // the two rounds phase C stalls in.
+    //
+    // C1 IS WHERE THEY START EARNING IT. With a seat filled, these are the two
+    // rounds in which the snapshot's hand is empty while the engine waits on a
+    // card, and section 8 is explicit that a client driving its hand from
+    // snapshots stops working in exactly them and nowhere else. A run that
+    // reaches game over has passed the test the last two rounds exist to be.
     setup.endWithForeheadAndHidden = true;
 
     setup.shuffleSeed = kSeed;
@@ -96,6 +137,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&controller, &GameController::gameOver,     this, &MainWindow::onGameOver);
     connect(&controller, &GameController::gameFailed,   this, &MainWindow::showFailure);
 
+    // THE TWO PROMPTS, connected here with the rest and for the same reasons.
+    // They carry BetPrompt and PlayPrompt, which main() registered as metatypes
+    // before this constructor ran - an unregistered one is dropped with a line
+    // on stderr and no crash, which reads as the game hanging on your turn.
+    connect(&controller, &GameController::betRequested,  this, &MainWindow::onBetRequested);
+    connect(&controller, &GameController::cardRequested, this, &MainWindow::onCardRequested);
+
     // NO UNDO HISTORY. The log is read-only and append-only, and a full game
     // appends about 1300 lines - each one recorded as an undo command nothing in
     // this window can ever replay. The unlimited maximumBlockCount in the .ui is
@@ -115,7 +163,7 @@ MainWindow::MainWindow(QWidget *parent)
     // so this is on screen only for as long as the deal takes.
     statusBar()->showMessage(tr("Dealing..."));
 
-    startGame(buildSpectatorSetup());
+    startGame(buildSetup());
 }
 
 // Section 12's four regions, minus the two that are not B2b's: the prompt bar,
@@ -258,11 +306,18 @@ void MainWindow::startGame(GameSetup setup)
     // boundary is the one thing the column exists for.
     ui->log->clear();
 
-    // std::nullopt, NOT an arbitrary seat. Pass one and that bot silently plays
-    // without a beat, and canSeeHand() is asked about a viewer who is not
-    // there. Pacing{} is right as it stands - botBeat() picks spectatorBeat on
-    // its own when there is no human seat.
-    controller.prepare(std::nullopt, Pacing{});
+    // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one
+    // optional decides three things at once and they must not be separable:
+    // GameBridge stamps it onto every snapshot as humanSeat, which is what gives
+    // canSeeHand() a viewer to be asked about; GameController builds a
+    // QtMoveProvider from it and fills that seat in start(); and botBeat() reads
+    // it to choose which beat to pace at.
+    //
+    // THE GAME IS SLOWER FROM HERE, and correctly so. Pacing{} is unchanged, but
+    // botBeat() picks spectatorBeat (250ms) only when nobody is seated and
+    // beat (700ms) when somebody is - section 4.1's split, which phases A and B
+    // only ever saw one side of. A spectator watches; a player is waited for.
+    controller.prepare(Seat{ kHumanSeat }, Pacing{});
     controller.start(std::move(setup));
 }
 
@@ -357,6 +412,61 @@ void MainWindow::updateStatus(const GameSnapshot& snapshot)
                                       QString::number(snapshot.roundCount),
                                       trick,
                                       infostrip::roundTypeText(snapshot.roundType)));
+}
+
+// THE GAME THREAD IS PARKED IN makeBet() FOR THE WHOLE OF THIS, waiting on the
+// submit() at the bottom. That is the seam phase C is about, and C1 is where it
+// runs for the first time.
+//
+// C2 REPLACES THE MIDDLE OF THIS FUNCTION with the bid strip: the prompt is
+// cached, the panel enabled, and submit() moves to the button's handler. What
+// stays is the logging and the guard.
+void MainWindow::onBetRequested(BetPrompt prompt)
+{
+    appendLine(snapshotlog::format(prompt));
+
+    // NULL IN A SPECTATOR GAME, which this window no longer starts but phase D
+    // can start in the same process - "watching" is one of the setup dialog's
+    // options. A spectator raises no prompts, so this is unreachable rather than
+    // merely rare; it is checked because the alternative to an unreachable
+    // branch is an unchecked dereference.
+    if(!controller.provider())
+        return;
+
+    controller.provider()->submit(prompt.promptId, promptstandin::chooseBet(prompt));
+}
+
+// C3 REPLACES THE MIDDLE OF THIS with HandItem: legality lighting, hover, and a
+// click that resolves to a display slot. The last line does not change - the
+// translation through handIndex is the part C1 exists to have already working
+// when the widget arrives.
+void MainWindow::onCardRequested(PlayPrompt prompt)
+{
+    appendLine(snapshotlog::format(prompt));
+
+    if(!controller.provider())
+        return;
+
+    // Never empty in a raised prompt - playCard() returns without raising one
+    // when there is nothing legal to play, and a blind round still carries one
+    // position for the card the player may not look at. Guarded because the
+    // indexing below is what "the card played is not the card clicked" is made
+    // of, and an out-of-range read is the loudest possible version of it.
+    if(prompt.handIndex.empty())
+        return;
+
+    const std::size_t slot = promptstandin::chooseSlot(prompt);
+
+    // THROUGH handIndex, never the slot itself. A display slot is a position in
+    // the fan; the engine wants a position in the hand AS IT GAVE IT, and the
+    // prompt is the only object carrying both. Submitting the slot compiles,
+    // runs, and plays a different card than the one the player pointed at -
+    // which no rule in the engine would object to.
+    //
+    // Straight to the provider rather than through a signal: submit() touches
+    // only a mutex, so it needs no event loop and the game thread wakes now
+    // rather than at the next turn of one.
+    controller.provider()->submit(prompt.promptId, prompt.handIndex[slot]);
 }
 
 void MainWindow::onGameStopped()

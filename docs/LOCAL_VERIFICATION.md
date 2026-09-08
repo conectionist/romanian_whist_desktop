@@ -93,6 +93,41 @@ running a line. That is an environment quirk, not a fault in this code.
 Swap `thread` for `address,undefined` for the ASan/UBSan pass, which needs no `setarch`. Run each
 several times with `--order rand`: a race that reproduces once in twenty is the normal case.
 
+### TSan is not silent on a clean tree, and the count is not the signal
+
+**A clean `master` reports ~83 warnings and passes every test.** Measured at C1, on Qt 6.11.2:
+83 on `master`, the same set on the C1 branch, and the number moves a little run to run because
+`--order rand` and the timing of the `QDBusConnection` thread Qt starts for itself both vary. So
+*"TSan printed warnings"* says nothing on its own, and a person who reads the count as a verdict
+will either lose an afternoon or — worse — learn to stop reading TSan at all.
+
+**Every one of them bottoms out in Qt's own libraries**, which are not built with the sanitizer, so
+TSan cannot see the synchronisation they do internally. They cluster in two places: the
+`QDBusConnection` thread allocating on the main thread and freeing on its own, with no frame of ours
+anywhere in the report; and `Theme` / `CardRenderer` / `TableScene` appearing as the *caller* into
+`QPixmap` and Qt's global caches, with the race itself between two Qt threads. **No warning on a
+clean tree shows two of this client's own threads racing**, which is the thing the pass exists to
+find.
+
+So grep rather than count, and grep for our own code on **both** sides of a race:
+
+```bash
+setarch -R $S/tests/desktop_tests --order rand > /tmp/tsan.log 2>&1
+grep -c 'WARNING: ThreadSanitizer' /tmp/tsan.log          # expect ~83, not 0
+grep -oE '(src|tests)/[A-Za-z/]+\.(cpp|h)' /tmp/tsan.log | sort | uniq -c | sort -rn
+```
+
+A file in that list that is **not** `paint/`, `table/`, `ThemeTests`, `CardRendererTests` or
+`TableSceneTests` is the one to open. Anything naming `GameBridge`, `GameController`,
+`QtMoveProvider` or `MainWindow` is a real finding — those are the objects that genuinely cross the
+thread boundary, and none of them has ever appeared here.
+
+**Take the baseline before blaming the branch.** `git worktree add /tmp/wt-master master`, then
+`git -C /tmp/wt-master submodule update --init --recursive` (a worktree does not bring the engine
+with it, and the configure step fails by name if you forget), then configure and build that tree the
+same way. Two numbers and two file lists settle in ten minutes what reading a report will not settle
+at all.
+
 ## Running the APPLICATION under ASan
 
 The test suite needs nothing special. The application needs a build of its own — the `default`

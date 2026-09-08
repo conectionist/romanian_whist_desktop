@@ -2,6 +2,7 @@
 #define GAME_FIXTURES_H
 
 #include "engine/GameBridge.h"
+#include "engine/GameController.h"
 
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/GameEngine.h>
@@ -9,19 +10,27 @@
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 
+#include <QObject>
+#include <QString>
+
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
-// The two things every test that drives a real game needs, in one place.
+// What every test that drives a real game needs, in one place.
 //
 // GameBridgeTests and GameControllerTests each carried an identical private
 // copy; A6 wanted a third with a different seat count, which is the point at
-// which copying stops being cheaper than sharing.
+// which copying stops being cheaper than sharing. C1's HumanSeatTests wanted
+// Outcome on the same grounds, which is why that moved here too.
 
 namespace fixtures
 {
@@ -44,8 +53,17 @@ inline Pacing instant()
 // Two seats by default because that is what the shutdown and bridge suites
 // want - the fewest that make a game - and four when a caller needs a table
 // with a real trick in it.
+//
+// `humanSeat` LEAVES THAT SEAT'S PROVIDER NULL, which is exactly what a caller
+// of GameController::start() is contracted to do: start() fills that one seat,
+// and only that one, with a SeatProvider forwarding to the QtMoveProvider the
+// controller owns. Engaging it here without calling prepare() with the same seat
+// builds a setup the engine rejects by name, which is a legitimate thing for a
+// test to want and the reason this is a plain parameter rather than something
+// cleverer.
 inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
-                                            std::optional<std::uint32_t> seed = 42u)
+                                            std::optional<std::uint32_t> seed = 42u,
+                                            std::optional<std::size_t> humanSeat = std::nullopt)
 {
     using namespace romanian_whist;
 
@@ -60,6 +78,15 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
 
     for(std::size_t i = 0 ; i < seatCount ; i++)
     {
+        const std::string name = i < names.size() ? names[i]
+                                                  : "Seat " + std::to_string(i + 1);
+
+        if(humanSeat && *humanSeat == i)
+        {
+            setup.seats.push_back(SeatSetup{ name, nullptr });
+            continue;
+        }
+
         std::unique_ptr<IStrategy> strategy;
 
         switch(i % 3)
@@ -69,8 +96,7 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
             default: strategy = std::make_unique<FirstCardStrategy>();  break;
         }
 
-        setup.seats.push_back(SeatSetup{ i < names.size() ? names[i]
-                                                          : "Seat " + std::to_string(i + 1),
+        setup.seats.push_back(SeatSetup{ name,
                                          std::make_unique<AiMoveProvider>(std::move(strategy)) });
     }
 
@@ -84,6 +110,111 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
 
     return setup;
 }
+
+// Records which of the three terminal signals fired, and lets the test thread
+// wait for any of them with a deadline.
+//
+// Connected DIRECT, so the handler runs on the game thread as the signal is
+// emitted. The alternative - a queued connection into this thread - would need
+// the event loop pumped to see anything, which some tests exercise deliberately
+// and the rest have no reason to.
+//
+// ON THE BRIDGE, all three, which is the seam that reaches the game thread.
+// GameController's identically named signals are the GUI's seam: mirrors,
+// re-emitted on this thread once the event loop runs. A test that wants to watch
+// a game as it happens wants the bridge; a test that wants to see what a window
+// would see wants the controller. gameFailed in particular is a MIRROR now, so a
+// direct connection to the controller's copy never fires without the event loop
+// pumped and await() would simply time out.
+//
+// Through a context object rather than context-free, which is what disconnects
+// these when the Outcome dies. An Outcome is often a scoped local while its
+// sender is not - a controller outlives the inner scope of a reuse test - so a
+// context-free lambda would leave a dangling `this` connected for game two.
+//
+// MUST NOT BE DESTROYED MID-EMIT. Qt's disconnect is thread-safe, but a slot
+// already entered runs to completion - so an Outcome goes out of scope only
+// after await() has returned and the game has been stopped or has ended.
+class Outcome
+{
+public:
+    explicit Outcome(GameController& controller)
+    {
+        QObject::connect(controller.bridge(), &GameBridge::gameOver, &context,
+                         [this](std::vector<romanian_whist::Standing>,
+                                std::vector<romanian_whist::Standing>)
+                         { record(overCount); },
+                         Qt::DirectConnection);
+
+        QObject::connect(controller.bridge(), &GameBridge::gameStopped, &context,
+                         [this]{ record(stoppedCount); },
+                         Qt::DirectConnection);
+
+        QObject::connect(controller.bridge(), &GameBridge::gameFailed, &context,
+                         [this](QString what)
+                         {
+                             {
+                                 std::lock_guard lock(mutex);
+                                 failure = what.toStdString();
+                             }
+                             record(failedCount);
+                         },
+                         Qt::DirectConnection);
+    }
+
+    // Returns false on timeout rather than hanging.
+    bool await(std::chrono::milliseconds within = std::chrono::seconds(10))
+    {
+        std::unique_lock lock(mutex);
+        return cv.wait_for(lock, within, [this]{ return finished; });
+    }
+
+    std::atomic<int> overCount{0};
+    std::atomic<int> stoppedCount{0};
+    std::atomic<int> failedCount{0};
+
+    std::string failureMessage()
+    {
+        std::lock_guard lock(mutex);
+        return failure;
+    }
+
+private:
+    void record(std::atomic<int>& counter)
+    {
+        counter++;
+
+        {
+            std::lock_guard lock(mutex);
+            finished = true;
+
+            // NOTIFIED UNDER THE LOCK, which is not the usual advice and is
+            // required here. await() returning is what lets the test destroy
+            // this Outcome, and several tests scope one tightly so it dies
+            // before the next prepare(). Notify after releasing and the waiter
+            // can return, run its assertions, leave the scope and reach
+            // ~condition_variable while this thread is still inside
+            // notify_all() - destroying a condition variable out from under a
+            // notifier is undefined behaviour, and ThreadSanitizer reports it
+            // as pthread_cond_destroy racing pthread_cond_broadcast.
+            //
+            // Holding the mutex across the notify closes it: the waiter cannot
+            // return from wait_for() until it reacquires the mutex, and it
+            // cannot do that until this scope ends.
+            cv.notify_all();
+        }
+    }
+
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool finished = false;
+    std::string failure;
+
+    // LAST, so it is destroyed FIRST: Qt drops every connection made with it as
+    // context before the mutex and the condition variable those handlers touch
+    // are gone.
+    QObject context;
+};
 
 } // namespace fixtures
 

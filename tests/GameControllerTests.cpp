@@ -66,111 +66,14 @@ public:
     }
 };
 
-// Records which of the two terminal signals fired, and lets the test thread
-// wait for either with a deadline.
+// IN tests/GameFixtures.h SINCE C1, where HumanSeatTests wanted a second copy
+// of it. The same rule that put instant() and buildSetup() there and that the
+// fixture header states outright: a third copy is the point at which copying
+// stops being cheaper than sharing.
 //
-// Connected DIRECT, so the handler runs on the game thread as the signal is
-// emitted. The alternative - a queued connection into this thread - would need
-// the event loop pumped to see anything, which is what the last tests in this
-// file exercise deliberately and the rest have no reason to.
-//
-// ON THE BRIDGE, all three, which is the seam that reaches the game thread.
-// GameController's identically named signals are the GUI's seam: mirrors,
-// re-emitted on this thread once the event loop runs. A test that wants to
-// watch a game as it happens wants the bridge; a test that wants to see what a
-// window would see wants the controller.
-//
-// Through a context object rather than context-free, which is what disconnects
-// these when the Outcome dies. An Outcome is a scoped local while its sender is
-// not: `controller` outlives the reuse test's inner scope, so a context-free
-// lambda leaves a dangling `this` connected for game two.
-//
-// MUST NOT BE DESTROYED MID-EMIT. Qt's disconnect is thread-safe, but a slot
-// already entered runs to completion - so an Outcome goes out of scope only
-// after await() has returned and the game has been stopped or has ended.
-class Outcome
-{
-public:
-    explicit Outcome(GameController& controller)
-    {
-        QObject::connect(controller.bridge(), &GameBridge::gameOver, &context,
-                         [this](std::vector<Standing>, std::vector<Standing>)
-                         { record(overCount); },
-                         Qt::DirectConnection);
-
-        QObject::connect(controller.bridge(), &GameBridge::gameStopped, &context,
-                         [this]{ record(stoppedCount); },
-                         Qt::DirectConnection);
-
-        // ON THE BRIDGE, like the two above, and it has to be: GameController's
-        // gameFailed is a MIRROR now, re-emitted from a queued relay on this
-        // thread. A direct connection to the mirror never fires without the
-        // event loop pumped, and await() below would simply time out.
-        QObject::connect(controller.bridge(), &GameBridge::gameFailed, &context,
-                         [this](QString what)
-                         {
-                             {
-                                 std::lock_guard lock(mutex);
-                                 failure = what.toStdString();
-                             }
-                             record(failedCount);
-                         },
-                         Qt::DirectConnection);
-    }
-
-    // Returns false on timeout rather than hanging.
-    bool await(std::chrono::milliseconds within = std::chrono::seconds(10))
-    {
-        std::unique_lock lock(mutex);
-        return cv.wait_for(lock, within, [this]{ return finished; });
-    }
-
-    std::atomic<int> overCount{0};
-    std::atomic<int> stoppedCount{0};
-    std::atomic<int> failedCount{0};
-
-    std::string failureMessage()
-    {
-        std::lock_guard lock(mutex);
-        return failure;
-    }
-
-private:
-    void record(std::atomic<int>& counter)
-    {
-        counter++;
-
-        {
-            std::lock_guard lock(mutex);
-            finished = true;
-
-            // NOTIFIED UNDER THE LOCK, which is not the usual advice and is
-            // required here. await() returning is what lets the test destroy
-            // this Outcome, and several tests scope one tightly so it dies
-            // before the next prepare(). Notify after releasing and the waiter
-            // can return, run its assertions, leave the scope and reach
-            // ~condition_variable while this thread is still inside
-            // notify_all() - destroying a condition variable out from under a
-            // notifier is undefined behaviour, and ThreadSanitizer reports it
-            // as pthread_cond_destroy racing pthread_cond_broadcast.
-            //
-            // Holding the mutex across the notify closes it: the waiter cannot
-            // return from wait_for() until it reacquires the mutex, and it
-            // cannot do that until this scope ends.
-            cv.notify_all();
-        }
-    }
-
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool finished = false;
-    std::string failure;
-
-    // LAST, so it is destroyed FIRST: Qt drops every connection made with it as
-    // context before the mutex and the condition variable those handlers touch
-    // are gone.
-    QObject context;
-};
+// Named here rather than qualified at each use so every call site below reads
+// exactly as it did.
+using fixtures::Outcome;
 }
 
 TEST_CASE("stop() before prepare() does nothing and does not crash", "[controller]")

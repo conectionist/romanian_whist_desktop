@@ -86,6 +86,13 @@ qt_add_library(desktop_core STATIC
     src/ui/InfoStrip.cpp
     src/ui/ScoreboardWidget.h
     src/ui/ScoreboardWidget.cpp
+
+    # TEMPORARY, AND REMOVED IN C3 along with the two MainWindow slots that call
+    # it. See its header: it answers the prompts a seated human raises so that
+    # C1 can prove the whole prompt seam before C2 and C3 build the widgets that
+    # will answer them for real.
+    src/ui/PromptStandIn.h
+    src/ui/PromptStandIn.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
