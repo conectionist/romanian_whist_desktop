@@ -623,6 +623,8 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
 > the phase while that machinery is still fresh.
 
 - [ ] The threading group above.
+- [ ] **Before it, read the box below.** The hand's prompt/snapshot split has a latent hang in it that
+      only this phase can wake up.
 - [ ] The clock (§19) — the contrasting case: pure GUI-thread state on a `QTimer`, and it must stay
       off the snapshot.
 - [ ] `QPropertyAnimation` on `CardItem::pos`, to §18.2's budget. **Animation targets go through the
@@ -632,6 +634,34 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
 - [ ] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
       `KNOWN_ISSUES.md`, deferred out of B2b and belonging here because it is §18.1's
       device-pixel-ratio work rather than anything about the strip.
+
+
+> **A snapshot published while a prompt is live re-opens C3's hang, and this is the phase that could
+> publish one.** C3 shipped a defect where `TableScene::relayout()` re-sourced the fan from the
+> snapshot mid-turn — in a blind round that empties the fan, leaving nothing to click and an engine
+> parked forever. The fix was `HandItem` holding which of its two sources is on screen, and the
+> prompt outranking the snapshot while it is live.
+>
+> **That fix has one seam left.** `setPlayable(false)` both disables the fan *and* ends the prompt's
+> claim on it, and `MainWindow::render()` calls it unconditionally on every snapshot. So a snapshot
+> arriving mid-prompt still leaves the fan standing but **unplayable** — the same hang through a
+> different door. Measured, not supposed: set a blind prompt, arm it, then make `render()`'s two
+> calls in its order, and `isPlayable(0)` comes back false.
+>
+> **It is unreachable today**, and the reason is worth knowing before anything here changes it:
+> `GameBridge::onCardRequested()` calls `publish()` *before* the provider raises the prompt, both
+> cross the boundary queued in that order, and the game thread is blocked in the provider for the
+> whole wait — so `render()` always runs *before* `onCardRequested()` and never during it.
+>
+> **What would break that is a publish that does not come from the parked game thread.** Anything in
+> this phase that repaints the table on its own schedule is the candidate — and note the clock is
+> explicitly *not* one, because §19 keeps `elapsed` off the snapshot and on a `QTimer`, which is a
+> second reason for that rule beyond the stutter it was written for.
+>
+> **The hardening, if you want it before the fact:** let `setHand()` set `playable = false` when it
+> *accepts* a hand, and drop the separate call from `render()`. Then "the snapshot owns the fan" and
+> "the fan is not clickable" are one fact rather than two that a caller can set apart — which is what
+> §4.4's "DISABLED, always" says anyway.
 
 **Done when:** Part II is on screen.
 
@@ -670,6 +700,7 @@ Symptom first, because that is what you have.
 | The bid strip draws over your own seat plaque | It was placed against the viewport instead of `TableScene::overlayBand()` — the bottom of the table is where the seated player is drawn | §15.1 |
 | The card played is not the card pointed at, only in the overlaps | The fan's hit test walks forwards. Cards overlap and later ones are on top, so the slot is the LAST box containing the point | §14 |
 | A hovered card rises into your own plaque | The fan is centred in its strip rather than bottom-aligned, so half the lift reserve sits below the card | §15.2 |
+| The game stops on your turn in a Forehead or Hidden round, after a resize | The fan was re-sourced from the snapshot mid-prompt, and a blind round's snapshot hand is empty. `HandItem` refuses that while a prompt is live | §17, phase E's box |
 | Closing the window seems to leave the process running, tested with a script | `xdotool windowclose` destroys the window without a `QCloseEvent`, so `closeEvent()` never runs. Use `wmctrl -ic` | C2's findings |
 | Nothing to click in the last two rounds | The hand is being driven by the snapshot instead of `PlayPrompt` | §4.0, §17 |
 | Game two plays itself at full speed | `QtMoveProvider::abandoned` latched and reused | §8, phase D |
