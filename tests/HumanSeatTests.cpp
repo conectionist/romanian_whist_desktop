@@ -7,7 +7,6 @@
 #include "engine/GameController.h"
 #include "engine/QtMoveProvider.h"
 
-#include "ui/PromptStandIn.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/RoundType.h>
@@ -176,7 +175,7 @@ Transcript playSeatedGame()
                          // prompt shape exists for and the one a click handler
                          // will make. Submitting the slot itself would play a
                          // different card and no engine rule would object.
-                         const std::size_t slot = promptstandin::chooseSlot(prompt);
+                         const std::size_t slot = fixtures::firstLegalSlot(prompt);
                          provider.submit(prompt.promptId, prompt.handIndex[slot]);
                      });
 
@@ -277,7 +276,7 @@ TEST_CASE("A seated game reaches game over through the controller", "[humanseat]
     QObject::connect(controller.bridge(), &GameBridge::cardRequested, &context,
                      [&controller](PlayPrompt prompt)
                      {
-                         const std::size_t slot = promptstandin::chooseSlot(prompt);
+                         const std::size_t slot = fixtures::firstLegalSlot(prompt);
                          controller.provider()->submit(prompt.promptId,
                                                        prompt.handIndex[slot]);
                      },
@@ -348,7 +347,7 @@ TEST_CASE("Both prompts reach the GUI through the controller's queued relay", "[
                      [&](PlayPrompt prompt)
                      {
                          cards++;
-                         const std::size_t slot = promptstandin::chooseSlot(prompt);
+                         const std::size_t slot = fixtures::firstLegalSlot(prompt);
                          controller.provider()->submit(prompt.promptId,
                                                        prompt.handIndex[slot]);
                      });

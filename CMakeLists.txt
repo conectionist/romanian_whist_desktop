@@ -73,6 +73,8 @@ qt_add_library(desktop_core STATIC
     src/table/SeatItem.cpp
     src/table/TrickItem.h
     src/table/TrickItem.cpp
+    src/table/HandItem.h
+    src/table/HandItem.cpp
     src/table/TableScene.h
     src/table/TableScene.cpp
     src/table/TableView.h
@@ -89,13 +91,8 @@ qt_add_library(desktop_core STATIC
 
     src/ui/BidStrip.h
     src/ui/BidStrip.cpp
-
-    # TEMPORARY, AND REMOVED IN C3 along with the MainWindow slot that calls it.
-    # See its header: it answered both prompts a seated human raises so that C1
-    # could prove the whole prompt seam before any widget existed. C2's BidStrip
-    # took the bet half; the card half goes when HandItem lands.
-    src/ui/PromptStandIn.h
-    src/ui/PromptStandIn.cpp
+    src/ui/PromptBar.h
+    src/ui/PromptBar.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares

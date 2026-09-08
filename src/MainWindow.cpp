@@ -2,12 +2,13 @@
 #include "ui_MainWindow.h"
 
 #include "paint/Theme.h"
+#include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
 #include "ui/InfoStrip.h"
-#include "ui/PromptStandIn.h"
+#include "ui/PromptBar.h"
 #include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
 
@@ -19,6 +20,7 @@
 
 #include <QBoxLayout>
 #include <QCloseEvent>
+#include <QKeyEvent>
 #include <QDockWidget>
 #include <QGuiApplication>
 #include <QMenu>
@@ -193,10 +195,21 @@ void MainWindow::buildTable()
 
     connect(bidStrip, &BidStrip::bidChosen, this, &MainWindow::onBidChosen);
 
+    // OWNED BY THE SCENE, not by this window: the fan is a QGraphicsObject in the
+    // table rather than a widget, because section 18.2 animates a card from it to
+    // the table on CardItem::pos. This is a handle for driving its second source
+    // - the prompt - which is the one thing a snapshot cannot supply.
+    hand = scene->handItem();
+
+    connect(hand, &HandItem::cardClicked, this, &MainWindow::onCardPicked);
+
+    promptBar = new PromptBar(this);
+
     scene->setTheme(theme);
     infoStrip->setTheme(theme);
     scoreboard->setTheme(theme);
     bidStrip->setTheme(theme);
+    promptBar->setTheme(theme);
 
     // The strip full width across the top, then the table and the scoreboard
     // side by side. The table takes the stretch: the scoreboard is as wide as
@@ -214,6 +227,12 @@ void MainWindow::buildTable()
     stack->setSpacing(0);
     stack->addWidget(infoStrip);
     stack->addLayout(body, 1);
+
+    // SECTION 12'S FOURTH REGION, full width beneath the table AND the
+    // scoreboard, which is where that section's mockup draws it: it is where the
+    // game talks to you, and one line always in the same place is the whole
+    // point of it.
+    stack->addWidget(promptBar);
 
     setCentralWidget(central);
 }
@@ -380,11 +399,19 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
 
     appendLine(snapshotlog::format(*snapshot, elapsed));
 
+    lastSnapshot = snapshot;
+
     // THE TABLE AND THE LOG READ THE SAME FRAME, which is what makes the log a
     // diagnostic for the table rather than a second opinion about it: a card in
     // the wrong place with the right card in the log is a layout bug, and the
     // two being on one line together is what says so.
+    //
+    // The fan goes with it, inside setSnapshot(): section 4.4's "DISABLED,
+    // always". A snapshot's hand is what a player LOOKS at between turns - it
+    // carries no legality and is empty in a blind round, so it can never be the
+    // thing they click.
     scene->setSnapshot(snapshot);
+    hand->setPlayable(false);
     infoStrip->setSnapshot(*snapshot);
     scoreboard->setSnapshot(*snapshot);
 
@@ -473,26 +500,58 @@ void MainWindow::onBidChosen(unsigned int bet)
     controller.provider()->submit(activeBetPrompt.promptId, bet);
 }
 
-// C3 REPLACES THE MIDDLE OF THIS with HandItem: legality lighting, hover, and a
-// click that resolves to a display slot. The last line does not change - the
-// translation through handIndex is the part C1 exists to have already working
-// when the widget arrives.
+// THE ENGINE IS PARKED IN playCard() FROM HERE UNTIL onCardPicked(), which is
+// the other half of the wait section 4.4 is about - and the one C5's remaining
+// case closes over, because it is a different park from the bid's.
 void MainWindow::onCardRequested(PlayPrompt prompt)
 {
     appendLine(snapshotlog::format(prompt));
 
-    if(!controller.provider())
+    // BY VALUE, and it is handIndex that has to survive rather than only the
+    // promptId: the mapping from what the player pointed at back to what the
+    // engine holds travels with the prompt and with nothing else.
+    activePrompt = prompt;
+
+    // THE SECOND SOURCE. Between turns render() draws this fan from the
+    // snapshot, disabled; this is the redraw that gives it legality and makes it
+    // clickable - and in a blind round, the backs that are all there is to draw
+    // (section 17).
+    hand->setPrompt(prompt);
+    hand->setPlayable(true);
+
+    promptBar->setFields(promptbar::fieldsFor(prompt, lastSnapshot ? *lastSnapshot : GameSnapshot{}));
+}
+
+void MainWindow::onCardPicked(std::size_t slot)
+{
+    // THE UI'S OWN RULE ABOUT WHAT A CLICK MEANS, and not the same check as the
+    // provider's. HandItem refuses an illegal slot already; this is the window
+    // saying so too, because the digit keys reach here by another road and a
+    // guard that lives only in the item is one the keyboard can walk around.
+    // The provider checks again for its own reasons - it will not hand the engine
+    // something it would throw on.
+    //
+    // Written around `entries` being empty rather than assuming it is filled: a
+    // blind round has no entries at all and every slot is playable.
+    if(!activePrompt.entries.empty() &&
+       (slot >= activePrompt.entries.size() || !activePrompt.entries[slot].legal))
+    {
         return;
+    }
 
     // Never empty in a raised prompt - playCard() returns without raising one
     // when there is nothing legal to play, and a blind round still carries one
     // position for the card the player may not look at. Guarded because the
     // indexing below is what "the card played is not the card clicked" is made
     // of, and an out-of-range read is the loudest possible version of it.
-    if(prompt.handIndex.empty())
+    if(slot >= activePrompt.handIndex.size())
         return;
 
-    const std::size_t slot = promptstandin::chooseSlot(prompt);
+    hand->setPlayable(false);
+    promptBar->setFields(promptbar::idle());
+
+    if(!controller.provider())
+        return;
 
     // THROUGH handIndex, never the slot itself. A display slot is a position in
     // the fan; the engine wants a position in the hand AS IT GAVE IT, and the
@@ -503,7 +562,7 @@ void MainWindow::onCardRequested(PlayPrompt prompt)
     // Straight to the provider rather than through a signal: submit() touches
     // only a mutex, so it needs no event loop and the game thread wakes now
     // rather than at the next turn of one.
-    controller.provider()->submit(prompt.promptId, prompt.handIndex[slot]);
+    controller.provider()->submit(activePrompt.promptId, activePrompt.handIndex[slot]);
 }
 
 // THE THREE ENDINGS ALL HIDE THE STRIP, and it is one line in each rather than
@@ -513,9 +572,49 @@ void MainWindow::onCardRequested(PlayPrompt prompt)
 // button whose click would submit into a provider whose engine is gone. The
 // promptId gate would drop that answer, so this is the belt to its braces - but
 // a control that looks live and does nothing is its own defect.
+void MainWindow::keyPressEvent(QKeyEvent* event)
+{
+    // UNMODIFIED DIGITS ONLY, the guard C2's review put on the bid strip and for
+    // the same reason: a played card is irrevocable, and Ctrl+1 belongs to
+    // whatever the window binds it to. The keypad's own modifier is masked back
+    // in, because keypad 1 is the same 1 to the person pressing it.
+    if((event->modifiers() & ~Qt::KeypadModifier) != Qt::NoModifier)
+    {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
+    // ONE-BASED, which is section 15.2's own numbering and the terminal's: the
+    // leftmost card is 1, not 0. The bid strip's digits are ZERO-based because a
+    // bid of zero is a real bid - the two are different questions and the
+    // off-by-one between them is deliberate rather than an oversight.
+    const int typed = event->key() - Qt::Key_1;
+
+    if(typed < 0 || !hand)
+    {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
+    // ASKED OF THE FAN, not re-decided here. isPlayable() is the rule the mouse
+    // goes through, so a key cannot play a card a click would refuse.
+    if(!hand->isPlayable(static_cast<std::size_t>(typed)))
+    {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
+    // Through activate() rather than straight to onCardPicked(), so both roads
+    // run the item's own rule and the fan can never be told about a play it did
+    // not make.
+    hand->activate(static_cast<std::size_t>(typed));
+}
+
 void MainWindow::onGameStopped()
 {
     bidStrip->hide();
+    hand->setPlayable(false);
+    promptBar->setFields(promptbar::idle());
 
     appendLine(tr("-- stopped --"));
 
@@ -533,6 +632,8 @@ void MainWindow::onGameStopped()
 void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standing> winners)
 {
     bidStrip->hide();
+    hand->setPlayable(false);
+    promptBar->setFields(promptbar::idle());
 
     appendLine(tr("-- game over --"));
 
@@ -563,6 +664,8 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
 void MainWindow::showFailure(QString what)
 {
     bidStrip->hide();
+    hand->setPlayable(false);
+    promptBar->setFields(promptbar::idle());
 
     appendLine(tr("-- the game thread failed: %1 --").arg(what));
     statusBar()->showMessage(tr("The game ended in an error: %1").arg(what));

@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "table/TableScene.h"
+#include "table/HandItem.h"
 #include "table/SeatItem.h"
+#include "engine/Prompts.h"
 #include "paint/Theme.h"
 
 #include <QImage>
@@ -189,4 +191,143 @@ TEST_CASE("The bottom band is empty before there is anything to place it against
     scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
 
     REQUIRE(scene.overlayBand().isEmpty());
+}
+
+// ---- the strip reserved for the hand, added in C3 ----
+//
+// The bid strip could borrow the middle of the table because bidding finishes
+// before the round's first card is played. A HAND CANNOT: cards are on the table
+// while you are choosing one. And there was no room to borrow anyway - C2
+// measured thirteen pixels between the trick ring and the bottom plaque - so the
+// table gives the hand a strip and lays itself out in what is left.
+//
+// Section 14 is where this comes from ("a spectated game has no human... and the
+// bottom hand area is not drawn at all") and SeatLayout.h has been describing the
+// mechanism since B2: "no bottom strip is reserved for a hand, and that is the
+// caller's business: it passes a shorter rect."
+
+TEST_CASE("A seated table reserves a strip and lays out above it", "[table]")
+{
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
+
+    const qreal cardHeight = Theme::light().cardHeightFor(played);
+
+    const QRectF strip = scene.handRect(cardHeight);
+    const QRectF table = scene.tableRect(cardHeight);
+
+    REQUIRE_FALSE(strip.isEmpty());
+
+    // AT LEAST A CARD TALL, which is the whole requirement: a fan drawn into a
+    // strip shorter than a card is a fan with its top cut off.
+    REQUIRE(strip.height() >= cardHeight);
+
+    // The two partition the scene between them, with no gap and no overlap - a
+    // gap is wasted green and an overlap is the collision this exists to stop.
+    REQUIRE(table.bottom() <= strip.top() + 0.001);
+    REQUIRE(table.bottom() >= strip.top() - 0.001);
+    REQUIRE(strip.bottom() == played.height());
+    REQUIRE(table.height() < played.height());
+}
+
+TEST_CASE("A spectated table reserves nothing", "[table]")
+{
+    // SECTION 14'S RULE, and the reason it is a rect rather than a flag: with
+    // nobody seated there is no hand to draw, so the seats take the whole
+    // ellipse and nothing downstream needs to know which kind of game it is.
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, -1)));
+
+    const qreal cardHeight = Theme::light().cardHeightFor(played);
+
+    REQUIRE(scene.handRect(cardHeight).isEmpty());
+    REQUIRE(scene.tableRect(cardHeight) == scene.sceneRect());
+}
+
+TEST_CASE("The lowest plaque clears the reserved strip", "[table]")
+{
+    // THE COLLISION THE WHOLE CHANGE EXISTS TO PREVENT, and the direct descendant
+    // of C2's band case: the seated player is drawn at bottom-centre, so without
+    // a shorter rect their own plaque sits exactly where their hand goes.
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
+
+    const qreal cardHeight = Theme::light().cardHeightFor(played);
+
+    const QRectF strip = scene.handRect(cardHeight);
+    const qreal plaqueHeight = SeatItem::plaqueSize(cardHeight).height();
+
+    // seatRingRect insets the TABLE rect by half a plaque, so the lowest centre
+    // is at most tableRect.bottom() - plaqueH/2 and the plaque's own bottom edge
+    // reaches tableRect.bottom() exactly. Bounded here from the public facts
+    // rather than read back off the scene.
+    const qreal lowestPlaqueBottom = scene.tableRect(cardHeight).bottom();
+
+    REQUIRE(lowestPlaqueBottom <= strip.top() + 0.001);
+    REQUIRE(plaqueHeight > 0.0);
+}
+
+TEST_CASE("The bid strip's band survives the reserved strip", "[table]")
+{
+    // C2'S GUARANTEE, re-asserted now that the plaques have moved. The band is
+    // computed from the plaque positions, so reserving the hand strip moved it
+    // without a line of overlayBand() changing - which is exactly the kind of
+    // thing that is true until it is not.
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
+
+    const QRectF band = scene.overlayBand();
+    const qreal cardHeight = Theme::light().cardHeightFor(played);
+
+    REQUIRE_FALSE(band.isEmpty());
+
+    // Above the hand as well as above the plaque, which is the new half: the
+    // strip must not cover the cards you are bidding on.
+    REQUIRE(band.bottom() <= scene.handRect(cardHeight).top());
+}
+
+TEST_CASE("A resize during a play prompt leaves the prompt's fan standing", "[table]")
+{
+    // THE TWO SOURCES MEETING AT THE WORST MOMENT. relayout() re-sources the fan
+    // from the snapshot, and TableView calls it on every viewport resize - which
+    // includes the one the View > Log toggle causes, at any moment the user likes,
+    // while the engine is parked in playCard() waiting to be told which card.
+    //
+    // seatedTable()'s snapshot carries no hand, which is not a gap in the fixture:
+    // that is exactly the shape a Forehead or Hidden round publishes (section 17),
+    // and a fan re-sourced from it here empties out. Nothing left to click, no
+    // digit key in range, and an answer the game can never be given.
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
+
+    PlayPrompt prompt;
+
+    prompt.promptId = 5;
+    prompt.blind = true;
+    prompt.handIndex.push_back(0);
+
+    scene.handItem()->setPrompt(prompt);
+    scene.handItem()->setPlayable(true);
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), QSizeF(played.width() * 0.7,
+                                                        played.height() * 0.7)));
+    scene.relayout();
+
+    REQUIRE(scene.handItem()->slotCount() == 1);
+    REQUIRE(scene.handItem()->isPlayable(0));
 }

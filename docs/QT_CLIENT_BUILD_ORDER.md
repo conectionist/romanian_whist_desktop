@@ -381,17 +381,19 @@ comes from `isWinning` and is never recomputed.
       `MainWindow::onBetRequested()` becomes the panel; the logging and the null guard stay.
       *(`chooseBet()` moved to `fixtures::lowestLegalBid()` rather than staying in `src/` as
       production code only tests call.)*
-- [ ] **C3 — playing.** `HandItem` itself, which B2 could not build — the fan from
+- [x] **C3 — playing.** `HandItem` itself, which B2 could not build — the fan from
       `GameSnapshot::hand` between turns, drawn disabled, and the bottom strip the table reserves for
       it. Then `PlayPrompt` into the hand: legality lighting, hover, click →
       `handIndex[slot]` → `submit(promptId, …)`. Never a fan position, never a cached snapshot.
-      **Then delete `src/ui/PromptStandIn.{h,cpp}`, `tests/PromptStandInTests.cpp` and their two
-      `CMakeLists.txt` entries** — and note `tests/HumanSeatTests.cpp` calls the same two functions,
-      so it needs a scripted answerer of its own at that point rather than deleting with them.
-- [ ] **C4 — blind rounds.** Forehead and Hidden: `handIndex.size()` face-down backs, clickable;
-      other seats' cards from `SeatView::hand` (§17). **Both halves land here now**, including the
-      one that is pure rendering — `seats[i].hand` is empty for the whole of phase B for the same
-      reason the fan is, so C is the first phase in which §17 can be drawn at all.
+      The stand-in is gone; `chooseSlot()` went to `fixtures::firstLegalSlot()` beside C2's
+      `lowestLegalBid()`. **§12's prompt bar landed here too** — it is what explains a dimmed fan,
+      which is a question only this step raises.
+- [x] **…and C4's clickable backs, which C3 could not leave behind.** See the box below.
+- [ ] **C4 — blind rounds.** ~~`handIndex.size()` face-down backs, clickable~~ — **done in C3**, which
+      could not delete the stand-in without them. What is left is the other half: **other seats'
+      cards from `SeatView::hand`** in a Forehead round (§17), drawn face-up on their plaques. That
+      is a `SeatItem` change rather than a `HandItem` one, and `seats[i].hand` has been populated
+      since C1 with nothing reading it.
 - [ ] **C5 — shutdown while parked.** Close the window with the bid panel open. This is the
       `GameAbandoned` path and the only one that should produce it. **Both halves are already
       standing as of C2** — `GameControllerTests`' "A stop while the game is parked on a prompt ends
@@ -530,6 +532,50 @@ has strategies for anything better; a stand-in that played well would be one som
   only for the final bidder. `TableView` watches it for `LayoutRequest` and `Show` rather than
   placing it once, because a window nobody resizes would never correct itself.
 
+
+### Why C3 took C4's backs, and where the hand went
+
+**Deleting the stand-in without them stalls the last two rounds.** In Forehead and Hidden a play
+prompt's `entries` are empty and `handIndex.size()` face-down backs are all there is to draw — which
+this document assigned to C4. But C3 is what removes `chooseSlot()`, so a C3 that stopped at faces
+would end in a client that cannot finish a game, and every run would have to be abandoned at round
+25. `CardItem::setBack()` already existed, so the backs are a branch in `rebuild()` and nothing more.
+C4 keeps the half that is genuinely separate work.
+
+**And the hand could not do what the bid strip did.** C2 floated its strip over the middle of the
+table because bidding finishes before the round's first card is played. A hand cannot: cards are on
+the table while you are choosing one. §14 had the answer already — *"a spectated game has no human…
+and the bottom hand area is not drawn at all"* — and `SeatLayout.h` had been describing the mechanism
+since B2: *"no bottom strip is reserved for a hand, and that is the caller's business: it passes a
+shorter rect."* `TableScene::tableRect()` is that caller, and every other measurement on the table
+now comes off it.
+
+### What the C3 run found
+
+- **A test that drives a private hit test through a public shortcut tests neither.** The case for
+  "the slot under an overlap is the upper card" called `activate(1)` directly — which asserts only
+  that the signal carries what it was handed, whichever way `slotAt()` walks. Mutating the walk to go
+  forwards **passed**. It sends a real `QGraphicsSceneMouseEvent` through the scene now, and the same
+  mutation fails it. **The shape to look for: a case whose name is about geometry but whose body
+  never touches any.**
+- **The lift constant was in two files within an hour of being written.** `TableScene` reserved
+  `card * 1.12` and `HandItem` lifted by `0.12`, and nothing would have caught them drifting apart
+  except a hovered card leaving the strip. `HandItem::liftFraction()` is the one copy now — the same
+  argument `TrickItem::cardFootprint()` makes for the tilt.
+- **Centring the fan in its strip puts half the lift room where the lift never goes.** The hover only
+  rises, so a centred card had 7 px of headroom against a 14 px lift and went that far into the
+  plaque above. The fan is bottom-aligned in the strip, one margin up, and the whole reserve is where
+  the lift will use it. **Measured, not judged: `sceneBoundingRect()` against the scene rect.**
+- **`slots` is a Qt macro.** `std::vector<Slot> slots;` expands to `std::vector<Slot> ;` and the
+  compiler says *"declaration does not declare anything"* against a line that looks perfectly
+  correct. The member is `fan`.
+- **Driving the running client with `xdotool` sent keystrokes into another application** once the app
+  had exited under its own watchdog — the loop kept typing and the keys landed on whatever had focus.
+  Global `xdotool key` has no target; `import -window` on a dead window grabs something else. **The
+  by-eye pass on a phase this interactive belongs to a person**, and this is the phase that settled
+  that. The offscreen render — real widgets, real scene, no window — covers layout and legality
+  without touching the desktop at all, and is what the earlier findings above were measured on.
+
 ---
 
 ## Phase D — the game around the game
@@ -577,6 +623,8 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
 > the phase while that machinery is still fresh.
 
 - [ ] The threading group above.
+- [ ] **Before it, read the box below.** The hand's prompt/snapshot split has a latent hang in it that
+      only this phase can wake up.
 - [ ] The clock (§19) — the contrasting case: pure GUI-thread state on a `QTimer`, and it must stay
       off the snapshot.
 - [ ] `QPropertyAnimation` on `CardItem::pos`, to §18.2's budget. **Animation targets go through the
@@ -586,6 +634,34 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
 - [ ] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
       `KNOWN_ISSUES.md`, deferred out of B2b and belonging here because it is §18.1's
       device-pixel-ratio work rather than anything about the strip.
+
+
+> **A snapshot published while a prompt is live re-opens C3's hang, and this is the phase that could
+> publish one.** C3 shipped a defect where `TableScene::relayout()` re-sourced the fan from the
+> snapshot mid-turn — in a blind round that empties the fan, leaving nothing to click and an engine
+> parked forever. The fix was `HandItem` holding which of its two sources is on screen, and the
+> prompt outranking the snapshot while it is live.
+>
+> **That fix has one seam left.** `setPlayable(false)` both disables the fan *and* ends the prompt's
+> claim on it, and `MainWindow::render()` calls it unconditionally on every snapshot. So a snapshot
+> arriving mid-prompt still leaves the fan standing but **unplayable** — the same hang through a
+> different door. Measured, not supposed: set a blind prompt, arm it, then make `render()`'s two
+> calls in its order, and `isPlayable(0)` comes back false.
+>
+> **It is unreachable today**, and the reason is worth knowing before anything here changes it:
+> `GameBridge::onCardRequested()` calls `publish()` *before* the provider raises the prompt, both
+> cross the boundary queued in that order, and the game thread is blocked in the provider for the
+> whole wait — so `render()` always runs *before* `onCardRequested()` and never during it.
+>
+> **What would break that is a publish that does not come from the parked game thread.** Anything in
+> this phase that repaints the table on its own schedule is the candidate — and note the clock is
+> explicitly *not* one, because §19 keeps `elapsed` off the snapshot and on a `QTimer`, which is a
+> second reason for that rule beyond the stutter it was written for.
+>
+> **The hardening, if you want it before the fact:** let `setHand()` set `playable = false` when it
+> *accepts* a hand, and drop the separate call from `render()`. Then "the snapshot owns the fan" and
+> "the fan is not clickable" are one fact rather than two that a caller can set apart — which is what
+> §4.4's "DISABLED, always" says anyway.
 
 **Done when:** Part II is on screen.
 
@@ -622,6 +698,9 @@ Symptom first, because that is what you have.
 | "It played a card I did not click" | No `promptId` gate; a stray click armed the next prompt | §4.2 |
 | A seated game never ends and the log stops moving, with no hang in the window | An answer the provider will not accept. `makeBet()` and `playCard()` re-prompt rather than pass an illegal one on, so a widget that keeps sending it is asked again forever | §4.2 |
 | The bid strip draws over your own seat plaque | It was placed against the viewport instead of `TableScene::overlayBand()` — the bottom of the table is where the seated player is drawn | §15.1 |
+| The card played is not the card pointed at, only in the overlaps | The fan's hit test walks forwards. Cards overlap and later ones are on top, so the slot is the LAST box containing the point | §14 |
+| A hovered card rises into your own plaque | The fan is centred in its strip rather than bottom-aligned, so half the lift reserve sits below the card | §15.2 |
+| The game stops on your turn in a Forehead or Hidden round, after a resize | The fan was re-sourced from the snapshot mid-prompt, and a blind round's snapshot hand is empty. `HandItem` refuses that while a prompt is live | §17, phase E's box |
 | Closing the window seems to leave the process running, tested with a script | `xdotool windowclose` destroys the window without a `QCloseEvent`, so `closeEvent()` never runs. Use `wmctrl -ic` | C2's findings |
 | Nothing to click in the last two rounds | The hand is being driven by the snapshot instead of `PlayPrompt` | §4.0, §17 |
 | Game two plays itself at full speed | `QtMoveProvider::abandoned` latched and reused | §8, phase D |
