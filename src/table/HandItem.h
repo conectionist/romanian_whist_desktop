@@ -41,6 +41,11 @@ public:
 
     // BETWEEN TURNS. Drawn disabled whatever this says, because a snapshot's hand
     // is for looking at - see the class comment.
+    //
+    // IGNORED WHILE A PROMPT IS LIVE, and that is not a convenience: TableScene
+    // re-sources the fan from the snapshot on every resize and every theme
+    // change, and either can land in the middle of your turn. See the definition
+    // for what taking it there would cost.
     void setHand(const std::vector<HandEntry>& hand);
 
     // YOUR TURN. Legality that means something, or - in a blind round, where
@@ -69,6 +74,11 @@ public:
 
     // Whether a click does anything. The fan is drawn either way: a disabled hand
     // is still the hand you are looking at while a bot thinks.
+    //
+    // FALSE ALSO ENDS THE PROMPT'S CLAIM on the fan - an answer submitted, or a
+    // game that stopped - so the next snapshot is drawn again. There is no
+    // separate "the turn is over" call because there is no state where the hand
+    // is unplayable and the prompt still owns what is drawn.
     void setPlayable(bool playable);
 
     // How many cards are fanned, which is what a caller needs to know before it
@@ -139,6 +149,20 @@ private:
 
     qreal cardHeight = 0.0;
     bool playable = false;
+
+    // WHICH OF THE TWO SOURCES is currently on screen. The class comment above is
+    // about there being two; this is the one bit that says which, and it is here
+    // because the two arrive from different places and can arrive out of turn - a
+    // resize re-sources the snapshot at any moment, including while a prompt is
+    // waiting to be answered. The prompt takes the fan and keeps it until the
+    // hand stops being playable.
+    enum class Source
+    {
+        Snapshot,
+        Prompt
+    };
+
+    Source source = Source::Snapshot;
 
     // The slot under the cursor, lifted. Disengaged when the cursor is off the
     // fan or the hand is not playable.

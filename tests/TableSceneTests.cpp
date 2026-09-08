@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "table/TableScene.h"
+#include "table/HandItem.h"
 #include "table/SeatItem.h"
+#include "engine/Prompts.h"
 #include "paint/Theme.h"
 
 #include <QImage>
@@ -294,4 +296,38 @@ TEST_CASE("The bid strip's band survives the reserved strip", "[table]")
     // Above the hand as well as above the plaque, which is the new half: the
     // strip must not cover the cards you are bidding on.
     REQUIRE(band.bottom() <= scene.handRect(cardHeight).top());
+}
+
+TEST_CASE("A resize during a play prompt leaves the prompt's fan standing", "[table]")
+{
+    // THE TWO SOURCES MEETING AT THE WORST MOMENT. relayout() re-sources the fan
+    // from the snapshot, and TableView calls it on every viewport resize - which
+    // includes the one the View > Log toggle causes, at any moment the user likes,
+    // while the engine is parked in playCard() waiting to be told which card.
+    //
+    // seatedTable()'s snapshot carries no hand, which is not a gap in the fixture:
+    // that is exactly the shape a Forehead or Hidden round publishes (section 17),
+    // and a fan re-sourced from it here empties out. Nothing left to click, no
+    // digit key in range, and an answer the game can never be given.
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
+
+    PlayPrompt prompt;
+
+    prompt.promptId = 5;
+    prompt.blind = true;
+    prompt.handIndex.push_back(0);
+
+    scene.handItem()->setPrompt(prompt);
+    scene.handItem()->setPlayable(true);
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), QSizeF(played.width() * 0.7,
+                                                        played.height() * 0.7)));
+    scene.relayout();
+
+    REQUIRE(scene.handItem()->slotCount() == 1);
+    REQUIRE(scene.handItem()->isPlayable(0));
 }

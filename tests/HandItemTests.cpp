@@ -11,6 +11,7 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QObject>
 #include <QPointF>
+#include <QString>
 
 #include <cstddef>
 #include <vector>
@@ -287,6 +288,85 @@ TEST_CASE("A snapshot hand replaces a prompt's, and is never playable", "[hand]"
 
     REQUIRE(fan.item.slotCount() == 2);
     REQUIRE_FALSE(fan.item.isPlayable(0));
+}
+
+TEST_CASE("A snapshot arriving mid-prompt does not take the fan", "[hand]")
+{
+    // THE RESIZE THAT HUNG THE GAME. TableScene::relayout() re-sources the fan
+    // from the snapshot, and it runs on every viewport resize and every theme
+    // change - including while the engine is parked in playCard() waiting for
+    // this fan to be answered. This is that call, made at that moment.
+    //
+    // The hand below holds the same three cards the prompt does and calls them
+    // all legal, which is what every snapshot hand says. Taking it would light up
+    // the card the prompt dimmed.
+    Fanned fan(promptOf({ true, false, true }));
+
+    fan.item.setHand(handOf({ true, true, true }));
+
+    REQUIRE(fan.item.slotCount() == 3);
+    REQUIRE(fan.item.isPlayable(0));
+    REQUIRE_FALSE(fan.item.isPlayable(1));
+}
+
+TEST_CASE("A snapshot arriving mid-prompt leaves a blind round's backs standing", "[hand]")
+{
+    // THE SAME CALL, in the round where it cost the whole game rather than the
+    // dimming: a Forehead or Hidden round sends no hand at all, so the snapshot
+    // hand a relayout would draw from is EMPTY. A fan emptied here has no card to
+    // click and no digit key in range, and the engine waits for an answer that
+    // can no longer be given (sections 4.0 and 17).
+    PlayPrompt prompt;
+
+    prompt.promptId = 11;
+    prompt.blind = true;
+    prompt.handIndex.push_back(0);
+
+    Fanned fan(prompt);
+
+    fan.item.setHand({});
+
+    REQUIRE(fan.item.slotCount() == 1);
+    REQUIRE(fan.item.isPlayable(0));
+}
+
+TEST_CASE("The same snapshot hand twice does not rebuild the fan", "[hand]")
+{
+    // About 1300 snapshots reach the fan in a game and most carry a hand that has
+    // not changed since the last one - every frame between two plays is one - and
+    // every resize frame arrives here too. Rebuilding for them deletes and re-news
+    // every CardItem, which is the churn TableScene's class comment rules out for
+    // the seats and the trick, and from 18.2 on it is a card deleted out from
+    // under the animation moving it.
+    Fanned fan(promptOf({ true, true, true }));
+
+    fan.item.setPlayable(false);
+    fan.item.setHand(handOf({ true, true, true, true }));
+
+    std::vector<CardItem*> built = fan.cards();
+
+    REQUIRE(built.size() == 4);
+
+    // MARKED RATHER THAN COMPARED BY ADDRESS. A rebuild deletes these and news
+    // the replacements straight away, so the allocator may well hand back the
+    // same pointers - a test that compared them could pass over the very churn it
+    // is here to catch. Nothing carries a mark across a delete.
+    for(CardItem* card : built)
+        card->setData(0, QStringLiteral("kept"));
+
+    fan.item.setHand(handOf({ true, true, true, true }));
+
+    for(CardItem* card : fan.cards())
+        REQUIRE(card->data(0).toString() == QStringLiteral("kept"));
+
+    // AND A HAND THAT HAS CHANGED still rebuilds, which is the half a guard like
+    // this quietly breaks: the fan loses a card every trick.
+    fan.item.setHand(handOf({ true, true, true }));
+
+    REQUIRE(fan.item.slotCount() == 3);
+
+    for(CardItem* card : fan.cards())
+        REQUIRE(card->data(0).toString().isEmpty());
 }
 
 // ---- the answer the seated-game tests play with ----

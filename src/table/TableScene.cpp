@@ -350,6 +350,12 @@ void TableScene::relayout()
     // from the prompt when it is your turn, which is the second source and the
     // only one that can be clicked.
     //
+    // AND THE CALL IS REFUSED while a prompt is live: HandItem::setHand() holds
+    // that line, not this file. relayout() runs on every resize and every theme
+    // change, and either can land while the engine is parked waiting for a card -
+    // in a blind round the snapshot hand it would take is empty, which would
+    // leave nothing to click and no way to answer.
+    //
     // Sized and placed even when it is empty, so the strip it sits in is the one
     // TableScene reserved rather than wherever the last hand happened to leave
     // it.

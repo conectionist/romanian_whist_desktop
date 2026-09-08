@@ -18,6 +18,25 @@ constexpr qreal overlap = 0.40;
 // How far a hovered card rises, as a fraction of its height. Enough to read as
 // picked out; TableScene reserves the strip for it through liftFraction().
 constexpr qreal lift = 0.12;
+
+// WHETHER TWO HANDS WOULD FAN THE SAME, which is the only question setHand()
+// asks before deciding to do nothing.
+//
+// `legal` IS COMPARED along with the card even though a snapshot's is always
+// true, because what it is compared against may still be the last PROMPT's
+// entries - the fan is not rebuilt when the turn ends, only when the next
+// snapshot lands. That is exactly the case where the dimming has to come off,
+// and comparing cards alone would leave it on.
+//
+// A local function rather than an operator== on HandEntry: this is the fan
+// asking whether it would draw its own children differently, not a claim about
+// when two hands are the same hand.
+bool sameEntries(const std::vector<HandEntry>& left, const std::vector<HandEntry>& right)
+{
+    return std::equal(left.begin(), left.end(), right.begin(), right.end(),
+                      [](const HandEntry& a, const HandEntry& b)
+                      { return a.card == b.card && a.legal == b.legal; });
+}
 }
 
 qreal HandItem::liftFraction()
@@ -33,6 +52,33 @@ HandItem::HandItem(const CardRenderer* _renderer, QGraphicsItem* parent)
 
 void HandItem::setHand(const std::vector<HandEntry>& hand)
 {
+    // THE PROMPT OUTRANKS THE SNAPSHOT while it is live, and this line is the
+    // whole of what stops a resize from hanging the game. TableScene::relayout()
+    // re-sources the fan from the snapshot, and it runs on every viewport resize
+    // and every theme change - including while the engine is parked in playCard()
+    // waiting for this fan to be clicked.
+    //
+    // In a Forehead or Hidden round the snapshot's hand is EMPTY by design, so
+    // taking it here would leave no card to click, no digit key in range, and
+    // nothing anywhere that could answer the prompt: the game stops for good. In
+    // an ordinary round it costs less and is still wrong - the legality lighting
+    // goes, illegal cards undim and lift under the cursor, and the click they now
+    // invite is swallowed by MainWindow::onCardPicked().
+    if(source == Source::Prompt)
+        return;
+
+    // NOTHING TO DO IF NOTHING CHANGED. A game publishes about 1300 snapshots and
+    // every resize frame arrives here as well; rebuilding deletes and re-news
+    // every CardItem in the fan, which is the churn TableScene's class comment
+    // rules out for the seats and the trick - and, from 18.2 on, a card deleted
+    // out from under the animation moving it.
+    //
+    // `backs` is part of the question: a blind round's fan is backs against an
+    // empty `entries`, and the snapshot hand that follows it is empty too, so the
+    // entries alone would compare equal and leave the backs standing.
+    if(backs == 0 && sameEntries(entries, hand))
+        return;
+
     entries = hand;
     backs = 0;
 
@@ -41,6 +87,10 @@ void HandItem::setHand(const std::vector<HandEntry>& hand)
 
 void HandItem::setPrompt(const PlayPrompt& prompt)
 {
+    // THE FAN IS THE PROMPT'S NOW, until setPlayable(false) hands it back. See
+    // setHand() for what that is worth.
+    source = Source::Prompt;
+
     if(prompt.blind)
     {
         // NOTHING BUT A COUNT, which is all a blind round sends. entries is empty
@@ -61,6 +111,8 @@ void HandItem::setPrompt(const PlayPrompt& prompt)
 
 void HandItem::clear()
 {
+    source = Source::Snapshot;
+
     entries.clear();
     backs = 0;
 
@@ -89,6 +141,14 @@ void HandItem::setTheme(const Theme& palette)
 
 void HandItem::setPlayable(bool value)
 {
+    // BEFORE THE GUARD BELOW, and deliberately: setPrompt() takes the fan and the
+    // caller arms it a line later, so there is a moment where the prompt owns a
+    // fan that is not yet playable. Ending the claim only on a CHANGE to false
+    // would step over that moment and leave the prompt owning the fan past the
+    // end of its own turn - a stale hand that no snapshot can redraw.
+    if(!value)
+        source = Source::Snapshot;
+
     if(playable == value)
         return;
 
