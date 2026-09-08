@@ -13,13 +13,17 @@
 #include <romanian_whist/RoundType.h>
 #include <romanian_whist/Seat.h>
 
+#include <QCoreApplication>
 #include <QObject>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -242,11 +246,16 @@ TEST_CASE("A seated game reaches game over through the controller", "[humanseat]
 {
     // THE POSITIVE PATH THROUGH start()'s SEAT FILLING, which nothing else
     // covers: every other controller test is a spectator game or a setup the
-    // engine is meant to reject. On a real thread, because that is where the
-    // prompts have to cross - the seam that carries them is the same relay every
-    // other signal uses, and a prompt payload whose metatype went unregistered
-    // is dropped with a line on stderr and no crash, which reads as the game
-    // hanging on your turn.
+    // engine is meant to reject.
+    //
+    // WHAT THIS DOES NOT COVER, said outright because the connection below looks
+    // like it does: the answers here are given DIRECT, on the game thread, so
+    // nothing crosses GameController's queued relay and no prompt metatype is
+    // ever asked to marshal. Deleting both qRegisterMetaType calls AND the
+    // betRequested relay leaves this case green - measured, not supposed. The
+    // case after it is the one that fails, and the two are kept apart on
+    // purpose: this one passing while that one fails says the seat is fine and
+    // the relay is not, which is a diagnosis rather than a symptom.
     GameController controller;
     controller.prepare(Seat{ static_cast<unsigned int>(kHumanSeat) }, fixtures::instant());
 
@@ -284,6 +293,96 @@ TEST_CASE("A seated game reaches game over through the controller", "[humanseat]
     // that failed on an unfilled seat and of one that was stopped, and the whole
     // question here is WHICH ending a seated game reaches when its prompts are
     // answered.
+    REQUIRE(outcome.failedCount == 0);
+    REQUIRE(outcome.stoppedCount == 0);
+    REQUIRE(outcome.overCount == 1);
+
+    controller.stop();
+}
+
+TEST_CASE("Both prompts reach the GUI through the controller's queued relay", "[humanseat]")
+{
+    // THE PRODUCTION PATH, and until C1's review nothing exercised it: prompts
+    // raised on the game thread, marshalled across the boundary, answered by
+    // submit() from the GUI thread while the game thread is parked. That is
+    // exactly what MainWindow does.
+    //
+    // WHAT IT GUARDS is the two relay connects in prepare(). Deleting either one
+    // is a TOTAL LOSS THAT PRINTS NOTHING - the human is never asked, the game
+    // parks forever, and the whole client is dead - and the suite was green
+    // through both until this case existed. Each now fails it.
+    //
+    // WHAT NO TEST HERE CAN GUARD is the two qRegisterMetaType calls, and that
+    // is measured rather than assumed: removing them AND both
+    // Q_DECLARE_METATYPE lines leaves this case passing, because Qt 6 builds a
+    // QMetaType from any complete type and the queued relay resolves them on its
+    // own. Prompts.h says as much beside the macros. They stay for the platform
+    // or the future Qt where auto-registration does not reach, where the failure
+    // is one line on stderr and a game that hangs on your turn - so the defence
+    // is that all four live in two named places, not that anything checks them.
+    // Do not read this case as cover for deleting them.
+    //
+    // THE ASSERTION IS THAT THE GAME ENDS. It can only end if the human is asked
+    // and answers, so "reached onGameOver" IS "both relays carried a payload".
+    // The counters below only make the failure legible.
+    GameController controller;
+    controller.prepare(Seat{ static_cast<unsigned int>(kHumanSeat) }, fixtures::instant());
+
+    QObject context;
+    std::atomic<int> bets{0};
+    std::atomic<int> cards{0};
+
+    // TO THE CONTROLLER, not the bridge, and with no explicit connection type -
+    // which is the whole point. The bridge is moved to the game thread by
+    // start(), so the relay becomes queued and these handlers run HERE, on the
+    // test thread, standing in for the window.
+    QObject::connect(&controller, &GameController::betRequested, &context,
+                     [&](BetPrompt prompt)
+                     {
+                         bets++;
+                         controller.provider()->submit(prompt.promptId,
+                                                       promptstandin::chooseBet(prompt));
+                     });
+
+    QObject::connect(&controller, &GameController::cardRequested, &context,
+                     [&](PlayPrompt prompt)
+                     {
+                         cards++;
+                         const std::size_t slot = promptstandin::chooseSlot(prompt);
+                         controller.provider()->submit(prompt.promptId,
+                                                       prompt.handIndex[slot]);
+                     });
+
+    fixtures::Outcome outcome(controller);
+
+    // Two seats, so the schedule is short. The point here is the boundary, not
+    // the table.
+    controller.start(fixtures::buildSetup(2, 42u, kHumanSeat));
+
+    // PUMPED, NOT AWAITED, and Outcome::await() would deadlock in its place. The
+    // game thread is parked inside the prompt waiting for an answer that only
+    // this thread can deliver, and it can only deliver it by running its event
+    // loop - so a blocking wait on the condition variable would sit there while
+    // the game sat on the prompt, and the pass would be a 30-second timeout.
+    // Every other controller test can await() because a bot game needs nothing
+    // from the main thread; a seated one is the opposite case.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+
+    while(outcome.overCount == 0 && outcome.stoppedCount == 0 && outcome.failedCount == 0
+          && std::chrono::steady_clock::now() < deadline)
+    {
+        QCoreApplication::processEvents();
+
+        // So the wait is not a hot spin. One millisecond against a schedule of a
+        // few hundred prompts is well under a second of added run time.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    // Named separately so a failure says WHICH relay is missing rather than only
+    // that the game did not finish.
+    REQUIRE(bets > 0);
+    REQUIRE(cards > 0);
+
     REQUIRE(outcome.failedCount == 0);
     REQUIRE(outcome.stoppedCount == 0);
     REQUIRE(outcome.overCount == 1);

@@ -467,6 +467,28 @@ has strategies for anything better; a stand-in that played well would be one som
   "playing", because phase D's dialog offers both and a title naming either is one more thing to keep
   in step with the game actually running. **Worth a look every phase that changes what the client
   is** — the .ui holds several strings of that kind and none of them is under test.
+- **The relay `MainWindow` depends on entirely could be deleted with the suite green** — found by
+  review, confirmed by deleting it. `prepare()` relays `betRequested` and `cardRequested` from the
+  bridge to the controller, and the window connects to nothing else; remove either `connect()` and
+  the human is never asked, the game parks forever, and **137 tests still passed**. The first
+  `HumanSeatTests` case looked like cover and was not: it answers DIRECT on the bridge, on the game
+  thread, so nothing crosses the relay. A seated game answered from the *test* thread now pins both.
+  **The shape to look for is a test that connects to the bridge where the window connects to the
+  controller** — the two are one hop apart and only one of them is what ships.
+- **A seated game cannot use `Outcome::await()`, and the reason generalises.** The game thread parks
+  inside the prompt waiting for an answer only the GUI thread can give, and the GUI thread can only
+  give it by running its event loop — so a blocking wait on the condition variable holds the thread
+  that has to do the unblocking, and the test times out instead of passing. Every other controller
+  test can `await()` because a bot game needs nothing from the main thread. **Anything answering a
+  prompt has to pump, not wait**, which is the same asymmetry `kPromptCeiling` exists for from the
+  other direction.
+- **The two `qRegisterMetaType` calls for the prompts cannot be guarded by a test, and now say so.**
+  Removing them *and* both `Q_DECLARE_METATYPE` lines leaves the queued relay working and every test
+  passing: Qt 6 builds a `QMetaType` from any complete type. So the registrations are belt-and-braces
+  for a build where auto-registration does not reach, the defence is that all four declarations sit
+  in two named places, and a test written to pin them would be asserting that a working mechanism
+  does not work. Same shape as B1's `QPixmap(":/cards/x.svg")` trap — recorded in `MetaTypes.cpp`
+  where someone would otherwise delete them as dead.
 - **TSan is not silent on a clean tree**, which is worth knowing before reading a report as a
   verdict: `master` produces ~83 warnings and passes every test, all of them bottoming out in Qt's
   own uninstrumented libraries. C1 adds none — measured against a `master` worktree rather than
