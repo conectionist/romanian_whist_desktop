@@ -87,10 +87,13 @@ qt_add_library(desktop_core STATIC
     src/ui/ScoreboardWidget.h
     src/ui/ScoreboardWidget.cpp
 
-    # TEMPORARY, AND REMOVED IN C3 along with the two MainWindow slots that call
-    # it. See its header: it answers the prompts a seated human raises so that
-    # C1 can prove the whole prompt seam before C2 and C3 build the widgets that
-    # will answer them for real.
+    src/ui/BidStrip.h
+    src/ui/BidStrip.cpp
+
+    # TEMPORARY, AND REMOVED IN C3 along with the MainWindow slot that calls it.
+    # See its header: it answered both prompts a seated human raises so that C1
+    # could prove the whole prompt seam before any widget existed. C2's BidStrip
+    # took the bet half; the card half goes when HandItem lands.
     src/ui/PromptStandIn.h
     src/ui/PromptStandIn.cpp
 )

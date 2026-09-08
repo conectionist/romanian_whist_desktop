@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "table/TableScene.h"
+#include "table/SeatItem.h"
 #include "paint/Theme.h"
 
 #include <QImage>
@@ -8,6 +9,8 @@
 #include <QPixmap>
 #include <QRectF>
 #include <QSize>
+
+#include <memory>
 
 // THE HALF OF THE dpr CONTRACT THAT IS NOT THE PIXMAP'S.
 //
@@ -113,4 +116,77 @@ TEST_CASE("A partial repaint samples its own region of the background", "[table]
 
     // And nothing outside it was touched, which is what the exposed rect is for.
     REQUIRE(rendered.pixelColor(0, 0).alpha() == 0);
+}
+
+// ---- the band the bid strip sits in, added in C2 ----
+//
+// SECTION 15.1's strip "rises over the bottom of the table", and the bottom of
+// the table is where the HUMAN'S OWN PLAQUE is - seatlayout puts the seated
+// player at bottom-centre. So "the bottom" and "where the strip goes" are
+// different places, and getting that wrong is not subtle: C2's first run drew
+// the strip straight through the player's own name.
+//
+// Geometry with a right answer, which is what this file is for.
+
+namespace
+{
+GameSnapshot seatedTable(unsigned int seats, int humanSeat)
+{
+    GameSnapshot snapshot;
+
+    snapshot.humanSeat = humanSeat;
+    snapshot.roundNumber = 1;
+    snapshot.roundCount = 26;
+    snapshot.trickCount = 8;
+    snapshot.seats.resize(seats);
+
+    for(unsigned int i = 0 ; i < seats ; i++)
+        snapshot.seats[i].seatIndex = i;
+
+    return snapshot;
+}
+
+// A window of the size a person actually plays in, rather than the 320x200 the
+// dpr cases above use - a band is a question about a real table.
+const QSize played(1000, 700);
+}
+
+TEST_CASE("The bottom band clears the seated player's own plaque", "[table]")
+{
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
+
+    const QRectF band = scene.overlayBand();
+
+    // NOT EMPTY, which is the assertion that actually failed first. An empty
+    // band sends TableView to its fallback - the viewport's own bottom edge -
+    // and the strip lands under the plaque instead of above it, which looks
+    // like a placement bug rather than a band that was never computed.
+    REQUIRE_FALSE(band.isEmpty());
+
+    // ABOVE THE LOWEST PLAQUE, bounded independently rather than read back off
+    // the scene. seatRingRect insets the scene by half a plaque, so the lowest
+    // centre is at most sceneBottom - plaqueH/2 and its top edge at most
+    // sceneBottom - plaqueH. A band reaching past that is one covering the
+    // player's own name, which is the defect this case exists for.
+    const qreal plaqueHeight =
+        SeatItem::plaqueSize(Theme::light().cardHeightFor(played)).height();
+
+    REQUIRE(band.bottom() <= played.height() - plaqueHeight);
+    REQUIRE(band.top() < band.bottom());
+}
+
+TEST_CASE("The bottom band is empty before there is anything to place it against", "[table]")
+{
+    // No snapshot means no seats, so there is no plaque to clear and no band -
+    // and the caller is handed an empty rect to fall back on rather than a
+    // negative one to lay a widget out in.
+    TableScene scene;
+
+    scene.setSceneRect(QRectF(QPointF(0.0, 0.0), played));
+
+    REQUIRE(scene.overlayBand().isEmpty());
 }

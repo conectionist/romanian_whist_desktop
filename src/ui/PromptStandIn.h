@@ -28,24 +28,18 @@
 // strategies for that, and a stand-in that played well would be a thing someone
 // could be tempted to keep. This picks the first thing it is allowed to pick.
 //
-// Two free functions rather than logic inside a slot, on the grounds SnapshotLog
+// A free function rather than logic inside a slot, on the grounds SnapshotLog
 // gives for being one: this is the part with a right answer, so it is the part
 // worth a test, and it needs no widget, no thread and no engine to have that
 // answer checked.
 //
-// C2 stops calling chooseBet(), C3 stops calling chooseSlot() and removes the
-// file.
+// HALF OF IT IS ALREADY GONE. C1 shipped a chooseBet() beside this, and C2's
+// BidStrip took its caller - so it moved to tests/GameFixtures.h, where the
+// seated-game tests still need something to answer a bid with, rather than
+// staying here as production code only a test calls. C3 does the same to what is
+// left and deletes the file.
 namespace promptstandin
 {
-
-// The lowest bid this prompt permits: 0, or 1 where 0 is the forbidden one.
-//
-// NEVER prompt.forbiddenBet. The engine's response to an illegal bet is to throw
-// out of run(), which reaches the player as "the game thread failed" with the
-// game unresumable - QtMoveProvider::makeBet() re-prompts rather than passing
-// one on, so the visible cost of getting this wrong is a prompt loop rather than
-// a crash, but it is still a loop.
-unsigned int chooseBet(const BetPrompt& prompt);
 
 // The DISPLAY SLOT to click - the first one marked legal.
 //

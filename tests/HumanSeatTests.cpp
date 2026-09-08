@@ -153,7 +153,7 @@ Transcript playSeatedGame()
                          if(exhausted())
                              return;
 
-                         provider.submit(prompt.promptId, promptstandin::chooseBet(prompt));
+                         provider.submit(prompt.promptId, fixtures::lowestLegalBid(prompt));
                      });
 
     QObject::connect(&bridge, &GameBridge::cardRequested,
@@ -270,7 +270,7 @@ TEST_CASE("A seated game reaches game over through the controller", "[humanseat]
                      [&controller](BetPrompt prompt)
                      {
                          controller.provider()->submit(prompt.promptId,
-                                                       promptstandin::chooseBet(prompt));
+                                                       fixtures::lowestLegalBid(prompt));
                      },
                      Qt::DirectConnection);
 
@@ -341,7 +341,7 @@ TEST_CASE("Both prompts reach the GUI through the controller's queued relay", "[
                      {
                          bets++;
                          controller.provider()->submit(prompt.promptId,
-                                                       promptstandin::chooseBet(prompt));
+                                                       fixtures::lowestLegalBid(prompt));
                      });
 
     QObject::connect(&controller, &GameController::cardRequested, &context,

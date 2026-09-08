@@ -202,6 +202,50 @@ void TableScene::ensureSeats(std::size_t count)
         seats[i]->hide();
 }
 
+QRectF TableScene::overlayBand() const
+{
+    if(!snapshot || snapshot->seats.empty() || sceneRect().isEmpty())
+        return QRectF();
+
+    const std::size_t seatCount = snapshot->seats.size();
+
+    // THE SAME ONE UNIT the rest of the layout uses, not a second answer. The
+    // plaque below is derived from it, so the band moves with the table rather
+    // than drifting away from it at some window sizes.
+    const qreal cardHeight = cardHeightFor(seatCount);
+
+    const std::vector<QPointF> centres =
+        seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
+                                snapshot->humanSeat, seatRingRect(cardHeight));
+
+    if(centres.size() != seatCount)
+        return QRectF();
+
+    // The plaque nearest the bottom, which is the human's whenever there is one
+    // - seatlayout puts the seat it is told about at bottom-centre. Found by
+    // MEASURING rather than by indexing humanSeat, so a spectator game, where
+    // seat 0 goes there instead, needs no branch.
+    qreal lowestCentre = centres.front().y();
+
+    for(const QPointF& centre : centres)
+        lowestCentre = std::max(lowestCentre, centre.y());
+
+    const qreal plaqueHeight = SeatItem::plaqueSize(cardHeight).height();
+
+    // A GAP, so the strip does not sit flush against the plaque's rounded edge
+    // and read as one object with it. A fraction of the plaque rather than a
+    // constant, so it scales with the table like everything else here.
+    const qreal gap = plaqueHeight / 8.0;
+
+    const qreal bandBottom = lowestCentre - plaqueHeight / 2.0 - gap;
+
+    if(bandBottom <= sceneRect().top())
+        return QRectF();
+
+    return QRectF(sceneRect().left(), sceneRect().top(),
+                  sceneRect().width(), bandBottom - sceneRect().top());
+}
+
 void TableScene::relayout()
 {
     if(!snapshot || sceneRect().isEmpty())

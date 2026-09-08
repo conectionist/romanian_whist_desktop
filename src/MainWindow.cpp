@@ -4,6 +4,7 @@
 #include "paint/Theme.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
+#include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
 #include "ui/InfoStrip.h"
 #include "ui/PromptStandIn.h"
@@ -182,9 +183,20 @@ void MainWindow::buildTable()
     infoStrip = new InfoStrip(this);
     scoreboard = new ScoreboardWidget(this);
 
+    // OVER the table rather than in the layout below it: a strip that appears
+    // only on your turn would move everything beneath it every round, which is
+    // the defect B2b's review recorded against the info strip. Parented and
+    // placed by the view - see TableView::setBottomOverlay().
+    bidStrip = new BidStrip(table);
+    bidStrip->hide();
+    table->setBottomOverlay(bidStrip);
+
+    connect(bidStrip, &BidStrip::bidChosen, this, &MainWindow::onBidChosen);
+
     scene->setTheme(theme);
     infoStrip->setTheme(theme);
     scoreboard->setTheme(theme);
+    bidStrip->setTheme(theme);
 
     // The strip full width across the top, then the table and the scoreboard
     // side by side. The table takes the stretch: the scoreboard is as wide as
@@ -414,16 +426,36 @@ void MainWindow::updateStatus(const GameSnapshot& snapshot)
                                       infostrip::roundTypeText(snapshot.roundType)));
 }
 
-// THE GAME THREAD IS PARKED IN makeBet() FOR THE WHOLE OF THIS, waiting on the
-// submit() at the bottom. That is the seam phase C is about, and C1 is where it
-// runs for the first time.
+// THE GAME THREAD IS PARKED IN makeBet() FROM HERE UNTIL onBidChosen(), which is
+// an unbounded stretch - as long as the player takes to decide.
 //
-// C2 REPLACES THE MIDDLE OF THIS FUNCTION with the bid strip: the prompt is
-// cached, the panel enabled, and submit() moves to the button's handler. What
-// stays is the logging and the guard.
+// THAT IS WHY THE STRIP IS A PANEL AND NOT A QDialog. exec() would spin a nested
+// event loop for the whole of that wait and take the close button with it:
+// closeEvent() would not run, so stop() would never be called, so abandon()
+// would never wake the provider. C5 is the test for exactly that path and a
+// modal dialog makes it unperformable. See section 4.4.
 void MainWindow::onBetRequested(BetPrompt prompt)
 {
     appendLine(snapshotlog::format(prompt));
+
+    // BY VALUE, and this is the first cached prompt in the client. C1 answered
+    // from inside this function, so nothing could be stale; the answer now
+    // arrives whenever the player clicks, and the promptId is what has to
+    // survive until then.
+    activeBetPrompt = prompt;
+
+    bidStrip->setPrompt(prompt);
+    bidStrip->show();
+
+    // So the digit keys work without the player clicking the strip first.
+    // Section 15.1 asks for them and a strip that never gets focus never sees a
+    // key press - which looks finished, because the buttons still work.
+    bidStrip->setFocus();
+}
+
+void MainWindow::onBidChosen(unsigned int bet)
+{
+    bidStrip->hide();
 
     // NULL IN A SPECTATOR GAME, which this window no longer starts but phase D
     // can start in the same process - "watching" is one of the setup dialog's
@@ -433,7 +465,12 @@ void MainWindow::onBetRequested(BetPrompt prompt)
     if(!controller.provider())
         return;
 
-    controller.provider()->submit(prompt.promptId, promptstandin::chooseBet(prompt));
+    // THE promptId IS THE GATE, not the hiding above. submit() drops an answer
+    // naming any generation but the live one, which is what stops a stray click
+    // - a double click, or one that lands after the game has moved on - from
+    // arming the NEXT prompt with an answer chosen for this one. Hiding the
+    // widget narrows that window; only the generation closes it (section 4.2).
+    controller.provider()->submit(activeBetPrompt.promptId, bet);
 }
 
 // C3 REPLACES THE MIDDLE OF THIS with HandItem: legality lighting, hover, and a
@@ -469,8 +506,17 @@ void MainWindow::onCardRequested(PlayPrompt prompt)
     controller.provider()->submit(prompt.promptId, prompt.handIndex[slot]);
 }
 
+// THE THREE ENDINGS ALL HIDE THE STRIP, and it is one line in each rather than
+// one in a shared helper because they are reached from different places and two
+// of them are not reached at all on the path the third is. Between them they
+// close the same hole: a strip left standing over a finished game is a live
+// button whose click would submit into a provider whose engine is gone. The
+// promptId gate would drop that answer, so this is the belt to its braces - but
+// a control that looks live and does nothing is its own defect.
 void MainWindow::onGameStopped()
 {
+    bidStrip->hide();
+
     appendLine(tr("-- stopped --"));
 
     // The close this window started: closeEvent() has already accepted, and
@@ -486,6 +532,8 @@ void MainWindow::onGameStopped()
 
 void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standing> winners)
 {
+    bidStrip->hide();
+
     appendLine(tr("-- game over --"));
 
     for(const Standing& row : standings)
@@ -514,6 +562,8 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
 
 void MainWindow::showFailure(QString what)
 {
+    bidStrip->hide();
+
     appendLine(tr("-- the game thread failed: %1 --").arg(what));
     statusBar()->showMessage(tr("The game ended in an error: %1").arg(what));
 }

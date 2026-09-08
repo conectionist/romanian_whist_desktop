@@ -375,10 +375,12 @@ comes from `isWinning` and is never recomputed.
 - [x] **…and the prompt seam under it, answered by a stand-in.** Not in the step as written, and the
       reason for it is the reason this document has an order at all — see the box below. C2 deletes
       half of `src/ui/PromptStandIn.{h,cpp}` and C3 the rest.
-- [ ] **C2 — bidding.** `BidStrip` as a **panel, not a `QDialog`** (§4.4 — this is a shutdown
-      decision, and C4 is the test it exists for). One button per bid, `forbiddenBet` disabled with
+- [x] **C2 — bidding.** `BidStrip` as a **panel, not a `QDialog`** (§4.4 — this is a shutdown
+      decision, and C5 is the test it exists for). One button per bid, `forbiddenBet` disabled with
       the explanation underneath. **Stop calling `promptstandin::chooseBet()`** — the bet half of
       `MainWindow::onBetRequested()` becomes the panel; the logging and the null guard stay.
+      *(`chooseBet()` moved to `fixtures::lowestLegalBid()` rather than staying in `src/` as
+      production code only tests call.)*
 - [ ] **C3 — playing.** `HandItem` itself, which B2 could not build — the fan from
       `GameSnapshot::hand` between turns, drawn disabled, and the bottom strip the table reserves for
       it. Then `PlayPrompt` into the hand: legality lighting, hover, click →
@@ -391,7 +393,10 @@ comes from `isWinning` and is never recomputed.
       one that is pure rendering — `seats[i].hand` is empty for the whole of phase B for the same
       reason the fan is, so C is the first phase in which §17 can be drawn at all.
 - [ ] **C5 — shutdown while parked.** Close the window with the bid panel open. This is the
-      `GameAbandoned` path and the only one that should produce it.
+      `GameAbandoned` path and the only one that should produce it. **Both halves are already
+      standing as of C2** — `GameControllerTests`' "A stop while the game is parked on a prompt ends
+      it", and the manual close, measured at 39 ms with the strip up. What C5 is left to add is the
+      same close with C3's *hand* waiting, which parks in `playCard()` rather than `makeBet()`.
 
 **Done when:** a full game is playable; illegal cards cannot be clicked; the forbidden bid is
 disabled; the card clicked is the card played; and **the game reaches `onGameOver()` through the
@@ -495,6 +500,36 @@ has strategies for anything better; a stand-in that played well would be one som
   assumed. The method, and what a *real* finding would look like, is now a section in
   `LOCAL_VERIFICATION.md`.
 
+
+### What the C2 run found
+
+- **The strip landed on top of the player's own name, and only running it showed that.** §15.1 says
+  the strip "rises over the bottom of the table", and the bottom of the table is exactly where
+  `seatlayout` puts the **seated player's plaque**. An overlay pinned to the viewport's bottom edge
+  therefore draws straight through it. The fix is that the scene answers where an overlay may go —
+  `TableScene::overlayBand()` — rather than the view measuring it off the viewport. **The general
+  rule: a widget positioned against the window is positioned against the wrong thing whenever the
+  scene has something of its own down there.**
+- **And there is no free band to find.** Measured on a 1000×700 table: the trick's cards end 565 px
+  down and the bottom plaque starts at 578, so the gap between them is **thirteen pixels**. The
+  strip reaches *up over the middle of the table* instead, which is sound only because of *when* it
+  is shown — bidding finishes before the round's first card is played, so the trick area is empty
+  the whole time it is up. **C3 has to re-ask this**, because a hand is on screen while cards are
+  down and cannot borrow the middle.
+- **`xdotool windowclose` does not test a close.** It calls `XDestroyWindow`, so the window vanishes
+  and Qt never delivers a `QCloseEvent` — `closeEvent()` never runs, `stop()` is never called, and
+  the process is left alive with the game thread still parked. That reads *exactly* like the C5 hang
+  it is supposed to be checking for, and it cost a false report. **Close with `wmctrl -ic`**, which
+  sends `_NET_CLOSE_WINDOW`; the real close then exits in 39 ms.
+- **A widget test cannot click a button through the window manager either.** A synthetic
+  `xdotool click` at the right coordinates does nothing until the window is activated, which also
+  looks like a dead button. The keyboard path (`xdotool key`) works once the window is active and is
+  the cheaper check — and it exercises §15.1's digit binding at the same time.
+- **The strip's size changes with the round**, so geometry set once is right for one round and wrong
+  for the rest — nine buttons in an eight-card round, two in a one-card round, and the explanation
+  only for the final bidder. `TableView` watches it for `LayoutRequest` and `Show` rather than
+  placing it once, because a window nobody resizes would never correct itself.
+
 ---
 
 ## Phase D — the game around the game
@@ -586,6 +621,8 @@ Symptom first, because that is what you have.
 | The card played is not the card clicked | A fan position was submitted instead of `handIndex[slot]` | §4.4 |
 | "It played a card I did not click" | No `promptId` gate; a stray click armed the next prompt | §4.2 |
 | A seated game never ends and the log stops moving, with no hang in the window | An answer the provider will not accept. `makeBet()` and `playCard()` re-prompt rather than pass an illegal one on, so a widget that keeps sending it is asked again forever | §4.2 |
+| The bid strip draws over your own seat plaque | It was placed against the viewport instead of `TableScene::overlayBand()` — the bottom of the table is where the seated player is drawn | §15.1 |
+| Closing the window seems to leave the process running, tested with a script | `xdotool windowclose` destroys the window without a `QCloseEvent`, so `closeEvent()` never runs. Use `wmctrl -ic` | C2's findings |
 | Nothing to click in the last two rounds | The hand is being driven by the snapshot instead of `PlayPrompt` | §4.0, §17 |
 | Game two plays itself at full speed | `QtMoveProvider::abandoned` latched and reused | §8, phase D |
 | Game two deals one round and stops | `prepare()` did not clear `GameController::stopRequested` | §4.3 |
