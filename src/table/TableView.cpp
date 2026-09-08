@@ -66,14 +66,23 @@ void TableView::placeOverlay()
     if(!bottomOverlay)
         return;
 
-    // ITS OWN PREFERRED HEIGHT, and no wider than the viewport. The strip knows
-    // how tall it needs to be - the buttons and, when there is one, the
-    // explanation beneath them - and this knows how much room there is.
+    // NO WIDER THAN THE VIEWPORT. The strip knows how wide it would like to be -
+    // the buttons, side by side - and this knows how much room there is.
     const QSize viewportSize = viewport()->size();
     const QSize hint = bottomOverlay->sizeHint();
 
     const int width = std::min(hint.width(), viewportSize.width());
-    const int height = std::min(hint.height(), viewportSize.height());
+
+    // THEN THE HEIGHT AT THE WIDTH IT IS ACTUALLY GETTING, not at the one it
+    // asked for. The explanation beneath the buttons is word-wrapped, so a strip
+    // squeezed narrower than its hint needs a second line for it - and
+    // sizeHint().height() reports the height of the first line only. Taking the
+    // hint's height there is what clipped the forbidden-bid reason in half on a
+    // window narrow enough that the scoreboard crowds the table.
+    const int hfw = bottomOverlay->hasHeightForWidth() ? bottomOverlay->heightForWidth(width)
+                                                       : -1;
+
+    const int preferred = hfw > 0 ? hfw : hint.height();
 
     // ASKED OF THE SCENE, not measured off the viewport. The bottom of the table
     // is where the HUMAN'S PLAQUE is - seatlayout puts the seated player at
@@ -87,14 +96,21 @@ void TableView::placeOverlay()
     // - thirteen pixels on a 1000x700 table - and bidding finishes before the
     // round's first card is played, so the middle is empty while this is up.
     //
-    // The fallback is the viewport's own bottom, which is only reached before
-    // the first snapshot or on a table too short to have a band - and at that
-    // point there is no plaque drawn to collide with anyway.
+    // The fallback is the viewport itself, which is only reached before the
+    // first snapshot or on a table too short to have a band - and at that point
+    // there is no plaque drawn to collide with anyway.
+    const int top = band.isEmpty() ? 0 : static_cast<int>(band.top());
     const int bottom = band.isEmpty() ? viewportSize.height()
                                       : static_cast<int>(band.bottom());
 
+    // CLAMPED TO THE BAND, not to the viewport. A strip taller than the room
+    // above the plaque has to lose the difference somewhere, and clamping only
+    // the y below would leave the height intact and push the bottom edge back
+    // down over the plaque - the exact collision the band exists to prevent.
+    const int height = std::min(preferred, bottom - top);
+
     bottomOverlay->setGeometry((viewportSize.width() - width) / 2,
-                               std::max(0, bottom - height),
+                               std::max(top, bottom - height),
                                width,
                                height);
 }

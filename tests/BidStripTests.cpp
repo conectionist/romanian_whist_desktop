@@ -4,6 +4,8 @@
 
 #include "ui/BidStrip.h"
 
+#include <QCoreApplication>
+#include <QKeyEvent>
 #include <QObject>
 #include <QPushButton>
 #include <QString>
@@ -42,6 +44,16 @@ BetPrompt promptFor(std::size_t handSize, std::optional<unsigned int> forbidden 
 std::size_t buttonCount(const BidStrip& strip)
 {
     return static_cast<std::size_t>(strip.findChildren<QPushButton*>().size());
+}
+
+// A key press delivered the way the window would deliver one. sendEvent rather
+// than QTest::keyClick for the reason the click cases give below: QTest lives in
+// Qt6::Test, a whole module linked for one call.
+void press(BidStrip& strip, Qt::Key key, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+{
+    QKeyEvent event(QEvent::KeyPress, key, modifiers);
+
+    QCoreApplication::sendEvent(&strip, &event);
 }
 
 QPushButton* buttonFor(const BidStrip& strip, const QString& text)
@@ -180,6 +192,76 @@ TEST_CASE("A second prompt leaves no buttons from the first", "[bid-strip]")
 
     REQUIRE(buttonCount(strip) == 2);
     REQUIRE(buttonFor(strip, "8") == nullptr);
+}
+
+// ---- the keyboard half of section 15.1 ----
+
+TEST_CASE("A digit key bids that digit", "[bid-strip]")
+{
+    BidStrip strip;
+    strip.setPrompt(promptFor(8));
+
+    std::vector<unsigned int> chosen;
+
+    QObject::connect(&strip, &BidStrip::bidChosen,
+                     [&chosen](unsigned int bet){ chosen.push_back(bet); });
+
+    press(strip, Qt::Key_2);
+
+    REQUIRE(chosen.size() == 1);
+    REQUIRE(chosen.front() == 2u);
+}
+
+TEST_CASE("A digit held with a modifier bids nothing", "[bid-strip]")
+{
+    // A BID IS IRREVOCABLE, so this is not a cosmetic miss: Ctrl+2 reaching the
+    // strip submits a two and the round proceeds on it. The chord belongs to
+    // whatever the window binds it to - Phase E owns the keyboard map - and a
+    // strip that swallows it would take the binding silently.
+    BidStrip strip;
+    strip.setPrompt(promptFor(8));
+
+    std::vector<unsigned int> chosen;
+
+    QObject::connect(&strip, &BidStrip::bidChosen,
+                     [&chosen](unsigned int bet){ chosen.push_back(bet); });
+
+    press(strip, Qt::Key_2, Qt::ControlModifier);
+    press(strip, Qt::Key_2, Qt::AltModifier);
+
+    REQUIRE(chosen.empty());
+
+    // THE KEYPAD'S OWN MODIFIER IS NOT ONE OF THEM. Keypad 2 is the same 2 to
+    // the person pressing it, and platforms tag it - so a guard written as a
+    // flat comparison against NoModifier would take the numpad out with Ctrl.
+    press(strip, Qt::Key_2, Qt::KeypadModifier);
+
+    REQUIRE(chosen.size() == 1);
+    REQUIRE(chosen.front() == 2u);
+}
+
+TEST_CASE("The forbidden digit's key does nothing", "[bid-strip]")
+{
+    // The keyboard reads the button rather than re-testing the prompt, so this
+    // is the case that holds the two halves of section 15.1 to the same rule.
+    BidStrip strip;
+    strip.setPrompt(promptFor(8, 3u));
+
+    std::vector<unsigned int> chosen;
+
+    QObject::connect(&strip, &BidStrip::bidChosen,
+                     [&chosen](unsigned int bet){ chosen.push_back(bet); });
+
+    press(strip, Qt::Key_3);
+
+    REQUIRE(chosen.empty());
+
+    // And the digits either side of it still work, which is what says the strip
+    // ignored one bid rather than the keyboard.
+    press(strip, Qt::Key_4);
+
+    REQUIRE(chosen.size() == 1);
+    REQUIRE(chosen.front() == 4u);
 }
 
 // ---- the answer the seated-game tests bid with ----

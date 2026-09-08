@@ -153,6 +153,16 @@ void BidStrip::rebuild()
 
 void BidStrip::keyPressEvent(QKeyEvent* event)
 {
+    // UNMODIFIED DIGITS ONLY. A bid is irrevocable, so Ctrl+2 must not place
+    // one: that chord belongs to whatever the window binds it to, and Phase E
+    // owns the full keyboard map. The keypad's own modifier is masked back in
+    // because keypad 2 is the same 2 to the person pressing it.
+    if((event->modifiers() & ~Qt::KeypadModifier) != Qt::NoModifier)
+    {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
     const int digit = event->key() - Qt::Key_0;
 
     if(digit < 0 || static_cast<std::size_t>(digit) >= buttons.size())

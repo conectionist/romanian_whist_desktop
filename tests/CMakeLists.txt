@@ -24,6 +24,7 @@ add_executable(desktop_tests
     SeatLayoutTests.cpp
     TrickItemTests.cpp
     TableSceneTests.cpp
+    TableViewTests.cpp
     InfoStripTests.cpp
     ScoreboardTests.cpp
     TestApp.cpp
