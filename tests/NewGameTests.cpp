@@ -5,7 +5,10 @@
 #include "ui/NewGameDialog.h"
 
 #include <romanian_whist/GameEngine.h>
+#include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/IMoveProvider.h>
+#include <romanian_whist/RoundType.h>
+#include <romanian_whist/strategies/FirstCardStrategy.h>
 
 #include <QComboBox>
 #include <QLineEdit>
@@ -202,6 +205,53 @@ TEST_CASE("A setup the dialog would produce is one the engine accepts", "[new-ga
 
         GameEngine engine;
         REQUIRE_NOTHROW(engine.start(std::move(setup)));
+    }
+}
+
+TEST_CASE("A seated game from the dialog reaches game over", "[new-game]")
+{
+    // PHASE C's OWN "DONE WHEN", re-asked against D1's setup builder - because
+    // D1 moved the human from seat 1 to seat 0, and the seat is the index
+    // GameController::start() fills and GameBridge stamps onto every snapshot.
+    //
+    // AND THE LAST TWO ROUNDS ARE THE POINT. With endWithForeheadAndHidden left
+    // at its default the schedule ends with a Forehead round and then a Hidden
+    // one, which section 8 names as the two rounds a client driving its hand
+    // from snapshots stops working in. A game that stops short of them has
+    // proved nothing about them.
+    //
+    // Synchronous, with the human's seat filled by a bot: which prompt carried
+    // what is HumanSeatTests' question, and this one is about the schedule
+    // completing from a setup this dialog built.
+    for(int opponents = 1 ; opponents <= 5 ; opponents++)
+    {
+        newgame::Config config = playingConfig(opponents);
+        config.shuffleSeed = 42u;
+
+        GameSetup setup = newgame::buildSetup(config);
+
+        // Exactly the seat humanSeatOf() names, and it is null - which is the
+        // agreement start() relies on and indexes with .at().
+        const std::size_t seat = newgame::humanSeatOf(config)->index;
+        REQUIRE(setup.seats.at(seat).moveProvider == nullptr);
+
+        setup.seats.at(seat).moveProvider =
+            std::make_unique<AiMoveProvider>(std::make_unique<FirstCardStrategy>());
+
+        GameEngine engine;
+        engine.start(std::move(setup));
+        engine.run();
+
+        INFO("opponents " << opponents);
+        REQUIRE(engine.getStatus() == GameStatus::Finished);
+        REQUIRE(engine.getCurrentRoundIndex() == newgame::roundCount(config) - 1);
+
+        // The schedule really did end with the appended pair, so the loop above
+        // cannot pass by never reaching them.
+        REQUIRE(engine.getRound(newgame::roundCount(config) - 2).getRoundType()
+                == RoundType::Forehead);
+        REQUIRE(engine.getRound(newgame::roundCount(config) - 1).getRoundType()
+                == RoundType::Hidden);
     }
 }
 
