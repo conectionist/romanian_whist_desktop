@@ -30,11 +30,17 @@ namespace
 {
 // The stock opponent names, in seat order. The terminal's list is three letters
 // each because its seat table is fixed-width; this one has room, so these are
-// the names phase A's hardcoded setup used - the same table, still recognisable
-// to anyone who ran the client before D1.
+// the names phase A's setup and tests/GameFixtures.h both use.
+//
+// SIX, NOT FIVE, and the difference is a whole seat. Five is the most opponents
+// a PLAYING game can have, and a watched one has no human taking a chair - so a
+// five-name list runs out on the largest watched table and the sixth row fell
+// through to a "Bot 6" placeholder. Found by rendering a six-seat game; nothing
+// in the suite was looking at what the rows were pre-filled with.
 const QStringList& stockNames()
 {
     static const QStringList names = { QStringLiteral("Ana"),
+                                       QStringLiteral("Bogdan"),
                                        QStringLiteral("Cristina"),
                                        QStringLiteral("Dan"),
                                        QStringLiteral("Elena"),
@@ -105,7 +111,11 @@ newgame::Config newgame::defaults()
 {
     Config config;
 
-    config.humanName = QCoreApplication::translate("newgame", "You");
+    // NOT "You". SeatItem appends " (you)" to the seated player's plaque, so
+    // that default drew "You (you)" - found by rendering a dealt table. Section
+    // 13's mockup fills the field with a person's name for the same reason: it
+    // is a name to replace, not a label.
+    config.humanName = QCoreApplication::translate("newgame", "Player");
 
     for(int i = 0 ; i < 3 ; i++)
     {
@@ -153,14 +163,22 @@ QString newgame::summaryText(const Config& config)
     const int minutes = static_cast<int>(
         std::chrono::duration_cast<std::chrono::minutes>(total).count());
 
+    // "%n rounds" AND NOT "%n round(s)", which is the idiom and is wrong here.
+    // The parenthesised plural only resolves through a translator; with none
+    // loaded QCoreApplication::translate() substitutes %n and returns the source
+    // verbatim, so the dialog read "26 round(s)" - found by rendering it. The
+    // plural marker is still %n, so lupdate still collects every form Romanian
+    // needs; the source form just has to be the one English actually uses, and
+    // the count here is never 1 (the smallest table gives 18).
+    //
     // TWO SENTENCES, NOT ONE INTERPOLATED, when the estimate rounds to nothing.
     // An "about 0 minutes" is worse than saying nothing, and at the instant end
     // of the slider that is the honest answer.
     if(minutes < 1)
-        return QCoreApplication::translate("newgame", "%n round(s)", "", static_cast<int>(rounds));
+        return QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
 
     return QCoreApplication::translate("newgame", "%1 - about %2 minutes")
-        .arg(QCoreApplication::translate("newgame", "%n round(s)", "", static_cast<int>(rounds)),
+        .arg(QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds)),
              QString::number(minutes));
 }
 
@@ -542,11 +560,15 @@ void NewGameDialog::rebuildOpponentRows()
         row.name->setMaxLength(newgame::MaximumNameLength);
         row.name->setObjectName(QStringLiteral("botName%1").arg(index));
 
-        // A PRE-FILLED DEFAULT, and one that is not already taken. The stock
-        // list runs out at five, which is exactly the maximum number of
-        // opponents, so the fallback below is unreachable today and is written
-        // anyway - it is one line against a blank field that disables Deal for
-        // a reason the player did not cause.
+        // A PRE-FILLED DEFAULT, so no row starts blank - a blank one disables
+        // Deal for a reason the player did not cause. The stock list holds one
+        // name per seat at the largest table there is, so the fallback is
+        // unreachable; it is one line against the day MaximumSeats moves.
+        //
+        // IT DOES NOT AVOID THE HUMAN'S NAME, unlike the terminal's quick start,
+        // and that is section 13's own answer: a player who types "Ana" gets the
+        // duplicate marked and Deal disabled, which names the collision instead
+        // of silently renaming a seat under them.
         row.name->setText(index < stockNames().size() ? stockNames().at(index)
                                                       : tr("Bot %1").arg(index + 1));
 

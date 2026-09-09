@@ -5,6 +5,7 @@
 #include "engine/GameController.h"
 #include "engine/Prompts.h"
 #include "paint/Theme.h"
+#include "ui/NewGameDialog.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -12,6 +13,7 @@
 #include <chrono>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -22,12 +24,14 @@ QT_END_NAMESPACE
 
 QT_BEGIN_NAMESPACE
 class QDockWidget;
+class QStackedWidget;
 QT_END_NAMESPACE
 
 class BidStrip;
 class CardArtWindow;
 class HandItem;
 class InfoStrip;
+class MainMenuPage;
 class PromptBar;
 class ScoreboardWidget;
 class TableScene;
@@ -119,6 +123,16 @@ private slots:
     // prompt cached by onBetRequested().
     void onBidChosen(unsigned int bet);
 
+    // Section 13's dialog, opened from the main menu. Builds a GameSetup from
+    // what it was told and starts a game on it - which for the second and every
+    // later game is section 4.3's ordering run again from the top.
+    void showNewGameDialog();
+
+    // THE PAUSE. Raises it, opens the dialog, and lifts it on every path out -
+    // see the RAII guard in the body, and PauseDialog.h for why a modal dialog
+    // is safe here and is not safe for a bid.
+    void showPauseMenu();
+
 private:
     void appendLine(const QString& line);
 
@@ -151,13 +165,28 @@ private:
     // its owner rather than outliving the client.
     void showCardArt();
 
+    // The two pages of section 12's window. The menu is what the client opens
+    // on and what abandoning a game returns to; the table is everything phases B
+    // and C built, kept whole between games rather than rebuilt.
+    void showMainMenu();
+    void showTable();
+
     // Prepares the controller and starts a game, and - the reason this is a
     // function rather than two calls in the constructor - clears the elapsed
     // origin first. That origin belongs to a GAME, not to the window: leaving
     // it set would make a second game's elapsed column continue from the first
-    // one's start. Phase A never starts a second game, so this is the one place
-    // phase D's setup dialog has to go through for that to stay true.
-    void startGame(romanian_whist::GameSetup setup);
+    // one's start.
+    //
+    // AND SINCE D1, EVERYTHING ELSE A SECOND GAME INHERITS. The controller
+    // resets nothing in place, but this window is reused whole - the two cached
+    // prompts, the last snapshot, the bid strip's visibility and the fan all
+    // belong to the game that has ended. See the body for the list.
+    //
+    // The seat and the pacing come from the dialog rather than from a literal,
+    // which is the whole of what D1 changed about starting a game.
+    void startGame(romanian_whist::GameSetup setup,
+                   std::optional<romanian_whist::Seat> humanSeat,
+                   Pacing pacing);
 
     // The status bar, from the snapshot - but only when it would actually
     // change. See the shown* members below.
@@ -209,6 +238,17 @@ private:
     // and is empty in a blind round, so it cannot supply either (section 4.0).
     PlayPrompt activePrompt;
 
+    // Section 12's window, as two pages. Page 0 is the menu and page 1 the
+    // table composite buildTable() assembles.
+    QStackedWidget* pages = nullptr;
+    MainMenuPage* menuPage = nullptr;
+
+    // WHAT THE LAST GAME WAS DEALT FROM, so New Game pre-fills with it - section
+    // 16.2's "play again reopens the setup dialog pre-filled with the same
+    // settings". In memory rather than in QSettings, which is section 20 and
+    // phase E.
+    newgame::Config lastConfig = newgame::defaults();
+
     // Holds the .ui's log widget from buildLogDock() onward.
     QDockWidget* logDock = nullptr;
 
@@ -241,6 +281,17 @@ private:
     // Set by closeEvent() before it stops the game, so onGameStopped() can tell
     // a stop it caused from one it did not.
     bool closing = false;
+
+    // ITS TWIN, and D1 is what made a second one necessary. Set by
+    // showPauseMenu() before ITS stop, for the same reason and read in the same
+    // place: without it, abandoning a game to the main menu closes the
+    // application. Cleared by startGame(), so it is true for exactly one stop.
+    bool returningToMenu = false;
+
+    // Is there a game to pause? False on the menu page, and false again the
+    // moment a game ends by any of its three endings - a Resume offered on a
+    // finished game would promise something that cannot happen.
+    bool gameRunning = false;
 
     // DECLARED LAST, so it is destroyed FIRST: ~GameController joins the game
     // thread, and that has to happen before the widgets its slots write to are

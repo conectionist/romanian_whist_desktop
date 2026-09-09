@@ -321,6 +321,11 @@ TEST_CASE("The summary line names the round count it computed", "[new-game]")
     config.botSpeed = newgame::FastestSpeed;
     REQUIRE_FALSE(newgame::summaryText(config).isEmpty());
     REQUIRE_FALSE(newgame::summaryText(config).contains(QStringLiteral("0 minutes")));
+
+    // NOT "26 round(s)". The parenthesised plural is an idiom that only resolves
+    // through a translator, so an untranslated build printed it verbatim - which
+    // no assertion here noticed until the dialog was rendered and read.
+    REQUIRE_FALSE(newgame::summaryText(config).contains(QStringLiteral("(s)")));
 }
 
 TEST_CASE("A fixed deal seeds the bots that draw, so the game repeats", "[new-game]")
@@ -420,6 +425,43 @@ TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")
     // not cause.
     for(const QString& name : dialog.config().botNames)
         REQUIRE_FALSE(name.isEmpty());
+}
+
+TEST_CASE("Every row of the largest table is pre-filled with a real name", "[new-game]")
+{
+    // THE LARGEST TABLE IS A WATCHED ONE, which is the whole of this case: six
+    // bots where a played game has five, because nobody is taking a chair. The
+    // stock list was five long - sized for the played maximum - so the sixth row
+    // fell through to a "Bot 6" placeholder, found by rendering a six-seat game
+    // rather than by anything here.
+    //
+    // AND THE DIALOG IS STILL DEALABLE at that size, which is the assertion that
+    // makes this about more than tidiness: a placeholder name that collided with
+    // a stock one would disable Deal outright.
+    NewGameDialog dialog(newgame::defaults());
+
+    QRadioButton* watch = dialog.findChild<QRadioButton*>("watching");
+    QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
+    QPushButton* deal = dialog.findChild<QPushButton*>("deal");
+    REQUIRE(watch != nullptr);
+    REQUIRE(count != nullptr);
+    REQUIRE(deal != nullptr);
+
+    watch->setChecked(true);
+    count->setValue(static_cast<int>(newgame::MaximumSeats));
+
+    const newgame::Config config = dialog.config();
+    REQUIRE(config.botNames.size() == static_cast<int>(newgame::MaximumSeats));
+
+    for(const QString& name : config.botNames)
+    {
+        INFO("name " << name.toStdString());
+        REQUIRE_FALSE(name.isEmpty());
+        REQUIRE_FALSE(name.startsWith(QStringLiteral("Bot ")));
+    }
+
+    REQUIRE_FALSE(newgame::firstError(config).has_value());
+    REQUIRE(deal->isEnabled());
 }
 
 TEST_CASE("The dialog refuses to deal a game the engine would reject", "[new-game]")

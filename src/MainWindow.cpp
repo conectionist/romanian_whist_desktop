@@ -8,6 +8,9 @@
 #include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
 #include "ui/InfoStrip.h"
+#include "ui/MainMenuPage.h"
+#include "ui/NewGameDialog.h"
+#include "ui/PauseDialog.h"
 #include "ui/PromptBar.h"
 #include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
@@ -26,6 +29,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QStringList>
 #include <QResizeEvent>
@@ -40,86 +44,16 @@ using namespace romanian_whist;
 
 namespace
 {
-// Phase A's game, hardcoded. Phase D replaces this with the setup dialog.
+// PHASE A's HARDCODED GAME IS GONE, and this is what replaced it: nothing. The
+// seed, the seat and buildSetup() all lived here, and D1's dialog answers all
+// three - so the client no longer has an opinion about what game to play until
+// somebody asks for one.
 //
-// A FIXED SEED, so a misread frame is reproducible: the same deal and the same
-// bot choices every run, which is what makes "that card is wrong" a thing that
-// can be looked at twice.
-constexpr std::uint32_t kSeed = 42;
-
-// WHICH CHAIR THE PLAYER SITS IN. A literal for the same reason the seed above
-// is one and with the same life: section 13's setup dialog is what asks for both,
-// and phase D is where it is written. Neither is a fact about the game - the
-// engine is never told that a seat is a human's, and could not use it if it were.
-// A SeatSetup is a name and an IMoveProvider, and the human's is a SeatProvider
-// forwarding to QtMoveProvider, which is the same "a move comes from somewhere"
-// every bot seat has.
-//
-// What this index IS for is three questions the CLIENT has to answer and the
-// engine has no opinion on: which seat's provider GameController::start() fills,
-// who canSeeHand(viewer, holder) is asked on behalf of - it needs a viewer, and a
-// spectator game has none - and who is drawn at the bottom of the table in bold
-// with no thinking-beat before their turn. It is a VIEWER, not a player type.
-//
-// NON-ZERO DELIBERATELY. seatlayout puts seat 0 at bottom-centre when there is no
-// human at all, so seating seat 0 would draw a table identical to phase B's and a
-// client that dropped humanSeat on the floor would look correct. At seat 1 the
-// bottom plaque reading "Bogdan (you)" is a real assertion, and so is the
-// scoreboard bolding the second row. Bottom-centre is DERIVED from this index
-// rather than equal to it - seatlayout::seatCentres() places whichever seat it is
-// told about at the bottom and runs the rest clockwise from there.
-constexpr unsigned int kHumanSeat = 1;
-
-GameSetup buildSetup()
-{
-    GameSetup setup;
-
-    // Deterministic strategies only. RandomCardStrategy would need its own seed
-    // to be reproducible at all, and its draw count depends on what every other
-    // seat bids - so any behavioural change desyncs its stream and turns a
-    // located difference into "something changed somewhere".
-    setup.seats.push_back(SeatSetup{ "Ana",
-        std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()) });
-
-    // THE HUMAN'S SEAT, left null on purpose. GameController::start() fills
-    // exactly this one, addressed by the index prepare() was given, with a
-    // SeatProvider forwarding to the QtMoveProvider the controller keeps - not
-    // with the provider itself, which would then be destroyed with the engine on
-    // the game thread while a click handler still pointed at it.
-    //
-    // Any OTHER null seat stays null and GameEngine::start() rejects it BY NAME,
-    // which is the behaviour worth preserving: a forgotten bot is reported
-    // rather than quietly handed to the player as a second seat.
-    setup.seats.push_back(SeatSetup{ "Bogdan", nullptr });
-
-    setup.seats.push_back(SeatSetup{ "Cristina",
-        std::make_unique<AiMoveProvider>(std::make_unique<FirstCardStrategy>()) });
-    // Ducking rather than LowRisk since C1, only so that the three deterministic
-    // strategies are all represented now that the seat holding this one has a
-    // person in it.
-    setup.seats.push_back(SeatSetup{ "Dan",
-        std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()) });
-
-    setup.structure = GameStructure::S_181;
-
-    // Left at its default deliberately: it appends a Forehead round and then a
-    // Hidden one. Through phase B they differed only in the round-type column,
-    // because a spectator game fills no hand for anyone - Snapshot.cpp populates
-    // seat hands only once a human is seated - so the reason to keep them was
-    // narrower than a hand: a client that called every round Normal would hide
-    // the two rounds phase C stalls in.
-    //
-    // C1 IS WHERE THEY START EARNING IT. With a seat filled, these are the two
-    // rounds in which the snapshot's hand is empty while the engine waits on a
-    // card, and section 8 is explicit that a client driving its hand from
-    // snapshots stops working in exactly them and nowhere else. A run that
-    // reaches game over has passed the test the last two rounds exist to be.
-    setup.endWithForeheadAndHidden = true;
-
-    setup.shuffleSeed = kSeed;
-
-    return setup;
-}
+// THE SEAT INDEX IS WORTH ONE LINE ON ITS WAY OUT. It was 1 rather than 0, and
+// deliberately: seatlayout draws seat 0 at bottom-centre for a spectator too, so
+// a client that dropped humanSeat entirely would have looked correct at 0. The
+// dialog seats the human at 0 now - the terminal does the same - and the
+// property that index was standing in for is a test in NewGameTests instead.
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -162,11 +96,15 @@ MainWindow::MainWindow(QWidget *parent)
     buildLogDock();
     buildViewMenu();
 
-    // Replaced by the first snapshot, which arrives from inside start() below -
-    // so this is on screen only for as long as the deal takes.
-    statusBar()->showMessage(tr("Dealing..."));
-
-    startGame(buildSetup());
+    // NO GAME AT LAUNCH, which is what phase D's "the app never needs a command
+    // line" actually means and what the terminal does - its startGame() runs the
+    // setup wizard before a card exists. Phases A to C dealt a hardcoded game
+    // from right here.
+    //
+    // AND NO DIALOG FROM A CONSTRUCTOR EITHER. The menu is a page in the window,
+    // so this is a stack index rather than an exec() on a window that has not
+    // been shown yet.
+    showMainMenu();
 }
 
 // Section 12's four regions, minus the two that are not B2b's: the prompt bar,
@@ -205,6 +143,8 @@ void MainWindow::buildTable()
 
     promptBar = new PromptBar(this);
 
+    connect(promptBar, &PromptBar::menuRequested, this, &MainWindow::showPauseMenu);
+
     scene->setTheme(theme);
     infoStrip->setTheme(theme);
     scoreboard->setTheme(theme);
@@ -234,7 +174,107 @@ void MainWindow::buildTable()
     // point of it.
     stack->addWidget(promptBar);
 
-    setCentralWidget(central);
+    // TWO PAGES, and the table keeps its own state between games. The menu is
+    // page 0 because that is what the window opens on; nothing is destroyed when
+    // the pages change, so a second game repaints the same scene rather than
+    // building another.
+    menuPage = new MainMenuPage(this);
+    menuPage->setTheme(theme);
+
+    connect(menuPage, &MainMenuPage::newGameRequested, this, &MainWindow::showNewGameDialog);
+
+    // close() rather than qApp->quit(), so Quit goes through closeEvent() and
+    // therefore through stop() - section 12's rule that abandoning, quitting and
+    // closing the window are the same three calls in the same order. There is no
+    // game running when this button is reachable, which makes the stop a no-op
+    // and the uniformity free.
+    connect(menuPage, &MainMenuPage::quitRequested, this, &MainWindow::close);
+
+    pages = new QStackedWidget(this);
+    pages->addWidget(menuPage);
+    pages->addWidget(central);
+
+    setCentralWidget(pages);
+}
+
+void MainWindow::showMainMenu()
+{
+    pages->setCurrentWidget(menuPage);
+
+    // The log dock belongs to the table, not to the menu - it is a diagnostic
+    // for a game, and there is none here. Its View action is left alone, so a
+    // dock the player opened comes back with the next game.
+    if(logDock)
+        logDock->hide();
+
+    statusBar()->clearMessage();
+}
+
+void MainWindow::showTable()
+{
+    pages->setCurrentWidget(pages->widget(1));
+}
+
+void MainWindow::showNewGameDialog()
+{
+    // ON THE LAST ACCEPTED CONFIG, so play again pre-fills with the settings the
+    // last game was dealt from (section 16.2). Held here rather than in
+    // QSettings, which is section 20 and phase E.
+    NewGameDialog dialog(lastConfig, this);
+
+    if(dialog.exec() != QDialog::Accepted)
+        return;
+
+    lastConfig = dialog.config();
+
+    // A FRESH GameSetup EVERY TIME, never a stashed one: it is move-only and
+    // spent by the move into start(), so even the path where start() throws
+    // needs the dialog's config re-built rather than a copy kept (section 13).
+    startGame(newgame::buildSetup(lastConfig),
+              newgame::humanSeatOf(lastConfig),
+              newgame::pacingFor(lastConfig.botSpeed));
+}
+
+void MainWindow::showPauseMenu()
+{
+    // NOTHING TO PAUSE ON THE MENU PAGE. Esc is bound on the window, so it
+    // arrives here whichever page is showing.
+    if(!gameRunning)
+        return;
+
+    // RAII, so the pause is lifted on every path out of exec() - the two
+    // buttons, Esc, the title bar's close, and a throw. A pause that outlived
+    // this scope would leave the game thread parked in pace() with nothing on
+    // screen to release it.
+    struct PauseGuard
+    {
+        GameController& controller;
+        explicit PauseGuard(GameController& _controller) : controller(_controller)
+        {
+            controller.setPaused(true);
+        }
+        ~PauseGuard() { controller.setPaused(false); }
+    };
+
+    const PauseGuard guard(controller);
+
+    PauseDialog dialog(this);
+
+    if(dialog.exec() != PauseDialog::MainMenu)
+        return;
+
+    // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
+    // own - onGameStopped() closes the window for any stop it cannot account
+    // for, and this is the second such stop the client has ever produced.
+    returningToMenu = true;
+
+    // The guard lifts the pause as this scope ends, and stop() has already woken
+    // the paced thread with cancelPacing() by then - so neither depends on the
+    // other having run first.
+    controller.stop();
+
+    gameRunning = false;
+    showMainMenu();
 }
 
 void MainWindow::capScoreboard()
@@ -322,7 +362,7 @@ void MainWindow::showCardArt()
     cardArt->activateWindow();
 }
 
-void MainWindow::startGame(GameSetup setup)
+void MainWindow::startGame(GameSetup setup, std::optional<Seat> humanSeat, Pacing pacing)
 {
     // CLEARED HERE, not in the constructor: the elapsed column is measured from
     // a game's first snapshot, so the origin has to be re-armed by whatever
@@ -337,6 +377,36 @@ void MainWindow::startGame(GameSetup setup)
     // boundary is the one thing the column exists for.
     ui->log->clear();
 
+    // EVERYTHING BELOW IS GAME ONE'S, and none of it was cleared before D1
+    // because phase A never started a second game. The controller resets nothing
+    // in place - prepare() builds a fresh bridge and provider - but the WINDOW is
+    // reused whole, and every one of these outlives a game that has ended.
+    //
+    // The two cached prompts matter most: they name a promptId belonging to a
+    // provider prepare() is about to destroy. The generation gate would drop a
+    // click carrying one (section 4.2), so this is belt and braces rather than
+    // the defence - but a stale PlayPrompt is also what the prompt bar and the
+    // fan would be redrawn from.
+    activeBetPrompt = BetPrompt{};
+    activePrompt = PlayPrompt{};
+    lastSnapshot.reset();
+
+    bidStrip->hide();
+    hand->clear();
+    hand->setPlayable(false);
+    promptBar->setFields(promptbar::idle());
+
+    // Cleared here rather than in showPauseMenu(), so that the flag is false for
+    // exactly one stop and cannot survive into a game it was not raised for.
+    returningToMenu = false;
+    gameRunning = true;
+
+    showTable();
+
+    // Replaced by the first snapshot, which arrives from inside start() below -
+    // so this is on screen only for as long as the deal takes.
+    statusBar()->showMessage(tr("Dealing..."));
+
     // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one
     // optional decides three things at once and they must not be separable:
     // GameBridge stamps it onto every snapshot as humanSeat, which is what gives
@@ -348,7 +418,18 @@ void MainWindow::startGame(GameSetup setup)
     // botBeat() picks spectatorBeat (250ms) only when nobody is seated and
     // beat (700ms) when somebody is - section 4.1's split, which phases A and B
     // only ever saw one side of. A spectator watches; a player is waited for.
-    controller.prepare(Seat{ kHumanSeat }, Pacing{});
+    // FROM THE DIALOG SINCE D1, both of them. The one optional decides three
+    // things at once and they must not be separable: GameBridge stamps it onto
+    // every snapshot as humanSeat, which is what gives canSeeHand() a viewer;
+    // GameController builds a QtMoveProvider from it and fills that seat in
+    // start(); and botBeat() reads it to choose which beat to pace at.
+    //
+    // NO MODAL DIALOG MAY RUN BETWEEN prepare() AND HERE, and that is the one
+    // ordering trap in the reuse. prepare() calls stop() and then purges this
+    // object's posted MetaCalls - and THAT PURGE is what drops game one's queued
+    // gameStopped before it reaches onGameStopped(). Anything spinning the event
+    // loop in that gap delivers the relay instead, and the window closes.
+    controller.prepare(humanSeat, pacing);
     controller.start(std::move(setup));
 }
 
@@ -574,6 +655,16 @@ void MainWindow::onCardPicked(std::size_t slot)
 // a control that looks live and does nothing is its own defect.
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
+    // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc opens the pause
+    // dialog, which is the keyboard half of the prompt bar's Menu button - and
+    // it is checked first because the digit path below subtracts Key_1 from
+    // whatever arrives and would otherwise have to reason about the result.
+    if(event->key() == Qt::Key_Escape)
+    {
+        showPauseMenu();
+        return;
+    }
+
     // UNMODIFIED DIGITS ONLY, the guard C2's review put on the bid strip and for
     // the same reason: a played card is irrevocable, and Ctrl+1 belongs to
     // whatever the window binds it to. The keypad's own modifier is masked back
@@ -623,9 +714,17 @@ void MainWindow::onGameStopped()
     if(closing)
         return;
 
-    // A stop from somewhere else. Nothing in phase A produces one - there is no
-    // menu and no second game - but leaving the branch out would make the first
-    // caller that does produce one look like a hang.
+    // THE SECOND STOP THIS WINDOW CAUSES, and D1 is what introduced it. Without
+    // this branch, abandoning a game to the main menu closes the application -
+    // the flag above is the only thing that ever guarded that, and phase A had
+    // no other producer to guard against.
+    if(returningToMenu)
+        return;
+
+    // A stop from somewhere else again - now genuinely nothing, since both of
+    // this client's own stops are accounted for above. Kept because leaving the
+    // branch out would make the first caller that does produce one look like a
+    // hang.
     close();
 }
 
@@ -659,10 +758,23 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
     statusBar()->showMessage(names.size() == 1
                                  ? tr("%1 wins").arg(names.front())
                                  : tr("Drawn between %1").arg(names.join(tr(", "))));
+
+    // THE GAME IS OVER BUT THE TABLE STAYS UP, which is what section 16.2's
+    // panel is drawn over and what D2 builds. Until then the standings are in
+    // the status bar and the log, and the way on is the Menu button.
+    //
+    // Cleared so that the pause cannot be opened on a finished game: there is
+    // nothing to hold, and Resume would promise a game that has already ended.
+    gameRunning = false;
 }
 
 void MainWindow::showFailure(QString what)
 {
+    // Neither onGameStopped() nor onGameOver() fires on this path, so the flag
+    // they clear has to be cleared here too - otherwise the pause dialog is
+    // still reachable on a game whose thread has already unwound.
+    gameRunning = false;
+
     bidStrip->hide();
     hand->setPlayable(false);
     promptBar->setFields(promptbar::idle());
