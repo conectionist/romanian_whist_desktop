@@ -27,6 +27,11 @@
 // bid/won pill and section 18's +/- score colours - each added in the phase
 // whose widget needed it, and each added HERE rather than in that widget, which
 // is the rule that matters. Nothing in section 18 is owed to this struct now.
+//
+// The one member section 18 does NOT name is accentText below, which is not a
+// sixth design colour but the accent's second FORM: a colour readable as a mark
+// and a colour readable as a word are different colours, and the section spells
+// out neither. See the note on it.
 struct Theme
 {
     // Qt's own type rather than an enum of ours, because the caller that
@@ -43,6 +48,23 @@ struct Theme
     QColor accent;
     QColor textPrimary;
     QColor dimmedOverlay;
+
+    // THE ACCENT AS TEXT, which is not the same colour as the accent as a mark.
+    // C4 painted section 17's round-type label in `accent` and the light theme's
+    // amber measured 2.0:1 against the plaque behind it - below even the 3:1
+    // large-text floor, and dimmer than the textPrimary the label had before,
+    // so the line meant to CATCH the eye read worse than the three beside it.
+    //
+    // A hairline or a pip on a card can be the bright amber, because a mark is
+    // read as a shape at whatever contrast it has. A word has to be read as
+    // letters. So the two uses are two members: `accent` stays what it was for
+    // every mark already drawing it, and text takes the darkened one here.
+    //
+    // In the dark theme they are one colour, because the amber that had to be
+    // lifted to hold against a dark plaque already reads as text against it -
+    // hence the assignment rather than a literal in dark(). The split exists
+    // for the light theme; the dark one just keeps the same two names honest.
+    QColor accentText;
 
     // Section 14's bid/won pill, which is colour-coded because "on target",
     // "still owing tricks" and "over the bid" are three different states and a

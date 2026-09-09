@@ -389,11 +389,12 @@ comes from `isWinning` and is never recomputed.
       `lowestLegalBid()`. **§12's prompt bar landed here too** — it is what explains a dimmed fan,
       which is a question only this step raises.
 - [x] **…and C4's clickable backs, which C3 could not leave behind.** See the box below.
-- [ ] **C4 — blind rounds.** ~~`handIndex.size()` face-down backs, clickable~~ — **done in C3**, which
-      could not delete the stand-in without them. What is left is the other half: **other seats'
-      cards from `SeatView::hand`** in a Forehead round (§17), drawn face-up on their plaques. That
-      is a `SeatItem` change rather than a `HandItem` one, and `seats[i].hand` has been populated
-      since C1 with nothing reading it.
+- [x] **C4 — blind rounds.** ~~`handIndex.size()` face-down backs, clickable~~ — done in C3, which
+      could not delete the stand-in without them. This is the other half: **other seats' cards from
+      `SeatView::hand`** in a Forehead round (§17), face-up on their plaques, in the slot the
+      cards-left stack occupies — so **`plaqueSize()` does not change** and the table holds still
+      between rounds. §17's accent-coloured round type landed with it. **Hidden needed no code at
+      all**: see below.
 - [ ] **C5 — shutdown while parked.** Close the window with the bid panel open. This is the
       `GameAbandoned` path and the only one that should produce it. **Both halves are already
       standing as of C2** — `GameControllerTests`' "A stop while the game is parked on a prompt ends
@@ -532,6 +533,35 @@ has strategies for anything better; a stand-in that played well would be one som
   only for the final bidder. `TableView` watches it for `LayoutRequest` and `Show` rather than
   placing it once, because a window nobody resizes would never correct itself.
 
+
+### What the C4 run found
+
+- **Hidden rounds were already finished, and the way to establish that was to look.** §17 wants every
+  card face-down there, and that is what the table already showed: `canSeeHand()` is nobody, so every
+  `seats[i].hand` is empty, every plaque keeps its cards-left stack — which *is* the face-down card —
+  and your own card is C3's back in the fan. **A step whose plan says "build nothing here" is worth
+  more than one that builds something**, and the offscreen render is what turned that from a claim
+  into a fact.
+- **A mutation that crashes proves nothing.** Making `showsFace()` always true made `refreshFace()`
+  read `hand.front()` off an empty vector, so the run died instead of failing and the probe said
+  nothing about the test. The guard now checks the thing it is about to dereference rather than a
+  rect derived from it — belt and braces on a real crash — and only then was the mutation a fair
+  question to ask.
+- **And the answer was that the test did not cover it.** With the crash closed, `showsFace()` always
+  true *passed*: `refreshFace()` re-checks the hand, so no card is drawn either way. What that flag
+  really decides is the **layout** — a plaque wrongly believing it holds a card narrows its text
+  column and drops its stack, in twenty-four rounds of twenty-six, drawing no card at all. `SeatItem`
+  exposes its own decision now, and both directions of it fail.
+- **`SeatItem` had no test file until this step** — the last item on the table without one, and
+  B2b's four findings were every one of them in a painted widget of exactly this shape.
+- **The table holding still was checked with pixels, not eyes.** The two rounds render to images whose
+  plaque *name* areas are byte-identical, and whose only differences are inside the card slots. That
+  is `plaqueSize()` being a static of the card height alone, which is the property the whole
+  placement decision was chosen to keep.
+- **Editing `tests/CMakeLists.txt` while a background sanitizer build was in flight destroyed its
+  build tree.** The run came back with an empty error count rather than a failure, which reads like a
+  pass at a glance. **Do not touch the build inputs while a background build is running** — and
+  read the count, never the absence of one.
 
 ### Why C3 took C4's backs, and where the hand went
 
@@ -700,6 +730,8 @@ Symptom first, because that is what you have.
 | The bid strip draws over your own seat plaque | It was placed against the viewport instead of `TableScene::overlayBand()` — the bottom of the table is where the seated player is drawn | §15.1 |
 | The card played is not the card pointed at, only in the overlaps | The fan's hit test walks forwards. Cards overlap and later ones are on top, so the slot is the LAST box containing the point | §14 |
 | A hovered card rises into your own plaque | The fan is centred in its strip rather than bottom-aligned, so half the lift reserve sits below the card | §15.2 |
+| Your own card is face-up on your own plaque in a Forehead round | Something other than `SeatView::hand` decided to draw it. A non-empty hand IS `canSeeHand()`'s permission, and your own is empty there | §17 |
+| The table shifts when a Forehead round starts | `plaqueSize()` stopped being a function of the card height alone. It feeds `seatRingRect()` and `fitsOnTable()` | §14, C4's findings |
 | The game stops on your turn in a Forehead or Hidden round, after a resize | The fan was re-sourced from the snapshot mid-prompt, and a blind round's snapshot hand is empty. `HandItem` refuses that while a prompt is live | §17, phase E's box |
 | Closing the window seems to leave the process running, tested with a script | `xdotool windowclose` destroys the window without a `QCloseEvent`, so `closeEvent()` never runs. Use `wmctrl -ic` | C2's findings |
 | Nothing to click in the last two rounds | The hand is being driven by the snapshot instead of `PlayPrompt` | §4.0, §17 |

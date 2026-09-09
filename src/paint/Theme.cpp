@@ -104,9 +104,10 @@ struct Theme::Cache
 quint64 Theme::paletteKey() const
 {
     return qHashMulti(0, tableSurface.rgba(), seatPlaque.rgba(), accent.rgba(),
-                      textPrimary.rgba(), dimmedOverlay.rgba(),
-                      bidOnTarget.rgba(), bidOwing.rgba(), bidOver.rgba(),
-                      scorePositive.rgba(), scoreNegative.rgba());
+                      accentText.rgba(), textPrimary.rgba(),
+                      dimmedOverlay.rgba(), bidOnTarget.rgba(),
+                      bidOwing.rgba(), bidOver.rgba(), scorePositive.rgba(),
+                      scoreNegative.rgba());
 }
 
 Theme Theme::light()
@@ -115,10 +116,24 @@ Theme Theme::light()
     theme.tableSurface = QColor(0x3D, 0x6B, 0x54);
     theme.seatPlaque = QColor(0xF4, 0xF3, 0xEF);
     theme.accent = QColor(0xE0, 0xA3, 0x2E);
+
+    // The same amber walked down until it reads as words on the plaque above:
+    // 5.4:1 against seatPlaque, where the accent itself is 2.0:1. Darkened along
+    // its own hue rather than swapped for a brown, so the called-out round is
+    // recognisably the accent colour and not a second one to learn.
+    theme.accentText = QColor(0x7A, 0x60, 0x19);
+
     theme.textPrimary = QColor(0x1C, 0x1F, 0x1D);
     theme.dimmedOverlay = QColor(0x00, 0x00, 0x00, 110);
     theme.bidOnTarget = QColor(0x2E, 0x7D, 0x4F);
-    theme.bidOwing = QColor(0x8A, 0x6D, 0x1E);
+
+    // DARKENED IN C4a, from 0x8A6D1E, and by a hair rather than by design: the
+    // contrast case added with accentText measured the old amber at 4.41:1 on
+    // the plaque, which is under AA by less than a tenth and had been since B2.
+    // Same hue, five percent less light, 5.1:1 - the pill state a player learned
+    // is the pill state they still see.
+    theme.bidOwing = QColor(0x7F, 0x64, 0x1A);
+
     theme.bidOver = QColor(0xA8, 0x3F, 0x2C);
     theme.scorePositive = QColor(0x1E, 0x6B, 0x3F);
     theme.scoreNegative = QColor(0x9C, 0x2F, 0x22);
@@ -135,6 +150,13 @@ Theme Theme::dark()
     theme.tableSurface = QColor(0x23, 0x40, 0x2F);
     theme.seatPlaque = QColor(0x2A, 0x2E, 0x2C);
     theme.accent = QColor(0xF0, 0xB6, 0x46);
+
+    // ONE COLOUR HERE, and the header says why: the lift this accent already
+    // took to hold against a dark plaque is the same lift text needs, so it
+    // measures 7.5:1 as it stands. Assigned rather than repeated as a literal,
+    // because a second copy of the value is a second thing to keep in step.
+    theme.accentText = theme.accent;
+
     theme.textPrimary = QColor(0xE8, 0xE6, 0xE1);
     theme.dimmedOverlay = QColor(0x00, 0x00, 0x00, 140);
 
@@ -143,7 +165,13 @@ Theme Theme::dark()
     // hold against the darker plaque behind them.
     theme.bidOnTarget = QColor(0x4C, 0xB3, 0x7B);
     theme.bidOwing = QColor(0xD1, 0xA6, 0x3E);
-    theme.bidOver = QColor(0xE0, 0x6A, 0x53);
+
+    // LIFTED FURTHER IN C4a, from 0xE06A53. The paragraph above is the rule and
+    // this was the one of the three that did not quite follow it: the red came
+    // out at 4.17:1 on the dark plaque where the green and the amber cleared 5,
+    // which is what "only bright enough" reads as when it is judged by eye. Same
+    // red, four percent more light, 4.7:1.
+    theme.bidOver = QColor(0xE3, 0x79, 0x64);
     theme.scorePositive = QColor(0x5F, 0xC1, 0x88);
     theme.scoreNegative = QColor(0xE8, 0x76, 0x5F);
     theme.cache = std::make_shared<Cache>();
