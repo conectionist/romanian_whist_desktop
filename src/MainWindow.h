@@ -32,6 +32,7 @@ class CardArtWindow;
 class HandItem;
 class InfoStrip;
 class MainMenuPage;
+class PauseOverlay;
 class PromptBar;
 class ScoreboardWidget;
 class TableScene;
@@ -128,10 +129,13 @@ private slots:
     // later game is section 4.3's ordering run again from the top.
     void showNewGameDialog();
 
-    // THE PAUSE. Raises it, opens the dialog, and lifts it on every path out -
-    // see the RAII guard in the body, and PauseDialog.h for why a modal dialog
-    // is safe here and is not safe for a bid.
+    // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
+    // its own slot because that is what the Menu button connects to.
     void showPauseMenu();
+
+    // Abandons the running game and returns to the main menu. The second stop
+    // this window produces, and the reason `returningToMenu` exists.
+    void abandonToMenu();
 
 private:
     void appendLine(const QString& line);
@@ -170,6 +174,16 @@ private:
     // and C built, kept whole between games rather than rebuilt.
     void showMainMenu();
     void showTable();
+
+    // SHOWS THE PAUSE MENU AND HOLDS THE GAME, OR NEITHER. The two are set here
+    // together and nowhere else, so no caller can put them out of step - the
+    // hardening phase E's box asks for on the fan, applied to the pause before
+    // it has had a chance to go wrong.
+    //
+    // This replaced an RAII guard around a modal QDialog::exec(). The dialog
+    // went because Qt drops window-system events to a window a modal blocks, so
+    // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
+    void setPauseMenuVisible(bool visible);
 
     // Prepares the controller and starts a game, and - the reason this is a
     // function rather than two calls in the constructor - clears the elapsed
@@ -213,6 +227,12 @@ private:
 
     // Section 12's fourth region, and the last to be built.
     PromptBar* promptBar = nullptr;
+
+    // The pause menu, a child of the stack rather than a page in it or a dialog
+    // of its own - it covers whichever page is showing and dims it. Its
+    // visibility and GameController's pause are one fact; see
+    // setPauseMenuVisible().
+    PauseOverlay* pauseOverlay = nullptr;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this

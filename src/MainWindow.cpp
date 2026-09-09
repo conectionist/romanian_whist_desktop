@@ -10,7 +10,7 @@
 #include "ui/InfoStrip.h"
 #include "ui/MainMenuPage.h"
 #include "ui/NewGameDialog.h"
-#include "ui/PauseDialog.h"
+#include "ui/PauseOverlay.h"
 #include "ui/PromptBar.h"
 #include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
@@ -195,6 +195,19 @@ void MainWindow::buildTable()
     pages->addWidget(central);
 
     setCentralWidget(pages);
+
+    // A CHILD OF THE STACK, not a page in it, and not a dialog. It covers
+    // whichever page is showing rather than replacing one - the point is to dim
+    // the table and still show it. Hidden until a game is paused, and its
+    // geometry is kept by resizeEvent() below.
+    pauseOverlay = new PauseOverlay(pages);
+    pauseOverlay->setTheme(theme);
+    pauseOverlay->hide();
+
+    connect(pauseOverlay, &PauseOverlay::resumeRequested,
+            this, [this]{ setPauseMenuVisible(false); });
+
+    connect(pauseOverlay, &PauseOverlay::mainMenuRequested, this, &MainWindow::abandonToMenu);
 }
 
 void MainWindow::showMainMenu()
@@ -235,42 +248,52 @@ void MainWindow::showNewGameDialog()
               newgame::pacingFor(lastConfig.botSpeed));
 }
 
+void MainWindow::setPauseMenuVisible(bool visible)
+{
+    // ONE FACT, NOT TWO. "The menu is up" and "the game is held" are set here
+    // together and nowhere else, so no caller can put them out of step - which
+    // is the hardening phase E's box asks for on the fan's two sources, applied
+    // to the pause before it has a chance to go wrong.
+    //
+    // NOTHING TO PAUSE ON THE MENU PAGE, or on a game that has already ended.
+    // Esc is bound on the window, so it arrives here whichever page is showing.
+    if(visible && !gameRunning)
+        return;
+
+    // WHEN THE OVERLAY WAS A MODAL QDialog THIS WAS AN RAII GUARD around exec(),
+    // and losing that is the one thing this shape gives up: a pause left set
+    // parks the game thread in pace() with nothing on screen to release it. So
+    // the pause is raised only where it is also shown, and every path that ends
+    // a game clears both - startGame() before it prepares, abandonToMenu() with
+    // the stop, and closeEvent()'s stop() through cancelPacing() regardless.
+    controller.setPaused(visible);
+
+    if(!visible)
+    {
+        pauseOverlay->hide();
+        return;
+    }
+
+    pauseOverlay->setGeometry(pages->rect());
+    pauseOverlay->show();
+    pauseOverlay->raise();
+    pauseOverlay->focusResume();
+}
+
 void MainWindow::showPauseMenu()
 {
-    // NOTHING TO PAUSE ON THE MENU PAGE. Esc is bound on the window, so it
-    // arrives here whichever page is showing.
-    if(!gameRunning)
-        return;
+    setPauseMenuVisible(true);
+}
 
-    // RAII, so the pause is lifted on every path out of exec() - the two
-    // buttons, Esc, the title bar's close, and a throw. A pause that outlived
-    // this scope would leave the game thread parked in pace() with nothing on
-    // screen to release it.
-    struct PauseGuard
-    {
-        GameController& controller;
-        explicit PauseGuard(GameController& _controller) : controller(_controller)
-        {
-            controller.setPaused(true);
-        }
-        ~PauseGuard() { controller.setPaused(false); }
-    };
-
-    const PauseGuard guard(controller);
-
-    PauseDialog dialog(this);
-
-    if(dialog.exec() != PauseDialog::MainMenu)
-        return;
+void MainWindow::abandonToMenu()
+{
+    setPauseMenuVisible(false);
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
     // for, and this is the second such stop the client has ever produced.
     returningToMenu = true;
 
-    // The guard lifts the pause as this scope ends, and stop() has already woken
-    // the paced thread with cancelPacing() by then - so neither depends on the
-    // other having run first.
     controller.stop();
 
     gameRunning = false;
@@ -296,6 +319,12 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     capScoreboard();
+
+    // The overlay is a child rather than a layout item, so nothing else moves
+    // it. Only while it is up: a hidden widget's geometry is nobody's business,
+    // and it is set again on the way in.
+    if(pauseOverlay && pauseOverlay->isVisible())
+        pauseOverlay->setGeometry(pages->rect());
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -395,6 +424,12 @@ void MainWindow::startGame(GameSetup setup, std::optional<Seat> humanSeat, Pacin
     hand->clear();
     hand->setPlayable(false);
     promptBar->setFields(promptbar::idle());
+
+    // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
+    // lives on. Unreachable today - every path here comes from the menu page,
+    // where no game is running - and one line against a menu left standing over
+    // a game that has just been dealt.
+    pauseOverlay->hide();
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
@@ -655,13 +690,24 @@ void MainWindow::onCardPicked(std::size_t slot)
 // a control that looks live and does nothing is its own defect.
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
-    // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc opens the pause
-    // dialog, which is the keyboard half of the prompt bar's Menu button - and
-    // it is checked first because the digit path below subtracts Key_1 from
-    // whatever arrives and would otherwise have to reason about the result.
+    // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc raises the pause
+    // menu, which is the keyboard half of the prompt bar's Menu button, and
+    // dismisses it again - so the key that opened it is the key that leaves.
+    // Checked first because the digit path below subtracts Key_1 from whatever
+    // arrives and would otherwise have to reason about the result.
     if(event->key() == Qt::Key_Escape)
     {
-        showPauseMenu();
+        setPauseMenuVisible(!pauseOverlay->isVisible());
+        return;
+    }
+
+    // THE TABLE'S KEYS ARE NOT LIVE WHILE THE MENU IS UP. The overlay swallows
+    // the mouse by covering the table; the keyboard needs saying, because these
+    // digits are read HERE on the window rather than on the fan - so a 3 pressed
+    // over the pause menu would otherwise play the third card.
+    if(pauseOverlay->isVisible())
+    {
+        QMainWindow::keyPressEvent(event);
         return;
     }
 
@@ -771,7 +817,7 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
 void MainWindow::showFailure(QString what)
 {
     // Neither onGameStopped() nor onGameOver() fires on this path, so the flag
-    // they clear has to be cleared here too - otherwise the pause dialog is
+    // they clear has to be cleared here too - otherwise the pause menu is
     // still reachable on a game whose thread has already unwound.
     gameRunning = false;
 

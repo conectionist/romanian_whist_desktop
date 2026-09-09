@@ -3,7 +3,7 @@
 #include "MainWindow.h"
 #include "paint/Theme.h"
 #include "table/TableScene.h"
-#include "ui/PauseDialog.h"
+#include "ui/PauseOverlay.h"
 
 #include <QApplication>
 #include <QDialog>
@@ -45,20 +45,16 @@ void pump(int ms)
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
 }
 
-// Answers whichever modal dialog is up, FROM INSIDE ITS NESTED EVENT LOOP.
-// QDialog::exec() does not return until something answers it, so a test that
-// clicked the button and then looked would never reach the looking - the only
-// way in is a timer that fires within that loop.
-void answerModal(int afterMs, int result)
-{
-    QTimer::singleShot(afterMs, [result]
-    {
-        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
-            dialog->done(result);
-    });
-}
-
-// The same, flipping the setup dialog to "I'm watching" first.
+// Answers the setup dialog FROM INSIDE ITS NESTED EVENT LOOP. QDialog::exec()
+// does not return until something answers it, so a test that clicked New Game
+// and then looked would never reach the looking - the only way in is a timer
+// that fires within that loop.
+//
+// THE PAUSE MENU NEEDS NONE OF THIS, which is what changed when it stopped
+// being a modal dialog: it is a child widget, so its buttons are clicked
+// directly and the assertion after the click just runs.
+//
+// Flips the dialog to "I'm watching" on the way past.
 //
 // A SPECTATOR GAME, AND THAT IS NOT INCIDENTAL: a seated game CANNOT show the
 // pause working. At round 1 the game thread is parked in makeBet() waiting for a
@@ -149,25 +145,71 @@ TEST_CASE("A game paused from the menu button stops, and resumes", "[main-window
     // - what it claims is that the game is stopped THEREAFTER. The gap sampled
     // is 1.8s of a 250ms spectator beat, which is seven frames that must not
     // appear.
-    int settled = -1;
-    int held = -1;
-
-    QTimer::singleShot(800, [&]{ settled = log->blockCount(); });
-    QTimer::singleShot(2600, [&]{ held = log->blockCount(); });
-    answerModal(2800, PauseDialog::Resume);
-
     menu->click();
-    pump(400);
 
-    const int afterResume = log->blockCount();
-    INFO("settled " << settled << ", held " << held << ", after resume " << afterResume);
+    PauseOverlay* overlay = window.findChild<PauseOverlay*>();
+    REQUIRE(overlay != nullptr);
+    REQUIRE(overlay->isVisible());
 
+    pump(600);
+    const int settled = log->blockCount();
+
+    pump(1800);
+    const int held = log->blockCount();
+
+    INFO("settled " << settled << ", held " << held);
     REQUIRE(settled > 0);
     REQUIRE(held == settled);
+
+    QPushButton* resume = window.findChild<QPushButton*>("resume");
+    REQUIRE(resume != nullptr);
+    resume->click();
+
+    REQUIRE_FALSE(overlay->isVisible());
+    const int afterResume = log->blockCount();
 
     // And it is a pause rather than a stop: the game goes on afterwards.
     pump(2000);
     REQUIRE(log->blockCount() > afterResume);
+}
+
+TEST_CASE("The window can be closed while the game is paused", "[main-window]")
+{
+    // THE DEFECT THAT REPLACED THE MODAL DIALOG. Qt drops window-system events
+    // to a window blocked by a modal, so the title bar's X did nothing while the
+    // pause menu was up - not a hang, and recoverable by resuming first, but a
+    // dead close button all the same.
+    //
+    // WHAT THIS CAN AND CANNOT SEE. A test cannot press the X: that is the
+    // window manager's route, and the very thing Qt was filtering. What it can
+    // pin is the half that made the filtering possible - that nothing here is
+    // application-modal while the pause is up - and then that the close itself
+    // completes, which is section 15.3's hazard from the window's end: an
+    // indefinite pace() that cancelPacing() does not reach hangs in
+    // thread.wait() forever.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+
+    window.findChild<QPushButton*>("menu")->click();
+    pump(200);
+
+    REQUIRE(window.findChild<PauseOverlay*>()->isVisible());
+
+    // NOTHING IS MODAL. This is the assertion the dialog would fail, and it is
+    // what makes the window manager's close reach closeEvent() at all.
+    REQUIRE(QApplication::activeModalWidget() == nullptr);
+
+    // And the close completes rather than hanging on the join. If the paused
+    // wait ever stops testing pacingCancelled, this does not fail - it never
+    // returns, which is the honest shape and is why the case says so.
+    REQUIRE(window.close());
+    REQUIRE_FALSE(window.isVisible());
 }
 
 TEST_CASE("Abandoning to the main menu does not close the window", "[main-window]")
@@ -195,12 +237,17 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     QPushButton* menu = window.findChild<QPushButton*>("menu");
     REQUIRE(menu != nullptr);
 
-    answerModal(300, PauseDialog::MainMenu);
     menu->click();
+    pump(100);
+
+    QPushButton* mainMenu = window.findChild<QPushButton*>("mainMenu");
+    REQUIRE(mainMenu != nullptr);
+    mainMenu->click();
     pump(500);
 
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
+    REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
 }
 
 TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main-window]")
@@ -228,9 +275,9 @@ TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main
     const int gameOne = log->blockCount();
     REQUIRE(gameOne > 1);
 
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
-    answerModal(300, PauseDialog::MainMenu);
-    menu->click();
+    window.findChild<QPushButton*>("menu")->click();
+    pump(100);
+    window.findChild<QPushButton*>("mainMenu")->click();
     pump(500);
 
     // ---- game two ----

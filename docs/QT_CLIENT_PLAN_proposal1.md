@@ -2028,16 +2028,22 @@ About box prints the client version and the linked engine version, exactly as th
 `--version` does).
 
 > **AMENDED IN D1: there is no Game menu.** This section specified one — New Game…, Abandon Game,
-> Quit — and what was built instead is a **main-menu page** and a **pause dialog**:
+> Quit — and what was built instead is a **main-menu page** and a **pause menu**:
 >
 > - The window's central widget is a `QStackedWidget`. Page 0 is the menu — the title, **New Game**
 >   and **Quit** — and page 1 is the four regions above. **The client opens on page 0 with no game
 >   running at all**, which is what §8's "the app never needs a command line" means and what the
 >   terminal does: `TerminalRomanianWhist::startGame()` runs the setup wizard before a card exists.
 > - A **Menu** button at the right of the prompt bar — §12's own "one contextual action" slot, which
->   had nothing in it until now — and **Esc** open a modal pause dialog: **Resume**, or **Main
->   menu**, which abandons the game and returns to page 0. Later phases add a settings button beside
->   them.
+>   had nothing in it until now — and **Esc** open the pause menu: **Resume**, or **Main menu**,
+>   which abandons the game and returns to page 0. Later phases add a settings button beside them.
+> - **The pause menu is a panel, not a `QDialog`** — §4.4's rule, which this reached the hard way.
+>   It was a modal dialog first, on the reasoning that §4.4's warning is about a dialog up while the
+>   game thread is parked in a prompt, and that a close here would be refused rather than swallowed.
+>   **True about safety and wrong about behaviour**: Qt drops window-system events to a window a
+>   modal blocks, so *the title bar's X did nothing* while the pause was up. It is a child widget
+>   dimming the window with `Theme::dimmedOverlay` now — modal in look and in reach, and the window
+>   is never blocked. `BidStrip` arrived at the same shape from the same section.
 > - **The pause is real**: `GameBridge::pace()` holds the game thread while it is up. That is §15.3's
 >   indefinite wait, built early for this one caller — see the box there, and D1.1.
 >
@@ -2309,7 +2315,7 @@ for.
 > `onBettingComplete()`, not `onRoundStarted()`** (§11, `TerminalRomanianWhist.cpp:166`).
 
 > **PART OF THIS ARRIVED IN D1, and knowing which part matters before phase E opens.** The pause
-> behind §12's pause dialog is an indefinite `pace()` — `GameBridge::setPaused()`, a flag and a
+> behind §12's pause menu is an indefinite `pace()` — `GameBridge::setPaused()`, a flag and a
 > second `wait()` on the condition variable the cancel already used — so **the hazard this box
 > describes is already live**, and `stop()`'s unconditional `cancelPacing()` is already the only
 > thing that can reach it. Two tests pin that, each with the mutation that fails it: writing the

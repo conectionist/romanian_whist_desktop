@@ -15,7 +15,7 @@ QT_END_NAMESPACE
 //
 // A DEPARTURE FROM SECTION 12, and a deliberate one. That section puts New Game,
 // Abandon Game and Quit in a thin menu bar; this client has a menu page and a
-// pause dialog instead, because "abandon" with no way back is not what a player
+// pause menu instead, because "abandon" with no way back is not what a player
 // wants mid-game and Resume is. What is unchanged is what the buttons DO:
 // abandoning, quitting, closing the window and starting a second game are the
 // same three calls in the same order, which is the whole reason section 6

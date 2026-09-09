@@ -621,7 +621,7 @@ now comes off it.
 - [x] `NewGameDialog` (§13): live-validated names, clamped seat count, watching/playing, structure,
       seed. Split the way `BidStrip` is — the half with a right answer tested without a window.
       **Bot speed and fixed deal only**; "wait for me between tricks" stays phase E's (§13, amended).
-- [x] **A main-menu page and a pause dialog, where §12 specified a Game menu.** The client opens with
+- [x] **A main-menu page and a pause menu, where §12 specified a Game menu.** The client opens with
       no game running; **Menu** on the prompt bar and Esc open Resume / Main menu. §§12, 13 and 15.3
       are amended to record it — that document is the one that wins, so it is the one that had to
       change.
@@ -658,6 +658,29 @@ asserts.
   is the most opponents a *playing* game has; a watched one seats six, because nobody takes a chair.
   A placeholder is one seat past the end of any list sized from the wrong maximum.
 
+**And a fifth, found by running the client rather than by rendering it: the main window's X did
+nothing while the pause was up.** The pause menu was a modal `QDialog`, and Qt drops window-system
+events to a window a modal blocks — so `closeEvent()` never ran, `stop()` was never called, and the
+close was silently refused. **This is §4.4, arrived at from the other end**: that section is why
+`BidStrip` is a panel, and the argument written for keeping a dialog here — that a refused close
+leaks nothing, since nothing is destroyed — **was true about safety and silent about behaviour**. A
+dead close button is a defect whether or not a thread leaks.
+
+Two things measured on the way to fixing it, both worth having:
+
+- **A *programmatic* `close()` passes straight through a modal dialog.** Only the window manager's
+  route is filtered. So no test can reproduce the defect by calling `close()` — what a test can pin
+  is the property that made the filtering possible, which is that nothing is application-modal while
+  the pause is up. `MainWindowTests` asserts exactly that, and says why.
+- **The RAII pause guard went with the `exec()`.** A modal dialog gives you a scope; a panel does
+  not, so "the menu is up" and "the game is held" became two facts a caller could set apart —
+  which is the shape phase E's box warns about on the fan's two sources. `setPauseMenuVisible()` is
+  the one place both are written, and the only place either is.
+
+The panel dims the window with `Theme::dimmedOverlay`, which existed since B1 and had no caller
+until now. Measured rather than eyeballed: the info strip, the table, the scoreboard and the prompt
+bar all darken, and the status bar — outside the central widget — does not.
+
 And four about testing this phase, which cost a run each:
 
 - **A pause cannot be measured on a seated game at its own turn.** The game thread is parked in the
@@ -687,7 +710,7 @@ three of the four states were reachable**, so no render would have shown it. Two
 ### Why D1 built a pause, and a menu page instead of a menu bar
 
 The step as written is a dialog and a second game, and §12 puts New Game / Abandon Game / Quit in a
-menu bar. **What was built is a main-menu page and a pause dialog**, decided before the code was
+menu bar. **What was built is a main-menu page and a pause menu**, decided before the code was
 written and recorded in §§12, 13 and 15.3.
 
 The reason is the same one that puts A before B: *abandon* with no way back is not a thing a player
@@ -819,6 +842,7 @@ Symptom first, because that is what you have.
 | Resume works once and never again | `pace()` reads the pause flag at the first wait only. The predicate has to be evaluated at every wait, which is what the third bridge case pins | D1.1 |
 | A string reads "%n round(s)" or similar | The parenthesised plural resolves only through a translator. Untranslated, `translate()` substitutes `%n` and returns the source verbatim | §7, D1's findings |
 | A radio button unchecks one in a different group | `QRadioButton` auto-groups with every sibling sharing its **parent**. Declare a `QButtonGroup` per group — nothing looks wrong until a state is unreachable | D1's findings |
+| The window's close button does nothing, and the app is otherwise responsive | A modal `QDialog` is up. Qt drops window-system events to the window it blocks, so `closeEvent()` never runs — note a *programmatic* `close()` still works, so no test calling one will see it | §4.4, D1's findings |
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
