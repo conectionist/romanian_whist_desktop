@@ -62,7 +62,7 @@ jobs:
   #         name="romanian_whist_desktop-$version-linux"
   #         echo "version=$version" >> "$GITHUB_OUTPUT"
   #         echo "name=$name" >> "$GITHUB_OUTPUT"
-  #         echo "prefix=${GITHUB_WORKSPACE//\\/}/staging/$name" >> "$GITHUB_OUTPUT"
+  #         echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
   #
   #     - name: Build
   #       run: cmake --build --preset release
@@ -131,7 +131,7 @@ jobs:
           name="romanian_whist_desktop-$version-windows"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "prefix=${GITHUB_WORKSPACE//\\/}/staging/$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       # The default generator here is multi-config Visual Studio, which ignores
       # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
