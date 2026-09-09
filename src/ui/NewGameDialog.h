@@ -216,6 +216,11 @@ private:
     // levels already typed into the rows that survive.
     void rebuildOpponentRows();
 
+    // THE BOUNDS THE SPINNER TAKES, in one place because they are set twice: once
+    // when the dialog is built and again whenever the radio moves. Written out
+    // twice, they were set correctly on the second path only - see the body.
+    void applyOpponentRange(bool playing);
+
     // Reads every control into `current`, then re-runs the two things that
     // depend on all of it: the summary line and whether Deal is enabled.
     void refresh();
@@ -230,6 +235,17 @@ private:
     };
 
     newgame::Config current;
+
+    // WHAT THE DIALOG WAS OPENED ON, kept whole and never written to. `current`
+    // cannot serve: refresh() rebuilds its bot lists FROM the rows on every
+    // keystroke, so by the time a row is added the config that would have filled
+    // it has already been overwritten by the rows that exist.
+    //
+    // Read only by rebuildOpponentRows(), and that is the whole of its job: a
+    // player who re-opens the dialog on the last game's settings gets that
+    // game's opponents back, which is what "play again pre-filled with the same
+    // settings" (section 16.2) has to mean if it means anything.
+    newgame::Config initial;
 
     // TWO GROUPS, DECLARED RATHER THAN INFERRED. QRadioButton auto-groups with
     // every sibling sharing its PARENT, and all four radios below are children

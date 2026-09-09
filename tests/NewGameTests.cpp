@@ -514,6 +514,83 @@ TEST_CASE("Every row of the largest table is pre-filled with a real name", "[new
     REQUIRE(deal->isEnabled());
 }
 
+TEST_CASE("Reopening on a config offers back the game it describes", "[new-game]")
+{
+    // WHAT "PLAY AGAIN PRE-FILLS WITH THE SAME SETTINGS" HAS TO MEAN (section
+    // 16.2), and what it did not: every control read the config it was opened on
+    // except the opponent rows, which were built from the stock names and levels
+    // regardless - and refresh() then wrote those defaults back over the config,
+    // so a second game was dealt against three seats the player never chose.
+    //
+    // EVERY CASE ABOVE OPENS ON newgame::defaults(), which is exactly why this
+    // passed a green suite: the stock names ARE the defaults' names, so the
+    // overwrite was invisible to a dialog opened on them.
+    newgame::Config config = newgame::defaults();
+
+    config.botNames = QStringList{ "Zoltan", "Yvette" };
+    config.botLevels = { newgame::BotLevel::Ducking, newgame::BotLevel::Random };
+
+    NewGameDialog dialog(config);
+
+    const newgame::Config offered = dialog.config();
+
+    REQUIRE(offered.botNames == config.botNames);
+    REQUIRE(offered.botLevels == config.botLevels);
+
+    // The rows themselves, not only what config() computes from them - the
+    // player has to SEE the game they are being offered.
+    QLineEdit* first = dialog.findChild<QLineEdit*>("botName0");
+    QComboBox* firstLevel = dialog.findChild<QComboBox*>("botLevel0");
+    REQUIRE(first != nullptr);
+    REQUIRE(firstLevel != nullptr);
+
+    REQUIRE(first->text() == "Zoltan");
+    REQUIRE(newgame::BotLevels[firstLevel->currentIndex()] == newgame::BotLevel::Ducking);
+
+    // A SEAT THE CONFIG NEVER HAD still gets a stock default rather than a blank
+    // - the pre-fill above must not have cost the fallback that keeps Deal
+    // enabled for a reason the player did not cause.
+    QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
+    REQUIRE(count != nullptr);
+
+    count->setValue(3);
+
+    const newgame::Config grown = dialog.config();
+    REQUIRE(grown.botNames.size() == 3);
+    REQUIRE(grown.botNames.at(0) == "Zoltan");
+    REQUIRE_FALSE(grown.botNames.at(2).isEmpty());
+    REQUIRE_FALSE(newgame::firstError(grown).has_value());
+}
+
+TEST_CASE("The spinner opens on the range its own game allows", "[new-game]")
+{
+    // THE RANGE WAS SET ONCE FOR A PLAYED GAME AND THEN MAINTAINED CORRECTLY,
+    // which is the shape that hides: every later change goes through the radio's
+    // handler, and only the initial state had nothing maintaining it - the
+    // handler is connected after this runs.
+    //
+    // A WATCHED GAME OF SIX IS THE LARGEST TABLE THERE IS. Clamped to the played
+    // ceiling of five, the dialog silently offers a different game from the one
+    // it was opened on.
+    newgame::Config config = newgame::defaults();
+    config.spectator = true;
+    config.botNames = QStringList{ "A", "B", "C", "D", "E", "F" };
+    config.botLevels = std::vector<newgame::BotLevel>(6, newgame::BotLevel::Random);
+
+    NewGameDialog dialog(config);
+
+    QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
+    REQUIRE(count != nullptr);
+
+    REQUIRE(count->value() == static_cast<int>(newgame::MaximumSeats));
+    REQUIRE(dialog.config().botNames.size() == static_cast<int>(newgame::MaximumSeats));
+
+    // And the floor is the watched one, so the spinner cannot reach a table the
+    // engine would refuse - section 13 wants the control to make the illegal
+    // value unreachable rather than the message to explain it.
+    REQUIRE(count->minimum() == static_cast<int>(newgame::MinimumSeats));
+}
+
 TEST_CASE("The dialog refuses to deal a game the engine would reject", "[new-game]")
 {
     NewGameDialog dialog(newgame::defaults());

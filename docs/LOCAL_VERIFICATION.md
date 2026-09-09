@@ -95,11 +95,19 @@ several times with `--order rand`: a race that reproduces once in twenty is the 
 
 ### TSan is not silent on a clean tree, and the count is not the signal
 
-**A clean `master` reports ~83 warnings and passes every test.** Measured at C1, on Qt 6.11.2:
-83 on `master`, the same set on the C1 branch, and the number moves a little run to run because
-`--order rand` and the timing of the `QDBusConnection` thread Qt starts for itself both vary. So
-*"TSan printed warnings"* says nothing on its own, and a person who reads the count as a verdict
-will either lose an afternoon or — worse — learn to stop reading TSan at all.
+**A clean tree reports hundreds of warnings and passes every test.** Measured at C1 on Qt 6.11.2 it
+was ~83; measured again in D1's review it was **389 for the 219 tests at `14ea338`**, and the number
+moves run to run because `--order rand` and the timing of the `QDBusConnection` thread Qt starts for
+itself both vary. So *"TSan printed warnings"* says nothing on its own, and a person who reads the
+count as a verdict will either lose an afternoon or — worse — learn to stop reading TSan at all.
+
+**THE COUNT TRACKS THE SUITE, NOT THE CODE**, which is why no absolute number is worth writing down
+here for long. It rose from 83 to ~389 across phases that added tests, not races, and the D1 review's
+own five cases took its branch from 369 to 531 on the same build — the game-over case plays a whole
+game through the real window, and every frame that crosses the thread boundary is another chance for
+Qt to allocate on one thread and free on another. **Compare against the same test set**, which means
+either running the pre-change commit or excluding the new cases by name; a bare before-and-after of
+two different suites says nothing at all.
 
 **Every one of them bottoms out in Qt's own libraries**, which are not built with the sanitizer, so
 TSan cannot see the synchronisation they do internally. They cluster in two places: the
@@ -113,7 +121,7 @@ So grep rather than count, and grep for our own code on **both** sides of a race
 
 ```bash
 setarch -R $S/tests/desktop_tests --order rand > /tmp/tsan.log 2>&1
-grep -c 'WARNING: ThreadSanitizer' /tmp/tsan.log          # expect ~83, not 0
+grep -c 'WARNING: ThreadSanitizer' /tmp/tsan.log          # expect hundreds, not 0
 grep -oE '(src|tests)/[A-Za-z/]+\.(cpp|h)' /tmp/tsan.log | sort | uniq -c | sort -rn
 ```
 

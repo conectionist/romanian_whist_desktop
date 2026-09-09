@@ -693,6 +693,34 @@ Three things worth keeping from it:
   payload and the round sheet stayed in D2 — the panel is drawn from `gameOver`, which already
   carried both vectors it needs.
 
+**And five smaller ones from the same review, four of which the suite could not have found.** Worth
+recording together, because three are the same mistake in three places — *a thing set once, correctly,
+and then maintained by a path that does not run the first time*:
+
+- **The setup dialog threw away the opponents it was opened on.** Every control read the config
+  except the rows, which were built from the stock names and levels regardless — and `refresh()` then
+  wrote those defaults back *into* the config, so a second game was dealt against seats the player
+  never chose. Invisible to the suite because all six dialog cases open on `newgame::defaults()`,
+  whose names *are* the stock names.
+- **The opponent spinner took the played bounds whatever it was opened on**, because the radio's
+  handler that maintains them is connected after. A watched game of six — the largest table there is
+  — clamped to five on the way in.
+- **Abandoning left the dead game's queued signals to arrive after the menu page**, which is
+  `prepare()`'s purge from the other side: that comment said a new game was the only moment an old
+  queue is worthless, and abandoning is a second. One frame, measured, against the 618 `prepare()`
+  was written for — the pause usually lets the window go idle first.
+- **The pause never gave the keyboard back to the bid strip.** `focusResume()` takes it; hiding the
+  overlay does not return it. The strip's buttons still worked, which is what made it look finished.
+- **The log dock never came back**, because `showMainMenu()` hid it and `QDockWidget::hide()`
+  unchecks its own `toggleViewAction()` — the two-way sync that is the whole reason the action is
+  Qt's. The comment claiming the dock returned with the next game was wrong in both directions; it
+  is simply left alone now.
+
+**`hasFocus()` cannot be asserted on the offscreen platform**, and this is the second measurement of
+that shape after the modal close. It is false for every widget of an *inactive* window, and offscreen
+never activates one; `window.focusWidget()` answers the question actually being asked — which widget
+a key press would reach — and is what the pause's focus case uses.
+
 Two things measured on the way to fixing the modal dialog, both worth having:
 
 - **A *programmatic* `close()` passes straight through a modal dialog.** Only the window manager's
@@ -872,6 +900,9 @@ Symptom first, because that is what you have.
 | Resume works once and never again | `pace()` reads the pause flag at the first wait only. The predicate has to be evaluated at every wait, which is what the third bridge case pins | D1.1 |
 | A string reads "%n round(s)" or similar | The parenthesised plural resolves only through a translator. Untranslated, `translate()` substitutes `%n` and returns the source verbatim | §7, D1's findings |
 | A radio button unchecks one in a different group | `QRadioButton` auto-groups with every sibling sharing its **parent**. Declare a `QButtonGroup` per group — nothing looks wrong until a state is unreachable | D1's findings |
+| A View menu entry unchecks itself and never comes back | `QDockWidget::hide()` writes through to its own `toggleViewAction()`. That sync is why the action is Qt's rather than ours, and it runs in the direction you did not intend too | D1's findings |
+| The keyboard stops working, but only after a pause | Focus taken by a panel is not given back when it hides. The control that had it is still on screen and still clickable, so it reads as finished | §15.1, D1's findings |
+| A dialog reopened on the last config offers different settings | A control filled from a default rather than from that config, in a dialog whose every other control reads it — and worse, one whose refresh writes the default back over the config it was handed | §13, §16.2, D1's findings |
 | The window's close button does nothing, and the app is otherwise responsive | A modal `QDialog` is up. Qt drops window-system events to the window it blocks, so `closeEvent()` never runs — note a *programmatic* `close()` still works, so no test calling one will see it | §4.4, D1's findings |
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |

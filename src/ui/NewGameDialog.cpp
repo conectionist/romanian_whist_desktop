@@ -326,8 +326,8 @@ QString newgame::tooltipFor(BotLevel level)
 
 // ---- the widget ----
 
-NewGameDialog::NewGameDialog(const newgame::Config& initial, QWidget* parent)
-    : QDialog(parent), current(initial)
+NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
+    : QDialog(parent), current(_initial), initial(_initial)
 {
     setWindowTitle(tr("New Game"));
 
@@ -493,20 +493,27 @@ NewGameDialog::NewGameDialog(const newgame::Config& initial, QWidget* parent)
     if(current.shuffleSeed)
         seed->setValue(static_cast<int>(*current.shuffleSeed % 1000000u));
 
-    opponents->setRange(1, static_cast<int>(newgame::MaximumSeats) - 1);
+    // FROM THE CONFIG, not from the playing bounds regardless. This line set the
+    // range for a PLAYED game whatever was being opened, and then set the value
+    // against it: a watched game of six bots - which is legal, and the largest
+    // table there is - was clamped to five on the way in, silently changing the
+    // settings the player is being shown as the last game's. In the other
+    // direction it let a watched game read 1, which firstError() then has to
+    // reject, breaking section 13's own rule that a spinner which cannot reach
+    // an illegal value beats a message explaining one.
+    //
+    // The range moved correctly on every LATER change, because the radio's
+    // handler below does this properly - and that handler has not been connected
+    // yet when this runs, so the initial state was the one path with nothing
+    // maintaining it.
+    applyOpponentRange(!current.spectator);
     opponents->setValue(static_cast<int>(current.botNames.size()));
 
     const auto onChange = [this]{ refresh(); };
 
     connect(playing, &QRadioButton::toggled, this, [this](bool on)
     {
-        // THE RANGE MOVES WITH THE RADIO. A watched game has no human seat, so
-        // it needs two bots at minimum and may have six; a played one already
-        // has the human, so one bot is enough and five is the ceiling. Section
-        // 13: a spinner that cannot reach an illegal value beats an error
-        // message explaining one.
-        opponents->setRange(on ? 1 : static_cast<int>(newgame::MinimumSeats),
-                            static_cast<int>(newgame::MaximumSeats) - (on ? 1 : 0));
+        applyOpponentRange(on);
         humanNameLabel->setEnabled(on);
         humanName->setEnabled(on);
         refresh();
@@ -532,6 +539,16 @@ NewGameDialog::NewGameDialog(const newgame::Config& initial, QWidget* parent)
 newgame::Config NewGameDialog::config() const
 {
     return current;
+}
+
+void NewGameDialog::applyOpponentRange(bool playing)
+{
+    // A watched game has no human seat, so it needs two bots at minimum and may
+    // have six; a played one already has the human, so one bot is enough and
+    // five is the ceiling. Section 13: a spinner that cannot reach an illegal
+    // value beats an error message explaining one.
+    opponents->setRange(playing ? 1 : static_cast<int>(newgame::MinimumSeats),
+                        static_cast<int>(newgame::MaximumSeats) - (playing ? 1 : 0));
 }
 
 void NewGameDialog::rebuildOpponentRows()
@@ -561,17 +578,38 @@ void NewGameDialog::rebuildOpponentRows()
         row.name->setMaxLength(newgame::MaximumNameLength);
         row.name->setObjectName(QStringLiteral("botName%1").arg(index));
 
-        // A PRE-FILLED DEFAULT, so no row starts blank - a blank one disables
-        // Deal for a reason the player did not cause. The stock list holds one
-        // name per seat at the largest table there is, so the fallback is
-        // unreachable; it is one line against the day MaximumSeats moves.
+        // THE OPPONENT THIS SEAT HAD WHEN THE DIALOG OPENED, if it had one. The
+        // dialog is opened on the last game's config so that play again
+        // pre-fills with its settings (section 16.2), and every control did that
+        // except these: the rows were built from the stock list regardless, and
+        // refresh() then wrote those defaults back over the config that was
+        // handed in. So reopening a game against Ana, Bogdan and Cristi on three
+        // different levels offered - and then dealt - the stock three.
+        //
+        // FROM `initial` AND NOT FROM `current`, which cannot answer: refresh()
+        // rebuilds current's bot lists from the rows on every keystroke, so it
+        // describes the rows that exist rather than the game that was asked for.
+        //
+        // A PRE-FILLED DEFAULT OTHERWISE, so no row starts blank - a blank one
+        // disables Deal for a reason the player did not cause. The stock list
+        // holds one name per seat at the largest table there is, so its fallback
+        // is unreachable; it is one line against the day MaximumSeats moves.
         //
         // IT DOES NOT AVOID THE HUMAN'S NAME, unlike the terminal's quick start,
         // and that is section 13's own answer: a player who types "Ana" gets the
         // duplicate marked and Deal disabled, which names the collision instead
         // of silently renaming a seat under them.
-        row.name->setText(index < stockNames().size() ? stockNames().at(index)
-                                                      : tr("Bot %1").arg(index + 1));
+        // TWO SPELLINGS OF THE SAME SEAT, because the two lists are different
+        // containers: botNames is a QStringList and sizes in qsizetype, botLevels
+        // a std::vector and sizes in size_t. Comparing one index against both
+        // signednesses is what -Wsign-compare is for.
+        const std::size_t seat = static_cast<std::size_t>(index);
+
+        if(index < initial.botNames.size())
+            row.name->setText(initial.botNames.at(index));
+        else
+            row.name->setText(index < stockNames().size() ? stockNames().at(index)
+                                                          : tr("Bot %1").arg(index + 1));
 
         row.level = new QComboBox(this);
         row.level->setObjectName(QStringLiteral("botLevel%1").arg(index));
@@ -583,7 +621,15 @@ void NewGameDialog::rebuildOpponentRows()
                                    newgame::tooltipFor(level), Qt::ToolTipRole);
         }
 
-        row.level->setCurrentIndex(static_cast<int>(defaultLevel(index)));
+        // AND THE LEVEL WITH THE NAME, from the same seat of the same config -
+        // the two are one setting per opponent, and a row that kept the name and
+        // reset the level would be the same defect wearing half a fix.
+        //
+        // The index is the enum's own value, which is what BotLevels is ordered
+        // by and what defaultLevel() returns.
+        row.level->setCurrentIndex(seat < initial.botLevels.size()
+                                       ? static_cast<int>(initial.botLevels.at(seat))
+                                       : static_cast<int>(defaultLevel(index)));
 
         connect(row.name, &QLineEdit::textChanged, this, [this]{ refresh(); });
         connect(row.level, &QComboBox::currentIndexChanged, this, [this]{ refresh(); });

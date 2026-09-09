@@ -257,12 +257,18 @@ void MainWindow::showMainMenu()
 {
     pages->setCurrentWidget(menuPage);
 
-    // The log dock belongs to the table, not to the menu - it is a diagnostic
-    // for a game, and there is none here. Its View action is left alone, so a
-    // dock the player opened comes back with the next game.
-    if(logDock)
-        logDock->hide();
-
+    // THE LOG DOCK IS LEFT EXACTLY AS THE PLAYER LEFT IT, and this used to hide
+    // it here on the reasoning that a diagnostic for a game does not belong on a
+    // page with no game. The comment claimed the dock came back with the next
+    // one; it did not. QDockWidget::hide() unchecks its own toggleViewAction() -
+    // that two-way sync is the entire reason buildLogDock() uses Qt's action
+    // rather than one of ours - so hiding it here turned View > Log off, and
+    // nothing turned it back on.
+    //
+    // Nothing else has to be added to fix it: startGame() already clears the log
+    // for the elapsed column's sake, so a dock left open shows the new game from
+    // its first line, and this window goes on holding no "is the log showing"
+    // state of its own to get wrong.
     statusBar()->clearMessage();
 }
 
@@ -319,6 +325,20 @@ void MainWindow::setPauseMenuVisible(bool visible)
     if(!visible)
     {
         pauseOverlay->hide();
+
+        // AND THE KEYBOARD BACK WHERE THE PAUSE TOOK IT FROM. focusResume() put
+        // it on the Resume button, and hiding that button does not give it back
+        // - so a pause taken at a bid prompt left the strip's digit keys dead
+        // afterwards, with its buttons still working, which is the shape that
+        // looks finished. The same call onBetRequested() makes when it raises
+        // the strip, and for the same reason stated there.
+        //
+        // ASKED OF THE STRIP rather than remembered across the pause: it is
+        // visible exactly while the engine is parked waiting for a bid, which is
+        // the whole of the question.
+        if(bidStrip->isVisible())
+            bidStrip->setFocus();
+
         return;
     }
 
@@ -356,6 +376,23 @@ void MainWindow::abandonToMenu()
     returningToMenu = true;
 
     controller.stop();
+
+    // THE ABANDONED GAME'S QUEUED SIGNALS, dropped - the second moment an old
+    // game's queue is worthless, which is why the purge is no longer private to
+    // prepare(). Every frame the game thread published between this click and
+    // the join above is still in this thread's queue, and is delivered after
+    // showMainMenu() below: a line into the log of a game that no longer exists,
+    // and the status bar with it whenever the round or the trick moved in one.
+    //
+    // SMALL HERE, AND NOT NOTHING. Main menu is only reachable from the pause,
+    // which has usually let the window go idle and drain the queue first -
+    // measured at one frame for a click that does not wait, against the 618 that
+    // prepare()'s purge was written for. It is the same defect either way, and
+    // this is the path with nothing else standing between it and the menu page.
+    //
+    // AFTER THE STOP, never before it. The join is what makes this a purge
+    // rather than a race.
+    controller.discardQueuedSignals();
 
     tableState = TableState::NoGame;
     showMainMenu();

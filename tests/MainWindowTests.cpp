@@ -3,12 +3,15 @@
 #include "MainWindow.h"
 #include "paint/Theme.h"
 #include "table/TableScene.h"
+#include "ui/BidStrip.h"
 #include "ui/GameOverPanel.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QDialog>
+#include <QDockWidget>
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QPlainTextEdit>
@@ -17,6 +20,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QTimer>
 
 #include <functional>
@@ -394,6 +398,171 @@ TEST_CASE("A watched game arrives at the scene as one", "[main-window]")
 
     REQUIRE(scene->handRect(cardHeight).isEmpty());
     REQUIRE(scene->tableRect(cardHeight) == scene->sceneRect());
+}
+
+TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window]")
+{
+    // THE SECOND MOMENT AN OLD GAME'S QUEUE IS WORTHLESS, and until D1's review
+    // only prepare() knew about the first. stop() joins the game thread, so
+    // every frame published between the click and the join is already in this
+    // thread's queue - and it is delivered AFTER showMainMenu() has cleared the
+    // status bar, writing a dead game's round and trick over the menu page.
+    //
+    // A WATCHED GAME, which is what puts frames in the queue at all: a seated one
+    // is parked in the provider waiting for a bid and has published everything it
+    // is going to.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    REQUIRE(pages != nullptr);
+    REQUIRE(newGame != nullptr);
+
+    answerModalWatching(300);
+    newGame->click();
+    pump(2000);
+    REQUIRE(pages->currentIndex() == 1);
+
+    // Mid-game, with the bots pacing - so there is a backlog to leak.
+    REQUIRE_FALSE(window.statusBar()->currentMessage().isEmpty());
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    REQUIRE(log != nullptr);
+
+    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    REQUIRE(menu != nullptr);
+
+    // BOTH CLICKS IN ONE TURN OF THE EVENT LOOP, and that is the whole setup:
+    // pausing parks the game thread at the next pace(), and a pump between the
+    // two clicks would deliver the backlog before the abandon and leave nothing
+    // to leak. A player clicking Main menu straight after Menu is the ordinary
+    // case, not a contrived one - the queue is only ever drained by the window
+    // going idle.
+    menu->click();
+    window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
+
+    // THE PUMP IS THE MEASUREMENT. Everything the abandon does is synchronous,
+    // so an assertion that ran straight away would pass with the whole backlog
+    // still queued behind it; what has to be given the chance to happen is the
+    // delivery.
+    const int atAbandon = log->blockCount();
+    const QString cleared = window.statusBar()->currentMessage();
+
+    pump(500);
+
+    REQUIRE(pages->currentIndex() == 0);
+
+    // Nothing was drawn from a game that no longer exists: not a line in the
+    // log, and not a round-and-trick over the menu page's empty status bar.
+    REQUIRE(log->blockCount() == atAbandon);
+    REQUIRE(window.statusBar()->currentMessage() == cleared);
+    REQUIRE(window.statusBar()->currentMessage().isEmpty());
+}
+
+TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
+{
+    // THE PAUSE TAKES FOCUS AND NOTHING GIVES IT BACK. focusResume() puts the
+    // keyboard on the Resume button so that Enter resumes; hiding that button
+    // does not return it, so a pause taken while the strip was up left its digit
+    // keys dead afterwards - with the buttons still working, which is exactly
+    // the shape that looks finished.
+    //
+    // A SEATED GAME, and the only case in this file that needs one: the strip is
+    // shown while the engine is parked in the provider waiting for a bid, which
+    // is a state a watched game never has. The pause CANNOT be measured here -
+    // the thread is in the provider, not in pace() - and that is fine, because
+    // what is being measured is the focus.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    REQUIRE(newGame != nullptr);
+
+    // The dialog's defaults are a played game, so this accepts them unchanged.
+    QTimer::singleShot(300, []
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+            dialog->done(QDialog::Accepted);
+    });
+
+    newGame->click();
+
+    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    REQUIRE(bidStrip != nullptr);
+
+    // Round 1 is one card and the human bids first at seat 0, so the strip is up
+    // as soon as the deal is.
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    // focusWidget(), NOT hasFocus(). hasFocus() is false for every widget in an
+    // inactive window, and the offscreen platform never activates one - so the
+    // stronger-looking assertion is the one that cannot be made here. This is
+    // the question that is actually being asked anyway: which widget the window
+    // would deliver a key press to.
+    REQUIRE(window.focusWidget() == bidStrip);
+
+    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    REQUIRE(menu != nullptr);
+
+    menu->click();
+    pump(100);
+    REQUIRE(window.focusWidget() != bidStrip);
+
+    window.findChild<PauseOverlay*>()->findChild<QPushButton*>("resume")->click();
+    pump(100);
+
+    // The strip is still the thing being waited on, so it is still the thing the
+    // digits belong to.
+    REQUIRE(bidStrip->isVisible());
+    REQUIRE(window.focusWidget() == bidStrip);
+}
+
+TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
+{
+    // QDockWidget::hide() UNCHECKS ITS OWN toggleViewAction(), and that two-way
+    // sync is the whole reason buildLogDock() uses Qt's action rather than one of
+    // ours. showMainMenu() hid the dock on the way to the menu and its comment
+    // claimed the dock came back with the next game; what actually happened is
+    // that View > Log turned itself off and nothing ever turned it back on.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QDockWidget* logDock = window.findChild<QDockWidget*>("logDock");
+    REQUIRE(logDock != nullptr);
+
+    QAction* logAction = logDock->toggleViewAction();
+    REQUIRE_FALSE(logAction->isChecked());
+
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    REQUIRE(newGame != nullptr);
+
+    answerModalWatching(300);
+    newGame->click();
+    pump(2000);
+
+    // The player opens it, the way the View menu does.
+    logAction->trigger();
+    REQUIRE(logDock->isVisible());
+
+    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    REQUIRE(menu != nullptr);
+    menu->click();
+    pump(100);
+    window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
+    pump(500);
+
+    // Still open, and still checked - the two are one fact, which is why the
+    // action is Qt's own.
+    REQUIRE(logAction->isChecked());
+    REQUIRE(logDock->isVisible());
 }
 
 TEST_CASE("A finished game has a way back to the menu", "[main-window]")
