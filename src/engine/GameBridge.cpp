@@ -243,6 +243,18 @@ void GameBridge::pace(std::chrono::milliseconds delay)
 
     // RETURNS on cancel. Does NOT throw - see the header. Getting this backwards
     // makes the clean shutdown path unreachable.
+
+    // AND THEN HOLDS, indefinitely, while the game is paused. Written as a
+    // second wait rather than folded into the predicate above so that the beat
+    // is still a beat: a pause landing mid-delay waits the delay out first and
+    // then holds, which costs at most one botBeat() of latency and keeps the
+    // timed half exactly what it was.
+    //
+    // pacingCancelled is in BOTH predicates, and that is the escape. Only
+    // cancelPacing() can end this wait, and GameController::stop() calls it
+    // unconditionally - so a close landing on a paused game returns here, back
+    // into run(), and out through onGameStopped() like any other.
+    pacingCv.wait(lock, [this]{ return pacingCancelled || !pacingPaused; });
 }
 
 void GameBridge::cancelPacing()
@@ -252,5 +264,23 @@ void GameBridge::cancelPacing()
         pacingCancelled = true;
     }
 
+    pacingCv.notify_all();
+}
+
+void GameBridge::setPaused(bool paused)
+{
+    {
+        std::lock_guard lock(pacingMutex);
+        pacingPaused = paused;
+    }
+
+    // notify_all rather than notify_one, matching cancelPacing() above: there is
+    // one waiter today - the game thread - and picking the cheaper call would be
+    // an assumption about that rather than a fact about this class.
+    //
+    // NOTIFYING ON A PAUSE, not only on a resume, is deliberate. Nothing is
+    // waiting on the paused predicate at that moment, so the wake is wasted -
+    // but writing it symmetrically is what stops a later reader from concluding
+    // that one direction of this flag is somehow special.
     pacingCv.notify_all();
 }

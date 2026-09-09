@@ -5,6 +5,7 @@
 #include "engine/GameController.h"
 #include "engine/Prompts.h"
 #include "paint/Theme.h"
+#include "ui/NewGameDialog.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -12,6 +13,7 @@
 #include <chrono>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -22,12 +24,16 @@ QT_END_NAMESPACE
 
 QT_BEGIN_NAMESPACE
 class QDockWidget;
+class QStackedWidget;
 QT_END_NAMESPACE
 
 class BidStrip;
 class CardArtWindow;
+class GameOverPanel;
 class HandItem;
 class InfoStrip;
+class MainMenuPage;
+class PauseOverlay;
 class PromptBar;
 class ScoreboardWidget;
 class TableScene;
@@ -119,6 +125,19 @@ private slots:
     // prompt cached by onBetRequested().
     void onBidChosen(unsigned int bet);
 
+    // Section 13's dialog, opened from the main menu. Builds a GameSetup from
+    // what it was told and starts a game on it - which for the second and every
+    // later game is section 4.3's ordering run again from the top.
+    void showNewGameDialog();
+
+    // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
+    // its own slot because that is what the Menu button connects to.
+    void showPauseMenu();
+
+    // Abandons the running game and returns to the main menu. The second stop
+    // this window produces, and the reason `returningToMenu` exists.
+    void abandonToMenu();
+
 private:
     void appendLine(const QString& line);
 
@@ -151,13 +170,46 @@ private:
     // its owner rather than outliving the client.
     void showCardArt();
 
+    // The two pages of section 12's window. The menu is what the client opens
+    // on and what abandoning a game returns to; the table is everything phases B
+    // and C built, kept whole between games rather than rebuilt.
+    void showMainMenu();
+    void showTable();
+
+    // SHOWS THE PAUSE MENU AND HOLDS THE GAME, OR NEITHER. The two are set here
+    // together and nowhere else, so no caller can put them out of step - the
+    // hardening phase E's box asks for on the fan, applied to the pause before
+    // it has had a chance to go wrong.
+    //
+    // This replaced an RAII guard around a modal QDialog::exec(). The dialog
+    // went because Qt drops window-system events to a window a modal blocks, so
+    // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
+    void setPauseMenuVisible(bool visible);
+
+    // Raises section 16.2's panel over the table it was filled from. The three
+    // callers are the two endings - onGameOver() and showFailure() - and a Play
+    // again the player then cancelled, which must put back what it took down.
+    //
+    // FILLS NOTHING. The panel keeps its face between a hide and a show, so this
+    // is geometry, show, raise and focus - the same four the pause menu does.
+    void showGameOverPanel();
+
     // Prepares the controller and starts a game, and - the reason this is a
     // function rather than two calls in the constructor - clears the elapsed
     // origin first. That origin belongs to a GAME, not to the window: leaving
     // it set would make a second game's elapsed column continue from the first
-    // one's start. Phase A never starts a second game, so this is the one place
-    // phase D's setup dialog has to go through for that to stay true.
-    void startGame(romanian_whist::GameSetup setup);
+    // one's start.
+    //
+    // AND SINCE D1, EVERYTHING ELSE A SECOND GAME INHERITS. The controller
+    // resets nothing in place, but this window is reused whole - the two cached
+    // prompts, the last snapshot, the bid strip's visibility and the fan all
+    // belong to the game that has ended. See the body for the list.
+    //
+    // The seat and the pacing come from the dialog rather than from a literal,
+    // which is the whole of what D1 changed about starting a game.
+    void startGame(romanian_whist::GameSetup setup,
+                   std::optional<romanian_whist::Seat> humanSeat,
+                   Pacing pacing);
 
     // The status bar, from the snapshot - but only when it would actually
     // change. See the shown* members below.
@@ -185,6 +237,18 @@ private:
     // Section 12's fourth region, and the last to be built.
     PromptBar* promptBar = nullptr;
 
+    // The pause menu, a child of the stack rather than a page in it or a dialog
+    // of its own - it covers whichever page is showing and dims it. Its
+    // visibility and GameController's pause are one fact; see
+    // setPauseMenuVisible().
+    PauseOverlay* pauseOverlay = nullptr;
+
+    // Section 16.2's panel, the same shape as the pause menu and for the same
+    // reason - it is drawn OVER the final state rather than replacing it, which
+    // is what section 4.1's "publish the last snapshot before emitting gameOver"
+    // exists to make possible.
+    GameOverPanel* gameOverPanel = nullptr;
+
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this
     // is what drives its second source: the snapshot reaches it through
@@ -208,6 +272,17 @@ private:
     // NEVER READ FROM A SNAPSHOT INSTEAD. A snapshot's hand carries no legality
     // and is empty in a blind round, so it cannot supply either (section 4.0).
     PlayPrompt activePrompt;
+
+    // Section 12's window, as two pages. Page 0 is the menu and page 1 the
+    // table composite buildTable() assembles.
+    QStackedWidget* pages = nullptr;
+    MainMenuPage* menuPage = nullptr;
+
+    // WHAT THE LAST GAME WAS DEALT FROM, so New Game pre-fills with it - section
+    // 16.2's "play again reopens the setup dialog pre-filled with the same
+    // settings". In memory rather than in QSettings, which is section 20 and
+    // phase E.
+    newgame::Config lastConfig = newgame::defaults();
 
     // Holds the .ui's log widget from buildLogDock() onward.
     QDockWidget* logDock = nullptr;
@@ -241,6 +316,31 @@ private:
     // Set by closeEvent() before it stops the game, so onGameStopped() can tell
     // a stop it caused from one it did not.
     bool closing = false;
+
+    // ITS TWIN, and D1 is what made a second one necessary. Set by
+    // showPauseMenu() before ITS stop, for the same reason and read in the same
+    // place: without it, abandoning a game to the main menu closes the
+    // application. Cleared by startGame(), so it is true for exactly one stop.
+    bool returningToMenu = false;
+
+    // WHAT THE TABLE IS SHOWING, and the three states are not two. This was a
+    // bool through D1 and the bool is what put the client in a dead end: a
+    // finished game cleared it, the pause menu is gated on it, and so Menu and
+    // Esc both did nothing on the one screen that needed a way off it.
+    //
+    // "Is there a game to hold" and "has a game ended" are different questions -
+    // Playing answers the first, Finished the second, and NoGame is the menu
+    // page, where neither applies. A Resume offered on a finished game would
+    // still promise something that cannot happen, which is why setPauseMenu-
+    // Visible() asks for Playing exactly rather than for "not NoGame".
+    enum class TableState
+    {
+        NoGame,
+        Playing,
+        Finished
+    };
+
+    TableState tableState = TableState::NoGame;
 
     // DECLARED LAST, so it is destroyed FIRST: ~GameController joins the game
     // thread, and that has to happen before the widgets its slots write to are

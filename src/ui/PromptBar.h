@@ -11,6 +11,7 @@
 
 QT_BEGIN_NAMESPACE
 class QLabel;
+class QPushButton;
 QT_END_NAMESPACE
 
 // Section 12's fourth region, and the last of them to be built: "where the game
@@ -64,6 +65,15 @@ public:
     void setFields(const promptbar::Fields& fields);
     void setTheme(const Theme& theme);
 
+signals:
+    // The Menu button was pressed. Section 12's "one contextual action" slot,
+    // which D1 is the first phase to have anything to put in.
+    //
+    // THE BAR KNOWS NOTHING ABOUT PAUSING. It says a button was pressed and
+    // MainWindow raises the pause and opens the dialog - the same division
+    // BidStrip keeps by emitting a bid rather than submitting one.
+    void menuRequested();
+
 private:
     // ITS HEIGHT IS RESERVED FOR THE WHOLE GAME, which is B2b's finding applied
     // before it can bite again: a widget whose size depends on what it is saying
@@ -73,6 +83,10 @@ private:
     Theme theme = Theme::light();
 
     QLabel* hint = nullptr;
+
+    // Right-aligned, and part of what the fixed height above is measured from -
+    // a button is taller than a line of text.
+    QPushButton* menu = nullptr;
 };
 
 #endif

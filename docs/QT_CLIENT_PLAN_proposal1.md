@@ -2023,13 +2023,37 @@ Four regions, each with one job:
 | **Scoreboard** | One row per seat: bid order, name, bid, won, round score, total, streak | The terminal's seat table, which is what players actually read between plays. **Never animated** — a number that slides is a number you cannot read. |
 | **Prompt bar** | Hint, error, and the one contextual action | Where the game talks to you. One line, always in the same place, so you learn where to look. |
 
-Menus stay thin: **Game** (New Game…, Abandon Game, Quit), **View** (Round history…, Preferences…,
-Full screen), **Help** (Rules, About — the About box prints the client version and the linked engine
-version, exactly as the terminal's `--version` does).
+Menus stay thin: **View** (Round history…, Preferences…, Full screen), **Help** (Rules, About — the
+About box prints the client version and the linked engine version, exactly as the terminal's
+`--version` does).
 
-**Abandon Game and Quit both route through `GameController::stop()`** (§6), and neither is a
-special path: closing the window, quitting, and starting a second game are the same three calls in
-the same order, which is the whole reason §6 insists `stop()` be idempotent.
+> **AMENDED IN D1: there is no Game menu.** This section specified one — New Game…, Abandon Game,
+> Quit — and what was built instead is a **main-menu page** and a **pause menu**:
+>
+> - The window's central widget is a `QStackedWidget`. Page 0 is the menu — the title, **New Game**
+>   and **Quit** — and page 1 is the four regions above. **The client opens on page 0 with no game
+>   running at all**, which is what §8's "the app never needs a command line" means and what the
+>   terminal does: `TerminalRomanianWhist::startGame()` runs the setup wizard before a card exists.
+> - A **Menu** button at the right of the prompt bar — §12's own "one contextual action" slot, which
+>   had nothing in it until now — and **Esc** open the pause menu: **Resume**, or **Main menu**,
+>   which abandons the game and returns to page 0. Later phases add a settings button beside them.
+> - **The pause menu is a panel, not a `QDialog`** — §4.4's rule, which this reached the hard way.
+>   It was a modal dialog first, on the reasoning that §4.4's warning is about a dialog up while the
+>   game thread is parked in a prompt, and that a close here would be refused rather than swallowed.
+>   **True about safety and wrong about behaviour**: Qt drops window-system events to a window a
+>   modal blocks, so *the title bar's X did nothing* while the pause was up. It is a child widget
+>   dimming the window with `Theme::dimmedOverlay` now — modal in look and in reach, and the window
+>   is never blocked. `BidStrip` arrived at the same shape from the same section.
+> - **The pause is real**: `GameBridge::pace()` holds the game thread while it is up. That is §15.3's
+>   indefinite wait, built early for this one caller — see the box there, and D1.1.
+>
+> **Why:** "Abandon Game" with no way back is not what a player wants mid-game, and Resume is. A
+> card game is a single focused activity, which is this section's own argument, and a menu bar is
+> where an IDE keeps its commands.
+
+**Abandoning, quitting, closing the window and starting a second game all route through
+`GameController::stop()`** (§6), and none is a special path: they are the same three calls in the
+same order, which is the whole reason §6 insists `stop()` be idempotent.
 
 ## 13. Setup
 
@@ -2058,12 +2082,11 @@ whole shape of the game before starting it is strictly better.
 │  [x] End with a forehead round and a hidden round        │
 │  [ ] Play every one-card round forehead                  │
 │                                                          │
-│         24 rounds · about 20 minutes                     │
+│         26 rounds · about 7 minutes                      │
 │                                                          │
 │  ── Pace ──────────────────────────────────────────────  │
 │                                                          │
 │  Bot speed   Slow ──────●──────── Instant                │
-│  [x] Wait for me between tricks                          │
 │  [ ] Fixed deal, seed [ 12345 ]                          │
 │                                                          │
 │                            [ Cancel ]  [ Deal ]          │
@@ -2082,18 +2105,52 @@ whole shape of the game before starting it is strictly better.
 - **Names are validated as you type.** The engine rejects an empty name and rejects two names equal
   **byte for byte** — no trimming, no case folding, which is deliberate on its side. The dialog
   marks the offending field and disables **Deal** rather than letting `start()` throw.
-- **"24 rounds · about 20 minutes" updates live** from the four shape controls. The round count is a
+- **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.
+
+  > **CORRECTED IN D1: the count is `3·seats + 12 + (endWithForeheadAndHidden ? 2 : 0)`**, and the
+  > mockup above said 24 for a four-seat game with the box ticked. 24 is the count *without* the
+  > appended pair, so the two halves of the mockup disagreed with each other. `Scoreboard::initialize()`
+  > is the authority: N one-card rounds, then 2..7, then N of eight, then 7..2, then N of one — which
+  > is `3N + 12` whichever end it starts from — and then the forehead and hidden pair. **Neither the
+  > structure nor `all1GamesAreForehead` changes it**: S_818 is the same schedule read backwards, and
+  > the forehead rule retypes rounds rather than adding any. `NewGameTests` asserts the formula
+  > against a real engine at every table size rather than against itself.
 - **Fixed deal is `shuffleSeed` with a friendlier name.** It stays in the GUI because it is how a
   rendering change gets reviewed as a diff, and because §8 asks phase A to run seeded so a misrender
   is reproducible. One checkbox.
+
+  > **A FIXED DEAL HAS TO SEED THE BOTS THAT DRAW, which D1 found and this section did not say.**
+  > `GameSetup::shuffleSeed` reaches the shuffle and nothing else — `GameEngine.h` says so outright —
+  > so a table holding a Random bot is not reproducible from the checkbox alone.
+  > `RandomCardStrategy` has a seeded constructor that seeds its `mt19937` once, and the dialog uses
+  > it, with the seat index folded in so two Random bots do not share a stream. *(The engine's
+  > `STRATEGIES.md` says that strategy "seeds a fresh `std::random_device` on every call", which
+  > `RandomCardStrategy.cpp` contradicts.)*
+
+- **AMENDED IN D1: "Wait for me between tricks" is not in the dialog**, and the mockup above no
+  longer shows it. It is §15.3's, and §15.3 is explicit that it turns `pace()` into a wait on a
+  button rather than on a duration — phase E's group. D1 built that machinery for exactly one caller,
+  the pause, and stopped there. **A disabled checkbox would be a promise**, so there is none; the bot
+  speed beside it is a per-game `Pacing` handed to `prepare()` and needs nothing from phase E.
 - **The strategy names are the terminal wizard's four, in its order**: Random, First card, Low risk,
   Ducking. Each gets a one-line tooltip from the engine's `STRATEGIES.md` (at the engine root, not
   under `docs/`), so the choice means something to a player who has never read the source.
 
-**What the dialog produces is a `GameSetup` with the human seat's `moveProvider` left null**, which
-`GameController::start()` fills with a `SeatProvider` (§4.2, §4.3). It does not build a
+**What the dialog produces is a `GameSetup` with the human seat's `moveProvider` left null**, and
+**the human is seat 0** — which is what asking for your name before the opponents' implies, and what
+the terminal does (`TerminalRomanianWhist::buildSetup()` sets `view.humanSeat = 0`). `GameController::start()`
+fills that seat with a `SeatProvider` (§4.2, §4.3).
+
+> **This replaces C1's `kHumanSeat = 1`, and the property that index was carrying had to go
+> somewhere.** C1 seated the human at 1 deliberately: `seatlayout` puts seat 0 at bottom-centre when
+> `humanSeat` is −1, so a client that dropped `humanSeat` on the floor would draw a table identical
+> to a spectator's and look entirely correct. At seat 0 that diagnostic is gone, so `NewGameTests`
+> names the seat outright instead — `humanSeatOf()` is `Seat{0}` for a player and `nullopt` for a
+> watcher — and asserts that `buildSetup()` leaves that seat's provider null and no other's.
+> `GameController::start()` indexes with `.at()`, so the two disagreeing is a `std::out_of_range` on
+> the GUI thread rather than a misdeal. It does not build a
 `QtMoveProvider` and it does not touch the controller's ordering: the dialog answers questions, the
 controller does prepare → connect → start. And because `GameSetup` is move-only and spent by the
 move into `start()`, **Play again (§16) re-runs the dialog's `buildSetup()` rather than reusing a
@@ -2257,6 +2314,22 @@ for.
 > The terminal's `resetSkip()` placement comes with the skip flag: **the end of
 > `onBettingComplete()`, not `onRoundStarted()`** (§11, `TerminalRomanianWhist.cpp:166`).
 
+> **PART OF THIS ARRIVED IN D1, and knowing which part matters before phase E opens.** The pause
+> behind §12's pause menu is an indefinite `pace()` — `GameBridge::setPaused()`, a flag and a
+> second `wait()` on the condition variable the cancel already used — so **the hazard this box
+> describes is already live**, and `stop()`'s unconditional `cancelPacing()` is already the only
+> thing that can reach it. Two tests pin that, each with the mutation that fails it: writing the
+> paused predicate as `!paused`, forgetting the cancel, hangs a close exactly as described here.
+>
+> **What is still phase E's** is everything that needs a signal the game thread has not already been
+> given: "wait for me between tricks", "skip to end of round", the **Deal round n** button and the
+> bot-speed slider *as a live control*. D1's slider is not one — it is a `Pacing` fixed at
+> `prepare()` — and that is why it could ship early.
+>
+> One thing D1 measured that this box does not say: **a pause cannot be seen on a seated game at
+> its own turn.** The game thread is parked in the provider, not in `pace()`, so there is nothing to
+> hold and Resume is a no-op. That is correct, and it means any test of a pause needs bots to pace.
+
 ## 16. The end of a round, the end of the game, and the history
 
 ### 16.1 The round sheet
@@ -2302,8 +2375,15 @@ A sheet slides down over the table:
 
            You and Ana tie for first with 47 points.
 
-              [ Play again ]      [ Close ]
+              [ Play again ]      [ Main menu ]
 ```
+
+> **AMENDED IN D1: the second button is Main menu, not Close** — and the panel itself was built in D1
+> rather than in D2, because D1's review found there was no way off a finished game at all. `Close`
+> was written when §12 still had a menu bar and the client had nowhere else to go; D1 replaced that
+> with a main-menu page precisely so that leaving a *game* is not leaving the *application*, and the
+> window's X and the menu page's Quit both already end the session. A third button that quits, beside
+> two that do not, is the one on that panel most easily pressed by mistake.
 
 - **Places come from `Standing::place`**, so 47, 47, 31, 28 reads **1, 1, 3, 4** — a tie for first
   consumes second. Not computed here.
@@ -2315,7 +2395,12 @@ A sheet slides down over the table:
   first…"* for three. Ported with its test (§21.4).
 - **Play again** reopens the setup dialog pre-filled with the same settings — which is §8 phase D's
   second game, and therefore `stop()` → join → `prepare()` → `start()`, with a freshly
-  built `GameSetup`. Nothing is reset in place, and nothing is reconnected (§4.3).
+  built `GameSetup`. Nothing is reset in place, and nothing is reconnected (§4.3). **A player who
+  cancels that dialog gets the panel back**, or the cancel would walk into the dead end from the
+  other side.
+- **The failure ending has the same panel**, with the error where the standings would be and Main
+  menu as its only button. `gameFailed` fires instead of `gameOver`, not beside it, so without this
+  the one ending a player can least reason their way out of is the one with no way out.
 
 **This panel is drawn from `gameOver`, not after `run()` returns.** The terminal draws its game-over
 screen after the loop ends and a GUI cannot: `run()` returning happens on the game thread, inside a
@@ -2685,6 +2770,14 @@ wrong axis to argue on. A related draft prohibited re-sorting the hand and point
 `orderHandForDisplay()` on the engine side; **no such function exists**, and the prohibition was the
 wrong fix for the right worry — sorting for display is fine, and unsafe only when the way back is
 not carried with it.
+
+**A.5 — "24 rounds", in §13's mockup and its caption. Arithmetic, and wrong.** The schedule is
+`3·seats + 12` and the checkbox beside it appends two more, so a four-seat game with
+`endWithForeheadAndHidden` ticked — which is what the mockup draws — is 26. 24 is that game with the
+box *cleared*, so the mockup disagreed with itself rather than with the engine. Corrected in §13 and
+asserted in `NewGameTests` against a real `GameEngine` at every table size. Worth keeping for
+Appendix A's own reason: the number is quotable, it appears twice, and nothing in a build would ever
+have contradicted it — the round-count label is a string.
 
 ---
 

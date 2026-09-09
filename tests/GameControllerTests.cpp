@@ -365,6 +365,91 @@ TEST_CASE("A stop landing before the engine is published still ends the game", "
     REQUIRE(snapshots == 1);
 }
 
+TEST_CASE("setPaused() on a controller with no game is a no-op", "[controller]")
+{
+    // The bridge is built by prepare(), and the pause is reached from a menu -
+    // which is on screen precisely when no game is running. So this is the
+    // ordinary state for the caller rather than a defensive case, and the same
+    // reasoning stop()'s two null guards are written from.
+    GameController controller;
+
+    controller.setPaused(true);
+    controller.setPaused(false);
+
+    SUCCEED("setPaused() before prepare() did not dereference a null bridge");
+}
+
+TEST_CASE("A stop while the game is paused still ends it", "[controller]")
+{
+    // SECTION 15.3's HAZARD, at the level the window actually calls it. The
+    // bridge test proves cancelPacing() releases a paused pace(); this proves
+    // stop() gets there - that the pause does not sit between a close and the
+    // join, which is a hang on thread.wait() rather than a failure.
+    //
+    // A REAL PACING, not instant(): a paused game must be held somewhere, and
+    // with a zero dwell the engine would race to the end before the pause was
+    // ever asked for. At 30 seconds a game that ignored the stop would time out
+    // in await() rather than passing quickly for the wrong reason.
+    GameController controller;
+
+    controller.prepare(std::nullopt, Pacing{ std::chrono::milliseconds(30000),
+                                             std::chrono::milliseconds(30000),
+                                             std::chrono::milliseconds(30000) });
+
+    Outcome outcome(controller);
+    controller.start(buildSetup());
+
+    // Long enough for the run slot to publish the engine and reach its first
+    // paced callback, so the pause has something to hold.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    controller.setPaused(true);
+
+    // ON ITS OWN THREAD, WITH A DEADLINE AND A RESCUE, and not called inline -
+    // which is the whole difficulty of asserting this at all.
+    //
+    // stop() JOINS. So the failure this case exists to catch - a pace() whose
+    // paused wait forgot pacingCancelled, which is the realistic way to write
+    // the bug section 15.3 describes - does not make stop() return the wrong
+    // answer, it makes stop() never return. Called inline that is a hung suite
+    // printing nothing, which is C1's finding about a stand-in that answers
+    // wrongly, arriving here from the shutdown side instead.
+    //
+    // So: run it off-thread, wait with a bound, and if the bound expires reach
+    // past the controller to the bridge and cancel the pacing by hand. That
+    // releases the game thread, lets stop() finish and the worker join, and
+    // turns the hang into an ordinary failed assertion.
+    std::atomic<bool> stopped{false};
+    std::thread stopper([&]
+    {
+        controller.stop();
+        stopped = true;
+    });
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while(!stopped && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    const bool stopReturnedOnItsOwn = stopped;
+
+    // The rescue, and it must be setPaused(false) rather than another
+    // cancelPacing(): the failure being caught here IS a cancel that no longer
+    // reaches the paused wait, so cancelling again rescues nothing. Lifting the
+    // pause is the one release left. A no-op on the passing path, where stop()
+    // has already returned.
+    if(!stopReturnedOnItsOwn)
+        controller.setPaused(false);
+
+    stopper.join();
+
+    // NOT resumed first, anywhere above. The window's close path does not know
+    // or care whether the game was paused - it calls stop(), and stop() has to
+    // be enough.
+    REQUIRE(stopReturnedOnItsOwn);
+    REQUIRE(outcome.await());
+    REQUIRE(outcome.stoppedCount == 1);
+    REQUIRE(outcome.overCount == 0);
+}
+
 TEST_CASE("prepare() clears the latch, so a second game is not stopped by the first", "[controller]")
 {
     // The same flag from the other side. Between this and the test above, the

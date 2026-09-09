@@ -55,33 +55,14 @@ void GameController::prepare(std::optional<Seat> humanSeat, Pacing pacing)
     }
 
     // THE PREVIOUS GAME'S UNDELIVERED SIGNALS, dropped on the floor - and this
-    // one statement is the whole reason the signals above are mirrored here.
+    // one call is the whole reason the signals above are mirrored here. It is
+    // its own function since D1's review, because prepare() stopped being the
+    // only moment an old game's queue is worthless: abandoning one to the main
+    // menu is another, and that path was leaving the backlog to repaint the
+    // status bar over the menu page.
     //
-    // Qt purges a posted QMetaCallEvent when its RECEIVER is destroyed, never
-    // when its sender is. Destroying game one's bridge below therefore purges
-    // nothing, and the backlog is not a rare case: stop() above blocks this
-    // thread in thread.wait() while the game thread publishes to the last card,
-    // so a "play again" pressed over the standings arrives with a whole game
-    // queued. Measured: 618 of 618 snapshots plus the gameOver, all delivered
-    // after game two had started, repainting game one's final table over game
-    // two's deal.
-    //
-    // AFTER stop(), which is what makes it sufficient rather than merely
-    // helpful: the game thread is joined by then, so nothing can post behind the
-    // purge. prepare() calls stop() first, so that holds by construction.
-    //
-    // NOT IN stop(), and that is the sharp edge. stop() is also the ORDINARY end
-    // of a game the player is still reading - the standings are on screen and
-    // the window has yet to draw the gameOver that produced them. Purging there
-    // deletes the ending. A new game is the only moment at which the old game's
-    // queue is genuinely worthless.
-    //
-    // MetaCall ONLY. DeferredDelete is a different event type and must survive;
-    // so must anything a future caller queues at this object for its own sake,
-    // which is why this names an event type rather than passing 0.
-    //
-    // ~GameController needs no equivalent: ~QObject already purges its own.
-    QCoreApplication::removePostedEvents(this, QEvent::MetaCall);
+    // AFTER stop(), which prepare() calls first, so that holds by construction.
+    discardQueuedSignals();
 
     // KEPT, because start() needs to know which seat the player drives - see
     // there. Set with the provider below and engaged on exactly the same
@@ -268,6 +249,28 @@ void GameController::runGame(GameSetup setup)
     thread.quit();
 }
 
+void GameController::discardQueuedSignals()
+{
+    // Qt purges a posted QMetaCallEvent when its RECEIVER is destroyed, never
+    // when its sender is. Destroying a game's bridge therefore purges nothing,
+    // and the backlog is not a rare case: stop() blocks the GUI thread in
+    // thread.wait() while the game thread publishes to the last card, so
+    // anything pressed over the standings arrives with a whole game queued.
+    // Measured: 618 of 618 snapshots plus the gameOver, all delivered after game
+    // two had started, repainting game one's final table over game two's deal.
+    //
+    // AFTER stop() AND ONLY AFTER IT - see the header. The join is what makes
+    // this sufficient rather than merely helpful: nothing can post behind the
+    // purge once the game thread is gone.
+    //
+    // MetaCall ONLY. DeferredDelete is a different event type and must survive;
+    // so must anything a future caller queues at this object for its own sake,
+    // which is why this names an event type rather than passing 0.
+    //
+    // ~GameController needs no equivalent: ~QObject already purges its own.
+    QCoreApplication::removePostedEvents(this, QEvent::MetaCall);
+}
+
 void GameController::stop()
 {
     {
@@ -315,6 +318,12 @@ void GameController::stop()
     // only re-set flags that are already set, and quit()/wait() on a finished
     // thread return at once. So there is deliberately no `stopped` guard here;
     // there would be nothing for it to guard.
+}
+
+void GameController::setPaused(bool paused)
+{
+    if(gameBridge)
+        gameBridge->setPaused(paused);
 }
 
 bool GameController::isStopRequested() const

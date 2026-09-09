@@ -152,6 +152,24 @@ public:
     // makes it safe to call on an object that lives on another thread.
     void cancelPacing();
 
+    // HOLDS THE GAME THREAD IN pace() FOR AS LONG AS IT IS SET. Called on the
+    // GUI thread, from GameController::setPaused(), and a plain method rather
+    // than a slot for the reason section 5 gives: the game thread is inside
+    // run() for the whole game, so its event loop never spins and no slot call
+    // could ever reach it. Same shape as cancelPacing() and the provider's
+    // submit() - a mutex, a flag and a notify.
+    //
+    // THIS IS THE FIRST INDEFINITE WAIT IN THE CLIENT, which section 15.3 flags
+    // as the one thing that adds a hazard to section 6: a pace() with a timeout
+    // ends on its own even if a close is dropped, and one waiting on a flag does
+    // not. requestStop() cannot reach it - the engine reads that at boundaries
+    // and the thread is not at one - so ONLY cancelPacing() can, and stop()
+    // calling it unconditionally is what makes a close land while paused. That
+    // call stops being tidy and becomes load-bearing here.
+    //
+    // Nothing clears this between games: prepare() builds a fresh bridge.
+    void setPaused(bool paused);
+
 private:
     // Snapshots on the GAME thread and emits the result by value. The GUI thread
     // must never reach into the engine, which has no thread safety at all.
@@ -165,6 +183,10 @@ private:
     //
     // If this threw instead, the clean path would almost never run - a spectator
     // game spends nearly all its wall-clock time in here.
+    //
+    // TWO WAITS SINCE D1, not one: the timed beat, and then an indefinite hold
+    // while `paused`. See setPaused() above for why the second one is the
+    // dangerous half.
     void pace(std::chrono::milliseconds delay);
 
     // Absent in a spectator game, which makes both helpers one-liners rather
@@ -192,10 +214,16 @@ private:
     // copy across seven callbacks is a state machine that can only ever drift
     // away from the one the engine already keeps.
 
-    // Woken by cancelPacing() so a close does not wait out a trick dwell.
+    // Woken by cancelPacing() so a close does not wait out a trick dwell, and by
+    // setPaused() so a resume does not wait out a pause that is already over.
     std::mutex pacingMutex;
     std::condition_variable pacingCv;
     bool pacingCancelled = false;
+
+    // The indefinite half of pace(). Guarded by pacingMutex like the flag above
+    // it, and read ONLY through the predicate - a bare bool read outside the
+    // lock is the version of this that works until it does not.
+    bool pacingPaused = false;
 };
 
 // Qt 6 builds a QMetaType from any complete type, so a queued connection usually

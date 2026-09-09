@@ -1,5 +1,9 @@
 #include "PromptBar.h"
 
+#include <QPushButton>
+
+#include <algorithm>
+
 #include <QBoxLayout>
 #include <QLabel>
 #include <QPalette>
@@ -78,9 +82,25 @@ PromptBar::PromptBar(QWidget* parent) : QWidget(parent)
 {
     hint = new QLabel(this);
 
+    // SECTION 12's "one contextual action", which until D1 had nothing to hold.
+    // The pause is reached from here rather than from a menu bar because this
+    // screen reads as a table, and a table's controls are on it.
+    menu = new QPushButton(tr("Menu"), this);
+    menu->setObjectName("menu");
+
+    // NOT A DEFAULT BUTTON, and not focusable. This bar sits under a hand whose
+    // digit keys play cards and whose Esc opens the same dialog this button
+    // does - a button that took focus would swallow Enter and, worse, would take
+    // the keyboard away from the window that reads those digits.
+    menu->setAutoDefault(false);
+    menu->setFocusPolicy(Qt::NoFocus);
+
+    connect(menu, &QPushButton::clicked, this, &PromptBar::menuRequested);
+
     auto* row = new QHBoxLayout(this);
     row->addWidget(hint);
     row->addStretch(1);
+    row->addWidget(menu);
 
     // THE HEIGHT IS SETTLED NOW AND NEVER AGAIN, which is B2b's finding applied
     // rather than rediscovered. This bar is empty for most of a game, and a bar
@@ -88,9 +108,14 @@ PromptBar::PromptBar(QWidget* parent) : QWidget(parent)
     // every turn and back on every play - twice a trick, where the trump label
     // managed it only twice a game.
     //
-    // From the font, so it follows a user who has set a larger one.
-    setFixedHeight(fontMetrics().height() + row->contentsMargins().top()
-                                          + row->contentsMargins().bottom());
+    // MEASURED OFF THE BUTTON SINCE D1, not off the font alone. A QPushButton is
+    // taller than a line of text, so the bar that was exactly a line high would
+    // have clipped the thing just added to it - which is B2b's own shape: a
+    // widget sized for one of the things it draws.
+    const int content = std::max(fontMetrics().height(), menu->sizeHint().height());
+
+    setFixedHeight(content + row->contentsMargins().top()
+                           + row->contentsMargins().bottom());
 
     setFields(promptbar::idle());
 }
