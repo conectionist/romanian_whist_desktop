@@ -93,6 +93,9 @@ qt_add_library(desktop_core STATIC
     src/ui/BidStrip.cpp
     src/ui/PromptBar.h
     src/ui/PromptBar.cpp
+
+    src/ui/NewGameDialog.h
+    src/ui/NewGameDialog.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
