@@ -2375,8 +2375,15 @@ A sheet slides down over the table:
 
            You and Ana tie for first with 47 points.
 
-              [ Play again ]      [ Close ]
+              [ Play again ]      [ Main menu ]
 ```
+
+> **AMENDED IN D1: the second button is Main menu, not Close** — and the panel itself was built in D1
+> rather than in D2, because D1's review found there was no way off a finished game at all. `Close`
+> was written when §12 still had a menu bar and the client had nowhere else to go; D1 replaced that
+> with a main-menu page precisely so that leaving a *game* is not leaving the *application*, and the
+> window's X and the menu page's Quit both already end the session. A third button that quits, beside
+> two that do not, is the one on that panel most easily pressed by mistake.
 
 - **Places come from `Standing::place`**, so 47, 47, 31, 28 reads **1, 1, 3, 4** — a tie for first
   consumes second. Not computed here.
@@ -2388,7 +2395,12 @@ A sheet slides down over the table:
   first…"* for three. Ported with its test (§21.4).
 - **Play again** reopens the setup dialog pre-filled with the same settings — which is §8 phase D's
   second game, and therefore `stop()` → join → `prepare()` → `start()`, with a freshly
-  built `GameSetup`. Nothing is reset in place, and nothing is reconnected (§4.3).
+  built `GameSetup`. Nothing is reset in place, and nothing is reconnected (§4.3). **A player who
+  cancels that dialog gets the panel back**, or the cancel would walk into the dead end from the
+  other side.
+- **The failure ending has the same panel**, with the error where the standings would be and Main
+  menu as its only button. `gameFailed` fires instead of `gameOver`, not beside it, so without this
+  the one ending a player can least reason their way out of is the one with no way out.
 
 **This panel is drawn from `gameOver`, not after `run()` returns.** The terminal draws its game-over
 screen after the loop ends and a GUI cannot: `run()` returning happens on the game thread, inside a

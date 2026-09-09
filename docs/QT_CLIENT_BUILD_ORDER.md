@@ -626,6 +626,10 @@ now comes off it.
       are amended to record it — that document is the one that wins, so it is the one that had to
       change.
 - [x] **Play again**, which is the first thing in the client that reuses a `GameController`.
+- [x] **§16.2's `GameOverPanel`, pulled forward out of D2** by the review of this branch — the
+      standings, the winners' stars and the ported announcement, over the final state. Not in the
+      step as written; it is here because without it a finished game had no way back to the menu and
+      **Play again above was unreachable from a game that had actually ended**. See the findings.
 
 > The second game is §4.3's ordering run again from the top: `stop()` and join, a fresh bridge and
 > provider from `prepare()`, `start()`. **Nothing is reset in place**, and there is no reconnection
@@ -666,7 +670,30 @@ close was silently refused. **This is §4.4, arrived at from the other end**: th
 leaks nothing, since nothing is destroyed — **was true about safety and silent about behaviour**. A
 dead close button is a defect whether or not a thread leaks.
 
-Two things measured on the way to fixing it, both worth having:
+**And a sixth, found by REVIEWING the finished branch rather than by running it: a finished game had
+no way anywhere, and that is what pulled §16.2's `GameOverPanel` into D1.** `onGameOver()` cleared
+`gameRunning`, which is the flag `setPauseMenuVisible()` is gated on — deliberately, so that Resume
+could not be offered on a game that had ended — and the menu bar holds nothing but *View*. So the
+Menu button and Esc were both dead on the one screen with nothing else on it, and the only way out of
+a completed game was closing the window. **`Play again` was therefore unreachable from the ending it
+exists for**, which D1 ticked off as built: the second game could only be reached by abandoning the
+first part-way through. `showFailure()` was the same dead end.
+
+Three things worth keeping from it:
+
+- **A bool that answers two questions is the bug.** "Is there a game to hold" and "has a game ended"
+  are different, and one flag serving both is what let the pause's correct refusal become the
+  window's dead end. It is a `TableState` of three now — `NoGame`, `Playing`, `Finished` — and the
+  pause asks for `Playing` exactly rather than for "not NoGame".
+- **A green suite says nothing about a screen you cannot leave.** Every D1 test drove the client into
+  a game and out of it through the pause; none of them played one to its end, so nothing ever stood
+  where the player would have been stuck. The test that pins it now plays a real two-bot watched game
+  at `FastestSpeed` to `gameOver` and presses the button.
+- **The panel is D2's one bullet the dead end needed, and no more.** `roundScored()`'s `RoundResult`
+  payload and the round sheet stayed in D2 — the panel is drawn from `gameOver`, which already
+  carried both vectors it needs.
+
+Two things measured on the way to fixing the modal dialog, both worth having:
 
 - **A *programmatic* `close()` passes straight through a modal dialog.** Only the window manager's
   route is filtered. So no test can reproduce the defect by calling `close()` — what a test can pin
@@ -730,7 +757,9 @@ slider is a `Pacing` fixed at `prepare()`, which is why it could ship here.
       column cannot be reconstructed later — `onRoundScored()` is the only callback at which the
       per-round score can be read against the right round index. This is a change in `GameBridge`,
       not in the widget that wants it.
-- [ ] `ScoreboardWidget`, `RoundSheet`, `GameOverPanel`.
+- [ ] `ScoreboardWidget`, `RoundSheet`. **`GameOverPanel` was built in D1** — see the review finding
+      below. The rest of this step is untouched by that: the payload above is the round sheet's, and
+      the panel needed nothing from it.
 - [ ] Winners from `getWinners()`, places from `Standing::place`. Never `standings.front()` — that
       bug shipped once already, in the terminal's 2.1.0.
 
@@ -837,6 +866,7 @@ Symptom first, because that is what you have.
 | Game two deals one round and stops | `prepare()` did not clear `GameController::stopRequested` | §4.3 |
 | Closing the window hangs, but only after a pause | The paused wait in `pace()` does not test `pacingCancelled`, so `cancelPacing()` no longer reaches it. `requestStop()` cannot — the thread is not at a boundary | §15.3, D1.1 |
 | "Main menu" closes the application | `onGameStopped()` closes for any stop it cannot account for, and `returningToMenu` is what accounts for this one — beside `closing`, which was the only such stop before D1 | D1's findings |
+| The Menu button and Esc do nothing, but only once the game has ended | The flag the pause is gated on is cleared at `gameOver` — correctly, since Resume cannot be offered on a finished game. One bool cannot also answer "is there a game on the table", and the screen with nothing else on it is the one it leaves you stuck on | §16.2, D1's findings |
 | Starting a new game closes the window | A modal dialog, or anything spinning the event loop, ran between `stop()` and `prepare()`. That purge is what drops game one's queued `gameStopped`; a nested loop in the gap delivers it first | §4.3 |
 | The game does not pause, but only on your own turn | It is already paused — the game thread is parked in the provider, not in `pace()`, and there is nothing to hold | D1's findings |
 | Resume works once and never again | `pace()` reads the pause flag at the first wait only. The predicate has to be evaluated at every wait, which is what the third bridge case pins | D1.1 |

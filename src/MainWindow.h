@@ -29,6 +29,7 @@ QT_END_NAMESPACE
 
 class BidStrip;
 class CardArtWindow;
+class GameOverPanel;
 class HandItem;
 class InfoStrip;
 class MainMenuPage;
@@ -185,6 +186,14 @@ private:
     // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
     void setPauseMenuVisible(bool visible);
 
+    // Raises section 16.2's panel over the table it was filled from. The three
+    // callers are the two endings - onGameOver() and showFailure() - and a Play
+    // again the player then cancelled, which must put back what it took down.
+    //
+    // FILLS NOTHING. The panel keeps its face between a hide and a show, so this
+    // is geometry, show, raise and focus - the same four the pause menu does.
+    void showGameOverPanel();
+
     // Prepares the controller and starts a game, and - the reason this is a
     // function rather than two calls in the constructor - clears the elapsed
     // origin first. That origin belongs to a GAME, not to the window: leaving
@@ -233,6 +242,12 @@ private:
     // visibility and GameController's pause are one fact; see
     // setPauseMenuVisible().
     PauseOverlay* pauseOverlay = nullptr;
+
+    // Section 16.2's panel, the same shape as the pause menu and for the same
+    // reason - it is drawn OVER the final state rather than replacing it, which
+    // is what section 4.1's "publish the last snapshot before emitting gameOver"
+    // exists to make possible.
+    GameOverPanel* gameOverPanel = nullptr;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this
@@ -308,10 +323,24 @@ private:
     // application. Cleared by startGame(), so it is true for exactly one stop.
     bool returningToMenu = false;
 
-    // Is there a game to pause? False on the menu page, and false again the
-    // moment a game ends by any of its three endings - a Resume offered on a
-    // finished game would promise something that cannot happen.
-    bool gameRunning = false;
+    // WHAT THE TABLE IS SHOWING, and the three states are not two. This was a
+    // bool through D1 and the bool is what put the client in a dead end: a
+    // finished game cleared it, the pause menu is gated on it, and so Menu and
+    // Esc both did nothing on the one screen that needed a way off it.
+    //
+    // "Is there a game to hold" and "has a game ended" are different questions -
+    // Playing answers the first, Finished the second, and NoGame is the menu
+    // page, where neither applies. A Resume offered on a finished game would
+    // still promise something that cannot happen, which is why setPauseMenu-
+    // Visible() asks for Playing exactly rather than for "not NoGame".
+    enum class TableState
+    {
+        NoGame,
+        Playing,
+        Finished
+    };
+
+    TableState tableState = TableState::NoGame;
 
     // DECLARED LAST, so it is destroyed FIRST: ~GameController joins the game
     // thread, and that has to happen before the widgets its slots write to are

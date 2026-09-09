@@ -7,6 +7,7 @@
 #include "table/TableView.h"
 #include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
+#include "ui/GameOverPanel.h"
 #include "ui/InfoStrip.h"
 #include "ui/MainMenuPage.h"
 #include "ui/NewGameDialog.h"
@@ -208,6 +209,48 @@ void MainWindow::buildTable()
             this, [this]{ setPauseMenuVisible(false); });
 
     connect(pauseOverlay, &PauseOverlay::mainMenuRequested, this, &MainWindow::abandonToMenu);
+
+    // THE SAME ARRANGEMENT, for the same reason plus one of its own: section
+    // 16.2 draws the standings OVER the final state, and section 4.1 publishes
+    // the last snapshot before emitting gameOver precisely so that the table
+    // underneath this is the game that just ended.
+    gameOverPanel = new GameOverPanel(pages);
+    gameOverPanel->setTheme(theme);
+    gameOverPanel->hide();
+
+    // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
+    // for a game that has already ended: stop() is idempotent, and a game that
+    // reached gameOver emits no gameStopped for the returningToMenu latch to
+    // have to catch - GameBridge::onGameStopped() fires only when a stop was
+    // requested, and this game was not stopped, it finished.
+    connect(gameOverPanel, &GameOverPanel::mainMenuRequested, this, &MainWindow::abandonToMenu);
+
+    connect(gameOverPanel, &GameOverPanel::playAgainRequested, this, [this]
+    {
+        // HIDDEN FIRST, because what follows opens a modal dialog and this panel
+        // would otherwise stand over the table behind it for as long as the
+        // player takes to answer.
+        gameOverPanel->hide();
+
+        // SECTION 16.2's "play again reopens the setup dialog pre-filled with
+        // the same settings" - which is exactly what this slot already does,
+        // from lastConfig. It is section 4.3's ordering from the top: stop(),
+        // join, prepare(), start(), with a freshly built GameSetup.
+        //
+        // The dialog's exec() runs BEFORE startGame(), so the trap that function
+        // records - no modal event loop between prepare() and start() - holds
+        // here as it does from the menu page.
+        showNewGameDialog();
+
+        // AND BACK UP IF THE PLAYER CANCELLED IT, which is the dead end this
+        // whole panel exists to remove, walked into from the other side: a
+        // dismissed dialog leaves a finished game on the table, and hiding the
+        // panel on the way in would have left nothing to press. startGame() is
+        // what moves the state on, so this reads the state rather than the
+        // dialog's answer.
+        if(tableState == TableState::Finished)
+            showGameOverPanel();
+    });
 }
 
 void MainWindow::showMainMenu()
@@ -257,7 +300,12 @@ void MainWindow::setPauseMenuVisible(bool visible)
     //
     // NOTHING TO PAUSE ON THE MENU PAGE, or on a game that has already ended.
     // Esc is bound on the window, so it arrives here whichever page is showing.
-    if(visible && !gameRunning)
+    //
+    // PLAYING EXACTLY, not "anything but NoGame". A finished game now has a
+    // panel of its own with the two ways on, and a Resume raised over it would
+    // promise a game that has already ended - which is the same reason the flag
+    // this reads was cleared at gameOver before there was anywhere to go.
+    if(visible && tableState != TableState::Playing)
         return;
 
     // WHEN THE OVERLAY WAS A MODAL QDialog THIS WAS AN RAII GUARD around exec(),
@@ -285,9 +333,22 @@ void MainWindow::showPauseMenu()
     setPauseMenuVisible(true);
 }
 
+void MainWindow::showGameOverPanel()
+{
+    gameOverPanel->setGeometry(pages->rect());
+    gameOverPanel->show();
+    gameOverPanel->raise();
+    gameOverPanel->focusDefaultButton();
+}
+
 void MainWindow::abandonToMenu()
 {
     setPauseMenuVisible(false);
+
+    // AND THE GAME-OVER PANEL, because this is the button on BOTH of them. From
+    // the pause it is hidden already; from the panel it is what was just
+    // clicked, and a panel left up would stand over the menu page.
+    gameOverPanel->hide();
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
@@ -296,7 +357,7 @@ void MainWindow::abandonToMenu()
 
     controller.stop();
 
-    gameRunning = false;
+    tableState = TableState::NoGame;
     showMainMenu();
 }
 
@@ -325,6 +386,9 @@ void MainWindow::resizeEvent(QResizeEvent* event)
     // and it is set again on the way in.
     if(pauseOverlay && pauseOverlay->isVisible())
         pauseOverlay->setGeometry(pages->rect());
+
+    if(gameOverPanel && gameOverPanel->isVisible())
+        gameOverPanel->setGeometry(pages->rect());
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -431,10 +495,15 @@ void MainWindow::startGame(GameSetup setup, std::optional<Seat> humanSeat, Pacin
     // a game that has just been dealt.
     pauseOverlay->hide();
 
+    // AND THE PANEL THE LAST GAME ENDED ON, which is not unreachable at all: it
+    // is where Play again is pressed, and it is still up while the setup dialog
+    // it opens is answered.
+    gameOverPanel->hide();
+
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
     returningToMenu = false;
-    gameRunning = true;
+    tableState = TableState::Playing;
 
     showTable();
 
@@ -806,20 +875,25 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
                                  : tr("Drawn between %1").arg(names.join(tr(", "))));
 
     // THE GAME IS OVER BUT THE TABLE STAYS UP, which is what section 16.2's
-    // panel is drawn over and what D2 builds. Until then the standings are in
-    // the status bar and the log, and the way on is the Menu button.
+    // panel is drawn over - the final snapshot arrived before this signal did
+    // (section 4.1), so what is underneath the panel is the game that ended.
     //
-    // Cleared so that the pause cannot be opened on a finished game: there is
-    // nothing to hold, and Resume would promise a game that has already ended.
-    gameRunning = false;
+    // Finished, not NoGame: the table is still showing a game, and the pause
+    // must not open over it - there is nothing to hold, and Resume would promise
+    // a game that has already ended. The panel below is the way on, and D1's
+    // review is what found that there had to be one.
+    tableState = TableState::Finished;
+
+    gameOverPanel->showResult(standings, winners);
+    showGameOverPanel();
 }
 
 void MainWindow::showFailure(QString what)
 {
-    // Neither onGameStopped() nor onGameOver() fires on this path, so the flag
-    // they clear has to be cleared here too - otherwise the pause menu is
-    // still reachable on a game whose thread has already unwound.
-    gameRunning = false;
+    // Neither onGameStopped() nor onGameOver() fires on this path, so the state
+    // they move has to be moved here too - otherwise the pause menu is still
+    // reachable on a game whose thread has already unwound.
+    tableState = TableState::Finished;
 
     bidStrip->hide();
     hand->setPlayable(false);
@@ -827,6 +901,13 @@ void MainWindow::showFailure(QString what)
 
     appendLine(tr("-- the game thread failed: %1 --").arg(what));
     statusBar()->showMessage(tr("The game ended in an error: %1").arg(what));
+
+    // THE PANEL'S OTHER FACE, and the reason it has one: this ending is as much
+    // a dead end as the ordinary one was, and it is the ending a player is least
+    // able to guess their way out of. No standings, because there are none, and
+    // no Play again - see GameOverPanel::showFailure().
+    gameOverPanel->showFailure(what);
+    showGameOverPanel();
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

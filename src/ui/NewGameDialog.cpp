@@ -431,6 +431,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& initial, QWidget* parent)
     // rather than on a duration, and that is the machinery D1 built one caller
     // of and no more. A disabled checkbox would be a promise, so there is none.
     speed = new QSlider(Qt::Horizontal, this);
+    speed->setObjectName("speed");
     speed->setRange(newgame::SlowestSpeed, newgame::FastestSpeed);
     speed->setPageStep(1);
     speed->setTickPosition(QSlider::TicksBelow);

@@ -3,16 +3,23 @@
 #include "MainWindow.h"
 #include "paint/Theme.h"
 #include "table/TableScene.h"
+#include "ui/GameOverPanel.h"
+#include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 
 #include <QApplication>
 #include <QDialog>
 #include <QElapsedTimer>
+#include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QTimer>
+
+#include <functional>
 
 // D1's flow, driven through the real window: menu, deal, pause, resume, abandon,
 // and a second game. Constructible because TestApp is a QApplication on the
@@ -74,6 +81,58 @@ void answerModalWatching(int afterMs)
 
         dialog->done(QDialog::Accepted);
     });
+}
+
+// THE SHORTEST GAME THIS CLIENT CAN BE ASKED FOR, and the only reason to want
+// one: a test about the END of a game has to get there. Watched, so the pause
+// and the ending both work without a seat to answer prompts from; two bots,
+// which is the smallest table and an 18-round schedule; and the slider at
+// FastestSpeed, where pacingFor() scales every beat by zero.
+//
+// Every control is reached by NAME, which is D1's own finding - a positional
+// findChildren<QLineEdit*>() typed a bot name into the seed box and asserted
+// nothing, because every QSpinBox owns an editable QLineEdit of its own.
+void answerModalShortWatchedGame(int afterMs)
+{
+    QTimer::singleShot(afterMs, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QRadioButton* watch = dialog->findChild<QRadioButton*>("watching"))
+            watch->setChecked(true);
+
+        // AFTER the radio, which is what moves the spinner's range: a watched
+        // game seats two bots at minimum, and setting the value first would set
+        // it against the playing bounds.
+        if(QSpinBox* opponents = dialog->findChild<QSpinBox*>("opponents"))
+            opponents->setValue(2);
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::FastestSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+}
+
+// Pumps until `ready` answers true, or until the deadline. Returns what it last
+// saw, so the caller asserts on a bool rather than on a hang - a game that never
+// ends must fail this file rather than stop it.
+bool pumpUntil(int limitMs, const std::function<bool()>& ready)
+{
+    QElapsedTimer clock;
+    clock.start();
+
+    while(clock.elapsed() < limitMs)
+    {
+        if(ready())
+            return true;
+
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    }
+
+    return ready();
 }
 }
 
@@ -335,4 +394,74 @@ TEST_CASE("A watched game arrives at the scene as one", "[main-window]")
 
     REQUIRE(scene->handRect(cardHeight).isEmpty());
     REQUIRE(scene->tableRect(cardHeight) == scene->sceneRect());
+}
+
+TEST_CASE("A finished game has a way back to the menu", "[main-window]")
+{
+    // THE DEAD END D1's REVIEW FOUND, and the one thing under this whole panel
+    // that a unit test of the panel cannot see. onGameOver() cleared the flag
+    // setPauseMenuVisible() is gated on, so on a finished game the Menu button
+    // and Esc were both dead and the menu bar held nothing but View: the only
+    // way out of a completed game was closing the window, which also made "play
+    // again" - the thing D1 exists to build - unreachable from the ending it
+    // exists for.
+    //
+    // A REAL GAME PLAYED TO ITS END, not a signal delivered by hand. What is
+    // being tested is the chain from gameOver through the window to a button
+    // that works, and every link that could drop it - the state the pause reads,
+    // the panel's geometry, the connection to abandonToMenu() - is in between.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    REQUIRE(pages != nullptr);
+    REQUIRE(newGame != nullptr);
+    REQUIRE(panel != nullptr);
+
+    REQUIRE_FALSE(panel->isVisible());
+
+    answerModalShortWatchedGame(300);
+    newGame->click();
+
+    // 18 rounds of two bots with every beat scaled to zero. The deadline is
+    // generous against a loaded machine and is not the measurement - a game that
+    // has not ended in thirty seconds has stopped, which is a failure and not a
+    // slow pass.
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+
+    // Over the table, not instead of it: section 16.2 draws the standings on the
+    // final state, which section 4.1 publishes before it emits gameOver.
+    REQUIRE(pages->currentIndex() == 1);
+    REQUIRE(panel->geometry() == pages->rect());
+
+    QLabel* announcement = panel->findChild<QLabel*>("announcement");
+    REQUIRE(announcement != nullptr);
+    REQUIRE_FALSE(announcement->text().isEmpty());
+
+    // AND THE PAUSE STAYS SHUT UNDER IT. There is nothing left to hold, and a
+    // Resume raised over a finished game would promise a game that has ended -
+    // which is what the state this panel reads is for.
+    window.findChild<PauseOverlay*>()->hide();
+    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    REQUIRE(menu != nullptr);
+    menu->click();
+    pump(100);
+    REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
+
+    QPushButton* mainMenu = panel->findChild<QPushButton*>("gameOverMainMenu");
+    REQUIRE(mainMenu != nullptr);
+
+    mainMenu->click();
+    pump(500);
+
+    // The window is still up - the stop this button causes is the second one
+    // onGameStopped() has to account for, and it accounts for it whether the
+    // game was abandoned or had already ended.
+    REQUIRE(pages->currentIndex() == 0);
+    REQUIRE(window.isVisible());
+    REQUIRE_FALSE(panel->isVisible());
 }

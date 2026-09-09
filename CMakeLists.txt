@@ -100,6 +100,8 @@ qt_add_library(desktop_core STATIC
     src/ui/MainMenuPage.cpp
     src/ui/PauseOverlay.h
     src/ui/PauseOverlay.cpp
+    src/ui/GameOverPanel.h
+    src/ui/GameOverPanel.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
