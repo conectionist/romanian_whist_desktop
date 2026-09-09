@@ -1,6 +1,7 @@
 #include "SeatLayout.h"
 
 #include <cmath>
+#include <numbers>
 
 namespace
 {
@@ -55,7 +56,7 @@ std::vector<QPointF> seatlayout::seatCentres(unsigned int seatCount, int humanSe
     const qreal radiusX = table.width() * radiusFractionX;
     const qreal radiusY = table.height() * radiusFractionY;
 
-    const qreal step = 2.0 * M_PI / seatCount;
+    const qreal step = 2.0 * std::numbers::pi / seatCount;
 
     std::vector<QPointF> centres(seatCount);
 
