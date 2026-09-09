@@ -317,6 +317,12 @@ void GameController::stop()
     // there would be nothing for it to guard.
 }
 
+void GameController::setPaused(bool paused)
+{
+    if(gameBridge)
+        gameBridge->setPaused(paused);
+}
+
 bool GameController::isStopRequested() const
 {
     std::lock_guard lock(engineMutex);

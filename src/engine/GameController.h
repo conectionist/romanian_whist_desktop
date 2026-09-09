@@ -102,6 +102,20 @@ public:
     // game that never started, on one that already finished, and twice.
     void stop();
 
+    // HOLDS THE GAME WHERE IT IS. Forwards to GameBridge::setPaused(); see there
+    // for why this is a plain call rather than a signal, and for the hazard it
+    // introduces.
+    //
+    // NULL-SAFE, on the same reasoning as stop()'s two guards: the bridge is
+    // built by prepare(), so a pause asked for before a game exists has nobody
+    // to tell. It is a no-op rather than an error because the caller is a menu
+    // and a menu is reachable with no game running.
+    //
+    // The pause lands within one pacing beat, and NOT AT ALL while the game
+    // thread is parked in a prompt waiting for the player - which is already a
+    // pause, so there is nothing there to do.
+    void setPaused(bool paused);
+
     // Built by prepare(), destroyed by the next one. NOT the GUI's seam: GUI code
     // connects to this object's mirrored signals instead, which outlive a game -
     // see the signals block for what connecting here across a "play again" costs.

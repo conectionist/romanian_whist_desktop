@@ -142,6 +142,155 @@ TEST_CASE("pace() actually waits when nothing has cancelled it", "[bridge]")
     REQUIRE(immediate < std::chrono::milliseconds(100));
 }
 
+TEST_CASE("setPaused() holds pace() past its delay, and resuming releases it", "[bridge]")
+{
+    // D1's pause, and the first INDEFINITE wait in the client. Everything above
+    // this line waits for a bounded time and comes back on its own; this one
+    // comes back only when somebody says so, which is what section 15.3 warns
+    // is a different kind of object.
+    //
+    // AN INSTANT PACING, deliberately. If the dwell were long the case would
+    // pass whether the pause worked or not - the wait it measures would be the
+    // beat. At zero, every millisecond spent inside onRoundScored() is the pause
+    // and nothing else.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+    bridge.setPaused(true);
+
+    std::atomic<bool> returned{false};
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    // OBSERVED, THEN ASSERTED AFTER THE JOIN, and not asserted here. A failing
+    // REQUIRE unwinds, and unwinding past a std::thread that has not been joined
+    // is std::terminate - so the mutation this case exists to catch would abort
+    // the run instead of failing it, taking every later case with it and
+    // printing an abort where a failure belongs. C4 found the same shape from
+    // the other direction: a mutation that crashes proves nothing about the test.
+    //
+    // Long enough that a pace() which ignored the flag would be finished many
+    // times over - its dwell is zero.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool heldWhilePaused = !returned;
+
+    const auto resumed = std::chrono::steady_clock::now();
+    bridge.setPaused(false);
+    worker.join();
+
+    REQUIRE(heldWhilePaused);
+    REQUIRE(returned);
+
+    // It came back ON the resume rather than at some later moment of its own -
+    // which is what says the resume is the thing that released it.
+    REQUIRE(std::chrono::steady_clock::now() - resumed < std::chrono::seconds(5));
+}
+
+TEST_CASE("cancelPacing() releases a PAUSED pace(), and still does not throw", "[bridge]")
+{
+    // THE ONE THAT MATTERS, and the reason the pause was built before any menu
+    // stood on it. requestStop() cannot reach a thread inside pace() - the
+    // engine reads that flag at boundaries and the thread is not at one - and a
+    // paused pace() has no timeout to expire either. So cancelPacing() is the
+    // ONLY thing that can end this wait, and GameController::stop() calling it
+    // unconditionally is what makes a close land on a paused game rather than
+    // hanging in thread.wait() forever.
+    //
+    // Its non-throwing half is re-asserted here for the same reason the first
+    // case in this file asserts it: a pace() that threw would take the clean
+    // shutdown path away, and now it would do so on the one path a player
+    // reaches by pausing and then closing the window.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+    bridge.setPaused(true);
+
+    std::atomic<bool> returnedNormally{false};
+    std::atomic<bool> threw{false};
+
+    std::thread worker([&]
+    {
+        try
+        {
+            bridge.onRoundScored(engine);
+            returnedNormally = true;
+        }
+        catch(...)
+        {
+            threw = true;
+        }
+    });
+
+    // Observed rather than asserted, for the reason the case above gives at
+    // length: an assertion here unwinds past an unjoined thread.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool heldWhilePaused = !returnedNormally && !threw;
+
+    // NOT setPaused(false). The point is that a close does not have to know the
+    // game was paused - stop() calls this and nothing else, and it is enough.
+    bridge.cancelPacing();
+
+    // BOUNDED, WITH A RESCUE. The mutation this case exists to catch is the
+    // realistic one - a paused wait written `[this]{ return !pacingPaused; }`,
+    // forgetting the cancel - and under it the cancel above releases nothing,
+    // so join() would hang the whole suite rather than fail this assertion.
+    //
+    // The rescue has to be setPaused(false) and cannot be another cancel: the
+    // cancel is precisely what is broken. Lifting the pause is the one thing
+    // that still ends the wait, which makes the failure printable.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while(!returnedNormally && !threw && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    const bool cancelReleasedIt = returnedNormally || threw;
+
+    if(!cancelReleasedIt)
+        bridge.setPaused(false);
+
+    worker.join();
+
+    REQUIRE(heldWhilePaused);
+    REQUIRE(cancelReleasedIt);
+    REQUIRE(returnedNormally);
+    REQUIRE_FALSE(threw);
+}
+
+TEST_CASE("A resumed game is not still paused at its next beat", "[bridge]")
+{
+    // The counterweight, in the shape the file's own "pace() actually waits"
+    // case uses: the two tests above would both pass against a setPaused() that
+    // latched permanently on its first true and cleared on its first false, and
+    // also against one that only ever consulted the flag once.
+    //
+    // What this pins is that the flag is READ AT EVERY WAIT rather than at the
+    // first one - so a game paused and resumed goes on to pace normally, which
+    // is the entire behaviour a player sees after pressing Resume.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    bridge.setPaused(true);
+    bridge.setPaused(false);
+
+    const auto started = std::chrono::steady_clock::now();
+    bridge.onRoundScored(engine);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    // On the test's OWN thread, with nothing standing by to release it: a
+    // pace() still holding the pause would deadlock here rather than fail, so
+    // the timeout is the suite's rather than an assertion's. That is the
+    // honest shape - there is no way to observe "it did not block" except by
+    // not blocking.
+    REQUIRE(elapsed < std::chrono::seconds(5));
+}
+
 TEST_CASE("A bot is given a beat before it is asked for a card", "[bridge]")
 {
     // THE BEAT THAT MAKES THE SEAT ON TURN VISIBLE. onCardRequested publishes
