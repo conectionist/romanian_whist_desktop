@@ -7,6 +7,8 @@
 #include <QPixmap>
 #include <QSize>
 
+#include <cmath>
+
 // Theme is mostly a palette, and a palette has no test worth writing - a colour
 // is right or wrong by eye. What IS testable is the part with a rule: the one
 // metric every other metric on the table derives from, and the two properties
@@ -281,4 +283,84 @@ TEST_CASE("The score colours are a green and a red in both palettes", "[theme]")
         REQUIRE(theme.scorePositive.green() > theme.scorePositive.red());
         REQUIRE(theme.scoreNegative.red() > theme.scoreNegative.green());
     }
+}
+
+// A NUMBER, because "does that read?" was answered by eye once and answered
+// wrong. C4 painted section 17's round-type label in `accent`, and against the
+// plaque the light theme's amber measures 2.0:1 - under the 3:1 floor even for
+// large text, and far under the 14.97:1 the three labels beside it kept. The
+// word was still legible-ish and the mistake still shipped, which is the whole
+// argument for asserting the ratio rather than trusting a look at a screenshot.
+//
+// WCAG 2.x relative luminance, spelled out here rather than pulled in: it is
+// eight lines, Qt has no equivalent, and a contrast rule nothing can evaluate is
+// a comment rather than a constraint.
+static double relativeLuminance(const QColor& colour)
+{
+    auto channel = [](double srgb) {
+        return srgb <= 0.03928 ? srgb / 12.92
+                               : std::pow((srgb + 0.055) / 1.055, 2.4);
+    };
+
+    return 0.2126 * channel(colour.redF()) + 0.7152 * channel(colour.greenF())
+           + 0.0722 * channel(colour.blueF());
+}
+
+static double contrastRatio(const QColor& text, const QColor& background)
+{
+    const double one = relativeLuminance(text);
+    const double two = relativeLuminance(background);
+
+    return (std::max(one, two) + 0.05) / (std::min(one, two) + 0.05);
+}
+
+TEST_CASE("Every colour drawn as text on the plaque holds AA against it", "[theme]")
+{
+    for(const Theme& theme : { Theme::light(), Theme::dark() })
+    {
+        // The regression this case exists for. accentText is the round type in
+        // InfoStrip and nothing else yet; if a later phase reaches for `accent`
+        // to colour another word, this is the line that should stop it.
+        REQUIRE(contrastRatio(theme.accentText, theme.seatPlaque) >= 4.5);
+
+        // Its neighbours, in the same case rather than a second one: they are
+        // all text on the same plaque, and the point is the RULE, not the one
+        // colour that broke it. The bid and score colours read on the plaque
+        // too - the pill and the scoreboard both fill with seatPlaque.
+        REQUIRE(contrastRatio(theme.textPrimary, theme.seatPlaque) >= 4.5);
+        REQUIRE(contrastRatio(theme.bidOnTarget, theme.seatPlaque) >= 4.5);
+        REQUIRE(contrastRatio(theme.bidOwing, theme.seatPlaque) >= 4.5);
+        REQUIRE(contrastRatio(theme.bidOver, theme.seatPlaque) >= 4.5);
+        REQUIRE(contrastRatio(theme.scorePositive, theme.seatPlaque) >= 4.5);
+        REQUIRE(contrastRatio(theme.scoreNegative, theme.seatPlaque) >= 4.5);
+    }
+}
+
+// The other half of the split, and the half a contrast number cannot say: the
+// two ambers have to stay ONE colour to a player. A darkened accent is a shade
+// of the same thing; an unrelated brown would be a second colour to learn, and
+// would pass the ratio above just as happily.
+TEST_CASE("The text accent is the accent, darkened", "[theme]")
+{
+    for(const Theme& theme : { Theme::light(), Theme::dark() })
+    {
+        REQUIRE(std::abs(theme.accentText.hslHue() - theme.accent.hslHue()) <= 10);
+        REQUIRE(theme.accentText.lightnessF() <= theme.accent.lightnessF());
+    }
+}
+
+// THE KEY LEADS ITS PAINTERS again, for the colour C4a added. Nothing Theme
+// paints reads accentText - InfoStrip colours a QLabel with it - so this is the
+// bid-colour case's argument one more time, and the reason it is written now
+// rather than when a painter finally does read it.
+TEST_CASE("Recolouring the text accent invalidates the cached background", "[theme]")
+{
+    Theme theme = Theme::light();
+    const QSize view(320, 200);
+
+    const QPixmap before = theme.background(view, 1.0);
+
+    theme.accentText = Theme::dark().accentText;
+
+    REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
 }

@@ -194,11 +194,18 @@ void InfoStrip::refresh()
     // SECTION 17'S THIRD LINE. Per-label rather than through the strip's palette,
     // which the other three labels share - this is the only one whose colour
     // depends on what it says.
+    //
+    // accentText AND NOT accent: this is a word, and the light theme's accent is
+    // 2.0:1 against the plaque this strip fills itself with - so painting the
+    // called-out round in it made the one line meant to be read at a glance the
+    // hardest of the four to read. Theme carries both halves; the marks on the
+    // table keep the bright one.
     QPalette typeColours = roundType->palette();
 
     typeColours.setColor(QPalette::WindowText,
-                         infostrip::isCalledOut(shown.roundType) ? theme.accent
-                                                                 : theme.textPrimary);
+                         infostrip::isCalledOut(shown.roundType)
+                             ? theme.accentText
+                             : theme.textPrimary);
 
     roundType->setPalette(typeColours);
 
