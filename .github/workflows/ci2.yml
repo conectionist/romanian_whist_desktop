@@ -105,10 +105,17 @@ jobs:
         with:
           submodules: recursive
 
+      # setup-python: false - install-qt-action's own actions/setup-python step
+      # downloads and installs a hosted-tool-cache Python via a script built for
+      # GitHub-hosted runner images, which fails on this self-hosted runner
+      # ("Error happened during Python installation"). win_vm_runner already has
+      # a machine-wide Python on PATH (installed for exactly this purpose), so
+      # skip the action's own setup and let it use that one instead.
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           cache: true
+          setup-python: false
 
       # See ci.yml for the full explanation.
       - name: Configure
