@@ -614,9 +614,18 @@ now comes off it.
 
 ### D1 — the dialog and the second game
 
-- [ ] `NewGameDialog` (§13): live-validated names, clamped seat count, watching/playing, structure,
-      seed.
-- [ ] **Play again**, which is the first thing in the client that reuses a `GameController`.
+- [x] **D1.1 — the pause, first, with no UI on it.** Not in the step as written, and it is what the
+      shape agreed for this phase needed underneath it — see the box below. `GameBridge::setPaused()`
+      and a second, indefinite `wait()` in `pace()`. **The first indefinite wait in the client**, so
+      §15.3's hazard becomes live here and `stop()`'s unconditional `cancelPacing()` stops being tidy.
+- [x] `NewGameDialog` (§13): live-validated names, clamped seat count, watching/playing, structure,
+      seed. Split the way `BidStrip` is — the half with a right answer tested without a window.
+      **Bot speed and fixed deal only**; "wait for me between tricks" stays phase E's (§13, amended).
+- [x] **A main-menu page and a pause dialog, where §12 specified a Game menu.** The client opens with
+      no game running; **Menu** on the prompt bar and Esc open Resume / Main menu. §§12, 13 and 15.3
+      are amended to record it — that document is the one that wins, so it is the one that had to
+      change.
+- [x] **Play again**, which is the first thing in the client that reuses a `GameController`.
 
 > The second game is §4.3's ordering run again from the top: `stop()` and join, a fresh bridge and
 > provider from `prepare()`, `start()`. **Nothing is reset in place**, and there is no reconnection
@@ -625,6 +634,72 @@ now comes off it.
 > full speed) and `GameController::stopRequested` (game two deals one round and stops) — and a
 > third thing would, if `prepare()` did not purge: game one's queued signals, which arrive after
 > game two has started and repaint its deal with game one's final table.
+
+### What the D1 run found
+
+Four defects on screen, every one invisible to a green suite and every one found by **rendering the
+window offscreen and looking at the image** — the technique C3 and C4 settled on, and the reason it
+keeps earning its place is here: three of the four are strings or colours, which nothing compiles or
+asserts.
+
+- **`Theme` has no colour for text on the table surface**, because until D1 nothing wrote any. Every
+  word on the table is on a seat plaque, and `textPrimary` is chosen against `seatPlaque` — so the
+  menu's title, drawn in it directly on the background, was dark grey on dark green. The title and
+  buttons sit on a plaque now, which uses the pair of colours picked for each other rather than
+  inventing a third. **The same shape as C4's finding** that `accent` measured 2.0:1 as text.
+- **The default human name was "You", and `SeatItem` appends " (you)".** The plaque read "You (you)".
+  §13's mockup fills that field with a person's name for the same reason: it is a name to replace.
+- **"26 round(s)".** `%n round(s)` is the plural idiom and it only resolves through a *translator* —
+  with none loaded, `translate()` substitutes `%n` and returns the source verbatim. The source form
+  has to be the one English actually uses (`%n rounds`, still a plural for `lupdate`). **Worth
+  knowing before phase F**: every `%n` string in the client has this property, and an untranslated
+  build is the only place it shows.
+- **The sixth seat of a watched game was called "Bot 6".** The stock name list was five long, which
+  is the most opponents a *playing* game has; a watched one seats six, because nobody takes a chair.
+  A placeholder is one seat past the end of any list sized from the wrong maximum.
+
+And four about testing this phase, which cost a run each:
+
+- **A pause cannot be measured on a seated game at its own turn.** The game thread is parked in the
+  provider, not in `pace()`, so nothing advances whether it is paused or not — the first version of
+  `MainWindowTests` dealt a played game and measured a log that was never going to move. Any test of
+  a pause needs bots to pace.
+- **An assertion before a `join()` turns a failure into an abort.** Unwinding past an unjoined
+  `std::thread` is `std::terminate`, so the first pause mutation printed an abort where a failure
+  belonged and took every later case with it. Record the observation into a `bool`, release the
+  worker, join, and assert after. C4 found the same shape from the other side.
+- **A rescue cannot be the thing the mutation broke.** Both shutdown cases first rescued a hung wait
+  with `cancelPacing()` — which is exactly what the realistic §15.3 mutation disables — so the suite
+  hung instead of failing. `setPaused(false)` is the release that survives it. And
+  `GameController::stop()` *joins*, so the case for "a stop lands on a paused game" has to run it
+  off-thread with a deadline, or the failure is a hang rather than an assertion.
+- **Every `QSpinBox` owns an editable `QLineEdit`.** So `findChildren<QLineEdit*>()` returns controls
+  the dialog never created, and a positional lookup over that list typed a bot name into the seed
+  box and asserted nothing. Every control a test reaches for is named.
+
+**One defect was found by the tests rather than by looking, and it is the one worth repeating:**
+**four `QRadioButton`s sharing a parent are one exclusive group.** Qt auto-groups a radio with every
+sibling under the same parent, so checking "1-8-1" unchecked "I'm playing" — after which toggling to
+watching emitted nothing and the opponent range never moved. **All four buttons drew correctly and
+three of the four states were reachable**, so no render would have shown it. Two declared
+`QButtonGroup`s. Found by the case that flips to watching and reads the spinner's floor back.
+
+### Why D1 built a pause, and a menu page instead of a menu bar
+
+The step as written is a dialog and a second game, and §12 puts New Game / Abandon Game / Quit in a
+menu bar. **What was built is a main-menu page and a pause dialog**, decided before the code was
+written and recorded in §§12, 13 and 15.3.
+
+The reason is the same one that puts A before B: *abandon* with no way back is not a thing a player
+wants mid-game, and once "Resume" is on offer it has to be true. **That makes the pause D1's
+riskiest idea rather than the dialog** — it is an indefinite `pace()`, which §15.3 flags as the one
+thing that adds a hazard to §6 — so it was built first, with no UI standing on it, and proven by two
+mutations before a button existed to raise it.
+
+**It is a small piece of phase E pulled forward and no more.** Everything in that group needing a
+signal the game thread has not already been given — "wait for me between tricks", "skip to end of
+round", **Deal round n**, and the bot-speed slider *as a live control* — is still phase E's. D1's
+slider is a `Pacing` fixed at `prepare()`, which is why it could ship here.
 
 ### D2 — the read-only panels
 
@@ -737,6 +812,13 @@ Symptom first, because that is what you have.
 | Nothing to click in the last two rounds | The hand is being driven by the snapshot instead of `PlayPrompt` | §4.0, §17 |
 | Game two plays itself at full speed | `QtMoveProvider::abandoned` latched and reused | §8, phase D |
 | Game two deals one round and stops | `prepare()` did not clear `GameController::stopRequested` | §4.3 |
+| Closing the window hangs, but only after a pause | The paused wait in `pace()` does not test `pacingCancelled`, so `cancelPacing()` no longer reaches it. `requestStop()` cannot — the thread is not at a boundary | §15.3, D1.1 |
+| "Main menu" closes the application | `onGameStopped()` closes for any stop it cannot account for, and `returningToMenu` is what accounts for this one — beside `closing`, which was the only such stop before D1 | D1's findings |
+| Starting a new game closes the window | A modal dialog, or anything spinning the event loop, ran between `stop()` and `prepare()`. That purge is what drops game one's queued `gameStopped`; a nested loop in the gap delivers it first | §4.3 |
+| The game does not pause, but only on your own turn | It is already paused — the game thread is parked in the provider, not in `pace()`, and there is nothing to hold | D1's findings |
+| Resume works once and never again | `pace()` reads the pause flag at the first wait only. The predicate has to be evaluated at every wait, which is what the third bridge case pins | D1.1 |
+| A string reads "%n round(s)" or similar | The parenthesised plural resolves only through a translator. Untranslated, `translate()` substitutes `%n` and returns the source verbatim | §7, D1's findings |
+| A radio button unchecks one in a different group | `QRadioButton` auto-groups with every sibling sharing its **parent**. Declare a `QButtonGroup` per group — nothing looks wrong until a state is unreachable | D1's findings |
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
