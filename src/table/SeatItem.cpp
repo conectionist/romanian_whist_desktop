@@ -1,5 +1,8 @@
 #include "SeatItem.h"
 
+#include "paint/CardRenderer.h"
+#include "table/CardItem.h"
+
 #include <QFontMetricsF>
 #include <QPainter>
 
@@ -25,11 +28,74 @@ constexpr qreal ringGapInCards = 0.035;
 constexpr qreal stackCardWidthInCards = 0.10;
 constexpr qreal stackStepInCards = 0.030;
 
+// How much of the plaque's HEIGHT a face-up card takes, leaving a hair of margin
+// top and bottom. Of the plaque and not of the padded inner box, which is only
+// 0.38 card-heights - a card that fitted inside that would be too small to read
+// a rank off, and reading it is the whole point of section 17.
+constexpr qreal faceHeightInPlaques = 0.88;
+
+// The gap between that card and the text beside it, as a fraction of the card's
+// own width.
+constexpr qreal faceGapInCards = 0.22;
+
 }
 
-SeatItem::SeatItem(QGraphicsItem* parent)
-    : QGraphicsObject(parent)
+qreal seatitem::faceHeightFor(qreal cardHeight)
 {
+    return cardHeight * plaqueHeightInCards * faceHeightInPlaques;
+}
+
+seatitem::Layout seatitem::layoutFor(qreal cardHeight, QSizeF faceSize)
+{
+    Layout layout;
+
+    if(cardHeight <= 0.0)
+        return layout;
+
+    const qreal width = cardHeight * plaqueWidthInCards;
+    const qreal height = cardHeight * plaqueHeightInCards;
+
+    layout.plaque = QRectF(-width / 2.0, -height / 2.0, width, height);
+
+    const qreal pad = height * 0.16;
+    const QRectF inner = layout.plaque.adjusted(pad, pad, -pad, -pad);
+
+    // The stack's right edge is the inner box's, whether or not it is the thing
+    // being drawn - so the two never disagree about where this side of the
+    // plaque ends.
+    layout.stack = inner;
+
+    if(faceSize.isEmpty())
+    {
+        // No card: the text gets the whole inner box, exactly as it did before
+        // C4.
+        layout.text = inner;
+
+        return layout;
+    }
+
+    // CENTRED IN THE PLAQUE, not in the inner box, because it is taller than the
+    // inner box - see faceHeightInPlaques.
+    layout.card = QRectF(layout.plaque.right() - pad - faceSize.width(),
+                         layout.plaque.center().y() - faceSize.height() / 2.0,
+                         faceSize.width(),
+                         faceSize.height());
+
+    // AND THE TEXT GIVES UP THAT WIDTH. The name is elided against this rect, so
+    // a text column that did not narrow here would be measured at one width and
+    // drawn at another - the defect B2b found four times over.
+    const qreal taken = faceSize.width() + faceSize.width() * faceGapInCards;
+
+    layout.text = inner.adjusted(0.0, 0.0, -taken, 0.0);
+
+    return layout;
+}
+
+SeatItem::SeatItem(const CardRenderer* _renderer, QGraphicsItem* parent)
+    : QGraphicsObject(parent), renderer(_renderer)
+{
+    face = new CardItem(renderer, this);
+    face->hide();
 }
 
 QSizeF SeatItem::plaqueSize(qreal cardHeight)
@@ -49,6 +115,8 @@ void SeatItem::setSeat(const SeatView& view, bool isActive, const Theme& palette
     active = isActive;
     theme = palette;
     update();
+
+    refreshFace();
 }
 
 void SeatItem::setCardHeight(qreal height)
@@ -59,6 +127,8 @@ void SeatItem::setCardHeight(qreal height)
     prepareGeometryChange();
     cardHeight = height;
     update();
+
+    refreshFace();
 }
 
 // NO BID IS NOT A BID OF ZERO. hasBet is on the snapshot precisely to tell them
@@ -101,6 +171,51 @@ QRectF SeatItem::boundingRect() const
     return QRectF(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 }
 
+bool SeatItem::showsFace() const
+{
+    // NOT "is this a Forehead round". The snapshot does not need to be asked:
+    // refreshFromEngine() fills this hand only where canSeeHand(viewer, holder)
+    // allows, so a non-empty hand IS the permission - and a spectator game fills
+    // none at all, which is why a spectated Forehead round shows no faces.
+    return !seat.hand.empty();
+}
+
+seatitem::Layout SeatItem::layoutFor() const
+{
+    if(!showsFace() || !renderer)
+        return seatitem::layoutFor(cardHeight, QSizeF());
+
+    return seatitem::layoutFor(cardHeight,
+                               renderer->sizeForHeight(seatitem::faceHeightFor(cardHeight)));
+}
+
+void SeatItem::refreshFace()
+{
+    const seatitem::Layout layout = layoutFor();
+
+    // BOTH, and the hand is asked FIRST. The layout's card rect is derived from
+    // showsFace(), so today the two cannot disagree - and the day they did, the
+    // front() below would be a read off an empty vector rather than a plaque
+    // drawn slightly wrong. Guarding on the thing actually dereferenced is what
+    // makes that a hidden card instead of undefined behaviour.
+    if(seat.hand.empty() || layout.card.isEmpty())
+    {
+        face->hide();
+        return;
+    }
+
+    // THE FIRST CARD AND ONLY THE FIRST. A Forehead round is a one-trick round,
+    // so a visible hand is one card - and the plaque has room for one. Drawing a
+    // hand of several here would be inventing a layout for a state the engine's
+    // own schedule cannot produce.
+    face->setFace(seat.hand.front().card);
+    face->setCardHeight(seatitem::faceHeightFor(cardHeight));
+
+    // CardItem's origin is its centre, which is what these two lines are about.
+    face->setPos(layout.card.center());
+    face->show();
+}
+
 void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
 {
     if(cardHeight <= 0.0)
@@ -108,9 +223,13 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     painter->setRenderHint(QPainter::Antialiasing);
 
-    const qreal width = cardHeight * plaqueWidthInCards;
+    // ONE ANSWER ABOUT WHERE THINGS GO, shared with refreshFace() so the card the
+    // child is placed at and the width the text is measured against cannot
+    // disagree.
+    const seatitem::Layout layout = layoutFor();
+
     const qreal height = cardHeight * plaqueHeightInCards;
-    const QRectF plaque(-width / 2.0, -height / 2.0, width, height);
+    const QRectF plaque = layout.plaque;
     const qreal radius = height * 0.18;
 
     painter->setPen(Qt::NoPen);
@@ -130,8 +249,7 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
                                  radius + gap, radius + gap);
     }
 
-    const qreal pad = height * 0.16;
-    const QRectF inner = plaque.adjusted(pad, pad, -pad, -pad);
+    const QRectF inner = layout.text;
 
     QFont nameFont = painter->font();
     nameFont.setPointSizeF(std::max(6.0, height * 0.26));
@@ -168,6 +286,12 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     painter->drawText(bottom, Qt::AlignLeft | Qt::AlignVCenter, pill);
 
+    // THE STACK, OR NOTHING. A seat showing a face-up card is showing what it
+    // holds already, and drawing the count beside it would be the same fact
+    // twice - in a Forehead round it is always exactly one.
+    if(!layout.card.isEmpty())
+        return;
+
     // Cards left, as a tiny stack rather than a number (section 14). Drawn from
     // the right so it grows toward the middle and never collides with the name.
     const qreal stackWidth = cardHeight * stackCardWidthInCards;
@@ -183,7 +307,7 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     for(unsigned int i = 0 ; i < drawn ; i++)
     {
-        const qreal x = inner.right() - stackWidth - (drawn - 1 - i) * step;
+        const qreal x = layout.stack.right() - stackWidth - (drawn - 1 - i) * step;
 
         painter->drawRoundedRect(QRectF(x, bottom.center().y() - stackHeight / 2.0,
                                         stackWidth, stackHeight),

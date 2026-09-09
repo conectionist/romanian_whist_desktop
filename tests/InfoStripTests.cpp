@@ -163,3 +163,19 @@ TEST_CASE("A default snapshot states a round of nothing and no trump", "[info-st
     REQUIRE_FALSE(fields.round.isEmpty());
     REQUIRE_FALSE(fields.roundType.isEmpty());
 }
+
+TEST_CASE("Forehead and Hidden are called out and Normal is not", "[info-strip]")
+{
+    // Section 17's third line: the round type reads in an accent colour, so a
+    // blind round is identifiable before the cards are dealt.
+    //
+    // NEVER A COLOUR-ONLY CUE (section 18), and this case is also what says so:
+    // the WORD differs too, and it is the word that carries the information. The
+    // colour is reinforcement, which is what makes it safe to use at all.
+    REQUIRE(infostrip::isCalledOut(RoundType::Forehead));
+    REQUIRE(infostrip::isCalledOut(RoundType::Hidden));
+    REQUIRE_FALSE(infostrip::isCalledOut(RoundType::Normal));
+
+    REQUIRE(infostrip::roundTypeText(RoundType::Forehead)
+            != infostrip::roundTypeText(RoundType::Normal));
+}

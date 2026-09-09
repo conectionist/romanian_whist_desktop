@@ -65,6 +65,16 @@ Fields fieldsFor(const GameSnapshot& snapshot);
 // client has exactly two: one for machines and one for people.
 QString roundTypeText(romanian_whist::RoundType type);
 
+// WHETHER THIS ROUND TYPE IS CALLED OUT, which section 17 asks for: Forehead and
+// Hidden read "in an accent colour, so the round is identifiable before the
+// cards are dealt".
+//
+// NEVER A COLOUR-ONLY CUE, which is section 18's rule and the reason this is
+// safe: the WORD is already the distinguishing information and is already on
+// screen, so the colour reinforces it rather than carrying it. A reader who
+// cannot tell the two colours apart has lost nothing.
+bool isCalledOut(romanian_whist::RoundType type);
+
 } // namespace infostrip
 
 // The widget. Dumb by design: it asks fieldsFor() what to say and draws it.

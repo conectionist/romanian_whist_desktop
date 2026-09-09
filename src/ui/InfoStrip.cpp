@@ -4,6 +4,7 @@
 #include <QFontMetricsF>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPalette>
 
 #include <algorithm>
 
@@ -35,6 +36,14 @@ QString infostrip::roundTypeText(RoundType type)
     }
 
     return QCoreApplication::translate("infostrip", "Unknown");
+}
+
+bool infostrip::isCalledOut(RoundType type)
+{
+    // Asked as "not Normal" rather than listed, so a round type added to the
+    // engine is called out by default. The two that exist are the two section 17
+    // is about, and a new one would be a special round too.
+    return type != RoundType::Normal;
 }
 
 infostrip::Fields infostrip::fieldsFor(const GameSnapshot& snapshot)
@@ -181,6 +190,17 @@ void InfoStrip::refresh()
     round->setText(fields.round);
     cardCount->setText(fields.cards);
     roundType->setText(fields.roundType);
+
+    // SECTION 17'S THIRD LINE. Per-label rather than through the strip's palette,
+    // which the other three labels share - this is the only one whose colour
+    // depends on what it says.
+    QPalette typeColours = roundType->palette();
+
+    typeColours.setColor(QPalette::WindowText,
+                         infostrip::isCalledOut(shown.roundType) ? theme.accent
+                                                                 : theme.textPrimary);
+
+    roundType->setPalette(typeColours);
 
     if(!fields.hasTrump)
     {
