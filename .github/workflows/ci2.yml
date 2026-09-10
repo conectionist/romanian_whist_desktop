@@ -38,18 +38,18 @@ jobs:
         with:
           submodules: recursive
 
-      # actions/setup-python (which install-qt-action calls internally unless
-      # told not to) only ships prebuilt binaries for a fixed list of distros,
-      # and has none for Debian - "The version '>=3.9.0 <=3.13.3' ... was not
-      # found for Debian 13." setup-python: false below skips that and uses
-      # the system's own python3 instead, which has to actually be installed
-      # first. patchelf is installed in the same step for no deeper reason
-      # than that both are apt packages needed before the steps below run -
-      # qt_deploy_runtime_dependencies() uses patchelf later to rewrite
-      # RPATHs so the archived binary finds the Qt libraries shipped beside
-      # it rather than whatever the host happens to have.
+      # cmake and build-essential (gcc/g++/make): unlike ubuntu-latest in
+      # ci.yml, a bare machine has neither. actions/setup-python (which
+      # install-qt-action calls internally unless told not to) only ships
+      # prebuilt binaries for a fixed list of distros, and has none for
+      # Debian - "The version '>=3.9.0 <=3.13.3' ... was not found for Debian
+      # 13." setup-python: false below skips that and uses the system's own
+      # python3 instead, which has to actually be installed first. patchelf
+      # is installed here too, for qt_deploy_runtime_dependencies() to use
+      # later rewriting RPATHs so the archived binary finds the Qt libraries
+      # shipped beside it rather than whatever the host happens to have.
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y patchelf python3 python3-pip python3-venv
+        run: sudo apt-get update && sudo apt-get install -y patchelf python3 python3-pip python3-venv cmake build-essential
 
       # PIP_BREAK_SYSTEM_PACKAGES: install-qt-action's own pip install of
       # aqtinstall's dependencies hits Debian's PEP 668 guard ("error:
