@@ -92,6 +92,18 @@ unsigned int QtMoveProvider::makeBet(const BetContext& context)
         // Still needed, and not made redundant by the check above: the wait
         // returns on an abandon with `answer` empty, and falling through would
         // dereference an empty optional.
+        //
+        // NO TEST CAN PIN THIS LINE, and C5 established that by trying. Delete
+        // it and the run stays green: the garbage read fails the range check
+        // below, the loop goes round, and the pre-prompt check throws
+        // GameAbandoned anyway - so the game ends cleanly and every shutdown
+        // assertion still holds. It was caught by a probe assertion on
+        // `answer.has_value()`, which is not a thing the suite could assert
+        // without asserting that a working mechanism does not work.
+        //
+        // Same shape as the QPixmap(":/cards/x.svg") trap in B1 and the
+        // qRegisterMetaType pair in C1: the comment IS the defence. playCard()
+        // has the identical line with the identical property.
         if(abandoned)
             throw GameAbandoned{};
 
@@ -167,6 +179,11 @@ std::optional<std::size_t> QtMoveProvider::playCard(const PlayContext& context)
 
         cv.wait(lock, [this, prompt]{ return answeredPrompt == prompt || abandoned; });
 
+        // LOAD-BEARING, exactly as makeBet()'s twin says of itself and this one
+        // did not: the wait returns on an abandon with `answer` EMPTY, so
+        // falling through dereferences an empty optional. That is undefined
+        // behaviour, not a redundant check. See makeBet() for why no test can
+        // say so - the UB is the kind that produces the right answer.
         if(abandoned)
             throw GameAbandoned{};
 
