@@ -8,9 +8,11 @@
 #include "ui/GameOverPanel.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
+#include "ui/RoundSheet.h"
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QDialog>
 #include <QDockWidget>
 #include <QElapsedTimer>
@@ -140,6 +142,39 @@ void answerModalFastSeatedGame(int afterMs)
 
         if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
             speed->setValue(newgame::FastestSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+}
+
+// A game that stops at every round sheet, dealt as fast as it can be. Section
+// 16.1's dismissal setting, which is off by default - so this is the only
+// helper that turns it on.
+//
+// WATCHED, AND THAT IS NOT A SHORTCUT AROUND THE SEAT. A seated game reaches no
+// round sheet without somebody answering both prompts - round 1 is one card, so
+// the human bids AND plays before anything is scored - and a case about the
+// HOLD would then be half a case about answering prompts. The setting is not
+// seated-only; a player watching bots may want to read each round just as much.
+void answerModalWaitingWatchedGame(int afterMs)
+{
+    QTimer::singleShot(afterMs, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QRadioButton* watch = dialog->findChild<QRadioButton*>("watching"))
+            watch->setChecked(true);
+
+        if(QSpinBox* opponents = dialog->findChild<QSpinBox*>("opponents"))
+            opponents->setValue(2);
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::FastestSpeed);
+
+        if(QCheckBox* wait = dialog->findChild<QCheckBox*>("waitEachRound"))
+            wait->setChecked(true);
 
         dialog->done(QDialog::Accepted);
     });
@@ -740,4 +775,118 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
     REQUIRE_FALSE(panel->isVisible());
+}
+
+TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
+{
+    // SECTION 16.1's SHEET, and the hold that makes its Continue button mean
+    // something. Measured the way D1's pause case is - the log stops appending
+    // and starts again - because that is the only thing on screen that says
+    // whether the game thread is moving.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    RoundSheet* sheet = window.findChild<RoundSheet*>();
+    REQUIRE(log != nullptr);
+    REQUIRE(sheet != nullptr);
+
+    answerModalWaitingWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    REQUIRE(pumpUntil(20000, [sheet]{ return sheet->isVisible(); }));
+
+    // HELD. At FastestSpeed every beat is zero, so a game that was not held
+    // would run to its end inside this window rather than sitting still.
+    const int atSheet = log->blockCount();
+    pump(1500);
+
+    INFO("log at sheet " << atSheet << ", after waiting " << log->blockCount());
+    REQUIRE(log->blockCount() == atSheet);
+    REQUIRE(sheet->isVisible());
+
+    QPushButton* continueButton = window.findChild<QPushButton*>("continueRound");
+    REQUIRE(continueButton != nullptr);
+    continueButton->click();
+
+    REQUIRE_FALSE(sheet->isVisible());
+    REQUIRE(pumpUntil(10000, [&]{ return log->blockCount() > atSheet; }));
+}
+
+TEST_CASE("An unwaited game runs to the end with nobody watching", "[main-window]")
+{
+    // THE DEFAULT, and the half that matters most: the sheet must not hold a
+    // game whose player did not ask it to. A watched game with the box unticked
+    // has to reach its own ending untouched, or every spectated game becomes a
+    // sequence of clicks.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    REQUIRE(panel != nullptr);
+
+    answerModalShortWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    // The whole 18-round schedule, unattended.
+    REQUIRE(pumpUntil(60000, [panel]{ return panel->isVisible(); }));
+
+    // AND THE SHEET IS NOT LEFT STANDING UNDER IT. The final round of an
+    // unwaited game is skipped outright - its numbers are the ones the panel is
+    // about to show in full - so there is nothing there to hide.
+    REQUIRE_FALSE(window.findChild<RoundSheet*>()->isVisible());
+}
+
+TEST_CASE("The pause menu and the round sheet do not release each other",
+          "[main-window]")
+{
+    // THE HAZARD D2 ADDED, and the reason applyHold() exists. GameController
+    // holds ONE flag; the pause menu and the round sheet are two reasons to set
+    // it, and a Resume that wrote that flag directly would release a sheet which
+    // was holding the game as well as its own menu.
+    //
+    // The guard is that a HOLDING sheet refuses the pause menu outright - so
+    // what this pins is the refusal, and that the game stays held through it.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    RoundSheet* sheet = window.findChild<RoundSheet*>();
+    PauseOverlay* overlay = window.findChild<PauseOverlay*>();
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    REQUIRE(sheet != nullptr);
+    REQUIRE(overlay != nullptr);
+    REQUIRE(log != nullptr);
+
+    answerModalWaitingWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    REQUIRE(pumpUntil(20000, [sheet]{ return sheet->isVisible(); }));
+
+    // Esc, which reaches setPauseMenuVisible() whichever page is showing.
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+    pump(100);
+
+    REQUIRE_FALSE(overlay->isVisible());
+    REQUIRE(sheet->isVisible());
+
+    // And the Menu button, which is the same refusal by the other road.
+    window.findChild<QPushButton*>("menu")->click();
+    pump(100);
+
+    REQUIRE_FALSE(overlay->isVisible());
+    REQUIRE(sheet->isVisible());
+
+    // THE GAME IS STILL HELD after both attempts, which is what the hazard is
+    // actually about: a menu that had opened and closed would have cleared the
+    // one flag on its way out.
+    const int held = log->blockCount();
+    pump(800);
+    REQUIRE(log->blockCount() == held);
 }

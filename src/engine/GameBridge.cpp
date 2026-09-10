@@ -187,19 +187,99 @@ void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int tr
     pace(pacing.trickDwell);
 }
 
+RoundResult GameBridge::buildRoundResult(const GameEngine& engine) const
+{
+    RoundResult result;
+
+    const unsigned int index = engine.getCurrentRoundIndex();
+
+    result.roundNumber = index + 1;          // getCurrentRoundIndex() is 0-based
+    result.roundCount = engine.getRoundCount();
+    result.trickCount = engine.getCurrentRoundTrickCount();
+    result.roundType = engine.getCurrentRoundType();
+
+    const std::optional<Card> trump = engine.getCurrentTrumpCard();
+    result.hasTrump = trump.has_value();
+    if(trump)
+        result.trump = *trump;
+
+    // THE FIELD THIS TYPE EXISTS FOR. One-card rounds count for neither
+    // direction of a streak, so a warning that the next miss costs 10 is wrong
+    // when the next round deals one card. The schedule was laid out at start(),
+    // so the round after this one already exists and can be asked - from HERE,
+    // on the game thread, and nowhere else.
+    //
+    // The final round has no next round, so nothing can be warned about.
+    if(index + 1 < result.roundCount)
+        result.nextRoundCountsForStreaks = engine.getRound(index + 1).getTrickCount() != 1;
+
+    const auto& players = engine.getPlayers();
+    const unsigned int playerCount = engine.getPlayerCount();
+
+    result.seats.resize(playerCount);
+
+    for(unsigned int i = 0 ; i < playerCount ; i++)
+    {
+        const romanian_whist::Player& player = players.at(i);
+        RoundSeatResult& seat = result.seats[i];
+        const Seat at{ i };
+
+        seat.name = player.getName();
+        seat.seatIndex = i;
+        seat.isHuman = isHuman(at);
+
+        const std::optional<unsigned int> bet = engine.getBet(at);
+        seat.hasBet = bet.has_value();
+        if(bet)
+            seat.bet = *bet;
+
+        seat.tricksWon = engine.getTricksWon(at);
+
+        // NOT SUMMED HERE, and the sheet is what adds them. Inside this callback
+        // the round score is what the round was worth and the total is the one
+        // it has not been folded into yet - which is exactly the pair section
+        // 16.1 draws as "34 -> 41".
+        seat.roundScore = engine.getRoundScore(at);
+        seat.totalScore = engine.getTotalScore(at);
+
+        seat.winStreak = player.getConsecutiveWins();
+        seat.lossStreak = player.getConsecutiveLosses();
+    }
+
+    return result;
+}
+
 void GameBridge::onRoundScored(const GameEngine& engine)
 {
     // This callback and not onRoundComplete: it is the last one at which the
     // engine still names the round just scored, so a round sheet drawn from it
     // shows the right round's numbers.
     publish(engine);
-    emit roundScored();
+
+    // BUILT BEFORE THE PACE, on the game thread, out of an engine that is about
+    // to move on. By onRoundComplete() the index has advanced and every number
+    // above would be attributed to the next round.
+    emit roundScored(buildRoundResult(engine));
+
+    // HELD BEFORE THE WAIT, ON THIS THREAD, and not by the window that shows the
+    // sheet. The emit above is queued: a window that set the hold on receiving
+    // it would be racing the two lines below, and at the top of the speed slider
+    // - where the dwell is zero - it loses every time.
+    //
+    // The window RELEASES it, on Continue. A release that arrives late is
+    // harmless; a hold that arrives late does not hold anything.
+    if(pacing.waitAfterEachRound)
+        setPaused(true);
 
     // AND THE DWELL BELONGS HERE, on the frame that carries the result, not on
     // the blank one after it. Measured in phase A's log with the two the other
     // way round: onRoundScored published the result and returned, so that frame
     // stood for 0ms, and the 1.2s landed on onRoundComplete's advanced-index
     // frame - a next round with no trump, no bets and nothing played.
+    //
+    // THIS IS THE UNWAITED PATH'S DWELL. On the waited path the hold above IS the
+    // beat, and pace() takes no timed wait at all - see the guard at the top of
+    // it, and D2's review for what stacking the two cost.
     //
     // TerminalRomanianWhist does it this way too: it draws in onRoundScored()
     // and pauses there, and does not override onRoundComplete() at all. Its
@@ -239,16 +319,30 @@ void GameBridge::onGameStopped(const GameEngine&)
 void GameBridge::pace(std::chrono::milliseconds delay)
 {
     std::unique_lock lock(pacingMutex);
-    pacingCv.wait_for(lock, delay, [this]{ return pacingCancelled; });
+
+    // NO TIMED DWELL ON A FRAME THAT IS ALREADY HELD. A dwell and a hold are the
+    // same beat - both exist so the player can read the frame - and the hold is
+    // the longer one, because it ends when the player says so. Stacking them
+    // means a release has to wait the dwell out before anything moves: D2 shipped
+    // that in onRoundScored(), where the frozen half was up to 2.4s of a Continue
+    // click doing nothing at the bottom of the speed slider.
+    //
+    // The frame is published BEFORE pace() at every call site, so it is on screen
+    // for the whole hold either way and nothing is skipped by skipping this.
+    //
+    // Read under the lock this already holds, so it costs no new synchronisation.
+    if(!pacingPaused)
+        pacingCv.wait_for(lock, delay, [this]{ return pacingCancelled; });
 
     // RETURNS on cancel. Does NOT throw - see the header. Getting this backwards
     // makes the clean shutdown path unreachable.
 
     // AND THEN HOLDS, indefinitely, while the game is paused. Written as a
     // second wait rather than folded into the predicate above so that the beat
-    // is still a beat: a pause landing mid-delay waits the delay out first and
+    // is still a beat: a pause landing MID-DELAY waits the delay out first and
     // then holds, which costs at most one botBeat() of latency and keeps the
-    // timed half exactly what it was.
+    // timed half exactly what it was. Only a pause that was already set when we
+    // arrived skips it, which is the guard above.
     //
     // pacingCancelled is in BOTH predicates, and that is the escape. Only
     // cancelPacing() can end this wait, and GameController::stop() calls it

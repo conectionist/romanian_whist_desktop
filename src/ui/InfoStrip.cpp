@@ -23,6 +23,27 @@ constexpr qreal marginInLines = 0.35;
 
 }
 
+QString infostrip::cardsText(unsigned int trickCount)
+{
+    // TWO STRINGS RATHER THAN Qt's "%n card(s)", which was tried and is wrong
+    // here. Qt takes the plural FORMS from the catalogue, for the source
+    // language as much as for any other - so with no translator loaded, which is
+    // what an English build is, translate("%n card(s)", n) substitutes the count
+    // and leaves the rest alone: "1 card(s)", on screen, in the shipped
+    // language. Selecting here spells both forms correctly out of the box and
+    // still gives lupdate two strings to collect. Languages whose plural rules
+    // need more than two forms are the reason %n exists, and the day one is
+    // added this becomes the thing to revisit.
+    //
+    // D2 FOUND THE SECOND CALLER by getting it wrong: the round sheet's title
+    // built its own "%1 cards" and drew "Round 1 - 1 cards - Normal", directly
+    // under an info strip that said "1 card". One function now, so the two
+    // cannot disagree again.
+    return trickCount == 1 ? QCoreApplication::translate("infostrip", "1 card")
+                           : QCoreApplication::translate("infostrip", "%1 cards")
+                                 .arg(trickCount);
+}
+
 QString infostrip::roundTypeText(RoundType type)
 {
     // No default case, so a fourth round type is a warning here rather than a
@@ -64,20 +85,7 @@ infostrip::Fields infostrip::fieldsFor(const GameSnapshot& snapshot)
     // The trick count IS the number of cards dealt to each player - a round of
     // six cards is a round of six tricks - so this reads it rather than adding a
     // field that would have to agree with it.
-    //
-    // TWO STRINGS RATHER THAN Qt's "%n card(s)", which was tried and is wrong
-    // here. Qt takes the plural FORMS from the catalogue, for the source
-    // language as much as for any other - so with no translator loaded, which is
-    // what an English build is, translate("%n card(s)", n) substitutes the count
-    // and leaves the rest alone: "1 card(s)", on screen, in the shipped
-    // language. Selecting here spells both forms correctly out of the box and
-    // still gives lupdate two strings to collect. Languages whose plural rules
-    // need more than two forms are the reason %n exists, and the day one is
-    // added this becomes the thing to revisit.
-    fields.cards = snapshot.trickCount == 1
-                       ? QCoreApplication::translate("infostrip", "1 card")
-                       : QCoreApplication::translate("infostrip", "%1 cards")
-                             .arg(snapshot.trickCount);
+    fields.cards = cardsText(snapshot.trickCount);
 
     fields.roundType = roundTypeText(snapshot.roundType);
 

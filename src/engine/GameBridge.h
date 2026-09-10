@@ -2,6 +2,7 @@
 #define GAME_BRIDGE_H
 
 #include "Prompts.h"
+#include "RoundResult.h"
 
 #include "core/GameSnapshot.h"
 
@@ -33,6 +34,21 @@ struct Pacing
     std::chrono::milliseconds beat{700};
     std::chrono::milliseconds spectatorBeat{250};
     std::chrono::milliseconds trickDwell{1200};
+
+    // Does the game HOLD at each round result, rather than dwelling on it?
+    // Section 16.1's sheet, for a player who asked to be waited for.
+    //
+    // A PACING KNOB AND NOT A WINDOW FLAG, and that placement is the whole fix
+    // for a race rather than a matter of taste. onRoundScored() emits its result
+    // and goes STRAIGHT into pace(); the emit is queued, so a window that set the
+    // hold on receiving it is setting it after the game thread has already read
+    // the flag and moved on. The 1.2s dwell hides that - at the top of the speed
+    // slider the dwell is ZERO and the hold never lands at all.
+    //
+    // Set here, the bridge holds itself on the game thread before it waits, and
+    // the window only ever RELEASES - which it can do late, because a released
+    // hold that was never taken is a no-op.
+    bool waitAfterEachRound = false;
 };
 
 // The observer. LIVES ON THE GAME THREAD - every IGameObserver method below runs
@@ -97,7 +113,11 @@ signals:
     void trickStarted(unsigned int trickNumber, unsigned int leader);
     void cardPlayed(unsigned int seat, romanian_whist::Card card);
     void trickWon(unsigned int seat, unsigned int trickNumber);
-    void roundScored();
+    // CARRIES THE ROUND IT REPORTS since D2. Section 21.3: the engine stores no
+    // per-round score, and this is the only callback at which one can be read
+    // against the right round index - so a payload-less signal leaves the round
+    // sheet nothing to draw and phase E's history nothing to accumulate.
+    void roundScored(RoundResult result);
     void gameOver(std::vector<romanian_whist::Standing> standings,
                   std::vector<romanian_whist::Standing> winners);
     void gameStopped();
@@ -175,6 +195,12 @@ private:
     // must never reach into the engine, which has no thread safety at all.
     void publish(const romanian_whist::GameEngine& engine);
 
+    // The round just scored, read off the engine on the GAME thread. Separate
+    // from publish() because it is built once per round rather than twelve times
+    // a trick, and because it reads one thing no snapshot does - see
+    // RoundResult.h.
+    RoundResult buildRoundResult(const romanian_whist::GameEngine& engine) const;
+
     // An INTERRUPTIBLE wait, and one that RETURNS on cancellation rather than
     // throwing. That distinction is the whole of the shutdown story: returning
     // puts the game thread back in run() within microseconds, where it reaches
@@ -187,6 +213,11 @@ private:
     // TWO WAITS SINCE D1, not one: the timed beat, and then an indefinite hold
     // while `paused`. See setPaused() above for why the second one is the
     // dangerous half.
+    //
+    // AND THE TIMED HALF IS SKIPPED ENTIRELY when the game is ALREADY held on
+    // arrival, because then the hold is the beat and waiting out a dwell first
+    // only delays the release. A pause that lands mid-delay still waits it out -
+    // the body says why the two cases differ.
     void pace(std::chrono::milliseconds delay);
 
     // Absent in a spectator game, which makes both helpers one-liners rather

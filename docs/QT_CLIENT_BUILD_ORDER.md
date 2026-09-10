@@ -34,7 +34,7 @@ Two rules travel with every step and are not repeated:
 | **A** ✅ | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
 | **B** ✅ | Cards on a table | A spectated game is watchable and legible |
 | **C** ✅ | The human plays | A full game is playable, Forehead and Hidden rounds included |
-| **D** | The game around the game | No command line, no restart between games |
+| **D** ✅ | The game around the game | No command line, no restart between games |
 | **E** | Polish | Part II is on screen |
 | **F** | Ship | Three platforms produce installable artifacts |
 
@@ -837,15 +837,48 @@ slider is a `Pacing` fixed at `prepare()`, which is why it could ship here.
 
 ### D2 — the read-only panels
 
-- [ ] **First:** give `roundScored()` a `RoundResult` payload (§21.3). The round sheet's `34 → 41`
-      column cannot be reconstructed later — `onRoundScored()` is the only callback at which the
-      per-round score can be read against the right round index. This is a change in `GameBridge`,
-      not in the widget that wants it.
-- [ ] `ScoreboardWidget`, `RoundSheet`. **`GameOverPanel` was built in D1** — see the review finding
-      below. The rest of this step is untouched by that: the payload above is the round sheet's, and
-      the panel needed nothing from it.
-- [ ] Winners from `getWinners()`, places from `Standing::place`. Never `standings.front()` — that
-      bug shipped once already, in the terminal's 2.1.0.
+- [x] **First:** give `roundScored()` a `RoundResult` payload (§21.3). This is a change in
+      `GameBridge`, not in the widget that wants it.
+
+      > **The reason this step gives for it is the weaker of the two, and the stronger one is not
+      > written down anywhere.** The `34 → 41` column *could* have come from the snapshot published
+      > immediately before the signal — the game thread is inside `pace()` for the whole time the
+      > sheet is up, so nothing overwrites it. What could not is
+      > **`nextRoundCountsForStreaks`**: §16.1's warning is wrong when the next round deals one card,
+      > one-card rounds counting for neither direction of a streak, and that is a fact about a round
+      > not yet played. No snapshot carries it and the GUI thread may not ask. The history (§16.3) is
+      > the other real reason, and it is phase E's.
+
+- [x] `RoundSheet`. **`ScoreboardWidget` shipped in B2b** with its streak pips, and **`GameOverPanel`
+      was built in D1** — see the review finding there. So this step is the sheet and the payload,
+      and nothing else.
+- [x] Winners from `getWinners()`, places from `Standing::place` — **done in D1 with the panel.**
+
+### What the D2 run found
+
+**Three, and the first is a real bug that a slower default was hiding.**
+
+- **THE HOLD RACED THE GAME THREAD AND LOST AT ZERO DWELL.** `onRoundScored()` emits its result and
+  goes *straight* into `pace()`. The emit is queued, so a window that set the hold on receiving it
+  sets it **after** the game thread has read the flag and moved on. At the default 1.2s dwell that
+  window is never observed; at the top of the speed slider the dwell is **zero** and the sheet never
+  held at all. It is a `Pacing` knob now — the bridge holds itself on the game thread before it
+  waits, and the window only ever *releases*. **The rule this leaves behind: a hold that arrives late
+  holds nothing, a release that arrives late is harmless — so holds belong on the side that waits.**
+- **REFUSING THE PAUSE MENU WHILE THE SHEET WAS VISIBLE KILLED THE MENU BUTTON** for a third of a
+  watched game, because with auto-dismiss the sheet is up for the whole dwell after every round. The
+  guard is on the *hold* instead; a dwelling sheet is transient chrome and gives way. Caught by D1's
+  own pause case, which clicked Menu and found nothing opened.
+- **`deleteLater()` LEFT GHOST ROWS.** A widget taken out of a layout but not yet destroyed is still
+  a child at its last geometry and goes on painting, so round two drew over round one.
+  `GameOverPanel` is right to use the deferred form — it builds its rows once per *game*; this
+  rebuilds them up to thirty-two times. **The difference is how often the thing runs, not what it
+  contains.** Caught by counting labels after two rounds and finding two "Ana"s.
+
+And one from rendering it: the title read **"Round 1 - 1 cards - Normal"** directly under an info
+strip that said "1 card". `InfoStrip` had already met that and recorded why Qt's `%n card(s)` is
+wrong with no translator loaded, so `cardsText()` is shared now rather than copied — the same move
+`roundTypeText()` had already earned.
 
 **Done when:** two games back to back in one process, the second as playable as the first; and a
 game deliberately ended in a draw announces **both** seats.
@@ -969,6 +1002,11 @@ Symptom first, because that is what you have.
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |
 | Closing the window hangs with your hand lit, waiting to play | `stop()` is not reaching the parked provider — `abandon()` is the only thing that can, and `requestStop()` cannot, because the game thread is inside a condition variable rather than at a boundary | §6, C5 |
 | A shutdown mutation leaves the suite green | The two post-wait throws in `QtMoveProvider` are unpinnable: removing one is UB that the re-prompt loop then rescues. Mutate `stop()`'s `abandon()` instead | C5's findings |
+| The round sheet does not hold the game, but only at the fastest speed | The hold is being set from the GUI on a queued signal, and `onRoundScored()` paces immediately after emitting. It belongs on `Pacing`, set by the bridge before it waits | §16.1, D2's findings |
+| A panel's old rows are drawn under its new ones | `deleteLater()` on widgets taken out of a layout — they stay parented at their last geometry until the loop runs. Fine once a game, not once a round | D2's findings |
+| The Menu button does nothing for a second after each round | The pause guard is testing whether the round sheet is VISIBLE rather than whether it is HOLDING | D2's findings |
+| Continue does nothing for up to 2.4s, and only at the slower speeds | A dwell and a hold stacked on the same frame. They are ONE beat — `pace()` skips its timed half when it arrives already held, or the release has to wait the dwell out before anything moves. Note the whole family of these is invisible at `FastestSpeed`, where every dwell is 0 | §16.1, D2's review |
+| Only one player is warned about their streak | `streakWarning()` returned from inside its loop. Two seats can be on four in the same round, and an earlier seat's win streak then silences a later seat's loss streak | §16.1, D2's review |
 
 ---
 

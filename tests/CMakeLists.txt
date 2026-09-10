@@ -20,6 +20,7 @@ add_executable(desktop_tests
     BidStripTests.cpp
     NewGameTests.cpp
     GameOverTests.cpp
+    RoundSheetTests.cpp
     MainWindowTests.cpp
     HandItemTests.cpp
     PromptBarTests.cpp

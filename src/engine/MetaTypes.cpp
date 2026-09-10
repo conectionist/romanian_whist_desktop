@@ -2,6 +2,7 @@
 
 #include "GameBridge.h"
 #include "Prompts.h"
+#include "RoundResult.h"
 
 #include "core/GameSnapshot.h"
 
@@ -33,6 +34,7 @@ void registerMetaTypes()
     // declarations sit in two named places, and this comment.
     qRegisterMetaType<BetPrompt>();
     qRegisterMetaType<PlayPrompt>();
+    qRegisterMetaType<RoundResult>();
 
     qRegisterMetaType<romanian_whist::Card>();
 

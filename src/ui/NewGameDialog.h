@@ -115,6 +115,18 @@ struct Config
     // the three delays, so the Config stays a record of what was ASKED and the
     // mapping lives in one testable place.
     int botSpeed = 2;
+
+    // Does section 16.1's round sheet WAIT, or show for the dwell and go?
+    //
+    // OFF BY DEFAULT, which is the deliberate answer rather than the lazy one: a
+    // player learning the game turns this on to read every round, and most will
+    // want it off once they are not.
+    //
+    // THE ROUND SIBLING OF SECTION 15.3's "wait for me between tricks", which is
+    // still phase E's. This one is here because the sheet needs it and because
+    // D1 already built the indefinite pace() both would use; the trick one is
+    // not, and no disabled checkbox promises it.
+    bool waitAfterEachRound = false;
 };
 
 // The defaults the dialog opens with the first time. Play again re-opens it on
@@ -270,6 +282,7 @@ private:
     QLabel* summary = nullptr;
 
     QSlider* speed = nullptr;
+    QCheckBox* waitEachRound = nullptr;
     QCheckBox* fixedDeal = nullptr;
     QSpinBox* seed = nullptr;
 

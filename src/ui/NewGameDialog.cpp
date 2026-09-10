@@ -443,6 +443,18 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     speedRow->addWidget(new QLabel(tr("Instant"), this));
     stack->addLayout(speedRow);
 
+    // SECTION 16.1's SHEET, held or not. Its button says Continue in every round
+    // rather than "Deal round 8", because on the final round there is nothing
+    // left to deal - see RoundSheet.h.
+    //
+    // NOTE WHAT THE SLIDER ABOVE DOES TO THE OTHER SETTING, which is worth
+    // stating rather than fixing: at Instant the trick dwell is zero, so with
+    // this unticked the sheet flashes and is gone. That is what Instant means,
+    // and a player who wants to read the sheet has this box.
+    waitEachRound = new QCheckBox(tr("Wait for me after each round"), this);
+    waitEachRound->setObjectName("waitEachRound");
+    stack->addWidget(waitEachRound);
+
     fixedDeal = new QCheckBox(tr("Fixed deal, seed"), this);
     fixedDeal->setObjectName("fixedDeal");
     seed = new QSpinBox(this);
@@ -488,6 +500,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     foreheadAndHidden->setChecked(current.endWithForeheadAndHidden);
     allOnesForehead->setChecked(current.all1GamesAreForehead);
     speed->setValue(current.botSpeed);
+    waitEachRound->setChecked(current.waitAfterEachRound);
     fixedDeal->setChecked(current.shuffleSeed.has_value());
 
     if(current.shuffleSeed)
@@ -525,6 +538,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     connect(foreheadAndHidden, &QCheckBox::toggled, this, onChange);
     connect(allOnesForehead, &QCheckBox::toggled, this, onChange);
     connect(speed, &QSlider::valueChanged, this, onChange);
+    connect(waitEachRound, &QCheckBox::toggled, this, onChange);
     connect(fixedDeal, &QCheckBox::toggled, this, [this](bool on){ seed->setEnabled(on); refresh(); });
     connect(seed, &QSpinBox::valueChanged, this, onChange);
 
@@ -662,6 +676,7 @@ void NewGameDialog::refresh()
     current.endWithForeheadAndHidden = foreheadAndHidden->isChecked();
     current.all1GamesAreForehead = allOnesForehead->isChecked();
     current.botSpeed = speed->value();
+    current.waitAfterEachRound = waitEachRound->isChecked();
     current.shuffleSeed = fixedDeal->isChecked()
                               ? std::optional<std::uint32_t>(static_cast<std::uint32_t>(seed->value()))
                               : std::nullopt;

@@ -2348,7 +2348,7 @@ A sheet slides down over the table:
 │                                                          │
 │   Ana has missed four in a row — a fifth costs 10.       │
 │                                                          │
-│                                 [ Deal round 8 ]         │
+│                                 [ Continue ]             │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -2360,8 +2360,37 @@ A sheet slides down over the table:
   bid or miss and one-card rounds count for neither, and a player has no way to see that coming
   without counting rounds. `winStreak`/`lossStreak` are already on `SeatView`, so the scoreboard
   carries streak pips and the sheet warns at four.
-- **[ Deal round 8 ] is an indefinite `pace()`**, per §15.3. The same button, the same condition
-  variable, the same requirement that `cancelPacing()` reach it.
+- **AMENDED IN D2: the button says `Continue`, not `Deal round 8`.** On the final round there is
+  nothing left to deal — the sheet there hands over to §16.2's panel — and a label that is a lie on
+  the last round is worse than one word that is true in all of them.
+
+- **AMENDED IN D2: how the sheet is dismissed is a setting, and it is off by default.** §13's Pace
+  block gains **"Wait for me after each round"**. Unticked, the sheet shows for the trick dwell and
+  goes, and the **final round is skipped outright** — its numbers are the ones the game-over panel is
+  about to show in full, so a sheet there would be two panels in a second. Ticked, it holds every
+  round including the last, and Continue on that one is what hands over.
+
+  > **This is the ROUND sibling of §15.3's "wait for me between tricks", which stays phase E's.** It
+  > is here because the sheet needs it and because D1 had already built the indefinite `pace()` both
+  > would use.
+
+- **The hold is an indefinite `pace()`**, per §15.3 — the same condition variable and the same
+  requirement that `cancelPacing()` reach it.
+
+  > **AND IT BELONGS TO `Pacing`, NOT TO THE WINDOW, which D2 found by getting it wrong.**
+  > `onRoundScored()` emits its result and goes *straight* into `pace()`. The emit is queued, so a
+  > window that set the hold on receiving it sets it **after** the game thread has already read the
+  > flag and moved on. The 1.2s dwell hides that completely; at the top of the speed slider the dwell
+  > is **zero** and the hold never lands at all. The bridge holds itself on the game thread before it
+  > waits, and the window only ever *releases* — a release that arrives late is harmless, a hold that
+  > arrives late holds nothing.
+
+  > **AND THE HOLD IS THE DWELL, not a wait after it — D2's review found the other half of the same
+  > mistake.** Both exist so the player can read the frame, so stacking them means Continue has to
+  > wait the dwell out before anything moves: up to 2.4s at the bottom of the speed slider. `pace()`
+  > skips its timed half whenever it arrives already held, which states the rule once for all five
+  > of its call sites. Note that the fastest speed hides this defect exactly as it hid the one
+  > above — a test that pins either has to run at a **non-zero** dwell.
 
 ### 16.2 The end of the game
 
@@ -2429,9 +2458,28 @@ still reports the cards actually played in it.
 >
 > That makes `onRoundScored()` the one callback in §4.1 that does more than publish and emit. It
 > builds a `RoundResult` — index, trick count, round type, trump, and per seat the name, bid, tricks
-> won, `getRoundScore()`, `getTotalScore()` and their sum — appends it to a history the bridge owns,
-> and emits it. `roundScored()` as declared in §4.1 carries no payload; **it needs one.** Both the
-> round sheet and this dialog read it, and neither can be reconstructed later.
+> won, `getRoundScore()`, `getTotalScore()` and their sum — and emits it. `roundScored()` as declared
+> in §4.1 carries no payload; **it needs one.** Both the round sheet and this dialog read it, and
+> neither can be reconstructed later.
+>
+> **AMENDED IN D2 — the history is NOT owned by the bridge.** That object lives on the game thread
+> and would be writing it from there, so a dialog reading the history is the GUI thread reading
+> engine-thread state, which is the one rule §3 has. `MainWindow` appending from the queued signal is
+> the same data with no boundary crossed, and it is one line whenever phase E wants it. D2 emits the
+> payload and accumulates nothing, because nothing yet reads it.
+>
+> **And one field turned out to matter more than the score column.** `RoundResult` carries
+> `nextRoundCountsForStreaks`, read from `getRound(index + 1)`. §16.1's warning line is *wrong* when
+> the next round deals one card — one-card rounds count for neither direction of a streak — and that
+> is a fact about a round that has not been played, which no snapshot carries and the GUI thread may
+> not ask for. **It is the sharpest reason the payload exists**, sharper than the history: most of
+> the sheet could otherwise have been drawn from the snapshot published immediately before the
+> signal.
+>
+> **A reason this document implies that does NOT hold**, recorded so it is not re-derived: that a
+> snapshot-driven sheet would be wiped by `onRoundComplete()`'s next publish. It would not. The game
+> thread is inside `pace()` for the whole time the sheet is up, so nothing else is published until it
+> is dismissed.
 
 ## 17. Forehead and Hidden, drawn
 

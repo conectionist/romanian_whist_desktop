@@ -65,6 +65,13 @@ Fields fieldsFor(const GameSnapshot& snapshot);
 // client has exactly two: one for machines and one for people.
 QString roundTypeText(romanian_whist::RoundType type);
 
+// "6 cards", or "1 card". SHARED WITH THE ROUND SHEET since D2, which names the
+// same fact about the same round in its title - two spellings of it would be two
+// entries in the catalogue and two chances for them to drift, which is the drift
+// section 7 is about. See the body for why this is two strings rather than Qt's
+// "%n card(s)".
+QString cardsText(unsigned int trickCount);
+
 // WHETHER THIS ROUND TYPE IS CALLED OUT, which section 17 asks for: Forehead and
 // Hidden read "in an accent colour, so the round is identifiable before the
 // cards are dealt".

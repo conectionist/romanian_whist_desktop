@@ -62,6 +62,7 @@ qt_add_library(desktop_core STATIC
 
     src/engine/GameAbandoned.h
     src/engine/Prompts.h
+    src/engine/RoundResult.h
     src/engine/QtMoveProvider.h
     src/engine/QtMoveProvider.cpp
     src/engine/GameBridge.h
@@ -113,6 +114,8 @@ qt_add_library(desktop_core STATIC
     src/ui/PauseOverlay.cpp
     src/ui/GameOverPanel.h
     src/ui/GameOverPanel.cpp
+    src/ui/RoundSheet.h
+    src/ui/RoundSheet.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
