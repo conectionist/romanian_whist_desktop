@@ -91,7 +91,7 @@ jobs:
           echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset release --parallel
 
       - name: Test
         run: ctest --preset release --output-on-failure --no-tests=error
@@ -171,7 +171,7 @@ jobs:
       # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
       # actually selects Release.
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset release --parallel
 
       - name: Test
         run: ctest --preset release --output-on-failure --no-tests=error

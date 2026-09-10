@@ -113,7 +113,7 @@ jobs:
           echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset release --parallel
 
       # --no-tests=error, because a build that lands with tests disabled would
       # otherwise print "No tests were found!!!" and exit 0 - green having run
@@ -210,7 +210,7 @@ jobs:
       # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
       # actually selects Release, and --config Release below matches it.
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset release --parallel
 
       - name: Test
         run: ctest --preset release --output-on-failure --no-tests=error
@@ -273,7 +273,7 @@ jobs:
           echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset release --parallel
 
       - name: Test
         run: ctest --preset release --output-on-failure --no-tests=error
