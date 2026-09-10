@@ -38,14 +38,32 @@ function Get-MachinePath {
     [System.Environment]::GetEnvironmentVariable("Path", "Machine")
 }
 
-function Add-MachinePathEntry([string]$Entry) {
+function Add-MachinePathEntry([string]$Entry, [switch]$Prepend) {
     $current = Get-MachinePath
-    if (($current -split ';') -contains $Entry) {
+    $parts = $current -split ';'
+    if ($parts -contains $Entry) {
+        if ($Prepend -and $parts[0] -ne $Entry) {
+            # Already present but not first - move it to the front. Needed for
+            # Git\bin specifically: C:\Windows\System32 ships its own bash.exe
+            # (a WSL launcher stub) and wins any PATH search that finds it
+            # first, so a GitHub Actions `shell: bash` step silently resolves
+            # to that stub instead of Git Bash and fails with "Windows
+            # Subsystem for Linux has no installed distributions."
+            $reordered = @($Entry) + ($parts | Where-Object { $_ -and $_ -ne $Entry })
+            [System.Environment]::SetEnvironmentVariable("Path", ($reordered -join ';'), "Machine")
+            Write-Host "  Already on machine PATH but not first; moved to front: $Entry"
+            return
+        }
         Write-Host "  Already on machine PATH: $Entry"
         return
     }
-    [System.Environment]::SetEnvironmentVariable("Path", "$current;$Entry", "Machine")
-    Write-Host "  Added to machine PATH: $Entry"
+    if ($Prepend) {
+        [System.Environment]::SetEnvironmentVariable("Path", "$Entry;$current", "Machine")
+        Write-Host "  Added to front of machine PATH: $Entry"
+    } else {
+        [System.Environment]::SetEnvironmentVariable("Path", "$current;$Entry", "Machine")
+        Write-Host "  Added to machine PATH: $Entry"
+    }
 }
 
 Assert-Elevated
@@ -54,7 +72,9 @@ Write-Host "=== 1/6: Visual Studio C++ workload (check only) ===" -ForegroundCol
 $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
 $hasCppWorkload = $false
 if (Test-Path $vswhere) {
-    $vsPath = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    # -products * is required: -latest alone only searches the full VS IDE products
+    # (Community/Professional/Enterprise), silently skipping a Build Tools-only install.
+    $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if ($vsPath) { $hasCppWorkload = $true }
 }
 if ($hasCppWorkload) {
@@ -70,8 +90,9 @@ if (Test-Path "C:\Program Files\Git\bin\git.exe") {
     winget install --id Git.Git -e --scope machine --accept-package-agreements --accept-source-agreements --silent
 }
 # bash.exe lives in Git\bin, which the installer does not add to PATH by default
-# (only Git\cmd, which has git.exe, goes on PATH automatically).
-Add-MachinePathEntry "C:\Program Files\Git\bin"
+# (only Git\cmd, which has git.exe, goes on PATH automatically). It must come
+# BEFORE C:\Windows\System32 in PATH - see the comment in Add-MachinePathEntry.
+Add-MachinePathEntry "C:\Program Files\Git\bin" -Prepend
 
 Write-Host "=== 3/6: CMake ===" -ForegroundColor Cyan
 if (Test-Path "C:\Program Files\CMake\bin\cmake.exe") {

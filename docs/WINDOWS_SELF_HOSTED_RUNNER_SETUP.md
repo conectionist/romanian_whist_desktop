@@ -43,15 +43,36 @@ logouts.
 ## 2. C++ toolchain: Visual Studio (or Build Tools) with the Desktop C++ workload
 
 Needed for MSVC and the Windows SDK. Verify an existing install actually has the workload the
-project needs — Visual Studio can be installed without it:
+project needs — Visual Studio can be installed without it. Always pass `-products *`: `vswhere
+-latest` on its own only searches the full Visual Studio IDE products (Community/Professional/
+Enterprise) - a Build Tools-only install is a different product ID and is silently skipped without
+it, making the workload look absent even when it's there.
 
 ```powershell
 & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" `
-    -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 ```
 
 If this prints nothing, install Visual Studio (Community is fine) or the standalone Build Tools
 with the "Desktop development with C++" workload, which pulls in both MSVC and a Windows SDK.
+
+To add the workload to an existing Build Tools install non-interactively, `setup.exe modify` takes
+`--passive` (which blocks until done and shows a small progress window) - there is no `--wait` flag,
+and passing one is a hard command-line parse error:
+
+```powershell
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe" modify `
+    --installPath "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" `
+    --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended `
+    --passive --norestart
+```
+
+In practice this command's own console output is not trustworthy: it can print exit code 0 after
+only *selecting* the workload (no "downloading payload"/"executing package" lines at all) while a
+detached elevation hand-off keeps the actual work going in the background, invisible to `tasklist`/
+`Get-Process` under any VS-related name - and the launching shell can then sit there looking hung
+long after that detached work has already finished. Confirm success with the `-products *` `vswhere`
+command above, not with the command's exit code or its console log.
 
 ## 3. Git for Windows — for `git.exe` *and* `bash.exe`
 
@@ -62,8 +83,28 @@ folder, which needs adding explicitly:
 ```powershell
 winget install --id Git.Git -e --scope machine --accept-package-agreements --accept-source-agreements
 [System.Environment]::SetEnvironmentVariable("Path",
-    [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";C:\Program Files\Git\bin",
+    "C:\Program Files\Git\bin;" + [System.Environment]::GetEnvironmentVariable("Path","Machine"),
     "Machine")
+```
+
+`Git\bin` must go at the **front** of `PATH`, not the end. `C:\Windows\System32` ships its own
+`bash.exe` - a launcher stub for Windows Subsystem for Linux - and it is on `PATH` well before
+anywhere a machine-wide install would append to. If it's found first, every workflow step with
+`shell: bash` silently runs under that stub instead of Git Bash and fails with:
+
+```
+Windows Subsystem for Linux has no installed distributions.
+```
+
+which reads like a WSL problem but is really just a `PATH` ordering bug. This bit us even with
+the setup script: its `Add-MachinePathEntry` helper appended by default, so `Git\bin` ended up
+after `System32` and CI failed at the first `shell: bash` step despite Git being "installed."
+Verify the order directly if a bash step ever fails like this:
+
+```powershell
+([System.Environment]::GetEnvironmentVariable("Path","Machine")) -split ';' |
+    Select-String -Pattern "System32$|Git.bin"
+# Git\bin must be listed first
 ```
 
 ## 4. CMake
@@ -79,6 +120,33 @@ package. Install it machine-wide, for the `NETWORK SERVICE` reason above:
 
 ```powershell
 winget install --id Python.Python.3.12 -e --scope machine --accept-package-agreements --accept-source-agreements
+```
+
+**If a per-user Python is already installed, remove it first.** The official Python installer is a
+single Burn-bundled transaction: if it detects an existing per-user ("JustForMe") install, it plans
+to remove that install and replace it with the machine-wide one in the same run - and on at least
+one machine, the sub-package installing with `ALLUSERS=1` still carried a stale per-user `TARGETDIR`
+(a leftover Burn variable from the old install), which sent MSI's directory-resolution logic into
+an infinite loop (visible in the verbose log as thousands of repeating `Note: 1: 1322`/`1: 1324`
+lines) that stack-overflows (`0xc00000fd`) and fails the whole transaction with a generic, unhelpful
+`1603`. Burn then rolls back everything, including re-restoring the per-user install it had just
+removed - so after a failure like this, the per-user copy is often still there, unchanged, making it
+easy to miss that it was the actual cause. Uninstall it cleanly and confirm it's gone before
+retrying:
+
+```powershell
+winget uninstall --id Python.Python.3.12
+Test-Path "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"   # must be False before retrying
+```
+
+The real MSI error, if you need to confirm this is what's happening, is buried under the generic
+`1603` in winget's own diagnostic logs (not the bundle's own temp log - the per-package one), here:
+
+```powershell
+$diag = "$env:LOCALAPPDATA\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir"
+Get-ChildItem $diag -Filter "Python*_AllUsers.log" | Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1 -ExpandProperty FullName |
+    ForEach-Object { Select-String -Path $_ -Encoding Unicode -Pattern "Internal Exception|Fatal error|Error 1[0-9]{3}" }
 ```
 
 ## 6. PowerShell execution policy
@@ -138,12 +206,17 @@ compiled under MSVC before this) much faster than iterating through CI:
 
 ```powershell
 $env:CMAKE_PREFIX_PATH = "<path to a Qt install>\msvc2022_64"   # any local Qt 6.10.3+ works for this check
-cmake --preset release
-cmake --build --preset release
 
 # Test executables need Qt's DLLs to launch - install-qt-action puts Qt's bin
-# on PATH automatically in CI; replicate that here:
+# on PATH automatically in CI; replicate that here BEFORE building, not just
+# before ctest. This project's tests use Catch2's catch_discover_tests(),
+# which runs the built test executable at BUILD time (as a post-build step)
+# to enumerate test names - without Qt's DLLs on PATH yet, that run fails
+# with exit code 0xc0000135 (STATUS_DLL_NOT_FOUND) and the build itself fails.
 $env:Path = "<path to a Qt install>\msvc2022_64\bin;" + $env:Path
+
+cmake --preset release
+cmake --build --preset release
 ctest --preset release --output-on-failure --no-tests=error
 ```
 
@@ -152,7 +225,8 @@ ctest --preset release --output-on-failure --no-tests=error
 - [ ] Runner registered, running as a Windows service
 - [ ] Noted the service account (`Get-WmiObject Win32_Service ...`)
 - [ ] Visual Studio/Build Tools with the C++ desktop workload (`vswhere` confirms it)
-- [ ] Git for Windows installed; `Git\bin` (not just `Git\cmd`) on the machine `PATH`
+- [ ] Git for Windows installed; `Git\bin` (not just `Git\cmd`) on the machine `PATH`, and listed
+      **before** `C:\Windows\System32` (else `shell: bash` steps resolve to the WSL stub)
 - [ ] CMake installed machine-wide
 - [ ] Python installed machine-wide
 - [ ] Execution policy `RemoteSigned` at `LocalMachine` scope
