@@ -4,15 +4,31 @@ name: CI
 # GitHub-hosted runner jobs are blocked: recent account payments have failed.
 # ci2.yml uses self-hosted runners in the meantime (Linux + Windows only).
 #
-# To re-enable, replace the trigger block below with the original:
+# To re-enable, replace the trigger block below with this - which is NOT the
+# block that was here before. The original had an unfiltered `push`, and an
+# unfiltered push alongside `pull_request` builds every PR TWICE: both events
+# fire on one `git push`, and with no concurrency group neither run cancels the
+# other. Restoring it verbatim would bring that straight back.
 #
 #   on:
 #     push:
+#       branches: [master]
 #       paths-ignore:
 #         - '**/*.md'
 #     pull_request:
 #       paths-ignore:
 #         - '**/*.md'
+#     workflow_dispatch:
+#
+#   concurrency:
+#     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+#     cancel-in-progress: true
+#
+# See ci2.yml, where both blocks live with the reasoning in full - including why
+# the pull_request run is the one worth keeping, and what restricting push gives
+# up. AND NOTE THE TWO FILES WOULD THEN BOTH BE LIVE: re-enabling this one means
+# deleting or disabling ci2.yml in the same commit, or every PR builds twice
+# again for a different reason.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 on:
