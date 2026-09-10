@@ -25,6 +25,17 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets LinguistTools Svg)
 # that gap is the second of the three silent ways to embed no resources at all.
 qt_standard_project_setup(REQUIRES 6.5)
 
+# MSVC compiles one .cpp per cl.exe invocation by default, leaving the rest of
+# a multi-core CI runner idle during the build - this is what made CI's Build
+# step take 9+ minutes on a 4-core/8-thread machine. /MP lets cl.exe compile
+# multiple files from one project in parallel. Set here, before any
+# add_subdirectory(), so it also reaches the engine submodule and Catch2 -
+# unlike WHIST_DESKTOP_WARNINGS below, this changes nothing about compiler
+# output, only how many files compile at once.
+if(MSVC)
+    add_compile_options(/MP)
+endif()
+
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
