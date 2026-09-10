@@ -1,0 +1,207 @@
+name: CI (self-hosted)
+
+# Temporary replacement for ci.yml while GitHub-hosted runner jobs are
+# blocked by a failed account payment. Targets the self-hosted runners
+# (Windows and Linux). macOS and the release job are omitted intentionally:
+# there is no self-hosted macOS runner, and release needs all three builds.
+#
+# build-linux targets whatever machine is registered with the self-hosted +
+# Linux labels - no per-machine targeting there, so bringing up a
+# replacement Linux runner needs no change to this file. build-windows DOES
+# target one machine by name (whist_windows_runner, a stronger physical
+# laptop) rather than staying generic, replacing win_vm_runner - a VM used
+# to prove out the dependency list in docs/WINDOWS_SELF_HOSTED_RUNNER_SETUP.md
+# in the first place. See that doc and docs/LINUX_SELF_HOSTED_RUNNER_SETUP.md
+# for what each runner actually needed.
+#
+# The WSL-hosted attempt (whist_wsl_ubuntu_runner) is stopped rather than
+# fixed: it broke on sudo needing a password, then on a broken Python stdlib
+# (types.py being shadowed) once that was fixed, and linux_old_laptop - a
+# native Linux machine - sidesteps that whole class of problem.
+#
+# Once billing is resolved:
+#   1. Re-enable ci.yml (restore its push/pull_request trigger block).
+#   2. Delete or disable this file.
+
+on:
+  push:
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+
+# See ci.yml for the full rationale behind this version pin.
+env:
+  QT_VERSION: '6.10.3'
+
+jobs:
+  build-linux:
+    name: Build (Linux)
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # cmake and build-essential (gcc/g++/make): unlike ubuntu-latest in
+      # ci.yml, a bare machine has neither. actions/setup-python (which
+      # install-qt-action calls internally unless told not to) only ships
+      # prebuilt binaries for a fixed list of distros, and has none for
+      # Debian - "The version '>=3.9.0 <=3.13.3' ... was not found for Debian
+      # 13." setup-python: false below skips that and uses the system's own
+      # python3 instead, which has to actually be installed first. patchelf
+      # is installed here too, for qt_deploy_runtime_dependencies() to use
+      # later rewriting RPATHs so the archived binary finds the Qt libraries
+      # shipped beside it rather than whatever the host happens to have.
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y patchelf python3 python3-pip python3-venv cmake build-essential
+
+      # PIP_BREAK_SYSTEM_PACKAGES: install-qt-action's own pip install of
+      # aqtinstall's dependencies hits Debian's PEP 668 guard ("error:
+      # externally-managed-environment") since Debian 12, which blocks pip
+      # from writing into the system site-packages python3 owns via apt. The
+      # env var makes pip skip that check for calls made within this step,
+      # without touching the system Python install the way deleting its
+      # EXTERNALLY-MANAGED marker file would.
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+          setup-python: false
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: "1"
+
+      # QT_ROOT_DIR is exported by install-qt-action, but it does not set
+      # CMAKE_PREFIX_PATH, and find_package(Qt6) does not read QT_ROOT_DIR.
+      # See ci.yml for the full explanation.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset release
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-linux"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
+
+      - name: Deploy
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
+
+      - name: Verify the deploy
+        run: |
+          if [ -z "$(find staging -name 'libQt6Widgets*' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - the deploy script did nothing."
+            find staging
+            exit 1
+          fi
+          if [ -z "$(find staging -name 'libqxcb.so' -print -quit)" ]; then
+            echo "::error::No platform plugin in the staging tree - the app cannot start."
+            find staging
+            exit 1
+          fi
+
+      - name: Archive
+        working-directory: staging
+        run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.tar.gz
+          archive: false
+
+  build-windows:
+    name: Build (Windows)
+    # Pinned to one machine (whist_windows_runner, a stronger physical
+    # laptop) rather than whichever machine has self-hosted + Windows - see
+    # the note above jobs:. A runner's own name is NOT an implicit label -
+    # runs-on only matches actual labels, default or custom - so
+    # "whist_windows_runner" had to be added to that runner as a custom
+    # label first (Settings -> Actions -> Runners, or the API) for this to
+    # match anything at all.
+    runs-on: [self-hosted, Windows, whist_windows_runner]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # setup-python: false - install-qt-action's own actions/setup-python step
+      # downloads and installs a hosted-tool-cache Python via a script built for
+      # GitHub-hosted runner images, which fails on this self-hosted runner
+      # ("Error happened during Python installation"). Needs a machine-wide
+      # Python on PATH instead (see docs/WINDOWS_SELF_HOSTED_RUNNER_SETUP.md) -
+      # true of win_vm_runner, which is where this was worked out; confirm it's
+      # also true of whist_windows_runner before relying on this passing here.
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+          setup-python: false
+
+      # See ci.yml for the full explanation.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset release
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+          name="romanian_whist_desktop-$version-windows"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
+
+      # The default generator here is multi-config Visual Studio, which ignores
+      # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
+      # actually selects Release.
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Test
+        run: ctest --preset release --output-on-failure --no-tests=error
+
+      - name: Deploy
+        shell: bash
+        run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
+
+      - name: Verify the deploy
+        shell: bash
+        run: |
+          if [ -z "$(find staging -name 'Qt6Widgets.dll' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - windeployqt did nothing."
+            find staging
+            exit 1
+          fi
+          if [ -z "$(find staging -name 'qwindows.dll' -print -quit)" ]; then
+            echo "::error::No platform plugin in the staging tree - the app cannot start."
+            find staging
+            exit 1
+          fi
+
+      - name: Archive
+        shell: bash
+        working-directory: staging
+        run: cmake -E tar cf "../${{ steps.version.outputs.name }}.zip" --format=zip "${{ steps.version.outputs.name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ steps.version.outputs.name }}.zip
+          archive: false   # see the note in build-linux above

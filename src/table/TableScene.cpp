@@ -9,6 +9,7 @@
 #include <QPainter>
 
 #include <cmath>
+#include <numbers>
 
 namespace
 {
@@ -95,7 +96,7 @@ QRectF TableScene::trickRingRect(std::size_t seatCount, qreal cardHeight) const
     const qreal occupies = std::max(footprint.width(), footprint.height());
 
     const qreal spacing = occupies * (1.0 + trickGap);
-    const qreal radius = spacing / (2.0 * std::sin(M_PI / static_cast<qreal>(seatCount)));
+    const qreal radius = spacing / (2.0 * std::sin(std::numbers::pi / static_cast<qreal>(seatCount)));
 
     // THE TABLE'S CENTRE, not the scene's. With a hand strip reserved the two
     // differ by half its height, and a trick centred on the scene drifts down

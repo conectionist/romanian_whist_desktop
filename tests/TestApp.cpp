@@ -69,6 +69,22 @@ public:
         if(qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
             qputenv("QT_QPA_PLATFORM", "offscreen");
 
+        // WINDOWS ONLY, and for the same reason as the block above: this has to
+        // land before QApplication exists. The offscreen platform's font
+        // database is FreeType-based on every OS, but only Linux and macOS point
+        // it at the system's installed fonts automatically, through fontconfig
+        // and CoreText respectively - Windows has neither. Without this,
+        // QFontDatabase::families() comes back EMPTY on Windows: every QFont
+        // resolves to nothing, and QFont::setBold() becomes a no-op because
+        // there is no distinct bold face to switch to. That is not a corner
+        // case - ScoreboardTests.cpp's "sized for the weight it draws in" is a
+        // direct, deterministic failure of it, discovered the first time this
+        // suite ever ran against MSVC.
+#ifdef Q_OS_WIN
+        if(qEnvironmentVariableIsEmpty("QT_QPA_FONTDIR"))
+            qputenv("QT_QPA_FONTDIR", qgetenv("SystemRoot") + "\\Fonts");
+#endif
+
         // Must outlive every test and be constructed before any QObject that
         // cares about thread affinity. argc is held by value because
         // QApplication takes it by reference and keeps the reference.

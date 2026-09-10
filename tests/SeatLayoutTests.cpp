@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <cmath>
+#include <numbers>
 
 // Section 14's seat table, asserted as the WORDS IT IS WRITTEN IN rather than
 // against the coordinates the implementation produces.
@@ -299,7 +300,7 @@ TEST_CASE("A ring rect spaces neighbours evenly", "[seat-layout]")
             seatlayout::seatCentres(seatCount, 0, seatlayout::ringRect(centre, radius));
 
         // The chord between adjacent seats on a circle: 2 r sin(pi/n).
-        const qreal expected = 2.0 * radius * std::sin(M_PI / seatCount);
+        const qreal expected = 2.0 * radius * std::sin(std::numbers::pi / seatCount);
 
         for(unsigned int seat = 0 ; seat < seatCount ; seat++)
         {
