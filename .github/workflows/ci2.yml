@@ -1,14 +1,15 @@
 name: CI (self-hosted)
 
 # Temporary replacement for ci.yml while GitHub-hosted runner jobs are
-# blocked by a failed account payment. Targets the self-hosted Windows
-# runner. macOS and the release job are omitted intentionally: there is no
+# blocked by a failed account payment. Targets the self-hosted runners.
+# macOS and the release job are omitted intentionally: there is no
 # self-hosted macOS runner, and release needs all three builds.
 #
-# build-linux is commented out below rather than removed: whist_wsl_ubuntu_runner
-# is registered but not yet configured with the toolchain this project needs
-# (CMake, Qt, patchelf, etc.), same as win_vm_runner was before it. Re-enable
-# once that runner is prepped the same way.
+# build-windows is commented out below rather than removed: TEMPORARY, while
+# build-linux is being brought up on whist_wsl_ubuntu_runner (registered but
+# failing partway through - "sudo not installed" was the symptom last seen).
+# Re-enable build-windows and comment build-linux back out once that's
+# fixed, so pushes don't trigger both every time.
 #
 # Once billing is resolved:
 #   1. Re-enable ci.yml (restore its push/pull_request trigger block).
@@ -27,96 +28,27 @@ env:
   QT_VERSION: '6.10.3'
 
 jobs:
-  # build-linux:
-  #   name: Build (Linux)
-  #   runs-on: [self-hosted, Linux]
-  #   steps:
-  #     - uses: actions/checkout@v7
-  #       with:
-  #         submodules: recursive
-  #
-  #     - uses: jurplel/install-qt-action@v4
-  #       with:
-  #         version: ${{ env.QT_VERSION }}
-  #         cache: true
-  #
-  #     # qt_deploy_runtime_dependencies() rewrites RPATHs with patchelf so the
-  #     # archived binary finds the Qt libraries shipped beside it rather than
-  #     # whatever the host happens to have.
-  #     - name: Install patchelf
-  #       run: sudo apt-get update && sudo apt-get install -y patchelf
-  #
-  #     # QT_ROOT_DIR is exported by install-qt-action, but it does not set
-  #     # CMAKE_PREFIX_PATH, and find_package(Qt6) does not read QT_ROOT_DIR.
-  #     # See ci.yml for the full explanation.
-  #     - name: Configure
-  #       env:
-  #         CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
-  #       run: cmake --preset release
-  #
-  #     - name: Get project version
-  #       id: version
-  #       shell: bash
-  #       run: |
-  #         version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
-  #         name="romanian_whist_desktop-$version-linux"
-  #         echo "version=$version" >> "$GITHUB_OUTPUT"
-  #         echo "name=$name" >> "$GITHUB_OUTPUT"
-  #         echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
-  #
-  #     - name: Build
-  #       run: cmake --build --preset release
-  #
-  #     - name: Test
-  #       run: ctest --preset release --output-on-failure --no-tests=error
-  #
-  #     - name: Deploy
-  #       run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
-  #
-  #     - name: Verify the deploy
-  #       run: |
-  #         if [ -z "$(find staging -name 'libQt6Widgets*' -print -quit)" ]; then
-  #           echo "::error::No Qt libraries in the staging tree - the deploy script did nothing."
-  #           find staging
-  #           exit 1
-  #         fi
-  #         if [ -z "$(find staging -name 'libqxcb.so' -print -quit)" ]; then
-  #           echo "::error::No platform plugin in the staging tree - the app cannot start."
-  #           find staging
-  #           exit 1
-  #         fi
-  #
-  #     - name: Archive
-  #       working-directory: staging
-  #       run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
-  #
-  #     - name: Upload artifact
-  #       uses: actions/upload-artifact@v7
-  #       with:
-  #         name: ${{ steps.version.outputs.name }}
-  #         path: ${{ steps.version.outputs.name }}.tar.gz
-  #         archive: false
-
-  build-windows:
-    name: Build (Windows)
-    runs-on: [self-hosted, Windows]
+  build-linux:
+    name: Build (Linux)
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      # setup-python: false - install-qt-action's own actions/setup-python step
-      # downloads and installs a hosted-tool-cache Python via a script built for
-      # GitHub-hosted runner images, which fails on this self-hosted runner
-      # ("Error happened during Python installation"). win_vm_runner already has
-      # a machine-wide Python on PATH (installed for exactly this purpose), so
-      # skip the action's own setup and let it use that one instead.
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           cache: true
-          setup-python: false
 
+      # qt_deploy_runtime_dependencies() rewrites RPATHs with patchelf so the
+      # archived binary finds the Qt libraries shipped beside it rather than
+      # whatever the host happens to have.
+      - name: Install patchelf
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+
+      # QT_ROOT_DIR is exported by install-qt-action, but it does not set
+      # CMAKE_PREFIX_PATH, and find_package(Qt6) does not read QT_ROOT_DIR.
       # See ci.yml for the full explanation.
       - name: Configure
         env:
@@ -128,14 +60,11 @@ jobs:
         shell: bash
         run: |
           version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
-          name="romanian_whist_desktop-$version-windows"
+          name="romanian_whist_desktop-$version-linux"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
 
-      # The default generator here is multi-config Visual Studio, which ignores
-      # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
-      # actually selects Release.
       - name: Build
         run: cmake --build --preset release
 
@@ -143,31 +72,103 @@ jobs:
         run: ctest --preset release --output-on-failure --no-tests=error
 
       - name: Deploy
-        shell: bash
         run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
 
       - name: Verify the deploy
-        shell: bash
         run: |
-          if [ -z "$(find staging -name 'Qt6Widgets.dll' -print -quit)" ]; then
-            echo "::error::No Qt libraries in the staging tree - windeployqt did nothing."
+          if [ -z "$(find staging -name 'libQt6Widgets*' -print -quit)" ]; then
+            echo "::error::No Qt libraries in the staging tree - the deploy script did nothing."
             find staging
             exit 1
           fi
-          if [ -z "$(find staging -name 'qwindows.dll' -print -quit)" ]; then
+          if [ -z "$(find staging -name 'libqxcb.so' -print -quit)" ]; then
             echo "::error::No platform plugin in the staging tree - the app cannot start."
             find staging
             exit 1
           fi
 
       - name: Archive
-        shell: bash
         working-directory: staging
-        run: cmake -E tar cf "../${{ steps.version.outputs.name }}.zip" --format=zip "${{ steps.version.outputs.name }}"
+        run: cmake -E tar czf "../${{ steps.version.outputs.name }}.tar.gz" "${{ steps.version.outputs.name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.version.outputs.name }}
-          path: ${{ steps.version.outputs.name }}.zip
-          archive: false   # see the note in ci.yml's build-linux job
+          path: ${{ steps.version.outputs.name }}.tar.gz
+          archive: false
+
+  # build-windows:
+  #   name: Build (Windows)
+  #   runs-on: [self-hosted, Windows]
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #       with:
+  #         submodules: recursive
+  #
+  #     # setup-python: false - install-qt-action's own actions/setup-python step
+  #     # downloads and installs a hosted-tool-cache Python via a script built for
+  #     # GitHub-hosted runner images, which fails on this self-hosted runner
+  #     # ("Error happened during Python installation"). win_vm_runner already has
+  #     # a machine-wide Python on PATH (installed for exactly this purpose), so
+  #     # skip the action's own setup and let it use that one instead.
+  #     - uses: jurplel/install-qt-action@v4
+  #       with:
+  #         version: ${{ env.QT_VERSION }}
+  #         cache: true
+  #         setup-python: false
+  #
+  #     # See ci.yml for the full explanation.
+  #     - name: Configure
+  #       env:
+  #         CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+  #       run: cmake --preset release
+  #
+  #     - name: Get project version
+  #       id: version
+  #       shell: bash
+  #       run: |
+  #         version=$(grep -m1 '^CMAKE_PROJECT_VERSION:' build-release/CMakeCache.txt | cut -d= -f2)
+  #         name="romanian_whist_desktop-$version-windows"
+  #         echo "version=$version" >> "$GITHUB_OUTPUT"
+  #         echo "name=$name" >> "$GITHUB_OUTPUT"
+  #         echo "prefix=${GITHUB_WORKSPACE//\\//}/staging/$name" >> "$GITHUB_OUTPUT"
+  #
+  #     # The default generator here is multi-config Visual Studio, which ignores
+  #     # CMAKE_BUILD_TYPE. The build preset's "configuration": "Release" is what
+  #     # actually selects Release.
+  #     - name: Build
+  #       run: cmake --build --preset release
+  #
+  #     - name: Test
+  #       run: ctest --preset release --output-on-failure --no-tests=error
+  #
+  #     - name: Deploy
+  #       shell: bash
+  #       run: cmake --install build-release --config Release --prefix "${{ steps.version.outputs.prefix }}"
+  #
+  #     - name: Verify the deploy
+  #       shell: bash
+  #       run: |
+  #         if [ -z "$(find staging -name 'Qt6Widgets.dll' -print -quit)" ]; then
+  #           echo "::error::No Qt libraries in the staging tree - windeployqt did nothing."
+  #           find staging
+  #           exit 1
+  #         fi
+  #         if [ -z "$(find staging -name 'qwindows.dll' -print -quit)" ]; then
+  #           echo "::error::No platform plugin in the staging tree - the app cannot start."
+  #           find staging
+  #           exit 1
+  #         fi
+  #
+  #     - name: Archive
+  #       shell: bash
+  #       working-directory: staging
+  #       run: cmake -E tar cf "../${{ steps.version.outputs.name }}.zip" --format=zip "${{ steps.version.outputs.name }}"
+  #
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v7
+  #       with:
+  #         name: ${{ steps.version.outputs.name }}
+  #         path: ${{ steps.version.outputs.name }}.zip
+  #         archive: false   # see the note in build-linux above
