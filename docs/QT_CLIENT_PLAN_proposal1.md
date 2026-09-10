@@ -2385,6 +2385,13 @@ A sheet slides down over the table:
   > waits, and the window only ever *releases* — a release that arrives late is harmless, a hold that
   > arrives late holds nothing.
 
+  > **AND THE HOLD IS THE DWELL, not a wait after it — D2's review found the other half of the same
+  > mistake.** Both exist so the player can read the frame, so stacking them means Continue has to
+  > wait the dwell out before anything moves: up to 2.4s at the bottom of the speed slider. `pace()`
+  > skips its timed half whenever it arrives already held, which states the rule once for all five
+  > of its call sites. Note that the fastest speed hides this defect exactly as it hid the one
+  > above — a test that pins either has to run at a **non-zero** dwell.
+
 ### 16.2 The end of the game
 
 ```

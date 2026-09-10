@@ -277,6 +277,10 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // stood for 0ms, and the 1.2s landed on onRoundComplete's advanced-index
     // frame - a next round with no trump, no bets and nothing played.
     //
+    // THIS IS THE UNWAITED PATH'S DWELL. On the waited path the hold above IS the
+    // beat, and pace() takes no timed wait at all - see the guard at the top of
+    // it, and D2's review for what stacking the two cost.
+    //
     // TerminalRomanianWhist does it this way too: it draws in onRoundScored()
     // and pauses there, and does not override onRoundComplete() at all. Its
     // roundPause() waits out the same option trickPause() uses, so matching it
@@ -315,16 +319,30 @@ void GameBridge::onGameStopped(const GameEngine&)
 void GameBridge::pace(std::chrono::milliseconds delay)
 {
     std::unique_lock lock(pacingMutex);
-    pacingCv.wait_for(lock, delay, [this]{ return pacingCancelled; });
+
+    // NO TIMED DWELL ON A FRAME THAT IS ALREADY HELD. A dwell and a hold are the
+    // same beat - both exist so the player can read the frame - and the hold is
+    // the longer one, because it ends when the player says so. Stacking them
+    // means a release has to wait the dwell out before anything moves: D2 shipped
+    // that in onRoundScored(), where the frozen half was up to 2.4s of a Continue
+    // click doing nothing at the bottom of the speed slider.
+    //
+    // The frame is published BEFORE pace() at every call site, so it is on screen
+    // for the whole hold either way and nothing is skipped by skipping this.
+    //
+    // Read under the lock this already holds, so it costs no new synchronisation.
+    if(!pacingPaused)
+        pacingCv.wait_for(lock, delay, [this]{ return pacingCancelled; });
 
     // RETURNS on cancel. Does NOT throw - see the header. Getting this backwards
     // makes the clean shutdown path unreachable.
 
     // AND THEN HOLDS, indefinitely, while the game is paused. Written as a
     // second wait rather than folded into the predicate above so that the beat
-    // is still a beat: a pause landing mid-delay waits the delay out first and
+    // is still a beat: a pause landing MID-DELAY waits the delay out first and
     // then holds, which costs at most one botBeat() of latency and keeps the
-    // timed half exactly what it was.
+    // timed half exactly what it was. Only a pause that was already set when we
+    // arrived skips it, which is the guard above.
     //
     // pacingCancelled is in BOTH predicates, and that is the escape. Only
     // cancelPacing() can end this wait, and GameController::stop() calls it

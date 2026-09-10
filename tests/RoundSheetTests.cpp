@@ -116,8 +116,8 @@ TEST_CASE("The streak warning fires on four, and only on four", "[round-sheet]")
     // onRoundScored() fires.
     const auto warnsAtLoss = [](unsigned int streak)
     {
-        return roundsheet::streakWarning(
-                   roundResult({ seatResult("Ana", -1, 30, 0, streak) })).has_value();
+        return !roundsheet::streakWarnings(
+                    roundResult({ seatResult("Ana", -1, 30, 0, streak) })).isEmpty();
     };
 
     REQUIRE_FALSE(warnsAtLoss(0));
@@ -131,22 +131,51 @@ TEST_CASE("The streak warning fires on four, and only on four", "[round-sheet]")
 
 TEST_CASE("The streak warning names the seat and both directions", "[round-sheet]")
 {
-    const std::optional<QString> missing =
-        roundsheet::streakWarning(roundResult({ seatResult("Ana", -1, 30, 0, 4) }));
+    const QStringList missing =
+        roundsheet::streakWarnings(roundResult({ seatResult("Ana", -1, 30, 0, 4) }));
 
-    REQUIRE(missing.has_value());
-    REQUIRE(missing->contains(QStringLiteral("Ana")));
-    REQUIRE(missing->contains(QStringLiteral("10")));
+    REQUIRE(missing.size() == 1);
+    REQUIRE(missing.at(0).contains(QStringLiteral("Ana")));
+    REQUIRE(missing.at(0).contains(QStringLiteral("10")));
 
-    const std::optional<QString> hitting =
-        roundsheet::streakWarning(roundResult({ seatResult("Bogdan", 7, 30, 4, 0) }));
+    const QStringList hitting =
+        roundsheet::streakWarnings(roundResult({ seatResult("Bogdan", 7, 30, 4, 0) }));
 
-    REQUIRE(hitting.has_value());
-    REQUIRE(hitting->contains(QStringLiteral("Bogdan")));
+    REQUIRE(hitting.size() == 1);
+    REQUIRE(hitting.at(0).contains(QStringLiteral("Bogdan")));
 
     // The two are different sentences: one is a cost and the other a reward, and
     // a warning that read the same either way would be worse than none.
-    REQUIRE(*missing != *hitting);
+    REQUIRE(missing.at(0) != hitting.at(0));
+}
+
+TEST_CASE("Every seat on four is warned, not just the first", "[round-sheet]")
+{
+    // D2'S REVIEW FINDING. The first version returned from inside the loop, so a
+    // round where two players are both on four warned about one of them - and
+    // the other never learned that their fifth costs or earns 10, which is the
+    // whole reason this payload is built on the game thread at all.
+    //
+    // ONE OF EACH DIRECTION, which is what also catches the sharper half of the
+    // bug: an earlier seat's WIN streak used to silence a later seat's LOSS
+    // streak, and a fix that collected the seats but reused one sentence for
+    // both would still be wrong.
+    const QStringList lines = roundsheet::streakWarnings(
+        roundResult({ seatResult("Ana", 7, 30, 4, 0),
+                      seatResult("Bogdan", 3, 30),        // on neither
+                      seatResult("Cristina", -1, 30, 0, 4) }));
+
+    REQUIRE(lines.size() == 2);
+
+    REQUIRE(lines.at(0).contains(QStringLiteral("Ana")));
+    REQUIRE(lines.at(1).contains(QStringLiteral("Cristina")));
+
+    // The seat on neither is not named anywhere in either line.
+    REQUIRE_FALSE(lines.join(QLatin1Char('\n')).contains(QStringLiteral("Bogdan")));
+
+    // Ana is up and Cristina is down, so these must be the two DIFFERENT
+    // sentences rather than one sentence with two names in it.
+    REQUIRE(lines.at(0) != lines.at(1));
 }
 
 TEST_CASE("The streak warning is silent when the next round deals one card", "[round-sheet]")
@@ -160,10 +189,10 @@ TEST_CASE("The streak warning is silent when the next round deals one card", "[r
     // round: no snapshot carries it, and the GUI thread may not ask the engine.
     RoundResult result = roundResult({ seatResult("Ana", -1, 30, 0, 4) });
 
-    REQUIRE(roundsheet::streakWarning(result).has_value());
+    REQUIRE_FALSE(roundsheet::streakWarnings(result).isEmpty());
 
     result.nextRoundCountsForStreaks = false;
-    REQUIRE_FALSE(roundsheet::streakWarning(result).has_value());
+    REQUIRE(roundsheet::streakWarnings(result).isEmpty());
 }
 
 TEST_CASE("The sheet draws a row for every seat, and rebuilds between rounds",
@@ -221,6 +250,14 @@ TEST_CASE("The sheet shows the streak warning only when there is one", "[round-s
 
     sheet.showResult(roundResult({ seatResult("Ana", -1, 34, 0, 4) }));
     REQUIRE(warningLabel()->text().contains(QStringLiteral("Ana")));
+
+    // TWO SEATS ON FOUR PUT BOTH IN THE LABEL, joined rather than one of them
+    // dropped - the widget half of the case above.
+    sheet.showResult(roundResult({ seatResult("Ana", -1, 34, 0, 4),
+                                   seatResult("Bogdan", 7, 34, 4, 0) }));
+
+    REQUIRE(warningLabel()->text().contains(QStringLiteral("Ana")));
+    REQUIRE(warningLabel()->text().contains(QStringLiteral("Bogdan")));
 
     // AND IT GOES AWAY AGAIN. A warning left standing from the round before is
     // worse than none at all - it names a streak that has just been broken.

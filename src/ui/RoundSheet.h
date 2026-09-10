@@ -6,9 +6,8 @@
 
 #include <QCoreApplication>
 #include <QString>
+#include <QStringList>
 #include <QWidget>
-
-#include <optional>
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
@@ -40,10 +39,16 @@ QString arrowFor(const RoundSeatResult& seat);
 // allows no cue that is colour alone, and the widget colours this as well.
 QString roundScoreFor(const RoundSeatResult& seat);
 
-// SECTION 16.1's WARNING LINE, and the reason RoundResult exists rather than the
-// sheet reading a snapshot. The engine awards +/-10 on the FIFTH consecutive
+// SECTION 16.1's WARNING LINES, and the reason RoundResult exists rather than
+// the sheet reading a snapshot. The engine awards +/-10 on the FIFTH consecutive
 // exact bid or miss, and a player has no way to see that coming without counting
 // rounds.
+//
+// ONE LINE PER SEAT ON FOUR, in table order, and D2 shipped this returning after
+// the first: a second player on four is exactly as entitled to the warning as
+// the first, and the round where two of them are is the round it matters most.
+// The early return also let an earlier seat's WIN streak silence a later seat's
+// LOSS streak, which is the half no eye would have caught.
 //
 // FOUR MEANS THE NEXT ONE IS THE FIFTH. Scoreboard::calculateScores() updates
 // the streaks before onRoundScored() fires, so the counts in the result already
@@ -56,7 +61,7 @@ QString roundScoreFor(const RoundSeatResult& seat);
 // because only the game thread could ask.
 //
 // Empty when nobody is on four, which is most rounds.
-std::optional<QString> streakWarning(const RoundResult& result);
+QStringList streakWarnings(const RoundResult& result);
 
 } // namespace roundsheet
 

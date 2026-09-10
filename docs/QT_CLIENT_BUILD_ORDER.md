@@ -1005,6 +1005,8 @@ Symptom first, because that is what you have.
 | The round sheet does not hold the game, but only at the fastest speed | The hold is being set from the GUI on a queued signal, and `onRoundScored()` paces immediately after emitting. It belongs on `Pacing`, set by the bridge before it waits | §16.1, D2's findings |
 | A panel's old rows are drawn under its new ones | `deleteLater()` on widgets taken out of a layout — they stay parented at their last geometry until the loop runs. Fine once a game, not once a round | D2's findings |
 | The Menu button does nothing for a second after each round | The pause guard is testing whether the round sheet is VISIBLE rather than whether it is HOLDING | D2's findings |
+| Continue does nothing for up to 2.4s, and only at the slower speeds | A dwell and a hold stacked on the same frame. They are ONE beat — `pace()` skips its timed half when it arrives already held, or the release has to wait the dwell out before anything moves. Note the whole family of these is invisible at `FastestSpeed`, where every dwell is 0 | §16.1, D2's review |
+| Only one player is warned about their streak | `streakWarning()` returned from inside its loop. Two seats can be on four in the same round, and an earlier seat's win streak then silences a later seat's loss streak | §16.1, D2's review |
 
 ---
 

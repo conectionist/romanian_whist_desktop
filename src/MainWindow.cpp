@@ -76,12 +76,15 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&controller, &GameController::gameOver,     this, &MainWindow::onGameOver);
     connect(&controller, &GameController::gameFailed,   this, &MainWindow::showFailure);
 
+    // SECTION 16.1's SHEET, on the payload section 21.3 asked for. Registered as
+    // a metatype in MetaTypes.cpp alongside the two prompts below, and for the
+    // same reason.
+    connect(&controller, &GameController::roundScored,   this, &MainWindow::onRoundScored);
+
     // THE TWO PROMPTS, connected here with the rest and for the same reasons.
     // They carry BetPrompt and PlayPrompt, which main() registered as metatypes
     // before this constructor ran - an unregistered one is dropped with a line
     // on stderr and no crash, which reads as the game hanging on your turn.
-    connect(&controller, &GameController::roundScored,   this, &MainWindow::onRoundScored);
-
     connect(&controller, &GameController::betRequested,  this, &MainWindow::onBetRequested);
     connect(&controller, &GameController::cardRequested, this, &MainWindow::onCardRequested);
 

@@ -192,6 +192,58 @@ TEST_CASE("setPaused() holds pace() past its delay, and resuming releases it", "
     REQUIRE(std::chrono::steady_clock::now() - resumed < std::chrono::seconds(5));
 }
 
+TEST_CASE("A pace entered while paused takes no dwell after the release", "[bridge]")
+{
+    // D2's REVIEW FINDING, and the reason this is the one pacing case that must
+    // NOT use instant(): at a zero dwell it passes whether the fix is there or
+    // not, which is exactly why the MainWindow case above it - running at
+    // FastestSpeed - could not see the bug. A 300ms dwell is what makes the
+    // stacked wait measurable.
+    //
+    // What it pins: the hold and the dwell are ONE beat. onRoundScored() holds
+    // the game and then paces it, and before the guard in pace() the release had
+    // to wait the dwell out before anything moved - up to 2.4s of a Continue
+    // click doing nothing at the bottom of the speed slider.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, Pacing{ std::chrono::milliseconds(0),
+                                            std::chrono::milliseconds(0),
+                                            std::chrono::milliseconds(300) });
+    bridge.setPaused(true);
+
+    std::atomic<bool> returned{false};
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    // OBSERVED, THEN ASSERTED AFTER THE JOIN, for the reason the case above
+    // records: a REQUIRE that unwinds past an unjoined std::thread is
+    // std::terminate, so the mutation this exists to catch would abort the run
+    // rather than fail one case.
+    //
+    // Comfortably inside the dwell, so a bridge that skipped the HOLD instead of
+    // the dwell fails here rather than passing on a technicality.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const bool heldWhilePaused = !returned;
+
+    const auto resumed = std::chrono::steady_clock::now();
+    bridge.setPaused(false);
+    worker.join();
+    const auto afterRelease = std::chrono::steady_clock::now() - resumed;
+
+    REQUIRE(heldWhilePaused);
+
+    // THE FINDING ITSELF. Stacked, this would be the ~200ms of dwell still
+    // standing when the release landed; skipped, the release IS the return.
+    // Generous enough that a loaded machine cannot fail it, tight enough that
+    // two thirds of a 300ms dwell cannot hide inside it.
+    REQUIRE(afterRelease < std::chrono::milliseconds(150));
+}
+
 TEST_CASE("cancelPacing() releases a PAUSED pace(), and still does not throw", "[bridge]")
 {
     // THE ONE THAT MATTERS, and the reason the pause was built before any menu

@@ -106,6 +106,12 @@ private slots:
     // fires on that path, so this is the only report the window gets.
     void showFailure(QString what);
 
+    // Section 16.1's sheet, from the payload section 21.3 asked for. The only
+    // slot in this window that receives a round rather than a frame - which is
+    // why it is here and not down with the two prompts, whose caching story
+    // below has nothing to do with it.
+    void onRoundScored(RoundResult result);
+
     // THE ENGINE IS PARKED IN THE PROVIDER FROM EITHER OF THESE UNTIL ITS ANSWER,
     // which is as long as the player takes. Both take their prompt BY VALUE -
     // what a queued signal delivers - and both cache it, because the answer
@@ -115,10 +121,6 @@ private slots:
     // answer later than the signal. C2 added activeBetPrompt with the panel that
     // needed it and C3 activePrompt with the fan, and in both the cached promptId
     // is what actually gates a stale submission - not the widget being disabled.
-    // Section 16.1's sheet, from the payload section 21.3 asked for. The only
-    // slot in this window that receives a round rather than a frame.
-    void onRoundScored(RoundResult result);
-
     void onBetRequested(BetPrompt prompt);
     void onCardRequested(PlayPrompt prompt);
 

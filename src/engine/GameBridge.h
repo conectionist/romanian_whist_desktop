@@ -213,6 +213,11 @@ private:
     // TWO WAITS SINCE D1, not one: the timed beat, and then an indefinite hold
     // while `paused`. See setPaused() above for why the second one is the
     // dangerous half.
+    //
+    // AND THE TIMED HALF IS SKIPPED ENTIRELY when the game is ALREADY held on
+    // arrival, because then the hold is the beat and waiting out a dwell first
+    // only delays the release. A pause that lands mid-delay still waits it out -
+    // the body says why the two cases differ.
     void pace(std::chrono::milliseconds delay);
 
     // Absent in a spectator game, which makes both helpers one-liners rather

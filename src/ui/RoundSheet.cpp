@@ -58,7 +58,7 @@ QString roundsheet::roundScoreFor(const RoundSeatResult& seat)
                                : QString::number(seat.roundScore);
 }
 
-std::optional<QString> roundsheet::streakWarning(const RoundResult& result)
+QStringList roundsheet::streakWarnings(const RoundResult& result)
 {
     // SILENT WHEN THE NEXT ROUND CANNOT COUNT, and this is the first thing
     // checked rather than the last, because it makes every warning below true or
@@ -67,25 +67,31 @@ std::optional<QString> roundsheet::streakWarning(const RoundResult& result)
     //
     // Also false on the final round, where there is no next round at all.
     if(!result.nextRoundCountsForStreaks)
-        return std::nullopt;
+        return {};
 
+    QStringList lines;
+
+    // EVERY SEAT ON FOUR, and the loop runs to the end rather than returning
+    // from inside it - see the header for what returning early cost. Table
+    // order, which is the order the rows above are drawn in.
     for(const RoundSeatResult& seat : result.seats)
     {
         // EXACTLY four, in either direction. Five has already paid out and three
         // is too early to be worth a line - and the two counters are never both
-        // engaged, because a round that advances one resets the other.
+        // engaged, because a round that advances one resets the other, so the
+        // order of these two within a seat decides nothing.
         if(seat.lossStreak == warnAt)
-            return QCoreApplication::translate(
-                       "roundsheet", "%1 has missed four in a row - a fifth costs %2.")
-                .arg(QString::fromStdString(seat.name), QString::number(10));
+            lines.append(QCoreApplication::translate(
+                             "roundsheet", "%1 has missed four in a row - a fifth costs %2.")
+                             .arg(QString::fromStdString(seat.name), QString::number(10)));
 
         if(seat.winStreak == warnAt)
-            return QCoreApplication::translate(
-                       "roundsheet", "%1 has hit four in a row - a fifth is worth %2.")
-                .arg(QString::fromStdString(seat.name), QString::number(10));
+            lines.append(QCoreApplication::translate(
+                             "roundsheet", "%1 has hit four in a row - a fifth is worth %2.")
+                             .arg(QString::fromStdString(seat.name), QString::number(10)));
     }
 
-    return std::nullopt;
+    return lines;
 }
 
 // ---- the widget ----
@@ -280,10 +286,14 @@ void RoundSheet::showResult(const RoundResult& result)
     for(const RoundSeatResult& seat : result.seats)
         addRow(seat);
 
-    const std::optional<QString> line = roundsheet::streakWarning(result);
+    // ONE LABEL, NOT ONE PER LINE. The label already wraps and the panel is
+    // sized to what it holds below, so joining costs no layout - and at most six
+    // seats can be on four at once, which in practice is one and occasionally
+    // two.
+    const QStringList lines = roundsheet::streakWarnings(result);
 
-    warning->setText(line.value_or(QString()));
-    warning->setVisible(line.has_value());
+    warning->setText(lines.join(QLatin1Char('\n')));
+    warning->setVisible(!lines.isEmpty());
 
     // The panel is rebuilt per round and the seat count can differ between
     // games, so it is sized to what it now holds rather than to what it held.
