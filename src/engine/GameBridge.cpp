@@ -187,13 +187,79 @@ void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int tr
     pace(pacing.trickDwell);
 }
 
+RoundResult GameBridge::buildRoundResult(const GameEngine& engine) const
+{
+    RoundResult result;
+
+    const unsigned int index = engine.getCurrentRoundIndex();
+
+    result.roundNumber = index + 1;          // getCurrentRoundIndex() is 0-based
+    result.roundCount = engine.getRoundCount();
+    result.trickCount = engine.getCurrentRoundTrickCount();
+    result.roundType = engine.getCurrentRoundType();
+
+    const std::optional<Card> trump = engine.getCurrentTrumpCard();
+    result.hasTrump = trump.has_value();
+    if(trump)
+        result.trump = *trump;
+
+    // THE FIELD THIS TYPE EXISTS FOR. One-card rounds count for neither
+    // direction of a streak, so a warning that the next miss costs 10 is wrong
+    // when the next round deals one card. The schedule was laid out at start(),
+    // so the round after this one already exists and can be asked - from HERE,
+    // on the game thread, and nowhere else.
+    //
+    // The final round has no next round, so nothing can be warned about.
+    if(index + 1 < result.roundCount)
+        result.nextRoundCountsForStreaks = engine.getRound(index + 1).getTrickCount() != 1;
+
+    const auto& players = engine.getPlayers();
+    const unsigned int playerCount = engine.getPlayerCount();
+
+    result.seats.resize(playerCount);
+
+    for(unsigned int i = 0 ; i < playerCount ; i++)
+    {
+        const romanian_whist::Player& player = players.at(i);
+        RoundSeatResult& seat = result.seats[i];
+        const Seat at{ i };
+
+        seat.name = player.getName();
+        seat.seatIndex = i;
+        seat.isHuman = isHuman(at);
+
+        const std::optional<unsigned int> bet = engine.getBet(at);
+        seat.hasBet = bet.has_value();
+        if(bet)
+            seat.bet = *bet;
+
+        seat.tricksWon = engine.getTricksWon(at);
+
+        // NOT SUMMED HERE, and the sheet is what adds them. Inside this callback
+        // the round score is what the round was worth and the total is the one
+        // it has not been folded into yet - which is exactly the pair section
+        // 16.1 draws as "34 -> 41".
+        seat.roundScore = engine.getRoundScore(at);
+        seat.totalScore = engine.getTotalScore(at);
+
+        seat.winStreak = player.getConsecutiveWins();
+        seat.lossStreak = player.getConsecutiveLosses();
+    }
+
+    return result;
+}
+
 void GameBridge::onRoundScored(const GameEngine& engine)
 {
     // This callback and not onRoundComplete: it is the last one at which the
     // engine still names the round just scored, so a round sheet drawn from it
     // shows the right round's numbers.
     publish(engine);
-    emit roundScored();
+
+    // BUILT BEFORE THE PACE, on the game thread, out of an engine that is about
+    // to move on. By onRoundComplete() the index has advanced and every number
+    // above would be attributed to the next round.
+    emit roundScored(buildRoundResult(engine));
 
     // AND THE DWELL BELONGS HERE, on the frame that carries the result, not on
     // the blank one after it. Measured in phase A's log with the two the other

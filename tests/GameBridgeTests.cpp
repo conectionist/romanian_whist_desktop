@@ -7,6 +7,7 @@
 
 #include <romanian_whist/GameEngine.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -468,6 +469,155 @@ TEST_CASE("A game that ends on its own reports winners, not a first row", "[brid
         REQUIRE(winner.place == 1);
         REQUIRE(winner.score == standings.front().score);
     }
+}
+
+TEST_CASE("The round result reports the round it was scored in", "[bridge]")
+{
+    // SECTION 21.3's PAYLOAD, and the assertion is about WHEN it is built rather
+    // than what is in it. onRoundScored() is the last callback at which
+    // getCurrentRoundIndex() still names the round being reported; by
+    // onRoundComplete() the index has advanced and every number would be
+    // attributed to the next round.
+    //
+    // Driven through a real seeded game rather than a hand-built engine, so the
+    // numbers are the engine's own.
+    GameEngine engine;
+    engine.start(fixtures::buildSetup(2, 42u));
+
+    GameBridge bridge(std::nullopt, instant());
+
+    std::vector<RoundResult> results;
+    QObject::connect(&bridge, &GameBridge::roundScored,
+                     [&results](RoundResult result){ results.push_back(std::move(result)); });
+
+    engine.addObserver(&bridge);
+    engine.run();
+
+    REQUIRE_FALSE(results.empty());
+    REQUIRE(results.size() == engine.getRoundCount());
+
+    // ONE PER ROUND, IN ORDER, EACH NAMING ITS OWN. A result built one callback
+    // later would be off by one everywhere but the last round - where the index
+    // does not advance at all, which is A6's finding and the reason an off-by-one
+    // here would otherwise hide in the final row.
+    for(std::size_t i = 0 ; i < results.size() ; i++)
+    {
+        INFO("result " << i);
+        REQUIRE(results[i].roundNumber == i + 1);
+        REQUIRE(results[i].roundCount == engine.getRoundCount());
+        REQUIRE(results[i].trickCount == engine.getRound(static_cast<unsigned int>(i)).getTrickCount());
+        REQUIRE(results[i].roundType == engine.getRound(static_cast<unsigned int>(i)).getRoundType());
+        REQUIRE(results[i].seats.size() == engine.getPlayerCount());
+    }
+}
+
+TEST_CASE("The round result carries the score and the total it is not yet in", "[bridge]")
+{
+    // THE TWO HALVES OF "34 -> 41". IGameObserver.h is explicit that inside this
+    // callback getRoundScore() is what the round was worth and getTotalScore()
+    // is the committed total it has NOT been folded into - so the projection is
+    // their sum, and a client that read one for the other would be wrong on
+    // every row of every sheet.
+    //
+    // Asserted as a RUNNING TOTAL across the game, which is what makes it a test
+    // of the split rather than of arithmetic: each round's `totalScore` must
+    // equal the previous round's projection.
+    GameEngine engine;
+    engine.start(fixtures::buildSetup(2, 42u));
+
+    GameBridge bridge(std::nullopt, instant());
+
+    std::vector<RoundResult> results;
+    QObject::connect(&bridge, &GameBridge::roundScored,
+                     [&results](RoundResult result){ results.push_back(std::move(result)); });
+
+    engine.addObserver(&bridge);
+    engine.run();
+
+    REQUIRE(results.size() > 1);
+
+    // The first round starts from nothing committed.
+    for(const RoundSeatResult& seat : results.front().seats)
+        REQUIRE(seat.totalScore == 0);
+
+    for(std::size_t i = 1 ; i < results.size() ; i++)
+    {
+        for(std::size_t s = 0 ; s < results[i].seats.size() ; s++)
+        {
+            const RoundSeatResult& now = results[i].seats[s];
+            const RoundSeatResult& before = results[i - 1].seats[s];
+
+            INFO("round " << i + 1 << ", seat " << now.name);
+            REQUIRE(now.totalScore == before.totalScore + before.roundScore);
+        }
+    }
+
+    // And the last projection is the score the game actually ends on, which ties
+    // the whole chain to something outside it.
+    for(const Standing& standing : engine.getStandings())
+    {
+        const RoundSeatResult& last = results.back().seats.at(standing.seat.index);
+
+        INFO("final standing for " << standing.name);
+        REQUIRE(last.totalScore + last.roundScore == standing.score);
+    }
+}
+
+TEST_CASE("The round result says whether the NEXT round counts for streaks", "[bridge]")
+{
+    // THE ONE FIELD NO SNAPSHOT COULD CARRY, and the reason RoundResult exists
+    // rather than the sheet reading lastSnapshot. One-card rounds count for
+    // neither direction of a streak, so section 16.1's "a fifth costs 10" is
+    // wrong whenever the next round deals one card - and only the game thread
+    // can ask getRound(index + 1).
+    GameEngine engine;
+    engine.start(fixtures::buildSetup(2, 42u));
+
+    GameBridge bridge(std::nullopt, instant());
+
+    std::vector<RoundResult> results;
+    QObject::connect(&bridge, &GameBridge::roundScored,
+                     [&results](RoundResult result){ results.push_back(std::move(result)); });
+
+    engine.addObserver(&bridge);
+    engine.run();
+
+    REQUIRE(results.size() == engine.getRoundCount());
+
+    for(std::size_t i = 0 ; i < results.size() ; i++)
+    {
+        const bool isLast = i + 1 == results.size();
+
+        INFO("round " << i + 1 << " of " << results.size());
+
+        if(isLast)
+        {
+            // NO NEXT ROUND TO COUNT. The default schedule ends with a Forehead
+            // and a Hidden round, both one card, so a version that read this off
+            // the CURRENT round would also answer false here - which is why the
+            // loop below matters more than this line.
+            REQUIRE_FALSE(results[i].nextRoundCountsForStreaks);
+            continue;
+        }
+
+        const unsigned int nextCards =
+            engine.getRound(static_cast<unsigned int>(i) + 1).getTrickCount();
+
+        REQUIRE(results[i].nextRoundCountsForStreaks == (nextCards != 1));
+    }
+
+    // AND BOTH ANSWERS ACTUALLY OCCUR in this schedule, so the loop above cannot
+    // pass by the field being constant. A 1-8-1 game opens with one-card rounds
+    // and climbs, so it has both.
+    const auto counts = [&results](bool value)
+    {
+        return std::count_if(results.begin(), results.end(),
+                             [value](const RoundResult& r)
+                             { return r.nextRoundCountsForStreaks == value; });
+    };
+
+    REQUIRE(counts(true) > 0);
+    REQUIRE(counts(false) > 0);
 }
 
 TEST_CASE("A stopped game reports gameStopped and never gameOver", "[bridge]")

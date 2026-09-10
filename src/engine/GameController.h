@@ -198,7 +198,7 @@ signals:
     void trickStarted(unsigned int trickNumber, unsigned int leader);
     void cardPlayed(unsigned int seat, romanian_whist::Card card);
     void trickWon(unsigned int seat, unsigned int trickNumber);
-    void roundScored();
+    void roundScored(RoundResult result);
     void gameOver(std::vector<romanian_whist::Standing> standings,
                   std::vector<romanian_whist::Standing> winners);
     void gameStopped();

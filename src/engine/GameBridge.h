@@ -2,6 +2,7 @@
 #define GAME_BRIDGE_H
 
 #include "Prompts.h"
+#include "RoundResult.h"
 
 #include "core/GameSnapshot.h"
 
@@ -97,7 +98,11 @@ signals:
     void trickStarted(unsigned int trickNumber, unsigned int leader);
     void cardPlayed(unsigned int seat, romanian_whist::Card card);
     void trickWon(unsigned int seat, unsigned int trickNumber);
-    void roundScored();
+    // CARRIES THE ROUND IT REPORTS since D2. Section 21.3: the engine stores no
+    // per-round score, and this is the only callback at which one can be read
+    // against the right round index - so a payload-less signal leaves the round
+    // sheet nothing to draw and phase E's history nothing to accumulate.
+    void roundScored(RoundResult result);
     void gameOver(std::vector<romanian_whist::Standing> standings,
                   std::vector<romanian_whist::Standing> winners);
     void gameStopped();
@@ -174,6 +179,12 @@ private:
     // Snapshots on the GAME thread and emits the result by value. The GUI thread
     // must never reach into the engine, which has no thread safety at all.
     void publish(const romanian_whist::GameEngine& engine);
+
+    // The round just scored, read off the engine on the GAME thread. Separate
+    // from publish() because it is built once per round rather than twelve times
+    // a trick, and because it reads one thing no snapshot does - see
+    // RoundResult.h.
+    RoundResult buildRoundResult(const romanian_whist::GameEngine& engine) const;
 
     // An INTERRUPTIBLE wait, and one that RETURNS on cancellation rather than
     // throwing. That distinction is the whole of the shutdown story: returning
