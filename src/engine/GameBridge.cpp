@@ -261,6 +261,16 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // above would be attributed to the next round.
     emit roundScored(buildRoundResult(engine));
 
+    // HELD BEFORE THE WAIT, ON THIS THREAD, and not by the window that shows the
+    // sheet. The emit above is queued: a window that set the hold on receiving
+    // it would be racing the two lines below, and at the top of the speed slider
+    // - where the dwell is zero - it loses every time.
+    //
+    // The window RELEASES it, on Continue. A release that arrives late is
+    // harmless; a hold that arrives late does not hold anything.
+    if(pacing.waitAfterEachRound)
+        setPaused(true);
+
     // AND THE DWELL BELONGS HERE, on the frame that carries the result, not on
     // the blank one after it. Measured in phase A's log with the two the other
     // way round: onRoundScored published the result and returned, so that frame

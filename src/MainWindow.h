@@ -4,6 +4,7 @@
 #include "core/GameSnapshot.h"
 #include "engine/GameController.h"
 #include "engine/Prompts.h"
+#include "engine/RoundResult.h"
 #include "paint/Theme.h"
 #include "ui/NewGameDialog.h"
 
@@ -35,6 +36,7 @@ class InfoStrip;
 class MainMenuPage;
 class PauseOverlay;
 class PromptBar;
+class RoundSheet;
 class ScoreboardWidget;
 class TableScene;
 class TableView;
@@ -113,6 +115,10 @@ private slots:
     // answer later than the signal. C2 added activeBetPrompt with the panel that
     // needed it and C3 activePrompt with the fan, and in both the cached promptId
     // is what actually gates a stale submission - not the widget being disabled.
+    // Section 16.1's sheet, from the payload section 21.3 asked for. The only
+    // slot in this window that receives a round rather than a frame.
+    void onRoundScored(RoundResult result);
+
     void onBetRequested(BetPrompt prompt);
     void onCardRequested(PlayPrompt prompt);
 
@@ -186,6 +192,15 @@ private:
     // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
     void setPauseMenuVisible(bool visible);
 
+    // THE ONLY CALLER OF GameController::setPaused(). Two things can want a game
+    // held now - the pause menu and the round sheet - and two callers writing
+    // one flag is the defect setPauseMenuVisible() was shaped to prevent. See
+    // the body.
+    void applyHold();
+
+    void showRoundSheet(const RoundResult& result);
+    void hideRoundSheet();
+
     // Raises section 16.2's panel over the table it was filled from. The three
     // callers are the two endings - onGameOver() and showFailure() - and a Play
     // again the player then cancelled, which must put back what it took down.
@@ -248,6 +263,9 @@ private:
     // is what section 4.1's "publish the last snapshot before emitting gameOver"
     // exists to make possible.
     GameOverPanel* gameOverPanel = nullptr;
+
+    // Section 16.1's sheet, raised over the round it reports.
+    RoundSheet* roundSheet = nullptr;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this
@@ -322,6 +340,16 @@ private:
     // place: without it, abandoning a game to the main menu closes the
     // application. Cleared by startGame(), so it is true for exactly one stop.
     bool returningToMenu = false;
+
+    // THE TWO REASONS A GAME CAN BE HELD, kept apart so that releasing one does
+    // not release the other. applyHold() is what turns them into the single flag
+    // GameBridge owns.
+    bool pauseMenuHolding = false;
+    bool roundSheetHolding = false;
+
+    // Does the round sheet WAIT? From the dialog, per game - section 16.1's
+    // dismissal, and off by default.
+    bool waitAfterEachRound = false;
 
     // WHAT THE TABLE IS SHOWING, and the three states are not two. This was a
     // bool through D1 and the bool is what put the client in a dead end: a

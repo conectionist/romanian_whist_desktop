@@ -13,6 +13,7 @@
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/PromptBar.h"
+#include "ui/RoundSheet.h"
 #include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
 
@@ -79,6 +80,8 @@ MainWindow::MainWindow(QWidget *parent)
     // They carry BetPrompt and PlayPrompt, which main() registered as metatypes
     // before this constructor ran - an unregistered one is dropped with a line
     // on stderr and no crash, which reads as the game hanging on your turn.
+    connect(&controller, &GameController::roundScored,   this, &MainWindow::onRoundScored);
+
     connect(&controller, &GameController::betRequested,  this, &MainWindow::onBetRequested);
     connect(&controller, &GameController::cardRequested, this, &MainWindow::onCardRequested);
 
@@ -214,6 +217,27 @@ void MainWindow::buildTable()
     // 16.2 draws the standings OVER the final state, and section 4.1 publishes
     // the last snapshot before emitting gameOver precisely so that the table
     // underneath this is the game that just ended.
+    // SECTION 16.1's SHEET, the third overlay and the same arrangement as the two
+    // above it. Raised over the round it reports, which is the state the table is
+    // still showing when onRoundScored() fires.
+    roundSheet = new RoundSheet(pages);
+    roundSheet->setTheme(theme);
+    roundSheet->hide();
+
+    connect(roundSheet, &RoundSheet::continueRequested, this, [this]
+    {
+        hideRoundSheet();
+
+        // THE FINAL ROUND HANDS OVER rather than dealing anything - there is no
+        // round 27, which is why the button says Continue in every round rather
+        // than naming one. onGameOver() has already been delivered by then: the
+        // game thread was held inside onRoundScored(), so releasing it runs the
+        // rest of the game out and the panel arrives on its own.
+        //
+        // Nothing to do here for it. The state check is in onGameOver(), which
+        // raises the panel over whatever is on screen.
+    });
+
     gameOverPanel = new GameOverPanel(pages);
     gameOverPanel->setTheme(theme);
     gameOverPanel->hide();
@@ -292,9 +316,21 @@ void MainWindow::showNewGameDialog()
     // A FRESH GameSetup EVERY TIME, never a stashed one: it is move-only and
     // spent by the move into start(), so even the path where start() throws
     // needs the dialog's config re-built rather than a copy kept (section 13).
+    // THE SHEET'S DISMISSAL IS A PER-GAME SETTING, so it is read here with the
+    // rest of what the dialog answered rather than kept on the Config the window
+    // holds for pre-filling - those are the last game's settings, and this is
+    // the game being dealt.
+    waitAfterEachRound = lastConfig.waitAfterEachRound;
+
+    // ON THE Pacing RATHER THAN ONLY HERE, because the bridge is what has to
+    // hold the game - see Pacing::waitAfterEachRound. pacingFor() stays a pure
+    // mapping of the slider, which is what its own tests assert.
+    Pacing pacing = newgame::pacingFor(lastConfig.botSpeed);
+    pacing.waitAfterEachRound = lastConfig.waitAfterEachRound;
+
     startGame(newgame::buildSetup(lastConfig),
               newgame::humanSeatOf(lastConfig),
-              newgame::pacingFor(lastConfig.botSpeed));
+              pacing);
 }
 
 void MainWindow::setPauseMenuVisible(bool visible)
@@ -314,13 +350,38 @@ void MainWindow::setPauseMenuVisible(bool visible)
     if(visible && tableState != TableState::Playing)
         return;
 
+    // NOT OVER A ROUND SHEET THAT IS HOLDING THE GAME. That sheet has its own way
+    // on and its own hold; a pause menu over it would be a second overlay on the
+    // first, and its Resume would look like it should dismiss the sheet. The
+    // game-over panel is protected by tableState above - this one needs saying,
+    // because a game showing a round sheet is still Playing.
+    //
+    // ON THE HOLD AND NOT ON isVisible(), which is the version this was written
+    // as first and which made the Menu button DEAD for a third of a watched
+    // game: with the sheet auto-dismissing it is on screen for the whole trick
+    // dwell after every round, and refusing the menu there refuses it for over a
+    // second at a time, ~26 times a game. Caught by D1's own pause case, which
+    // clicked Menu and found nothing opened.
+    //
+    // A dwelling sheet is transient chrome, so the menu takes precedence and the
+    // sheet goes on the way past.
+    if(visible && roundSheetHolding)
+        return;
+
+    if(visible && roundSheet->isVisible())
+        hideRoundSheet();
+
     // WHEN THE OVERLAY WAS A MODAL QDialog THIS WAS AN RAII GUARD around exec(),
     // and losing that is the one thing this shape gives up: a pause left set
     // parks the game thread in pace() with nothing on screen to release it. So
     // the pause is raised only where it is also shown, and every path that ends
     // a game clears both - startGame() before it prepares, abandonToMenu() with
     // the stop, and closeEvent()'s stop() through cancelPacing() regardless.
-    controller.setPaused(visible);
+    //
+    // THROUGH applyHold() SINCE D2, because the pause menu is no longer the only
+    // reason to hold a game - see there.
+    pauseMenuHolding = visible;
+    applyHold();
 
     if(!visible)
     {
@@ -353,6 +414,53 @@ void MainWindow::showPauseMenu()
     setPauseMenuVisible(true);
 }
 
+void MainWindow::applyHold()
+{
+    // THE ONLY CALLER OF setPaused() IN THE CLIENT, and that is the whole point
+    // of it existing.
+    //
+    // D1 had one reason to hold a game and set the flag where it showed the
+    // menu. D2 adds a second - section 16.1's round sheet, for a player who
+    // asked to be waited for - and two callers writing one flag is the defect
+    // that shape was chosen to prevent, not a new one. They would collide the
+    // first time they overlapped: `tableState` is Playing while the sheet is up,
+    // so Esc opens the pause menu over it, and Resume would then clear the flag
+    // and release the SHEET's hold along with its own.
+    //
+    // So the two reasons are two members, this computes the hold from both, and
+    // GameBridge is untouched - the arbitration belongs to the one object that
+    // knows every reason there is.
+    controller.setPaused(pauseMenuHolding || roundSheetHolding);
+}
+
+void MainWindow::showRoundSheet(const RoundResult& result)
+{
+    roundSheet->showResult(result);
+
+    roundSheet->setGeometry(pages->rect());
+    roundSheet->show();
+    roundSheet->raise();
+
+    if(roundSheetHolding)
+        roundSheet->focusContinue();
+}
+
+void MainWindow::hideRoundSheet()
+{
+    roundSheet->hide();
+
+    // THE HOLD GOES WITH THE SHEET, always, and through applyHold() so that a
+    // pause menu standing at the same time is not released with it.
+    roundSheetHolding = false;
+    applyHold();
+
+    // The keyboard back to the strip if the strip is what is waiting, exactly as
+    // the pause menu returns it - focusContinue() took it, and hiding the button
+    // does not give it back.
+    if(bidStrip->isVisible())
+        bidStrip->setFocus();
+}
+
 void MainWindow::showGameOverPanel()
 {
     gameOverPanel->setGeometry(pages->rect());
@@ -369,6 +477,12 @@ void MainWindow::abandonToMenu()
     // the pause it is hidden already; from the panel it is what was just
     // clicked, and a panel left up would stand over the menu page.
     gameOverPanel->hide();
+
+    // The sheet cannot be up here - the pause menu is unreachable while it is -
+    // but the hold it may have set has to go, and stop() below is what releases
+    // the game thread either way.
+    roundSheet->hide();
+    roundSheetHolding = false;
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
@@ -426,6 +540,9 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 
     if(gameOverPanel && gameOverPanel->isVisible())
         gameOverPanel->setGeometry(pages->rect());
+
+    if(roundSheet && roundSheet->isVisible())
+        roundSheet->setGeometry(pages->rect());
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -537,6 +654,13 @@ void MainWindow::startGame(GameSetup setup, std::optional<Seat> humanSeat, Pacin
     // it opens is answered.
     gameOverPanel->hide();
 
+    // AND THE SHEET, with its hold - a game abandoned from a round sheet would
+    // otherwise leave roundSheetHolding set into the next one, where applyHold()
+    // would pause a game nobody asked to pause.
+    roundSheet->hide();
+    roundSheetHolding = false;
+    pauseMenuHolding = false;
+
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
     returningToMenu = false;
@@ -622,6 +746,16 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     appendLine(snapshotlog::format(*snapshot, elapsed));
 
     lastSnapshot = snapshot;
+
+    // THE SHEET GOES WHEN THE GAME MOVES ON, which is what dismisses it for a
+    // player who did not ask to be waited for: the dwell ends, onRoundComplete()
+    // publishes the next round, and this is where that arrives.
+    //
+    // GUARDED ON THE HOLD rather than hidden unconditionally, because a waited
+    // sheet must survive whatever else is published - and while the game thread
+    // is held inside pace(), nothing is.
+    if(!roundSheetHolding && roundSheet->isVisible())
+        hideRoundSheet();
 
     // THE TABLE AND THE LOG READ THE SAME FRAME, which is what makes the log a
     // diagnostic for the table rather than a second opinion about it: a card in
@@ -880,8 +1014,43 @@ void MainWindow::onGameStopped()
     close();
 }
 
+void MainWindow::onRoundScored(RoundResult result)
+{
+    // THE LAST ROUND OF AN UNATTENDED GAME GETS NO SHEET. Its numbers are the
+    // ones the game-over panel is about to show in full, and a sheet that
+    // flashed for a dwell and was replaced would be two panels in a second.
+    //
+    // A player who asked to be waited for DOES get it, and their Continue is
+    // what hands over to the panel - which is the whole reason that button says
+    // Continue rather than naming a round to deal.
+    const bool finalRound = result.roundNumber >= result.roundCount;
+
+    if(finalRound && !waitAfterEachRound)
+        return;
+
+    // THE WINDOW'S RECORD OF A HOLD THE BRIDGE HAS ALREADY TAKEN. It is not what
+    // pauses the game - onRoundScored() on the game thread is, before it waits,
+    // because a hold set from here would be racing that wait and would lose it
+    // outright at zero dwell (Pacing::waitAfterEachRound).
+    //
+    // What this is for is the RELEASE: applyHold() is the only thing that clears
+    // the flag, and it has to know that a sheet is one of the two reasons it is
+    // set. The applyHold() below therefore re-asserts a hold that is already
+    // taken, which is idempotent, and matters only when a pause menu is up at
+    // the same time.
+    roundSheetHolding = waitAfterEachRound;
+    applyHold();
+
+    showRoundSheet(result);
+}
+
 void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standing> winners)
 {
+    // THE SHEET GOES WHEN THE GAME DOES. On the final round of a waited game the
+    // player is still looking at it when Continue releases the thread, and the
+    // panel below would otherwise be raised behind it.
+    hideRoundSheet();
+
     bidStrip->hide();
     hand->setPlayable(false);
     promptBar->setFields(promptbar::idle());

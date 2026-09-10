@@ -34,6 +34,21 @@ struct Pacing
     std::chrono::milliseconds beat{700};
     std::chrono::milliseconds spectatorBeat{250};
     std::chrono::milliseconds trickDwell{1200};
+
+    // Does the game HOLD at each round result, rather than dwelling on it?
+    // Section 16.1's sheet, for a player who asked to be waited for.
+    //
+    // A PACING KNOB AND NOT A WINDOW FLAG, and that placement is the whole fix
+    // for a race rather than a matter of taste. onRoundScored() emits its result
+    // and goes STRAIGHT into pace(); the emit is queued, so a window that set the
+    // hold on receiving it is setting it after the game thread has already read
+    // the flag and moved on. The 1.2s dwell hides that - at the top of the speed
+    // slider the dwell is ZERO and the hold never lands at all.
+    //
+    // Set here, the bridge holds itself on the game thread before it waits, and
+    // the window only ever RELEASES - which it can do late, because a released
+    // hold that was never taken is a no-op.
+    bool waitAfterEachRound = false;
 };
 
 // The observer. LIVES ON THE GAME THREAD - every IGameObserver method below runs
