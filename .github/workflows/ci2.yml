@@ -125,12 +125,13 @@ jobs:
 
   build-windows:
     name: Build (Windows)
-    # Named runner, not just labels: whist_windows_runner specifically (a
-    # stronger physical laptop) rather than whichever machine has
-    # self-hosted + Windows - see the note above jobs:. Every self-hosted
-    # runner gets its own name as an implicit label, so this is enough on
-    # its own to pin it; self-hosted and Windows are kept alongside it only
-    # as documentation of what it actually is.
+    # Pinned to one machine (whist_windows_runner, a stronger physical
+    # laptop) rather than whichever machine has self-hosted + Windows - see
+    # the note above jobs:. A runner's own name is NOT an implicit label -
+    # runs-on only matches actual labels, default or custom - so
+    # "whist_windows_runner" had to be added to that runner as a custom
+    # label first (Settings -> Actions -> Runners, or the API) for this to
+    # match anything at all.
     runs-on: [self-hosted, Windows, whist_windows_runner]
     steps:
       - uses: actions/checkout@v7
