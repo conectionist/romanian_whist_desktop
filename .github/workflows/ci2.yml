@@ -5,11 +5,14 @@ name: CI (self-hosted)
 # (Windows and Linux). macOS and the release job are omitted intentionally:
 # there is no self-hosted macOS runner, and release needs all three builds.
 #
-# Both jobs target whatever machine is registered with the matching
-# self-hosted + Windows/Linux labels - no per-machine targeting here, so
-# bringing up a replacement runner needs no change to this file. See
-# docs/WINDOWS_SELF_HOSTED_RUNNER_SETUP.md and
-# docs/LINUX_SELF_HOSTED_RUNNER_SETUP.md for what each runner actually needed.
+# build-linux targets whatever machine is registered with the self-hosted +
+# Linux labels - no per-machine targeting there, so bringing up a
+# replacement Linux runner needs no change to this file. build-windows DOES
+# target one machine by name (whist_windows_runner, a stronger physical
+# laptop) rather than staying generic, replacing win_vm_runner - a VM used
+# to prove out the dependency list in docs/WINDOWS_SELF_HOSTED_RUNNER_SETUP.md
+# in the first place. See that doc and docs/LINUX_SELF_HOSTED_RUNNER_SETUP.md
+# for what each runner actually needed.
 #
 # The WSL-hosted attempt (whist_wsl_ubuntu_runner) is stopped rather than
 # fixed: it broke on sudo needing a password, then on a broken Python stdlib
@@ -122,7 +125,13 @@ jobs:
 
   build-windows:
     name: Build (Windows)
-    runs-on: [self-hosted, Windows]
+    # Named runner, not just labels: whist_windows_runner specifically (a
+    # stronger physical laptop) rather than whichever machine has
+    # self-hosted + Windows - see the note above jobs:. Every self-hosted
+    # runner gets its own name as an implicit label, so this is enough on
+    # its own to pin it; self-hosted and Windows are kept alongside it only
+    # as documentation of what it actually is.
+    runs-on: [self-hosted, Windows, whist_windows_runner]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -131,9 +140,10 @@ jobs:
       # setup-python: false - install-qt-action's own actions/setup-python step
       # downloads and installs a hosted-tool-cache Python via a script built for
       # GitHub-hosted runner images, which fails on this self-hosted runner
-      # ("Error happened during Python installation"). win_vm_runner already has
-      # a machine-wide Python on PATH (installed for exactly this purpose), so
-      # skip the action's own setup and let it use that one instead.
+      # ("Error happened during Python installation"). Needs a machine-wide
+      # Python on PATH instead (see docs/WINDOWS_SELF_HOSTED_RUNNER_SETUP.md) -
+      # true of win_vm_runner, which is where this was worked out; confirm it's
+      # also true of whist_windows_runner before relying on this passing here.
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
