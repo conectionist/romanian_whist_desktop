@@ -358,6 +358,61 @@ TEST_CASE("abandon() throws out of a parked provider", "[provider]")
     REQUIRE_FALSE(parked.result.has_value());
 }
 
+TEST_CASE("abandon() throws out of a provider parked on a BET", "[provider]")
+{
+    // THE FOURTH CORNER, and C5 is what noticed it was empty. The case above
+    // abandons a provider parked in playCard(); GameControllerTests stops one
+    // parked in makeBet(). So both provider methods were covered and both
+    // layers were covered, DIAGONALLY - each method at one layer only, which is
+    // how a step comes to look more finished than it is.
+    //
+    // It is insurance rather than discovery, and worth saying so: the two
+    // methods share one mutex, one condition variable and one `abandoned` flag,
+    // with a symmetric check-and-throw around each wait. A bug that reaches one
+    // and not the other is a typo in one of four lines - and four lines with no
+    // test on two of them is exactly where a typo survives.
+    //
+    // NO ParkedBet CLASS FOR THIS. ParkedPlay exists because the play prompt is
+    // read back in several cases and needs its release/acquire handoff;
+    // this needs a thread and a join, which JoinGuard already is.
+    GameBridge bridge(Seat{0}, Pacing{});
+    QtMoveProvider provider(&bridge);
+
+    BetContext context{ Hand, std::nullopt, false, std::nullopt, RoundType::Normal };
+
+    std::atomic<unsigned int> lastPrompt{0};
+    QObject::connect(&bridge, &GameBridge::betRequested,
+                     [&lastPrompt](BetPrompt prompt){ lastPrompt = prompt.promptId; });
+
+    std::atomic<bool> done{false};
+    std::atomic<bool> threw{false};
+
+    JoinGuard worker(provider, std::thread([&]
+    {
+        try
+        {
+            provider.makeBet(context);
+        }
+        catch(const GameAbandoned&)
+        {
+            threw = true;
+        }
+
+        done = true;
+    }));
+
+    // Parked for real before the abandon lands, so this is the wait being broken
+    // into rather than the flag being seen on the way in - which is the next
+    // case's question, not this one's.
+    waitForPrompt(lastPrompt, 0);
+    REQUIRE_FALSE(done);
+
+    provider.abandon();
+    worker.join();
+
+    REQUIRE(threw);
+}
+
 TEST_CASE("abandon() before the provider parks still throws, rather than hanging", "[provider]")
 {
     // A window closed during setup, or between turns. abandon() only latches a

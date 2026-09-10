@@ -33,7 +33,7 @@ Two rules travel with every step and are not repeated:
 | **0** ✅ | Skeleton — verify what is already committed | The window opens and a card pixmap is non-null |
 | **A** ✅ | The seam | A seeded bot game logs start to finish, and closing it mid-game exits cleanly |
 | **B** ✅ | Cards on a table | A spectated game is watchable and legible |
-| **C** | The human plays | A full game is playable, Forehead and Hidden rounds included |
+| **C** ✅ | The human plays | A full game is playable, Forehead and Hidden rounds included |
 | **D** | The game around the game | No command line, no restart between games |
 | **E** | Polish | Part II is on screen |
 | **F** | Ship | Three platforms produce installable artifacts |
@@ -395,11 +395,67 @@ comes from `isWinning` and is never recomputed.
       cards-left stack occupies — so **`plaqueSize()` does not change** and the table holds still
       between rounds. §17's accent-coloured round type landed with it. **Hidden needed no code at
       all**: see below.
-- [ ] **C5 — shutdown while parked.** Close the window with the bid panel open. This is the
-      `GameAbandoned` path and the only one that should produce it. **Both halves are already
-      standing as of C2** — `GameControllerTests`' "A stop while the game is parked on a prompt ends
-      it", and the manual close, measured at 39 ms with the strip up. What C5 is left to add is the
-      same close with C3's *hand* waiting, which parks in `playCard()` rather than `makeBet()`.
+- [x] **C5 — shutdown while parked.** Close the window with the bid panel open, and with C3's *hand*
+      waiting. This is the `GameAbandoned` path and the only one that should produce it.
+
+      > **What this step said before it was done, and why it was wrong in a useful way.** It read
+      > *"both halves are already standing as of C2"* — the controller test and the manual close —
+      > with only the `playCard()` half left. **The coverage was not two halves, it was a diagonal**,
+      > and checking it rather than the checkbox is what found that:
+      >
+      > | Layer | Parked in `makeBet()` | Parked in `playCard()` |
+      > |---|---|---|
+      > | Provider — `abandon()` throws out of the wait | **was missing** | ✅ since C3 |
+      > | Controller — `stop()` returns from the join | ✅ since C2 | **was missing** |
+      > | Window — close with the prompt live | manual, 39 ms at C2 | **was missing** |
+      >
+      > Both provider methods were reached and both layers were exercised, but **each method at one
+      > layer only** — which is exactly how a step comes to look more finished than it is. The shape
+      > to look for: *two tests that between them name every part, and individually cover a
+      > different half each.*
+
+      Three cases close it, and the third is not C5 proper: `GameControllerTests`' "A stop while the
+      game is parked on a **CARD** ends it" (off-thread stop, deadline, rescue — the sibling's shape
+      verbatim), `MainWindowTests`' "The window can be closed with the hand waiting on a card", and
+      `QtMoveProviderTests`' "abandon() throws out of a provider parked on a **BET**", which fills
+      the fourth corner.
+
+### What the C5 run found
+
+**The two post-wait `throw GameAbandoned{}` lines in `QtMoveProvider` cannot be pinned by any test,
+and one of them had no comment saying so.** This is the finding, and it came out of trying to prove
+the new cases had teeth.
+
+Delete the `if(abandoned) throw` that follows the `cv.wait()` in either `makeBet()` or `playCard()`
+and **the whole suite stays green**. What happens instead is:
+
+1. the wait returns on the abandon with `answer` **empty**;
+2. `*std::exchange(answer, std::nullopt)` dereferences an empty optional — **undefined behaviour**;
+3. the garbage value fails the range check just below it (a bet over the hand size, or an index past
+   the end);
+4. the loop goes round, and **the pre-prompt check at the top throws `GameAbandoned` anyway**.
+
+So the game ends cleanly, the window closes, the join returns, and every shutdown assertion holds —
+through UB. **Confirmed rather than reasoned about**: a temporary `Q_ASSERT_X(answer.has_value())`
+placed before the dereference aborts, so step 2 really is reached.
+
+**This is C4's "a mutation that crashes proves nothing" one turn subtler — a mutation that *works*
+proves nothing either.** The category is B1's `QPixmap(":/cards/x.svg")` trap and C1's
+`qRegisterMetaType` pair: *a test written to pin these would be asserting that a working mechanism
+does not work.* `makeBet()` already said the line was load-bearing; `playCard()`'s twin said
+nothing, and both now say why no test can speak for them. **The comment is the defence.**
+
+**And the mutation that does have teeth is one level up:** deleting `movePlayer->abandon()` from
+`GameController::stop()` fails both controller cases loudly, through their rescues. That is the line
+worth mutating when any of this is touched again — the throws are unpinnable, the call that reaches
+them is not.
+
+**One case reports its failure as a hang, deliberately.** `MainWindowTests`' close-with-the-hand-up
+cannot do better: `close()` blocks on the GUI thread, and no rescue is reachable — `MainWindow`'s
+controller is private, and the event loop a timer would need is the thing that is blocked. A
+test-only accessor would be production API that only tests call, which C2 deliberately moved *out*
+of `src/`. **Verified that it does hang rather than silently pass**, so it cannot miss the defect
+even though it cannot name it; the controller case is what prints the message.
 
 **Done when:** a full game is playable; illegal cards cannot be clicked; the forbidden bid is
 disabled; the card clicked is the card played; and **the game reaches `onGameOver()` through the
@@ -911,6 +967,8 @@ Symptom first, because that is what you have.
 | The table or an avatar is soft while the cards beside it are crisp | `Theme::background()`/`avatar()` were handed a logical size and never told the ratio — both halves (rasterize at `size * dpr`, then `setDevicePixelRatio`) have to be on one path | §18.1 |
 | A new rank is drawn as the card back | The back shared the faces' index space (`indexOf` is `rank * 4 + suit`, the back was 52). It has its own key bit now — and note a `static_assert` **cannot** catch this: C++ cannot name "the last enumerator", so the assert has to spell `Rank::Ace`, which is still 12 after a rank is appended after it | §18.1 |
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |
+| Closing the window hangs with your hand lit, waiting to play | `stop()` is not reaching the parked provider — `abandon()` is the only thing that can, and `requestStop()` cannot, because the game thread is inside a condition variable rather than at a boundary | §6, C5 |
+| A shutdown mutation leaves the suite green | The two post-wait throws in `QtMoveProvider` are unpinnable: removing one is UB that the re-prompt loop then rescues. Mutate `stop()`'s `abandon()` instead | C5's findings |
 
 ---
 

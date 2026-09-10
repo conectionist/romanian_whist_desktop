@@ -181,10 +181,30 @@ TEST_CASE("A stop while the game is parked on a prompt ends it", "[controller]")
     // hangs prints nothing.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 
-    while(!parked)
-    {
-        REQUIRE(std::chrono::steady_clock::now() < deadline);
+    while(!parked && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // CHECKED, THEN JOINED, THEN LEFT - and the deadline is asserted OUTSIDE the
+    // spin for a reason that only shows up on the run where it fires.
+    //
+    // A REQUIRE inside the loop leaves this scope by THROWING, and unwinding it
+    // destroys `outcome`, `parked` and `prompts` while the game thread is still
+    // running and still bound to all three by DirectConnection - `controller` is
+    // declared first, so it joins LAST. What reached the report would be a write
+    // into freed stack memory, or a lock on a destroyed mutex, in place of the
+    // message the deadline was put there to print.
+    //
+    // CHECK rather than REQUIRE because the message has to be OUT BEFORE stop()
+    // is called: a game that never reached its prompt in ten seconds is a game
+    // that may not answer stop() either, and this call is on the test thread
+    // with no rescue behind it. stop() itself is safe whatever state it finds -
+    // the latch cases below are a controller that never parked at all.
+    CHECK(parked.load());
+
+    if(!parked)
+    {
+        controller.stop();
+        return;
     }
 
     // THE JOIN IS THE ASSERTION, and it is made on another thread because
@@ -230,6 +250,121 @@ TEST_CASE("A stop while the game is parked on a prompt ends it", "[controller]")
     // onGameStopped, and not gameFailed - the run slot's GameAbandoned arm is
     // the one that reports nothing, because the window is closing and there is
     // nobody left to tell.
+    REQUIRE(outcome.overCount == 0);
+    REQUIRE(outcome.failedCount == 0);
+    REQUIRE(outcome.stoppedCount == 0);
+}
+
+TEST_CASE("A stop while the game is parked on a CARD ends it", "[controller]")
+{
+    // C5'S OTHER HALF, and the case that closes phase C. Its sibling above parks
+    // in makeBet(); this one parks in playCard(), which is where C3's hand fan
+    // leaves the engine for as long as the player takes to choose a card.
+    //
+    // THE COVERAGE WAS DIAGONAL BEFORE THIS, which is how the step came to look
+    // more finished than it was. Both provider methods were reached, but each at
+    // only one layer: QtMoveProviderTests abandons a provider parked in
+    // playCard(), and the controller case above stops one parked in makeBet().
+    // Neither said anything about stop() reaching a hand.
+    //
+    // WHAT IT BUYS IS INSURANCE RATHER THAN DISCOVERY, and that is worth being
+    // honest about: makeBet() and playCard() share one mutex, one condition
+    // variable and one `abandoned` flag, with a symmetric check-and-throw before
+    // and after each wait. They are duplicated code, not divergent logic, so a
+    // bug that reaches one and not the other is a typo in one of four lines -
+    // and the mutation below is exactly that typo.
+    GameController controller;
+    controller.prepare(Seat{ 1u }, instant());
+
+    REQUIRE(controller.provider() != nullptr);
+
+    // THE BET IS ANSWERED, because nothing plays a card until the bidding is
+    // done - and that is the whole difference between this case and its sibling,
+    // which parks on the first prompt the game ever raises.
+    //
+    // A LEGAL bid, through the fixture rather than a literal. makeBet()
+    // RE-PROMPTS rather than passing an illegal answer to the engine, so an
+    // answerer that keeps giving a bad one is asked forever: the game never
+    // ends, this case never reaches an assertion, and the run has to be killed
+    // with no output. C1 found that from the other side and named it
+    // kPromptCeiling.
+    //
+    // ANSWERED INLINE, on the thread that raised it, which QtMoveProviderTests
+    // has a case for in each direction. submit() takes only a mutex and a
+    // condition variable, so it does not care which thread calls it.
+    QObject prompts;
+
+    QObject::connect(controller.bridge(), &GameBridge::betRequested, &prompts,
+                     [&controller](BetPrompt prompt)
+                     {
+                         controller.provider()->submit(prompt.promptId,
+                                                       fixtures::lowestLegalBid(prompt));
+                     },
+                     Qt::DirectConnection);
+
+    // AND THE CARD IS NOT. This only reports that the engine has reached the
+    // prompt; leaving it unanswered is what parks the game thread inside
+    // playCard() for the stop below to land on.
+    std::atomic<bool> parked{false};
+
+    QObject::connect(controller.bridge(), &GameBridge::cardRequested, &prompts,
+                     [&parked](PlayPrompt){ parked = true; },
+                     Qt::DirectConnection);
+
+    Outcome outcome(controller);
+
+    // Two seats, the human at 1. Seat 0 opens and leads, so the human is asked
+    // for a card in round 1 whatever the deal - there is no line of play that
+    // reaches game over without asking.
+    controller.start(fixtures::buildSetup(2, 42u, 1));
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+
+    while(!parked && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // OUTSIDE THE SPIN, AND BEFORE THE JOIN, for the reason the sibling above
+    // gives at length: a REQUIRE that throws from inside the loop unwinds
+    // `outcome`, `parked` and `prompts` out from under a game thread that is
+    // still writing to them, and the crash arrives instead of the message.
+    CHECK(parked.load());
+
+    if(!parked)
+    {
+        controller.stop();
+        return;
+    }
+
+    // THE JOIN IS THE ASSERTION, and it is made on another thread for the reason
+    // the sibling case states at length: stop() fails here by NEVER RETURNING,
+    // and a test that called it inline would hang rather than fail.
+    std::atomic<bool> returned{false};
+
+    std::thread stopper([&controller, &returned]
+                        {
+                            controller.stop();
+                            returned = true;
+                        });
+
+    const auto stopDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+
+    while(!returned && std::chrono::steady_clock::now() < stopDeadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    const bool joined = returned.load();
+
+    // The rescue, and it is what stop() was supposed to do. Without it the
+    // stopper thread never finishes, ~thread calls std::terminate, and the
+    // failure below is never printed.
+    if(!joined)
+        controller.provider()->abandon();
+
+    stopper.join();
+
+    REQUIRE(joined);
+
+    // NONE OF THE THREE ENDINGS, which is what says the throw was caught rather
+    // than the game merely finishing on its own while nobody was looking.
     REQUIRE(outcome.overCount == 0);
     REQUIRE(outcome.failedCount == 0);
     REQUIRE(outcome.stoppedCount == 0);

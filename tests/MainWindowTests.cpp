@@ -2,6 +2,7 @@
 
 #include "MainWindow.h"
 #include "paint/Theme.h"
+#include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "ui/BidStrip.h"
 #include "ui/GameOverPanel.h"
@@ -21,6 +22,7 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QString>
 #include <QTimer>
 
 #include <functional>
@@ -120,6 +122,29 @@ void answerModalShortWatchedGame(int afterMs)
     });
 }
 
+// A PLAYED game, dealt as fast as the client can be asked to deal one. The
+// dialog's defaults are already a seated game, so this leaves the radio alone
+// and moves only the slider - where pacingFor() scales every beat by zero.
+//
+// THE SPEED IS NOT A CONVENIENCE HERE. With a human seated botBeat() picks 700ms
+// rather than the spectator's 250 (section 4.1's split), so three bots bidding
+// is some two seconds of a test waiting for nothing before the human is asked
+// for a card.
+void answerModalFastSeatedGame(int afterMs)
+{
+    QTimer::singleShot(afterMs, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::FastestSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+}
+
 // Pumps until `ready` answers true, or until the deadline. Returns what it last
 // saw, so the caller asserts on a bool rather than on a hang - a game that never
 // ends must fail this file rather than stop it.
@@ -138,6 +163,21 @@ bool pumpUntil(int limitMs, const std::function<bool()>& ready)
 
     return ready();
 }
+
+// A bid button, found by the bid it offers. Same lookup BidStripTests uses and
+// for the same reason: QObject::findChildren() promises no order, so position
+// in the list is not something a test can assert through.
+QPushButton* bidButton(const BidStrip& strip, unsigned int bet)
+{
+    for(QPushButton* button : strip.findChildren<QPushButton*>())
+    {
+        if(button->text() == QString::number(bet))
+            return button;
+    }
+
+    return nullptr;
+}
+
 }
 
 TEST_CASE("The client opens on the menu with no game running", "[main-window]")
@@ -271,6 +311,73 @@ TEST_CASE("The window can be closed while the game is paused", "[main-window]")
     // And the close completes rather than hanging on the join. If the paused
     // wait ever stops testing pacingCancelled, this does not fail - it never
     // returns, which is the honest shape and is why the case says so.
+    REQUIRE(window.close());
+    REQUIRE_FALSE(window.isVisible());
+}
+
+TEST_CASE("The window can be closed with the hand waiting on a card", "[main-window]")
+{
+    // C5'S OWN SENTENCE, at the layer it was written about: "close the window
+    // with the panel open". Its sibling above closes a WATCHED game, where
+    // nothing is ever parked in a provider - the game thread is asleep in
+    // pace(), which cancelPacing() returns from. This one is the other half of
+    // section 6, and the only path in the client that should produce
+    // GameAbandoned: a seated game parked in playCard() with the fan lit, woken
+    // by abandon(), which THROWS.
+    //
+    // AND IT IS THE ONE PATH NOTHING AUTOMATED HAD EVER TAKEN. C2 measured the
+    // bid-strip close by hand at 39 ms and D1 added this file, but every close
+    // in it until now was a watched game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    answerModalFastSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    REQUIRE(bidStrip != nullptr);
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    // A BID OF 0, which is always legal for the opener - getForbiddenBet() is
+    // engaged for the LAST bidder only, and the human opens at seat 0. Answering
+    // is what gets the game past bidding and into the play the rest of this case
+    // is about.
+    //
+    // FOUND BY THE BID IT OFFERS, not by position: findChildren() documents no
+    // ordering, and a case that clicks whichever button comes back first would
+    // go on passing while quietly exercising a different bid.
+    QPushButton* zero = bidButton(*bidStrip, 0u);
+    REQUIRE(zero != nullptr);
+    zero->click();
+
+    // A PLAYABLE FAN IS THE OBSERVABLE FORM OF "parked in playCard()". Nothing
+    // else makes the hand clickable - a snapshot's hand carries no legality and
+    // is drawn disabled (section 4.4) - so this is true exactly while the engine
+    // is waiting on a card.
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    REQUIRE(pumpUntil(10000, [scene]{ return scene->handItem()->isPlayable(0); }));
+
+    // THE CLOSE. closeEvent() sets `closing`, calls stop(), and stop() calls
+    // abandon() on a provider that is parked right now.
+    //
+    // A FAILURE HERE IS A HANG, NOT A MESSAGE, and that is chosen rather than
+    // overlooked. If abandon() stops reaching the parked provider, close()
+    // blocks in thread.wait() on this very thread, and no rescue is reachable
+    // from outside: MainWindow's controller is private, and the event loop that
+    // a timer would need is the thing that is blocked. The obvious way in - a
+    // test-only accessor on MainWindow - is production API that only tests call,
+    // which C2 deliberately moved OUT of src/ when chooseBet() became
+    // fixtures::lowestLegalBid().
+    //
+    // GameControllerTests' "A stop while the game is parked on a CARD ends it"
+    // is what turns that same failure into a printed message, with an off-thread
+    // stop and a rescue. This case is the layer above it, and inherits its
+    // diagnosis rather than repeating its machinery.
     REQUIRE(window.close());
     REQUIRE_FALSE(window.isVisible());
 }
