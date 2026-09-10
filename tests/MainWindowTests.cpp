@@ -22,6 +22,7 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QString>
 #include <QTimer>
 
 #include <functional>
@@ -162,6 +163,21 @@ bool pumpUntil(int limitMs, const std::function<bool()>& ready)
 
     return ready();
 }
+
+// A bid button, found by the bid it offers. Same lookup BidStripTests uses and
+// for the same reason: QObject::findChildren() promises no order, so position
+// in the list is not something a test can assert through.
+QPushButton* bidButton(const BidStrip& strip, unsigned int bet)
+{
+    for(QPushButton* button : strip.findChildren<QPushButton*>())
+    {
+        if(button->text() == QString::number(bet))
+            return button;
+    }
+
+    return nullptr;
+}
+
 }
 
 TEST_CASE("The client opens on the menu with no game running", "[main-window]")
@@ -325,13 +341,17 @@ TEST_CASE("The window can be closed with the hand waiting on a card", "[main-win
     REQUIRE(bidStrip != nullptr);
     REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
 
-    // A BID OF 0, which the strip's first button always is and which is always
-    // legal for the opener - getForbiddenBet() is engaged for the LAST bidder
-    // only, and the human opens at seat 0. Answering is what gets the game past
-    // bidding and into the play the rest of this case is about.
-    const QList<QPushButton*> bids = bidStrip->findChildren<QPushButton*>();
-    REQUIRE_FALSE(bids.isEmpty());
-    bids.first()->click();
+    // A BID OF 0, which is always legal for the opener - getForbiddenBet() is
+    // engaged for the LAST bidder only, and the human opens at seat 0. Answering
+    // is what gets the game past bidding and into the play the rest of this case
+    // is about.
+    //
+    // FOUND BY THE BID IT OFFERS, not by position: findChildren() documents no
+    // ordering, and a case that clicks whichever button comes back first would
+    // go on passing while quietly exercising a different bid.
+    QPushButton* zero = bidButton(*bidStrip, 0u);
+    REQUIRE(zero != nullptr);
+    zero->click();
 
     // A PLAYABLE FAN IS THE OBSERVABLE FORM OF "parked in playCard()". Nothing
     // else makes the hand clickable - a snapshot's hand carries no legality and

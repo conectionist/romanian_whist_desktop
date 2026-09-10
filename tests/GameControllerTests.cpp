@@ -181,10 +181,30 @@ TEST_CASE("A stop while the game is parked on a prompt ends it", "[controller]")
     // hangs prints nothing.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 
-    while(!parked)
-    {
-        REQUIRE(std::chrono::steady_clock::now() < deadline);
+    while(!parked && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // CHECKED, THEN JOINED, THEN LEFT - and the deadline is asserted OUTSIDE the
+    // spin for a reason that only shows up on the run where it fires.
+    //
+    // A REQUIRE inside the loop leaves this scope by THROWING, and unwinding it
+    // destroys `outcome`, `parked` and `prompts` while the game thread is still
+    // running and still bound to all three by DirectConnection - `controller` is
+    // declared first, so it joins LAST. What reached the report would be a write
+    // into freed stack memory, or a lock on a destroyed mutex, in place of the
+    // message the deadline was put there to print.
+    //
+    // CHECK rather than REQUIRE because the message has to be OUT BEFORE stop()
+    // is called: a game that never reached its prompt in ten seconds is a game
+    // that may not answer stop() either, and this call is on the test thread
+    // with no rescue behind it. stop() itself is safe whatever state it finds -
+    // the latch cases below are a controller that never parked at all.
+    CHECK(parked.load());
+
+    if(!parked)
+    {
+        controller.stop();
+        return;
     }
 
     // THE JOIN IS THE ASSERTION, and it is made on another thread because
@@ -300,10 +320,19 @@ TEST_CASE("A stop while the game is parked on a CARD ends it", "[controller]")
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 
-    while(!parked)
-    {
-        REQUIRE(std::chrono::steady_clock::now() < deadline);
+    while(!parked && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // OUTSIDE THE SPIN, AND BEFORE THE JOIN, for the reason the sibling above
+    // gives at length: a REQUIRE that throws from inside the loop unwinds
+    // `outcome`, `parked` and `prompts` out from under a game thread that is
+    // still writing to them, and the crash arrives instead of the message.
+    CHECK(parked.load());
+
+    if(!parked)
+    {
+        controller.stop();
+        return;
     }
 
     // THE JOIN IS THE ASSERTION, and it is made on another thread for the reason
