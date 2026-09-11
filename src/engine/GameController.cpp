@@ -12,7 +12,6 @@
 #include <utility>
 
 using romanian_whist::GameEngine;
-using romanian_whist::GameSetup;
 using romanian_whist::Seat;
 
 GameController::GameController(QObject* parent) : QObject(parent)
@@ -108,7 +107,7 @@ void GameController::prepare(std::optional<Seat> humanSeat, Pacing pacing)
                            : nullptr;
 }
 
-void GameController::start(GameSetup setup)
+void GameController::start(GameDeal deal)
 {
     Q_ASSERT_X(gameBridge != nullptr, "GameController::start", "prepare() must be called first");
 
@@ -135,8 +134,8 @@ void GameController::start(GameSetup setup)
         // .at(), not [], so a seat past the end of the table is an exception out
         // of start() on the GUI thread rather than undefined behaviour. start()
         // already documents that it can throw and that a retry needs a freshly
-        // built GameSetup.
-        romanian_whist::SeatSetup& seat = setup.seats.at(humanPlayerSeat->index);
+        // built GameDeal.
+        romanian_whist::SeatSetup& seat = deal.setup.seats.at(humanPlayerSeat->index);
 
         Q_ASSERT_X(seat.moveProvider == nullptr, "GameController::start",
                    "the human seat's provider is left null by the caller");
@@ -159,21 +158,21 @@ void GameController::start(GameSetup setup)
     // slots on QThread::started - two engines, one bridge, on one thread.
     QObject::disconnect(runConnection);
 
-    // Worker-object pattern, never a QThread subclass. GameSetup is move-only,
-    // so it travels in the lambda's captures; it could not go through a queued
+    // Worker-object pattern, never a QThread subclass. GameDeal is move-only, so
+    // it travels in the lambda's captures; it could not go through a queued
     // signal argument at all.
     //
     // No context object, which makes this a DIRECT connection - so the lambda
     // runs on the new thread, inside QThread::run(), before its event loop is
     // entered. That is what puts the engine's whole life on the game thread.
     runConnection = QObject::connect(&thread, &QThread::started,
-                                     [this, setup = std::move(setup)]() mutable
-                                     { runGame(std::move(setup)); });
+                                     [this, deal = std::move(deal)]() mutable
+                                     { runGame(std::move(deal)); });
 
     thread.start();
 }
 
-void GameController::runGame(GameSetup setup)
+void GameController::runGame(GameDeal deal)
 {
     // THE ENGINE IS A LOCAL, born and destroyed on this thread. It is neither
     // copyable nor movable (it holds an atomic stop flag), so there is nothing
@@ -186,7 +185,29 @@ void GameController::runGame(GameSetup setup)
         // its last act and a bridge attached afterwards would miss it.
         game.addObserver(gameBridge.get());
 
-        game.start(std::move(setup));
+        // AND THE STRATEGIES THAT WATCH, on THIS thread for the reason
+        // GameController's own class comment gives, and before start() for a
+        // second and sharper one: ReckonerStrategy resolves its own SEAT inside
+        // onGameStarted(), from its name. One attached afterwards does not merely
+        // miss a callback - it plays the whole game believing it sits at seat 0,
+        // legally and badly, with nothing raised anywhere.
+        //
+        // AFTER THE BRIDGE, which is only an ordering of who hears a card first
+        // and is deliberately this way round: the bridge is the one observer that
+        // BLOCKS (pace()), and nothing asks a strategy for a move while it does,
+        // so a tracker one card stale for the length of a dwell is unobservable.
+        for(romanian_whist::IGameObserver* observer : deal.observers)
+        {
+            Q_ASSERT_X(observer != nullptr, "GameController::runGame",
+                       "newgame::buildDeal() never pushes a null observer");
+            game.addObserver(observer);
+        }
+
+        // The move empties deal.setup and NOT deal.observers, which is correct
+        // rather than sloppy: those pointers now aim at strategies the engine
+        // owns, the engine is about to be handed them, and nothing reads the
+        // vector again.
+        game.start(std::move(deal.setup));
 
         {
             // PUBLISH AND READ BACK UNDER ONE LOCK. That is the whole of the fix

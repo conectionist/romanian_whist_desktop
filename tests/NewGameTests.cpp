@@ -7,8 +7,10 @@
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/IMoveProvider.h>
+#include <romanian_whist/IGameObserver.h>
 #include <romanian_whist/RoundType.h>
 #include <romanian_whist/strategies/FirstCardStrategy.h>
+#include <romanian_whist/strategies/ReckonerStrategy.h>
 
 #include <QComboBox>
 #include <QLineEdit>
@@ -16,6 +18,7 @@
 #include <QRadioButton>
 #include <QSpinBox>
 
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -63,6 +66,28 @@ public:
     unsigned int makeBet(const BetContext&) override { return 0; }
     std::optional<std::size_t> playCard(const PlayContext&) override { return 0; }
 };
+
+// Starts an engine on a deal the way GameController::runGame() does: the
+// observers first, then the setup.
+//
+// NOT A CONVENIENCE, AND NOT SKIPPABLE. Written without it, the all-levels case
+// below died with "Ana played a card that is not legal in this trick" - because an
+// unregistered ReckonerStrategy keeps its tracker's default four-handed table, and
+// the base policy then picks out of the wrong deck profile and against a led suit
+// it never saw. So the cost of dropping the observers is not a bot that plays
+// badly, as it would be for the memory alone: it is a std::logic_error out of the
+// engine, on the game thread, from a strategy the dialog offered as a menu row.
+// Every site here goes through this for that reason, including the ones whose
+// levels cannot produce an observer today.
+void startWith(GameEngine& engine, GameDeal deal)
+{
+    for(IGameObserver* observer : deal.observers)
+        engine.addObserver(observer);
+
+    // The setup's providers move INTO the engine here, so the deal this function
+    // destroys on its way out holds nothing the engine is using.
+    engine.start(std::move(deal.setup));
+}
 }
 
 TEST_CASE("The round count is the engine's own schedule", "[new-game]")
@@ -81,11 +106,11 @@ TEST_CASE("The round count is the engine's own schedule", "[new-game]")
             newgame::Config config = playingConfig(opponents);
             config.endWithForeheadAndHidden = appended;
 
-            GameSetup setup = newgame::buildSetup(config);
-            setup.seats.at(0).moveProvider = std::make_unique<NullProvider>();
+            GameDeal deal = newgame::buildDeal(config);
+            deal.setup.seats.at(0).moveProvider = std::make_unique<NullProvider>();
 
             GameEngine engine;
-            engine.start(std::move(setup));
+            startWith(engine, std::move(deal));
 
             INFO("opponents " << opponents << ", appended " << appended);
             REQUIRE(newgame::roundCount(config) == engine.getRoundCount());
@@ -142,7 +167,7 @@ TEST_CASE("The human is seat 0, and only when there is one", "[new-game]")
     REQUIRE_FALSE(newgame::humanSeatOf(watchingConfig()).has_value());
 }
 
-TEST_CASE("buildSetup() leaves the human's provider null and no other", "[new-game]")
+TEST_CASE("buildDeal() leaves the human's provider null and no other", "[new-game]")
 {
     // THE ONE SEAT GameController::start() FILLS, addressed by the index
     // humanSeatOf() returns - and it indexes with .at(), so the two disagreeing
@@ -150,7 +175,7 @@ TEST_CASE("buildSetup() leaves the human's provider null and no other", "[new-ga
     // by GameEngine::start() BY NAME, which the last case here proves is not
     // what happens.
     const newgame::Config config = playingConfig(3);
-    const GameSetup setup = newgame::buildSetup(config);
+    const GameSetup setup = newgame::buildDeal(config).setup;
 
     REQUIRE(setup.seats.size() == 4);
     REQUIRE(setup.seats.at(0).name == "Dan");
@@ -168,14 +193,14 @@ TEST_CASE("buildSetup() leaves the human's provider null and no other", "[new-ga
 
 TEST_CASE("A watched game leaves no seat for the controller to fill", "[new-game]")
 {
-    // The spectator half, and it has to be asserted separately: a buildSetup()
+    // The spectator half, and it has to be asserted separately: a buildDeal()
     // that always left seat 0 null would pass every case above and then hand
     // GameEngine::start() a nameless hole in a game with no provider to plug it.
-    GameSetup setup = newgame::buildSetup(watchingConfig(4));
+    GameDeal deal = newgame::buildDeal(watchingConfig(4));
 
-    REQUIRE(setup.seats.size() == 4);
+    REQUIRE(deal.setup.seats.size() == 4);
 
-    for(const SeatSetup& seat : setup.seats)
+    for(const SeatSetup& seat : deal.setup.seats)
     {
         INFO("seat " << seat.name);
         REQUIRE(seat.moveProvider != nullptr);
@@ -184,7 +209,7 @@ TEST_CASE("A watched game leaves no seat for the controller to fill", "[new-game
     // Straight into a real engine with nothing added, which is exactly what
     // MainWindow does for a watched game.
     GameEngine engine;
-    REQUIRE_NOTHROW(engine.start(std::move(setup)));
+    REQUIRE_NOTHROW(startWith(engine, std::move(deal)));
 }
 
 TEST_CASE("A setup the dialog would produce is one the engine accepts", "[new-game]")
@@ -200,11 +225,11 @@ TEST_CASE("A setup the dialog would produce is one the engine accepts", "[new-ga
         INFO("opponents " << opponents);
         REQUIRE_FALSE(newgame::firstError(config).has_value());
 
-        GameSetup setup = newgame::buildSetup(config);
-        setup.seats.at(0).moveProvider = std::make_unique<NullProvider>();
+        GameDeal deal = newgame::buildDeal(config);
+        deal.setup.seats.at(0).moveProvider = std::make_unique<NullProvider>();
 
         GameEngine engine;
-        REQUIRE_NOTHROW(engine.start(std::move(setup)));
+        REQUIRE_NOTHROW(startWith(engine, std::move(deal)));
     }
 }
 
@@ -228,18 +253,18 @@ TEST_CASE("A seated game from the dialog reaches game over", "[new-game]")
         newgame::Config config = playingConfig(opponents);
         config.shuffleSeed = 42u;
 
-        GameSetup setup = newgame::buildSetup(config);
+        GameDeal deal = newgame::buildDeal(config);
 
         // Exactly the seat humanSeatOf() names, and it is null - which is the
         // agreement start() relies on and indexes with .at().
         const std::size_t seat = newgame::humanSeatOf(config)->index;
-        REQUIRE(setup.seats.at(seat).moveProvider == nullptr);
+        REQUIRE(deal.setup.seats.at(seat).moveProvider == nullptr);
 
-        setup.seats.at(seat).moveProvider =
+        deal.setup.seats.at(seat).moveProvider =
             std::make_unique<AiMoveProvider>(std::make_unique<FirstCardStrategy>());
 
         GameEngine engine;
-        engine.start(std::move(setup));
+        startWith(engine, std::move(deal));
         engine.run();
 
         INFO("opponents " << opponents);
@@ -305,7 +330,7 @@ TEST_CASE("A name the engine would reject disables Deal first", "[new-game]")
 TEST_CASE("A table too small or too large is refused", "[new-game]")
 {
     // Unreachable through the spinner, which is clamped - and worth checking
-    // anyway, because buildSetup() and firstError() are callable without one and
+    // anyway, because buildDeal() and firstError() are callable without one and
     // the engine's own range check is a throw rather than a message.
     newgame::Config tooSmall = playingConfig(0);
     REQUIRE(newgame::firstError(tooSmall).has_value());
@@ -396,7 +421,7 @@ TEST_CASE("A fixed deal seeds the bots that draw, so the game repeats", "[new-ga
             level = newgame::BotLevel::Random;
 
         GameEngine engine;
-        engine.start(newgame::buildSetup(config));
+        startWith(engine, newgame::buildDeal(config));
         engine.run();
 
         std::string result;
@@ -415,10 +440,25 @@ TEST_CASE("A fixed deal seeds the bots that draw, so the game repeats", "[new-ga
 
 TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
 {
-    // The list is section 13's four, in its order, and it doubles as the combo's
-    // index - so a level added without a provider case is a table of names that
-    // silently plays something else. A whole game each, because a provider that
-    // returns nothing parks the engine rather than throwing.
+    // The list doubles as the combo's index - so a level added without a provider
+    // case is a table of names that silently plays something else.
+    //
+    // NOT A WHOLE GAME PER LEVEL ANY MORE, and that is a deliberate division of
+    // labour rather than a corner cut. The Reckoner's four presets are one code
+    // path and four tables of numbers, and the ENGINE's own suite already plays
+    // full games at Easy, Hard and Brutal and asserts seeded replay
+    // (libs/RomanianWhistEngine/tests/ReckonerStrategyTests.cpp, and a tournament
+    // besides). Hard samples two hundred imagined deals per card and Brutal four
+    // hundred; playing two more full games here would re-test the engine at this
+    // suite's expense, three times over, because LOCAL_VERIFICATION.md builds this
+    // binary under three sanitizers.
+    //
+    // WHAT THIS SUITE OWES IS THE WIRING: that every level names something
+    // buildable, and that the thing it builds reaches a seat. The game below is
+    // what proves a provider actually answers rather than parking the engine, and
+    // ReckonerEasy is free enough to carry that for all four presets - its K_play
+    // and K_bid are 0, so the rollout engine short-circuits and it is the base
+    // policy plus an epsilon roll.
     for(const newgame::BotLevel level : newgame::BotLevels)
     {
         newgame::Config config = watchingConfig(2);
@@ -432,11 +472,95 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
         REQUIRE_FALSE(newgame::nameOf(level).isEmpty());
         REQUIRE_FALSE(newgame::tooltipFor(level).isEmpty());
 
+        const GameDeal deal = newgame::buildDeal(config);
+
+        REQUIRE(deal.setup.seats.size() == 2);
+        for(const SeatSetup& seat : deal.setup.seats)
+        {
+            INFO("seat " << seat.name);
+            REQUIRE(seat.moveProvider != nullptr);
+        }
+
+        if(newgame::isReckoner(level) && level != newgame::BotLevel::ReckonerEasy)
+            continue;
+
         GameEngine engine;
-        engine.start(newgame::buildSetup(config));
+        startWith(engine, newgame::buildDeal(config));
         engine.run();
 
         REQUIRE(engine.getStatus() == GameStatus::Finished);
+    }
+}
+
+TEST_CASE("A Reckoner seat comes with an observer and the others come with none", "[new-game]")
+{
+    // WHAT A RECKONER SEAT IS: a provider AND an observer, the same object twice,
+    // and it is useless as the first without being registered as the second - it
+    // plays out of a tracker only the engine's callbacks fill. A buildDeal() that
+    // returned the providers alone would deal a table of bots that play legal
+    // cards badly from an empty memory, and nothing anywhere would say so. This is
+    // the case that notices.
+    for(const newgame::BotLevel level : newgame::BotLevels)
+    {
+        newgame::Config config = watchingConfig(3);
+
+        for(auto& each : config.botLevels)
+            each = level;
+
+        const GameDeal deal = newgame::buildDeal(config);
+
+        INFO("level " << newgame::nameOf(level).toStdString());
+        REQUIRE(deal.observers.size() == (newgame::isReckoner(level) ? 3u : 0u));
+
+        for(IGameObserver* observer : deal.observers)
+        {
+            // dynamic_cast AND NOT A NULL CHECK, which is the whole assertion.
+            // ReckonerStrategy derives from IStrategy and IGameObserver both, so
+            // the two base subobjects sit at different addresses inside it -
+            // upcasting from the wrong one compiles and yields a non-null pointer
+            // to the wrong vtable. This is what pins down that the engine is being
+            // handed the IGameObserver subobject of a real strategy.
+            REQUIRE(dynamic_cast<ReckonerStrategy*>(observer) != nullptr);
+        }
+    }
+
+    // AND A MIXED TABLE, because every case above sets one level across all three
+    // seats - so a buildDeal() that pushed an observer per SEAT rather than per
+    // watching seat would pass all eight.
+    newgame::Config mixed = watchingConfig(3);
+    mixed.botLevels = { newgame::BotLevel::LowRisk,
+                        newgame::BotLevel::ReckonerHard,
+                        newgame::BotLevel::Ducking };
+
+    const GameDeal deal = newgame::buildDeal(mixed);
+
+    REQUIRE(deal.observers.size() == 1);
+    REQUIRE(dynamic_cast<ReckonerStrategy*>(deal.observers.front()) != nullptr);
+}
+
+TEST_CASE("Every combo row is the level its index names", "[new-game]")
+{
+    // THE RUNTIME HALF OF NewGameDialog.h's static_assert, and the widget half it
+    // cannot see: rebuildOpponentRows() writes a row with
+    // setCurrentIndex(static_cast<int>(level)) and refresh() reads it back with
+    // BotLevels[currentIndex()], so the enum's value, the array's order and the
+    // combo's rows are one fact in three places. A level appended to the enum but
+    // not to the array builds fine and offers a shorter menu than it has levels.
+    for(std::size_t i = 0 ; i < std::size(newgame::BotLevels) ; i++)
+        REQUIRE(static_cast<std::size_t>(newgame::BotLevels[i]) == i);
+
+    NewGameDialog dialog(newgame::defaults());
+
+    QComboBox* level = dialog.findChild<QComboBox*>("botLevel0");
+    REQUIRE(level != nullptr);
+    REQUIRE(level->count() == static_cast<int>(std::size(newgame::BotLevels)));
+
+    // Every row reads back as the level whose name it shows, which is the drift
+    // the index arithmetic above cannot catch on its own.
+    for(int i = 0 ; i < level->count() ; i++)
+    {
+        INFO("row " << i);
+        REQUIRE(level->itemText(i) == newgame::nameOf(newgame::BotLevels[i]));
     }
 }
 
@@ -447,7 +571,12 @@ TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")
     // a pre-filled default name; it does not open another dialog".
     NewGameDialog dialog(newgame::defaults());
 
-    REQUIRE(dialog.config().botNames.size() == 3);
+    // AGAINST defaults() RATHER THAN A LITERAL, because this case is about the
+    // rows FOLLOWING THE SPINNER and not about how many the dialog opens with.
+    // That count was 3 and is 4 now that every Reckoner preset has a default
+    // seat; a literal here makes the next change to the default table come and
+    // find this line for no reason.
+    REQUIRE(dialog.config().botNames.size() == newgame::defaults().botNames.size());
 
     // BY NAME, not by position in findChildren(). Every QSpinBox owns an
     // editable QLineEdit of its own, so a positional lookup over either list

@@ -5,6 +5,7 @@
 #include "QtMoveProvider.h"
 
 #include <romanian_whist/GameEngine.h>
+#include <romanian_whist/IGameObserver.h>
 #include <romanian_whist/Seat.h>
 
 #include <QObject>
@@ -14,6 +15,52 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <vector>
+
+// A GameSetup and the observers that have to be registered with the engine
+// BEFORE it starts. ONE TYPE, because the two are one fact: every pointer in
+// `observers` aims at an object `setup` itself owns, so a caller who moves one
+// without the other has either a strategy playing blind or a dangling pointer.
+//
+// WHY IT EXISTS AT ALL. ReckonerStrategy is an IStrategy *and* an IGameObserver
+// - it plays out of a card-counting tracker that only the observer callbacks
+// fill - and GameEngine::addObserver() is neither safe off the game thread nor
+// useful after start(), which fires onGameStarted() as its last act. The seats
+// are built on the GUI thread, where no engine exists; the registration has to
+// happen on the game thread between the engine's construction and its start().
+// This is what carries the pointers across, and it is the arrangement that does
+// NOT also move seat construction over the boundary - start() still fills the
+// human's seat by index, on the GUI thread, where .at() can throw at the caller.
+//
+// LIFETIME IS CORRECT BY CONSTRUCTION, which is why there is no removeObserver()
+// anywhere. runGame() takes this BY VALUE, so it is constructed before the local
+// GameEngine and destroyed after it: before start() the strategies are owned by
+// `setup` and outlive the engine, and after a successful start() they are owned
+// by the engine's Players and die WITH it, taking this list of pointers into them
+// along. GameEngine::start() validates everything before it moves anything, so
+// the throwing path leaves them in `setup` too. No path lets an observer outlive
+// the engine it was registered with.
+//
+// NOT A GameController MEMBER, and that is the same decision as stopRequested's.
+// A member survives prepare(), which is where "play again" joins and rebuilds -
+// so a list left behind points into game one's destroyed engine and is read by
+// game two's run slot. It travels with the setup and dies with it instead.
+struct GameDeal
+{
+    romanian_whist::GameSetup setup;
+    std::vector<romanian_whist::IGameObserver*> observers;
+
+    // Load-bearing: the converting constructor below suppresses the implicit
+    // default one, and the tests default-construct.
+    GameDeal() = default;
+
+    // NOT EXPLICIT, for the table with no watching strategy on it - which is
+    // every fixture and every call site that predates this type. The conversion
+    // can only ADD an empty observer list, never lose a filled one; losing one
+    // takes naming the member, which is what the negative half of the
+    // registration test does on purpose.
+    GameDeal(romanian_whist::GameSetup _setup) : setup(std::move(_setup)) {}
+};
 
 // Owns the game thread.
 //
@@ -74,10 +121,14 @@ public:
     // and by then there is no run slot left to race.
     void prepare(std::optional<romanian_whist::Seat> humanSeat, Pacing pacing);
 
-    // GameSetup is MOVE-ONLY - it owns the seats' unique_ptr<IMoveProvider> - so
-    // the call site reads start(std::move(setup)), and the setup is moved again
-    // into the run slot's captures. It cannot travel through a queued signal,
-    // which is why it goes into the lambda rather than a slot argument.
+    // GameDeal is MOVE-ONLY - its setup owns the seats' unique_ptr<IMoveProvider>
+    // - so the call site reads start(std::move(deal)), and the deal is moved
+    // again into the run slot's captures. It cannot travel through a queued
+    // signal, which is why it goes into the lambda rather than a slot argument.
+    //
+    // A BARE GameSetup STILL CONVERTS, which is how every caller with no watching
+    // strategy reads unchanged. See GameDeal above for what the observers are and
+    // why they cannot be registered here.
     //
     // REQUIRES AN IDLE THREAD, which prepare() is what provides. Asserted rather
     // than repaired here: a start() that quietly ended the running game would be
@@ -92,11 +143,11 @@ public:
     // OTHER empty seat is left for the engine to reject by name: a caller who
     // forgot a bot is told so, rather than having the human play that seat too.
     //
-    // The caller's GameSetup is gutted by the move whatever happens, so a
+    // The caller's GameDeal is gutted by the move whatever happens, so a
     // start() that throws needs a freshly built one to retry - not because the
     // engine kept anything, but because a move-only type passed by value is
     // spent at the call site.
-    void start(romanian_whist::GameSetup setup);
+    void start(GameDeal deal);
 
     // Ends the game and joins the thread. Safe to call before prepare(), on a
     // game that never started, on one that already finished, and twice.
@@ -217,7 +268,12 @@ signals:
 
 private:
     // The slot QThread::started is connected to. Runs the whole game.
-    void runGame(romanian_whist::GameSetup setup);
+    //
+    // BY VALUE, and that is the lifetime argument in GameDeal's comment rather
+    // than a convention: a by-value parameter is constructed before the first
+    // local and destroyed after it, so the deal outlives the engine local below
+    // on every path out of this function.
+    void runGame(GameDeal deal);
 
     QThread thread;
 

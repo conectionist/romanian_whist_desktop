@@ -1,7 +1,7 @@
 #ifndef NEW_GAME_DIALOG_H
 #define NEW_GAME_DIALOG_H
 
-#include "engine/GameBridge.h"
+#include "engine/GameController.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/Scoreboard.h>
@@ -13,6 +13,7 @@
 #include <QStringList>
 
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <vector>
 
@@ -35,17 +36,24 @@ QT_END_NAMESPACE
 //
 // PORTED FROM ../romanian_whist_terminal/src/SetupWizard.h - `GameConfig` is the
 // shape below, and section 21.4's row for it says what changes on the way: same
-// questions, same bounds, one screen. Two things do NOT come across. The
-// Reckoner levels its `AiLevel` lists do not exist in this repository's engine
-// submodule at 4.1.0, so offering them would be offering a strategy that cannot
-// be built; and its wizard asks its questions in sequence, which is the thing
-// this dialog exists not to do.
+// questions, same bounds, one screen. Its wizard asks its questions in sequence,
+// which is the thing this dialog exists not to do.
 //
-// WHAT IT PRODUCES is a GameSetup with the human seat's moveProvider left null,
-// which GameController::start() fills with a SeatProvider (sections 4.2, 4.3).
-// It does not build a QtMoveProvider and it does not touch the controller's
-// ordering: the dialog answers questions, the controller does prepare, connect,
-// start.
+// THE RECKONER LEVELS NOW COME ACROSS, and the comment here used to say they
+// could not: they did not exist in this repository's engine submodule at 4.1.0,
+// so offering them would have been offering a strategy that could not be built.
+// They arrived with the bump to 4.1.0-6-g66c170e and all four presets are in
+// BotLevel below. The one row of the terminal's enum that still does NOT port is
+// its generic `AiLevel::Reckoner` - it exists there only to defer to a
+// `--reckoner-preset` command-line flag, and a dialog has no equivalent to defer
+// to, so the four presets are named outright instead.
+//
+// WHAT IT PRODUCES is a GameDeal - a GameSetup with the human seat's moveProvider
+// left null, which GameController::start() fills with a SeatProvider (sections
+// 4.2, 4.3), plus the observers the engine must be given before it starts. It
+// does not build a QtMoveProvider, it does not touch the controller's ordering,
+// and it registers nothing itself: the dialog answers questions, the controller
+// does prepare, connect, start.
 namespace newgame
 {
 
@@ -64,7 +72,14 @@ enum class BotLevel
     Random,
     FirstCard,
     LowRisk,
-    Ducking
+    Ducking,
+    // APPENDED, NEVER INSERTED - see the static_assert below for what inserting
+    // costs. The four above are the terminal wizard's order; these four are its
+    // Reckoner levels, in its order too, one per engine preset.
+    ReckonerEasy,
+    ReckonerMedium,
+    ReckonerHard,
+    ReckonerBrutal
 };
 
 // Every option in menu order, so the combo and the factory below cannot drift
@@ -72,7 +87,36 @@ enum class BotLevel
 inline constexpr BotLevel BotLevels[] = { BotLevel::Random,
                                           BotLevel::FirstCard,
                                           BotLevel::LowRisk,
-                                          BotLevel::Ducking };
+                                          BotLevel::Ducking,
+                                          BotLevel::ReckonerEasy,
+                                          BotLevel::ReckonerMedium,
+                                          BotLevel::ReckonerHard,
+                                          BotLevel::ReckonerBrutal };
+
+// THE COMBO'S INDEX *IS* THE ENUM'S VALUE, and until the Reckoner landed that was
+// held by a comment alone. rebuildOpponentRows() writes the row with
+// setCurrentIndex(static_cast<int>(level)) and refresh() reads it back with
+// BotLevels[currentIndex()], so an enumerator INSERTED rather than appended
+// silently offers every player below it a strategy they did not pick - and there
+// is no compiler diagnostic for it and no symptom short of watching a bot play a
+// game it should not be able to play. This is that diagnostic.
+inline constexpr bool botLevelsAreIndexedByValue()
+{
+    for(std::size_t i = 0 ; i < std::size(BotLevels) ; i++)
+        if(static_cast<std::size_t>(BotLevels[i]) != i)
+            return false;
+
+    return true;
+}
+
+static_assert(botLevelsAreIndexedByValue(),
+              "BotLevels is indexed by the enum's own value: append, never insert");
+
+// Which of the levels think by sampling imagined deals. Named rather than
+// inlined at each site because three callers ask: the provider factory, the
+// seeding rule below, and the test that keeps the suite fast by not playing a
+// whole game per preset.
+bool isReckoner(BotLevel level);
 
 // The engine builds its deck from the player count and rejects anything outside
 // this range by name (GameEngine::start). Section 13's rule is that a spinner
@@ -187,18 +231,29 @@ std::optional<romanian_whist::Seat> humanSeatOf(const Config& config);
 // beside each other because they must agree: start() indexes with .at(), so a
 // disagreement is a std::out_of_range on the GUI thread rather than a misdeal.
 //
-// A FIXED DEAL SEEDS THE RANDOM BOTS TOO. GameSetup::shuffleSeed reaches the
+// A FIXED DEAL SEEDS THE BOTS THAT DRAW. GameSetup::shuffleSeed reaches the
 // shuffle and nothing else - the engine's own header says a fully reproducible
-// game additionally requires seeding every provider that draws - and
-// RandomCardStrategy has a seeded constructor that seeds its mt19937 once. So a
-// seeded config builds RandomCardStrategy(seed + index) and an unseeded one the
-// default. (The engine's STRATEGIES.md claims it "seeds a fresh
-// std::random_device on every call", which its own source contradicts.)
-romanian_whist::GameSetup buildSetup(const Config& config);
+// game additionally requires seeding every provider that draws - so a seeded
+// config passes seed + index to every strategy with a seeded constructor and an
+// unseeded one passes nothing. (The engine's STRATEGIES.md claims
+// RandomCardStrategy "seeds a fresh std::random_device on every call", which its
+// own source contradicts.)
+//
+// TWO STRATEGIES DRAW, NOT ONE, since the Reckoner landed - see providerFor() in
+// the .cpp for which and for what a seeded Reckoner is and is not.
+//
+// AND IT RETURNS THE OBSERVERS WITH THEM. A Reckoner seat is not a provider
+// alone: the same object is an IGameObserver, and it is useless until the engine
+// has been given it. See GameDeal in engine/GameController.h for the whole of
+// that argument; the rule here is only that the two halves travel together.
+GameDeal buildDeal(const Config& config);
 
-// The combo's rows and their tooltips, from the engine's STRATEGIES.md lead
-// table. Free functions rather than a table in the widget so the test can read
-// them without a window.
+// The combo's rows and their tooltips. The first four are the engine's
+// STRATEGIES.md lead table; the Reckoner's four are its design doc
+// (libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md, section 9's knobs
+// table), because STRATEGIES.md and the engine README were never updated for it
+// and both still say the engine ships four strategies. Free functions rather than
+// a table in the widget so the test can read them without a window.
 QString nameOf(BotLevel level);
 QString tooltipFor(BotLevel level);
 
@@ -218,9 +273,12 @@ public:
     // section 20 and phase E.
     explicit NewGameDialog(const newgame::Config& initial, QWidget* parent = nullptr);
 
-    // What was asked for. The CALLER runs buildSetup() on it: GameSetup is
-    // move-only and spent by the move into start(), so play again re-runs the
-    // build rather than reusing a stashed copy (section 13).
+    // What was asked for. The CALLER runs buildDeal() on it: a GameDeal is
+    // move-only - its setup owns the providers - and spent by the move into
+    // start(), so play again re-runs the build rather than reusing a stashed copy
+    // (section 13). That is doubly true now that a deal can carry observers
+    // pointing into the strategies it owns: the Config is the only thing worth
+    // keeping between games.
     newgame::Config config() const;
 
 private:

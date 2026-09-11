@@ -5,6 +5,7 @@
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 #include <romanian_whist/strategies/RandomCardStrategy.h>
+#include <romanian_whist/strategies/ReckonerStrategy.h>
 
 #include <QBoxLayout>
 #include <QButtonGroup>
@@ -48,49 +49,134 @@ const QStringList& stockNames()
     return names;
 }
 
-// The default level for the nth opponent. Deterministic strategies first and
-// Random last, which is the order phase A's setup chose and for its reason: a
-// fixed deal is only reproducible if every provider that draws is seeded, and a
-// table with no Random bot at all needs nothing said about it.
+// The default level for the nth opponent: THE FOUR RECKONER PRESETS, weakest
+// first, one per seat.
+//
+// THE DEFAULT TABLE IS DELIBERATELY THE EXPENSIVE ONE. Every bot a new player
+// meets counts cards, and the fourth one samples four hundred imagined deals per
+// decision - so the opening game is the slowest this client can deal, and that is
+// the choice rather than an oversight. The weakest-first order is what makes it
+// legible: the scoreboard should separate into the order of this array, and a
+// table where it does not is a finding about the engine's presets.
+//
+// EVERY ONE OF THEM DRAWS, which the old array was arranged to avoid - it put the
+// deterministic strategies first and Random last so that a default table needed
+// nothing said about seeding. A fixed deal is still reproducible, but now it is
+// because buildDeal() passes seed + index to all four rather than because three
+// of them ignore it.
 newgame::BotLevel defaultLevel(int index)
 {
-    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::LowRisk,
-                                                    newgame::BotLevel::FirstCard,
-                                                    newgame::BotLevel::Ducking };
+    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerEasy,
+                                                    newgame::BotLevel::ReckonerMedium,
+                                                    newgame::BotLevel::ReckonerHard,
+                                                    newgame::BotLevel::ReckonerBrutal };
 
     return levels[static_cast<std::size_t>(index) % std::size(levels)];
 }
 
-// One provider, from a level. The seed is engaged only for Random, which is the
-// only strategy that draws.
-std::unique_ptr<IMoveProvider> providerFor(newgame::BotLevel level,
-                                           std::optional<std::uint32_t> seed)
+// A seat's provider, and - for the levels that also WATCH the game - the observer
+// that has to reach the engine before it starts. Two fields rather than a return
+// value because a Reckoner seat is genuinely two things; see GameDeal in
+// engine/GameController.h.
+struct BuiltSeat
+{
+    std::unique_ptr<IMoveProvider> provider;
+    IGameObserver* observer = nullptr;
+};
+
+// THE ENGINE'S OWN makeReckonerSeat() DOES EXACTLY THIS and cannot be used here.
+// It takes a GameEngine& and calls addObserver() on it itself, which is right for
+// a caller that owns its engine as a member (the terminal client does) and
+// impossible for this one: buildDeal() runs on the GUI thread, where the game's
+// engine does not exist yet and will not until GameController's run slot
+// constructs it. So the registration is deferred and this is the helper minus
+// that one line. Kept line-for-line otherwise, so a fix landing there is findable
+// here.
+//
+// setPlayerName() AND NOT setSeat(), which is the engine helper's choice and
+// worth keeping for a second reason of our own: the strategy resolves its seat
+// from its name inside onGameStarted(), so a seat that is right here would be
+// right even for a strategy that was never registered - and the test proving the
+// registration happened would be asserting nothing. The name cannot mis-resolve,
+// because firstError() rejects duplicates more strictly than the engine does
+// (case-insensitively).
+BuiltSeat makeReckoner(const std::string& name,
+                       const reckoner::ReckonerKnobs& knobs,
+                       std::optional<std::uint32_t> seed)
+{
+    auto strategy = std::make_unique<ReckonerStrategy>(knobs, seed);
+    strategy->setPlayerName(name);
+
+    // TAKEN FROM ReckonerStrategy*, and taken BEFORE the move, in a named local.
+    // The class derives from IStrategy and IGameObserver both, so the two base
+    // subobjects sit at different addresses within it - upcasting from the wrong
+    // one compiles and hands the engine a pointer to the wrong vtable. A
+    // dynamic_cast in the test is what pins this down.
+    IGameObserver* observer = strategy.get();
+
+    return BuiltSeat{ std::make_unique<AiMoveProvider>(std::move(strategy)), observer };
+}
+
+// One seat, from a level.
+//
+// TWO STRATEGIES DRAW NOW, NOT ONE. This comment used to read "the seed is
+// engaged only for Random, which is the only strategy that draws", and the
+// Reckoner made it false: RandomCardStrategy seeds its mt19937 once from the
+// seed, and ReckonerStrategy does the same for its deal sampler, its epsilon roll
+// and its bid noise. Unseeded, both fall back to std::random_device exactly once,
+// at construction. The other three are deterministic and ignore it.
+//
+// WHAT A SEEDED RECKONER IS AND IS NOT. It replays a game card for card given the
+// same deal and the same opponents - the engine's own suite asserts that
+// (ReckonerStrategyTests). It is NOT reproducible across a change to any other
+// seat, because its rng is consumed per decision and a different card played
+// upstream shifts the whole stream. RandomCardStrategy has the same property, and
+// it is why the fixtures keep both out of transcript comparisons.
+BuiltSeat providerFor(newgame::BotLevel level,
+                      const std::string& name,
+                      std::optional<std::uint32_t> seed)
 {
     switch(level)
     {
     case newgame::BotLevel::Random:
-        // SEEDED WHEN THE DEAL IS FIXED. RandomCardStrategy's seeded constructor
-        // seeds its mt19937 once, so the whole game is then reproducible - which
-        // GameSetup::shuffleSeed alone does not give, because it reaches the
-        // shuffle and nothing else.
-        return std::make_unique<AiMoveProvider>(
-            seed ? std::make_unique<RandomCardStrategy>(*seed)
-                 : std::make_unique<RandomCardStrategy>());
+        return BuiltSeat{ std::make_unique<AiMoveProvider>(
+                              seed ? std::make_unique<RandomCardStrategy>(*seed)
+                                   : std::make_unique<RandomCardStrategy>()),
+                          nullptr };
 
     case newgame::BotLevel::FirstCard:
-        return std::make_unique<AiMoveProvider>(std::make_unique<FirstCardStrategy>());
+        return BuiltSeat{ std::make_unique<AiMoveProvider>(std::make_unique<FirstCardStrategy>()),
+                          nullptr };
 
     case newgame::BotLevel::LowRisk:
-        return std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>());
+        return BuiltSeat{ std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()),
+                          nullptr };
 
     case newgame::BotLevel::Ducking:
-        return std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>());
+        return BuiltSeat{ std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()),
+                          nullptr };
+
+    // THE KNOBS OVERLOAD, not the ReckonerPreset one, so the mapping from a row
+    // of this client's menu to a table of the engine's numbers is visible at the
+    // call site rather than one enum deep.
+    case newgame::BotLevel::ReckonerEasy:
+        return makeReckoner(name, reckoner::ReckonerKnobs::easy(), seed);
+
+    case newgame::BotLevel::ReckonerMedium:
+        return makeReckoner(name, reckoner::ReckonerKnobs::medium(), seed);
+
+    case newgame::BotLevel::ReckonerHard:
+        return makeReckoner(name, reckoner::ReckonerKnobs::hard(), seed);
+
+    case newgame::BotLevel::ReckonerBrutal:
+        return makeReckoner(name, reckoner::ReckonerKnobs::brutal(), seed);
     }
 
     // Unreachable for any enumerator above, and not an assert: a switch with no
     // default warns when a new level is added, which is the diagnostic wanted -
     // this is only here because a scoped enum can hold a value none of them name.
-    return std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>());
+    return BuiltSeat{ std::make_unique<AiMoveProvider>(std::make_unique<LowRiskStrategy>()),
+                      nullptr };
 }
 
 // Every name in the config, in seat order, for the duplicate check.
@@ -117,7 +203,11 @@ newgame::Config newgame::defaults()
     // is a name to replace, not a label.
     config.humanName = QCoreApplication::translate("newgame", "Player");
 
-    for(int i = 0 ; i < 3 ; i++)
+    // FOUR, one per Reckoner preset, so every level defaultLevel() cycles is on
+    // the opening table and the weakest-to-strongest order is something a player
+    // can read off the scoreboard. Four bots plus the human is five seats, inside
+    // the played range applyOpponentRange() allows, and stockNames() has six.
+    for(int i = 0 ; i < 4 ; i++)
     {
         config.botNames.push_back(stockNames().at(i));
         config.botLevels.push_back(defaultLevel(i));
@@ -251,9 +341,33 @@ std::optional<Seat> newgame::humanSeatOf(const Config& config)
     return Seat{ 0u };
 }
 
-GameSetup newgame::buildSetup(const Config& config)
+bool newgame::isReckoner(BotLevel level)
 {
-    GameSetup setup;
+    switch(level)
+    {
+    case BotLevel::ReckonerEasy:
+    case BotLevel::ReckonerMedium:
+    case BotLevel::ReckonerHard:
+    case BotLevel::ReckonerBrutal:
+        return true;
+
+    case BotLevel::Random:
+    case BotLevel::FirstCard:
+    case BotLevel::LowRisk:
+    case BotLevel::Ducking:
+        return false;
+    }
+
+    // Every enumerator is named above, so this is the same unreachable tail
+    // providerFor() carries and for the same reason: no default:, so a level added
+    // without a decision here is a warning rather than a silent false.
+    return false;
+}
+
+GameDeal newgame::buildDeal(const Config& config)
+{
+    GameDeal deal;
+    GameSetup& setup = deal.setup;
 
     // FIRST, and with a null provider on purpose - GameController::start() fills
     // exactly this seat, addressed by humanSeatOf() above. Any OTHER null seat
@@ -264,17 +378,28 @@ GameSetup newgame::buildSetup(const Config& config)
 
     for(int i = 0 ; i < config.botNames.size() ; i++)
     {
-        // The seed varies per seat, so two Random bots at one table do not play
-        // the same stream as each other.
+        // The seed varies per seat, so two bots that draw at one table do not play
+        // the same stream as each other. It is indexed by the SEAT and not by the
+        // bot, so a watched game and a played one do not seed the same bot alike -
+        // which is correct, because they are not the same table.
         const std::optional<std::uint32_t> seed =
             config.shuffleSeed
                 ? std::optional<std::uint32_t>(*config.shuffleSeed
                                                + static_cast<std::uint32_t>(setup.seats.size()))
                 : std::nullopt;
 
-        setup.seats.push_back(
-            SeatSetup{ config.botNames.at(i).toStdString(),
-                       providerFor(config.botLevels.at(static_cast<std::size_t>(i)), seed) });
+        const std::string name = config.botNames.at(i).toStdString();
+
+        BuiltSeat built = providerFor(config.botLevels.at(static_cast<std::size_t>(i)), name, seed);
+
+        // COLLECTED BEFORE THE PROVIDER IS MOVED AWAY, and only when there is one
+        // - an observer per seat that watches, nothing for the seats that do not.
+        // runGame() asserts the list holds no nulls, which is this check's other
+        // half.
+        if(built.observer != nullptr)
+            deal.observers.push_back(built.observer);
+
+        setup.seats.push_back(SeatSetup{ name, std::move(built.provider) });
     }
 
     setup.structure = config.structure;
@@ -282,7 +407,7 @@ GameSetup newgame::buildSetup(const Config& config)
     setup.all1GamesAreForehead = config.all1GamesAreForehead;
     setup.shuffleSeed = config.shuffleSeed;
 
-    return setup;
+    return deal;
 }
 
 QString newgame::nameOf(BotLevel level)
@@ -293,6 +418,17 @@ QString newgame::nameOf(BotLevel level)
     case BotLevel::FirstCard: return QCoreApplication::translate("newgame", "First card");
     case BotLevel::LowRisk:   return QCoreApplication::translate("newgame", "Low risk");
     case BotLevel::Ducking:   return QCoreApplication::translate("newgame", "Ducking");
+
+    // THE TERMINAL WIZARD'S STRINGS VERBATIM (section 21.4), parenthesised preset
+    // and all, so a player who knows one client reads the other.
+    case BotLevel::ReckonerEasy:
+        return QCoreApplication::translate("newgame", "Reckoner (Easy)");
+    case BotLevel::ReckonerMedium:
+        return QCoreApplication::translate("newgame", "Reckoner (Medium)");
+    case BotLevel::ReckonerHard:
+        return QCoreApplication::translate("newgame", "Reckoner (Hard)");
+    case BotLevel::ReckonerBrutal:
+        return QCoreApplication::translate("newgame", "Reckoner (Brutal)");
     }
 
     return QString();
@@ -302,6 +438,13 @@ QString newgame::tooltipFor(BotLevel level)
 {
     // The engine's STRATEGIES.md lead table, one row each, so the choice means
     // something to a player who has never read the source (section 13).
+    //
+    // EXCEPT THE RECKONER'S FOUR, which are not in STRATEGIES.md at all - it and
+    // the engine README were never updated when the strategy landed and both still
+    // say the engine ships four. Those four lines are section 9 of
+    // libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md, read as prose:
+    // the preset's memory, its rollout count, and the one thing it does that the
+    // preset below it does not.
     switch(level)
     {
     case BotLevel::Random:
@@ -319,6 +462,23 @@ QString newgame::tooltipFor(BotLevel level)
         return QCoreApplication::translate("newgame",
                                            "Bids 0 come what may, and sheds its highest cards "
                                            "whenever they cannot win.");
+
+    case BotLevel::ReckonerEasy:
+        return QCoreApplication::translate("newgame",
+                                           "Remembers only the trick in front of it, and plays a "
+                                           "random legal card one time in seven.");
+    case BotLevel::ReckonerMedium:
+        return QCoreApplication::translate("newgame",
+                                           "Remembers every card played, and weighs sixty imagined "
+                                           "deals before each card.");
+    case BotLevel::ReckonerHard:
+        return QCoreApplication::translate("newgame",
+                                           "Two hundred imagined deals a card, and it plays to break "
+                                           "the leader's bid as well as to make its own.");
+    case BotLevel::ReckonerBrutal:
+        return QCoreApplication::translate("newgame",
+                                           "Four hundred imagined deals a card, and it solves the "
+                                           "last two tricks exactly rather than guessing them.");
     }
 
     return QString();

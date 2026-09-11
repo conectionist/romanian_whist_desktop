@@ -17,11 +17,7 @@
 #include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
 
-#include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/GameEngine.h>
-#include <romanian_whist/strategies/DuckingStrategy.h>
-#include <romanian_whist/strategies/FirstCardStrategy.h>
-#include <romanian_whist/strategies/LowRiskStrategy.h>
 
 #include <QBoxLayout>
 #include <QCloseEvent>
@@ -47,9 +43,11 @@ using namespace romanian_whist;
 namespace
 {
 // PHASE A's HARDCODED GAME IS GONE, and this is what replaced it: nothing. The
-// seed, the seat and buildSetup() all lived here, and D1's dialog answers all
-// three - so the client no longer has an opinion about what game to play until
-// somebody asks for one.
+// seed, the seat and the setup building all lived here, and D1's dialog answers
+// all three - so the client no longer has an opinion about what game to play
+// until somebody asks for one. (It also took four strategy includes with it,
+// which stayed behind at the top of this file until the Reckoner nearly became a
+// fifth dead one.)
 //
 // THE SEAT INDEX IS WORTH ONE LINE ON ITS WAY OUT. It was 1 rather than 0, and
 // deliberately: seatlayout draws seat 0 at bottom-centre for a spectator too, so
@@ -331,7 +329,7 @@ void MainWindow::showNewGameDialog()
     Pacing pacing = newgame::pacingFor(lastConfig.botSpeed);
     pacing.waitAfterEachRound = lastConfig.waitAfterEachRound;
 
-    startGame(newgame::buildSetup(lastConfig),
+    startGame(newgame::buildDeal(lastConfig),
               newgame::humanSeatOf(lastConfig),
               pacing);
 }
@@ -612,7 +610,7 @@ void MainWindow::showCardArt()
     cardArt->activateWindow();
 }
 
-void MainWindow::startGame(GameSetup setup, std::optional<Seat> humanSeat, Pacing pacing)
+void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing pacing)
 {
     // CLEARED HERE, not in the constructor: the elapsed column is measured from
     // a game's first snapshot, so the origin has to be re-armed by whatever
@@ -698,7 +696,7 @@ void MainWindow::startGame(GameSetup setup, std::optional<Seat> humanSeat, Pacin
     // gameStopped before it reaches onGameStopped(). Anything spinning the event
     // loop in that gap delivers the relay instead, and the window closes.
     controller.prepare(humanSeat, pacing);
-    controller.start(std::move(setup));
+    controller.start(std::move(deal));
 }
 
 MainWindow::~MainWindow()

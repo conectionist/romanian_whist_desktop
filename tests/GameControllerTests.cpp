@@ -4,13 +4,16 @@
 #include "GameFixtures.h"
 
 #include "engine/GameController.h"
+#include "ui/NewGameDialog.h"
 
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/IMoveProvider.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
+#include <romanian_whist/strategies/ReckonerStrategy.h>
 
 #include <QCoreApplication>
+#include <QStringList>
 
 #include <algorithm>
 #include <atomic>
@@ -118,6 +121,266 @@ TEST_CASE("A game left to itself reaches onGameOver", "[controller]")
     REQUIRE(outcome.failedCount == 0);
 
     controller.stop();
+}
+
+TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[controller]")
+{
+    // THE ONE THING buildDeal() CANNOT PROVE ON ITS OWN. NewGameTests asserts that
+    // a Reckoner level yields an observer; this asserts that the observer actually
+    // reaches the engine - on the game thread, where addObserver() is legal, and
+    // before start(), which fires onGameStarted() as its last act and is where the
+    // strategy resolves its own seat from its name.
+    //
+    // OBSERVED THROUGH THE TRACKER, because there is nothing else to ask. The
+    // three fields below are reachable ONLY through the observer callbacks and all
+    // three have a default that a three-seat game at seat 2 cannot produce
+    // honestly: playerCount is 4 until onRoundStarted() sets it, mySeat is 0 until
+    // onGameStarted() resolves it, and completedTricks is empty until onTrickWon()
+    // appends to it. An unregistered Reckoner reports all three defaults while
+    // playing perfectly legal cards, which is exactly why this case exists.
+    const auto reckonerConfig = []
+    {
+        newgame::Config config;
+        config.spectator = true;   // so bot i is seat i, with no human seat shifting them
+        config.botNames = QStringList{ "Ana", "Bogdan", "Reckoner" };
+        config.botLevels = { newgame::BotLevel::LowRisk,
+                             newgame::BotLevel::Ducking,
+                             // EASY, whose K_play and K_bid are 0 - the rollout
+                             // engine short-circuits, so this is a whole 23-round
+                             // game at the cost of the base policy. Registration is
+                             // the same code at every preset.
+                             newgame::BotLevel::ReckonerEasy };
+        config.shuffleSeed = 42u;
+
+        return config;
+    };
+
+    // Latched from inside the slot rather than read afterwards: the strategy is
+    // owned by the engine's Player and dies with the engine inside runGame(), so
+    // reading the tracker once gameOver has arrived is a use-after-free. A DIRECT
+    // connection puts this slot on the game thread, which is the one place the
+    // tracker is safe to touch at all.
+    //
+    // THE MAXIMUM of completedTricks rather than its last value, because
+    // initRound() clears it - and the schedule opens with three one-card rounds,
+    // where the bridge (registered first, so called first) sees the trick before
+    // the strategy records it. The max crosses zero as soon as the rounds grow.
+    struct Latches
+    {
+        std::atomic<unsigned int> mySeat{99};
+        std::atomic<unsigned int> playerCount{99};
+        std::atomic<unsigned int> mostCompletedTricks{0};
+    };
+
+    const auto latch = [](Latches& into, const ReckonerStrategy& strategy)
+    {
+        const reckoner::ReckonerTracker& tracker = strategy.getTracker();
+
+        into.mySeat = tracker.mySeat;
+        into.playerCount = tracker.playerCount;
+        into.mostCompletedTricks = std::max(into.mostCompletedTricks.load(),
+                                           static_cast<unsigned int>(tracker.completedTricks.size()));
+    };
+
+    SECTION("registered, it knows the table it is sitting at")
+    {
+        GameController controller;
+        controller.prepare(std::nullopt, instant());
+
+        GameDeal deal = newgame::buildDeal(reckonerConfig());
+
+        REQUIRE(deal.observers.size() == 1);
+
+        ReckonerStrategy* reckoner = dynamic_cast<ReckonerStrategy*>(deal.observers.front());
+        REQUIRE(reckoner != nullptr);
+
+        Latches latches;
+        QObject latchContext;
+
+        QObject::connect(controller.bridge(), &GameBridge::trickWon, &latchContext,
+                         [&latches, &latch, reckoner](unsigned int, unsigned int)
+                         { latch(latches, *reckoner); },
+                         Qt::DirectConnection);
+
+        Outcome outcome(controller);
+
+        controller.start(std::move(deal));
+
+        REQUIRE(outcome.await());
+        REQUIRE(outcome.overCount == 1);
+        REQUIRE(outcome.failedCount == 0);
+
+        // Joined BEFORE the assertions, so nothing is still writing the latches -
+        // and before the engine is gone is not a thing to arrange here, because
+        // the latches are plain values and the strategy is no longer touched.
+        controller.stop();
+
+        REQUIRE(latches.playerCount == 3);
+        REQUIRE(latches.mySeat == 2);
+        REQUIRE(latches.mostCompletedTricks > 0);
+    }
+
+    SECTION("unregistered, it refuses to play at all rather than playing badly")
+    {
+        // THE MUTATION THAT HAS TO MAKE THE SECTION ABOVE FAIL, and the reason it
+        // is written out rather than described: dropping the observers is a
+        // one-line change, and without this nothing in this suite would notice it.
+        //
+        // WHAT IT ASSERTS CHANGED WITH THE ENGINE, and the history is worth keeping
+        // because the first version of this section was wrong in an instructive
+        // way. It expected a bot with no memory - a game that finished, every card
+        // legal, only the play weak. What actually happened was worse: the tracker
+        // kept its four-handed defaults, the rollout picked out of the wrong deck
+        // profile, and the engine rejected the card ("played a card that is not
+        // legal in this trick"), which is a failure several layers from its cause.
+        //
+        // The engine now refuses instead. ReckonerStrategy throws from its first
+        // decision if it never saw a round start, because the alternative - once
+        // getBestChoice() began filtering its answer through the card validator -
+        // was a misconfiguration that played weakly FOREVER with nothing to read.
+        // So the guard and this diagnostic arrived together, and this section is
+        // the client-side proof that the diagnostic reaches the GUI as a failure
+        // rather than as a quietly bad opponent.
+        GameController controller;
+        controller.prepare(std::nullopt, instant());
+
+        GameDeal deal = newgame::buildDeal(reckonerConfig());
+
+        REQUIRE(dynamic_cast<ReckonerStrategy*>(deal.observers.front()) != nullptr);
+
+        deal.observers.clear();
+
+        Outcome outcome(controller);
+
+        controller.start(std::move(deal));
+
+        REQUIRE(outcome.await());
+
+        // LOUDLY, AND NOT AT ALL QUIETLY. The overCount assertion is the half that
+        // matters: a game that reached its standings would mean the bot had played
+        // all 23 rounds out of a memory it never received.
+        REQUIRE(outcome.failedCount == 1);
+        REQUIRE(outcome.overCount == 0);
+
+        controller.stop();
+
+        // And the message names the fix, because a std::logic_error that only says
+        // something went wrong is barely better than the illegal card it replaced.
+        const std::string failure = outcome.failureMessage();
+
+        INFO("failure was: " << failure);
+        REQUIRE(failure.find("never registered as an observer") != std::string::npos);
+        REQUIRE(failure.find("makeReckonerSeat") != std::string::npos);
+    }
+}
+
+TEST_CASE("The default table registers every one of its watching seats", "[controller]")
+{
+    // THE GAME THE CLIENT OPENS ON, which the case above does not cover: that one
+    // is a three-seat WATCHED table with a single Reckoner, and newgame::defaults()
+    // is a five-seat PLAYED one with four. Two things are only true here - four
+    // observers registered in one run rather than one, and a human seat that
+    // GameController::start() has to fill by index on a setup the observer loop
+    // then walks past.
+    //
+    // EASY AT EVERY SEAT, and the levels are the one thing overridden. A default
+    // table at its real presets is 29 rounds against a Brutal bot sampling four
+    // hundred deals a card - about a second of thinking in a release build and six
+    // in this one, measured - which is not a cost this suite should carry to learn
+    // how many observers a vector holds. What the presets change is the contents of
+    // a knobs struct; what this case is about is the registration, which is the
+    // same code at every level.
+    newgame::Config config = newgame::defaults();
+
+    for(auto& level : config.botLevels)
+        level = newgame::BotLevel::ReckonerEasy;
+
+    config.shuffleSeed = 42u;
+
+    REQUIRE(config.botNames.size() == 4);
+    REQUIRE_FALSE(config.spectator);
+
+    GameController controller;
+    controller.prepare(newgame::humanSeatOf(config), instant());
+
+    REQUIRE(controller.provider() != nullptr);
+
+    GameDeal deal = newgame::buildDeal(config);
+
+    // One per bot, and none for the human - whose seat is the null one start() is
+    // about to fill.
+    REQUIRE(deal.observers.size() == 4);
+    REQUIRE(deal.setup.seats.size() == 5);
+    REQUIRE(deal.setup.seats.at(newgame::humanSeatOf(config)->index).moveProvider == nullptr);
+
+    std::vector<ReckonerStrategy*> reckoners;
+    for(IGameObserver* observer : deal.observers)
+    {
+        ReckonerStrategy* strategy = dynamic_cast<ReckonerStrategy*>(observer);
+        REQUIRE(strategy != nullptr);
+        reckoners.push_back(strategy);
+    }
+
+    // EVERY SEAT SEPARATELY, because one observer registered four times would
+    // satisfy a count and nothing else - and the seat each one resolves is the
+    // thing that tells them apart. Seats 1..4, since the human holds seat 0.
+    std::atomic<unsigned int> seatsSeen{0};
+    std::atomic<unsigned int> tableSize{0};
+
+    QObject latchContext;
+
+    // THE HUMAN'S SEAT HAS TO BE ANSWERED, which is the difference between this
+    // case and every all-bot one above: prepare() was given a seat, so the engine
+    // parks in QtMoveProvider waiting for a player who is not here and await()
+    // times out with nothing to show. Answered inline on the game thread, the way
+    // HumanSeatTests does, and with the fixtures' lowest-legal helpers - an illegal
+    // answer is re-prompted rather than rejected, which is a prompt LOOP rather
+    // than a red test.
+    QObject::connect(controller.bridge(), &GameBridge::betRequested, &latchContext,
+                     [&controller](BetPrompt prompt)
+                     {
+                         controller.provider()->submit(prompt.promptId,
+                                                       fixtures::lowestLegalBid(prompt));
+                     },
+                     Qt::DirectConnection);
+
+    QObject::connect(controller.bridge(), &GameBridge::cardRequested, &latchContext,
+                     [&controller](PlayPrompt prompt)
+                     {
+                         const std::size_t slot = fixtures::firstLegalSlot(prompt);
+                         controller.provider()->submit(prompt.promptId,
+                                                       prompt.handIndex[slot]);
+                     },
+                     Qt::DirectConnection);
+
+    QObject::connect(controller.bridge(), &GameBridge::trickWon, &latchContext,
+                     [&reckoners, &seatsSeen, &tableSize](unsigned int, unsigned int)
+                     {
+                         unsigned int mask = 0;
+                         for(const ReckonerStrategy* strategy : reckoners)
+                             mask |= 1u << strategy->getTracker().mySeat;
+
+                         seatsSeen = mask;
+                         tableSize = reckoners.front()->getTracker().playerCount;
+                     },
+                     Qt::DirectConnection);
+
+    Outcome outcome(controller);
+
+    controller.start(std::move(deal));
+
+    REQUIRE(outcome.await(std::chrono::seconds(60)));
+    REQUIRE(outcome.overCount == 1);
+    REQUIRE(outcome.failedCount == 0);
+
+    controller.stop();
+
+    REQUIRE(tableSize == 5);
+
+    // Seats 1, 2, 3 and 4 and no other - so no two of them think they are the same
+    // player, and none of them fell back to the seat-0 default that an unresolved
+    // name produces.
+    REQUIRE(seatsSeen == 0b11110);
 }
 
 TEST_CASE("stop() after the game finished on its own is safe", "[controller]")

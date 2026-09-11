@@ -224,7 +224,12 @@ private:
     //
     // The seat and the pacing come from the dialog rather than from a literal,
     // which is the whole of what D1 changed about starting a game.
-    void startGame(romanian_whist::GameSetup setup,
+    //
+    // A GameDeal RATHER THAN A GameSetup, because a seat's strategy can also be
+    // an observer the engine has to be given before it starts - see GameDeal in
+    // engine/GameController.h. This window only carries it from buildDeal() to
+    // start(); it registers nothing and looks inside nothing.
+    void startGame(GameDeal deal,
                    std::optional<romanian_whist::Seat> humanSeat,
                    Pacing pacing);
 
