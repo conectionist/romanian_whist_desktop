@@ -485,9 +485,9 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
     // NOT A WHOLE GAME PER LEVEL ANY MORE, and that is a deliberate division of
     // labour rather than a corner cut. The Reckoner's four presets are one code
     // path and four tables of numbers, and the ENGINE's own suite already plays
-    // full games at Easy, Hard and Brutal and asserts seeded replay
+    // full games at Alpha, Gamma and Delta and asserts seeded replay
     // (libs/RomanianWhistEngine/tests/ReckonerStrategyTests.cpp, and a tournament
-    // besides). Hard samples two hundred imagined deals per card and Brutal four
+    // besides). Gamma samples two hundred imagined deals per card and Delta four
     // hundred; playing two more full games here would re-test the engine at this
     // suite's expense, three times over, because LOCAL_VERIFICATION.md builds this
     // binary under three sanitizers.
@@ -495,7 +495,7 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
     // WHAT THIS SUITE OWES IS THE WIRING: that every level names something
     // buildable, and that the thing it builds reaches a seat. The game below is
     // what proves a provider actually answers rather than parking the engine, and
-    // ReckonerEasy is free enough to carry that for all four presets - its K_play
+    // ReckonerAlpha is free enough to carry that for all four presets - its K_play
     // and K_bid are 0, so the rollout engine short-circuits and it is the base
     // policy plus an epsilon roll.
     //
@@ -524,7 +524,7 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
             REQUIRE(seat.moveProvider != nullptr);
         }
 
-        if(newgame::isReckoner(level) && level != newgame::BotLevel::ReckonerEasy)
+        if(newgame::isReckoner(level) && level != newgame::BotLevel::ReckonerAlpha)
             continue;
 
         GameEngine engine;
@@ -580,7 +580,7 @@ TEST_CASE("A Reckoner or Cyborg seat comes with an observer and the others come 
     // right after a seat that does not.
     newgame::Config mixed = watchingConfig(4);
     mixed.botLevels = { newgame::BotLevel::LowRisk,
-                        newgame::BotLevel::ReckonerHard,
+                        newgame::BotLevel::ReckonerGamma,
                         newgame::BotLevel::Ducking,
                         newgame::BotLevel::Cyborg };
 
@@ -628,13 +628,13 @@ TEST_CASE("The dialog opens on the terminal's quick game", "[new-game]")
     const newgame::Config config = newgame::defaults();
 
     REQUIRE_FALSE(config.spectator);
-    REQUIRE(config.botLevels == std::vector<newgame::BotLevel>{ newgame::BotLevel::ReckonerHard,
+    REQUIRE(config.botLevels == std::vector<newgame::BotLevel>{ newgame::BotLevel::ReckonerGamma,
                                                                 newgame::BotLevel::Cyborg,
                                                                 newgame::BotLevel::LowRisk });
     REQUIRE(newgame::roundCount(config) == 26);
 
     // AND A FOURTH ROW MAKES THE DEMO'S TABLE, whose remaining seat is a Reckoner
-    // at Medium - rather than a second copy of the first seat.
+    // at Beta - rather than a second copy of the first seat.
     NewGameDialog dialog(config);
 
     QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
@@ -643,7 +643,7 @@ TEST_CASE("The dialog opens on the terminal's quick game", "[new-game]")
     count->setValue(4);
 
     REQUIRE(dialog.config().botLevels.size() == 4);
-    REQUIRE(dialog.config().botLevels.at(3) == newgame::BotLevel::ReckonerMedium);
+    REQUIRE(dialog.config().botLevels.at(3) == newgame::BotLevel::ReckonerBeta);
 }
 
 TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")

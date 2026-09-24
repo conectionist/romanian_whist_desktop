@@ -54,7 +54,7 @@ const QStringList& stockNames()
 // who knows one client sits down at the same table in the other.
 //
 // THE FIRST THREE ARE ITS QUICK GAME, "you and three bots", and they are what
-// defaults() seats: a Reckoner at Hard - the preset the terminal's
+// defaults() seats: a Reckoner at Gamma - the preset the terminal's
 // --reckoner-preset flag defaults to, since its quick game names no preset of
 // its own - then the Cyborg, then LowRisk. Its reason is the one worth keeping:
 // the table most players judge the bots on seats the two that actually think,
@@ -62,23 +62,23 @@ const QStringList& stockNames()
 //
 // THE FOURTH IS ITS DEMO'S REMAINING SEAT. The terminal has no default for a
 // fourth bot at a played table, because its quick game stops at three - but its
-// watched demo seats four, these three and a Reckoner at Medium. So a fourth
+// watched demo seats four, these three and a Reckoner at Beta. So a fourth
 // row, added from the spinner at a played table or a watched one, makes the
 // demo's table rather than a second copy of the first seat. Past four they
 // cycle.
 //
-// THIS REPLACED THE FOUR RECKONER PRESETS, weakest first, which was the most
+// THIS REPLACED THE FOUR RECKONER PRESETS, cheapest first, which was the most
 // expensive opening table this client could deal and was chosen for being so.
-// Hard samples two hundred imagined deals a card where Brutal sampled four
+// Gamma samples two hundred imagined deals a card where Delta sampled four
 // hundred, so the opening game is now the cheaper one; and only its Reckoner
 // draws - the Cyborg and LowRisk are deterministic - so it is the one seat a
 // fixed deal has to seed.
 newgame::BotLevel defaultLevel(int index)
 {
-    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerHard,
+    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerGamma,
                                                     newgame::BotLevel::Cyborg,
                                                     newgame::BotLevel::LowRisk,
-                                                    newgame::BotLevel::ReckonerMedium };
+                                                    newgame::BotLevel::ReckonerBeta };
 
     return levels[static_cast<std::size_t>(index) % std::size(levels)];
 }
@@ -198,17 +198,17 @@ BuiltSeat providerFor(newgame::BotLevel level,
     // THE KNOBS OVERLOAD, not the ReckonerPreset one, so the mapping from a row
     // of this client's menu to a table of the engine's numbers is visible at the
     // call site rather than one enum deep.
-    case newgame::BotLevel::ReckonerEasy:
-        return makeReckoner(name, reckoner::ReckonerKnobs::easy(), seed);
+    case newgame::BotLevel::ReckonerAlpha:
+        return makeReckoner(name, reckoner::ReckonerKnobs::alpha(), seed);
 
-    case newgame::BotLevel::ReckonerMedium:
-        return makeReckoner(name, reckoner::ReckonerKnobs::medium(), seed);
+    case newgame::BotLevel::ReckonerBeta:
+        return makeReckoner(name, reckoner::ReckonerKnobs::beta(), seed);
 
-    case newgame::BotLevel::ReckonerHard:
-        return makeReckoner(name, reckoner::ReckonerKnobs::hard(), seed);
+    case newgame::BotLevel::ReckonerGamma:
+        return makeReckoner(name, reckoner::ReckonerKnobs::gamma(), seed);
 
-    case newgame::BotLevel::ReckonerBrutal:
-        return makeReckoner(name, reckoner::ReckonerKnobs::brutal(), seed);
+    case newgame::BotLevel::ReckonerDelta:
+        return makeReckoner(name, reckoner::ReckonerKnobs::delta(), seed);
     }
 
     // Unreachable for any enumerator above, and not an assert: a switch with no
@@ -383,10 +383,10 @@ bool newgame::isReckoner(BotLevel level)
 {
     switch(level)
     {
-    case BotLevel::ReckonerEasy:
-    case BotLevel::ReckonerMedium:
-    case BotLevel::ReckonerHard:
-    case BotLevel::ReckonerBrutal:
+    case BotLevel::ReckonerAlpha:
+    case BotLevel::ReckonerBeta:
+    case BotLevel::ReckonerGamma:
+    case BotLevel::ReckonerDelta:
         return true;
 
     case BotLevel::Random:
@@ -474,14 +474,14 @@ QString newgame::nameOf(BotLevel level)
     // and all, so a player who knows one client reads the other.
     case BotLevel::Cyborg:
         return QCoreApplication::translate("newgame", "Cyborg");
-    case BotLevel::ReckonerEasy:
-        return QCoreApplication::translate("newgame", "Reckoner (Easy)");
-    case BotLevel::ReckonerMedium:
-        return QCoreApplication::translate("newgame", "Reckoner (Medium)");
-    case BotLevel::ReckonerHard:
-        return QCoreApplication::translate("newgame", "Reckoner (Hard)");
-    case BotLevel::ReckonerBrutal:
-        return QCoreApplication::translate("newgame", "Reckoner (Brutal)");
+    case BotLevel::ReckonerAlpha:
+        return QCoreApplication::translate("newgame", "Reckoner (Alpha)");
+    case BotLevel::ReckonerBeta:
+        return QCoreApplication::translate("newgame", "Reckoner (Beta)");
+    case BotLevel::ReckonerGamma:
+        return QCoreApplication::translate("newgame", "Reckoner (Gamma)");
+    case BotLevel::ReckonerDelta:
+        return QCoreApplication::translate("newgame", "Reckoner (Delta)");
     }
 
     return QString();
@@ -522,19 +522,19 @@ QString newgame::tooltipFor(BotLevel level)
                                            "odds on every card, and re-plans every trick which cards "
                                            "win and which go.");
 
-    case BotLevel::ReckonerEasy:
+    case BotLevel::ReckonerAlpha:
         return QCoreApplication::translate("newgame",
                                            "Remembers only the trick in front of it, and plays a "
                                            "random legal card one time in seven.");
-    case BotLevel::ReckonerMedium:
+    case BotLevel::ReckonerBeta:
         return QCoreApplication::translate("newgame",
                                            "Remembers every card played, and weighs sixty imagined "
                                            "deals before each card.");
-    case BotLevel::ReckonerHard:
+    case BotLevel::ReckonerGamma:
         return QCoreApplication::translate("newgame",
                                            "Two hundred imagined deals a card, and it plays to break "
                                            "the leader's bid as well as to make its own.");
-    case BotLevel::ReckonerBrutal:
+    case BotLevel::ReckonerDelta:
         return QCoreApplication::translate("newgame",
                                            "Four hundred imagined deals a card, and it solves the "
                                            "last two tricks exactly rather than guessing them.");

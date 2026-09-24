@@ -92,10 +92,15 @@ enum class BotLevel
     // for real.
     Cyborg,
     // The terminal's Reckoner levels, in its order too, one per engine preset.
-    ReckonerEasy,
-    ReckonerMedium,
-    ReckonerHard,
-    ReckonerBrutal
+    //
+    // LETTERS, NOT DIFFICULTIES, since engine 5.0.0 renamed Easy, Medium, Hard
+    // and Brutal: in play Hard was often no stronger than Easy or Medium, and
+    // Brutal overbid and finished last. Each still searches more than the one
+    // before it, and none is promised to play better. Terminal 2.5.0 followed.
+    ReckonerAlpha,
+    ReckonerBeta,
+    ReckonerGamma,
+    ReckonerDelta
 };
 
 // Every option in menu order, so the combo and the factory below cannot drift
@@ -105,10 +110,10 @@ inline constexpr BotLevel BotLevels[] = { BotLevel::Random,
                                           BotLevel::LowRisk,
                                           BotLevel::Ducking,
                                           BotLevel::Cyborg,
-                                          BotLevel::ReckonerEasy,
-                                          BotLevel::ReckonerMedium,
-                                          BotLevel::ReckonerHard,
-                                          BotLevel::ReckonerBrutal };
+                                          BotLevel::ReckonerAlpha,
+                                          BotLevel::ReckonerBeta,
+                                          BotLevel::ReckonerGamma,
+                                          BotLevel::ReckonerDelta };
 
 // THE COMBO'S INDEX *IS* THE ENUM'S VALUE, and until the Reckoner landed that was
 // held by a comment alone. rebuildOpponentRows() writes the row with

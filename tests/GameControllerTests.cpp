@@ -179,11 +179,11 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
         config.botNames = QStringList{ "Ana", "Bogdan", "Reckoner" };
         config.botLevels = { newgame::BotLevel::LowRisk,
                              newgame::BotLevel::Ducking,
-                             // EASY, whose K_play and K_bid are 0 - the rollout
+                             // ALPHA, whose K_play and K_bid are 0 - the rollout
                              // engine short-circuits, so this is a whole 23-round
                              // game at the cost of the base policy. Registration is
                              // the same code at every preset.
-                             newgame::BotLevel::ReckonerEasy };
+                             newgame::BotLevel::ReckonerAlpha };
         config.shuffleSeed = 42u;
 
         return config;
@@ -448,8 +448,8 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
     // after them that has none, and a human seat that GameController::start() has
     // to fill by index on a setup the observer loop then walks past.
     //
-    // THE RECKONER AT EASY, and its level is the one thing overridden. The
-    // default is Hard, which samples two hundred imagined deals a card - not a
+    // THE RECKONER AT ALPHA, and its level is the one thing overridden. The
+    // default is Gamma, which samples two hundred imagined deals a card - not a
     // cost this suite should carry to learn how many observers a vector holds.
     // What the presets change is the contents of a knobs struct; what this case
     // is about is the registration, which is the same code at every level. The
@@ -458,7 +458,7 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
 
     for(auto& level : config.botLevels)
         if(newgame::isReckoner(level))
-            level = newgame::BotLevel::ReckonerEasy;
+            level = newgame::BotLevel::ReckonerAlpha;
 
     config.shuffleSeed = 42u;
 
