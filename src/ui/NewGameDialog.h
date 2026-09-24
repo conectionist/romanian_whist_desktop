@@ -143,7 +143,8 @@ bool isReckoner(BotLevel level);
 // engine has to be given before it starts, or it has nothing to play from: the
 // four Reckoner presets and the Cyborg. buildDeal() does not ask this - it keeps
 // whatever observer a seat comes with - so this is the statement the tests hold
-// it to, kept beside the levels so that adding one forces a decision here.
+// it to. Built on isReckoner(), whose switch is where a new level is forced to a
+// decision; a watching level this then misses fails that same test.
 bool isObserver(BotLevel level);
 
 // The engine builds its deck from the player count and rejects anything outside

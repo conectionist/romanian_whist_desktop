@@ -93,51 +93,55 @@ struct BuiltSeat
     IGameObserver* observer = nullptr;
 };
 
-// THE ENGINE'S OWN makeReckonerSeat() DOES EXACTLY THIS and cannot be used here.
-// It takes a GameEngine& and calls addObserver() on it itself, which is right for
-// a caller that owns its engine as a member (the terminal client does) and
-// impossible for this one: buildDeal() runs on the GUI thread, where the game's
-// engine does not exist yet and will not until GameController's run slot
-// constructs it. So the registration is deferred and this is the helper minus
-// that one line. Kept line-for-line otherwise, so a fix landing there is findable
-// here.
+// A STRATEGY THAT ALSO WATCHES, AS A SEAT: the engine's own makeReckonerSeat()
+// and makeCyborgSeat() minus their one addObserver() line, and the one place the
+// two rules below are written down, so the next strategy that watches cannot
+// take one of them and not the other.
 //
-// setPlayerName() AND NOT setSeat(), which is the engine helper's choice and
+// THE REGISTRATION IS THE LINE LEFT OUT, because it cannot be made here. Both
+// engine helpers take a GameEngine& and call addObserver() on it themselves,
+// which is right for a caller that owns its engine as a member (the terminal
+// client does) and impossible for this one: buildDeal() runs on the GUI thread,
+// where the game's engine does not exist yet and will not until
+// GameController's run slot constructs it. Kept line-for-line with them
+// otherwise, so a fix landing there is findable here.
+//
+// setPlayerName() AND NOT setSeat(), which is the engine helpers' choice and
 // worth keeping for a second reason of our own: the strategy resolves its seat
 // from its name inside onGameStarted(), so a seat that is right here would be
 // right even for a strategy that was never registered - and the test proving the
 // registration happened would be asserting nothing. The name cannot mis-resolve,
 // because firstError() rejects duplicates more strictly than the engine does
 // (case-insensitively).
-BuiltSeat makeReckoner(const std::string& name,
-                       const reckoner::ReckonerKnobs& knobs,
-                       std::optional<std::uint32_t> seed)
+template<typename Strategy>
+BuiltSeat makeWatchingSeat(std::unique_ptr<Strategy> strategy, const std::string& name)
 {
-    auto strategy = std::make_unique<ReckonerStrategy>(knobs, seed);
     strategy->setPlayerName(name);
 
-    // TAKEN FROM ReckonerStrategy*, and taken BEFORE the move, in a named local.
-    // The class derives from IStrategy and IGameObserver both, so the two base
-    // subobjects sit at different addresses within it - upcasting from the wrong
-    // one compiles and hands the engine a pointer to the wrong vtable. A
-    // dynamic_cast in the test is what pins this down.
+    // TAKEN FROM Strategy*, and taken BEFORE the move, in a named local. Both
+    // strategies derive from IStrategy and IGameObserver, so the two base
+    // subobjects sit at different addresses within each - upcasting from the
+    // wrong one compiles and hands the engine a pointer to the wrong vtable. A
+    // dynamic_cast in the test is what pins this down. The template closes the
+    // one gap left: handed a unique_ptr<IStrategy>, this line does not compile.
     IGameObserver* observer = strategy.get();
 
     return BuiltSeat{ std::make_unique<AiMoveProvider>(std::move(strategy)), observer };
 }
 
-// THE ENGINE'S makeCyborgSeat() MINUS THE REGISTRATION, for exactly
-// makeReckoner()'s reason above, and kept line-for-line with it otherwise for the
-// same one. Both of makeReckoner()'s rules hold here unchanged: setPlayerName()
-// rather than setSeat(), so that only a registered strategy learns its seat; and
-// the observer taken from CyborgStrategy* before the move, because it has the
-// same two bases.
-//
-// THE NAME CARRIES ONE MORE CHECK HERE. A Cyborg whose name matches no seat does
-// not play as seat 0 the way a Reckoner does - it throws from onGameStarted(),
-// the last thing GameEngine::start() does. buildDeal() cannot trip that, because
-// the one `name` it builds per seat is the one both this and the SeatSetup are
-// given.
+// A Reckoner seat, from one of the engine's knob tables.
+BuiltSeat makeReckoner(const std::string& name,
+                       const reckoner::ReckonerKnobs& knobs,
+                       std::optional<std::uint32_t> seed)
+{
+    return makeWatchingSeat(std::make_unique<ReckonerStrategy>(knobs, seed), name);
+}
+
+// THE CYBORG'S NAME CARRIES ONE MORE CHECK. A Cyborg whose name matches no seat
+// does not play as seat 0 the way a Reckoner does - it throws from
+// onGameStarted(), the last thing GameEngine::start() does. buildDeal() cannot
+// trip that, because the one `name` it builds per seat is the one both this and
+// the SeatSetup are given.
 //
 // NO KNOBS AND NO SEED, which is not makeReckoner()'s shape and is deliberate
 // both times. The knobs are "development tuning, not a difficulty dial"
@@ -145,12 +149,7 @@ BuiltSeat makeReckoner(const std::string& name,
 // are that strength - and it draws nothing, so there is nothing to seed.
 BuiltSeat makeCyborg(const std::string& name)
 {
-    auto strategy = std::make_unique<CyborgStrategy>();
-    strategy->setPlayerName(name);
-
-    IGameObserver* observer = strategy.get();
-
-    return BuiltSeat{ std::make_unique<AiMoveProvider>(std::move(strategy)), observer };
+    return makeWatchingSeat(std::make_unique<CyborgStrategy>(), name);
 }
 
 // One seat, from a level.
@@ -394,6 +393,8 @@ bool newgame::isReckoner(BotLevel level)
     case BotLevel::FirstCard:
     case BotLevel::LowRisk:
     case BotLevel::Ducking:
+    // Watches, but does not sample - which is why isObserver() names it on its
+    // own rather than taking it from here.
     case BotLevel::Cyborg:
         return false;
     }
@@ -404,26 +405,14 @@ bool newgame::isReckoner(BotLevel level)
     return false;
 }
 
+// FROM isReckoner() RATHER THAN A SWITCH OF ITS OWN, so a new level is decided
+// once - in isReckoner(), whose switch warns until it is - and not twice in two
+// switches that could each be satisfied and still disagree. A level that watches
+// and is left out of this line is not silent either: the observer-count case in
+// NewGameTests compares it against the observers buildDeal() actually built.
 bool newgame::isObserver(BotLevel level)
 {
-    switch(level)
-    {
-    case BotLevel::Cyborg:
-    case BotLevel::ReckonerEasy:
-    case BotLevel::ReckonerMedium:
-    case BotLevel::ReckonerHard:
-    case BotLevel::ReckonerBrutal:
-        return true;
-
-    case BotLevel::Random:
-    case BotLevel::FirstCard:
-    case BotLevel::LowRisk:
-    case BotLevel::Ducking:
-        return false;
-    }
-
-    // isReckoner()'s unreachable tail, for its reason.
-    return false;
+    return isReckoner(level) || level == BotLevel::Cyborg;
 }
 
 GameDeal newgame::buildDeal(const Config& config)

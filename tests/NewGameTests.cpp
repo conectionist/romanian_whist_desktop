@@ -68,6 +68,24 @@ public:
     std::optional<std::size_t> playCard(const PlayContext&) override { return 0; }
 };
 
+// Every bid and every card of a game, in the order the engine took them - what a
+// replay has to match, and what equal standings alone do not prove.
+class PlayRecorder : public IGameObserver
+{
+public:
+    std::string log;
+
+    void onBetPlaced(const GameEngine&, Seat seat, unsigned int bet) override
+    {
+        log += "b" + std::to_string(seat.index) + ":" + std::to_string(bet) + " ";
+    }
+
+    void onCardPlayed(const GameEngine&, Seat seat, const Card& card) override
+    {
+        log += "c" + std::to_string(seat.index) + ":" + card.toString() + " ";
+    }
+};
+
 // Starts an engine on a deal the way GameController::runGame() does: the
 // observers first, then the setup.
 //
@@ -415,6 +433,11 @@ TEST_CASE("A fixed deal seeds the bots that draw, so the game repeats", "[new-ga
     //
     // Asserted as a whole game rather than by inspecting the provider, because
     // the provider is a unique_ptr<IMoveProvider> with nothing to ask.
+    //
+    // BID FOR BID AND CARD FOR CARD, not by the standings alone. Two games that
+    // part ways can still end on the same scores, and a replay compared only at
+    // the end would call them one game - so a Cyborg that started to draw would
+    // pass here while real replays diverged under it.
     const auto transcript = [](std::optional<std::uint32_t> seed)
     {
         newgame::Config config = watchingConfig(3);
@@ -428,11 +451,19 @@ TEST_CASE("A fixed deal seeds the bots that draw, so the game repeats", "[new-ga
         // enough, rather than a seat the fixed deal forgot.
         config.botLevels.at(1) = newgame::BotLevel::Cyborg;
 
+        // Declared before the engine, so the engine - which keeps a pointer to
+        // it - is destroyed first.
+        PlayRecorder recorder;
+
         GameEngine engine;
+        engine.addObserver(&recorder);
         startWith(engine, newgame::buildDeal(config));
         engine.run();
 
-        std::string result;
+        // An empty log would compare equal to itself, and say nothing.
+        REQUIRE_FALSE(recorder.log.empty());
+
+        std::string result = recorder.log;
         for(const Standing& standing : engine.getStandings())
             result += standing.name + ":" + std::to_string(standing.score) + " ";
 
@@ -624,9 +655,8 @@ TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")
 
     // AGAINST defaults() RATHER THAN A LITERAL, because this case is about the
     // rows FOLLOWING THE SPINNER and not about how many the dialog opens with.
-    // That count was 3 and is 4 now that every Reckoner preset has a default
-    // seat; a literal here makes the next change to the default table come and
-    // find this line for no reason.
+    // The default table has changed before and will again; a literal here
+    // would make each change come and find this line for no reason.
     REQUIRE(dialog.config().botNames.size() == newgame::defaults().botNames.size());
 
     // BY NAME, not by position in findChildren(). Every QSpinBox owns an

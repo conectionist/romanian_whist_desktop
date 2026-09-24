@@ -544,9 +544,11 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
 
     REQUIRE(tableSize == 4);
 
-    // Seats 1 and 2 and no other - so neither thinks it is the other, neither
-    // fell back to the seat-0 default that an unresolved name produces, and
-    // LowRisk's seat 3 is nobody's idea of itself.
+    // Seats 1 and 2 and no other - so neither thinks it is the other, the
+    // Reckoner did not fall back to the seat-0 default an unresolved name gives
+    // it (seat 0 is the human's), and LowRisk's seat 3 is nobody's idea of
+    // itself. The Cyborg has no such default: an unresolved name throws from
+    // start(), and that is failedCount above rather than a bit in this mask.
     REQUIRE(seatsSeen == 0b0110);
 }
 
