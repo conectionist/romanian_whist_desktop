@@ -9,8 +9,10 @@
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/IMoveProvider.h>
+#include <romanian_whist/strategies/CyborgStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 #include <romanian_whist/strategies/ReckonerStrategy.h>
+#include <romanian_whist/strategies/common/RoundMemory.h>
 
 #include <QCoreApplication>
 #include <QStringList>
@@ -77,6 +79,38 @@ public:
 // Named here rather than qualified at each use so every call site below reads
 // exactly as it did.
 using fixtures::Outcome;
+
+// What a watching strategy's memory says about the table it sits at.
+//
+// LATCHED FROM INSIDE A SLOT rather than read afterwards: the strategy is owned
+// by the engine's Player and dies with the engine inside runGame(), so reading
+// its memory once gameOver has arrived is a use-after-free. A DIRECT connection
+// puts the slot on the game thread, which is the one place the memory is safe to
+// touch at all.
+//
+// THE MAXIMUM of completedTricks rather than its last value, because
+// initRound() clears it - and the schedule opens with three one-card rounds,
+// where the bridge (registered first, so called first) sees the trick before
+// the strategy records it. The max crosses zero as soon as the rounds grow.
+//
+// ONE LATCH FOR BOTH STRATEGIES, because both remember through one class. Engine
+// 4.3.0 lifted common::RoundMemory out of the Reckoner's tracker for the Cyborg
+// to share, and ReckonerTracker derives from it - so getTracker() and getMemory()
+// are the same question asked of two strategies.
+struct Latches
+{
+    std::atomic<unsigned int> mySeat{99};
+    std::atomic<unsigned int> playerCount{99};
+    std::atomic<unsigned int> mostCompletedTricks{0};
+};
+
+void latch(Latches& into, const common::RoundMemory& memory)
+{
+    into.mySeat = memory.mySeat;
+    into.playerCount = memory.playerCount;
+    into.mostCompletedTricks = std::max(into.mostCompletedTricks.load(),
+                                       static_cast<unsigned int>(memory.completedTricks.size()));
+}
 }
 
 TEST_CASE("stop() before prepare() does nothing and does not crash", "[controller]")
@@ -155,33 +189,8 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
         return config;
     };
 
-    // Latched from inside the slot rather than read afterwards: the strategy is
-    // owned by the engine's Player and dies with the engine inside runGame(), so
-    // reading the tracker once gameOver has arrived is a use-after-free. A DIRECT
-    // connection puts this slot on the game thread, which is the one place the
-    // tracker is safe to touch at all.
-    //
-    // THE MAXIMUM of completedTricks rather than its last value, because
-    // initRound() clears it - and the schedule opens with three one-card rounds,
-    // where the bridge (registered first, so called first) sees the trick before
-    // the strategy records it. The max crosses zero as soon as the rounds grow.
-    struct Latches
-    {
-        std::atomic<unsigned int> mySeat{99};
-        std::atomic<unsigned int> playerCount{99};
-        std::atomic<unsigned int> mostCompletedTricks{0};
-    };
-
-    const auto latch = [](Latches& into, const ReckonerStrategy& strategy)
-    {
-        const reckoner::ReckonerTracker& tracker = strategy.getTracker();
-
-        into.mySeat = tracker.mySeat;
-        into.playerCount = tracker.playerCount;
-        into.mostCompletedTricks = std::max(into.mostCompletedTricks.load(),
-                                           static_cast<unsigned int>(tracker.completedTricks.size()));
-    };
-
+    // Read through Latches and latch() above, which say why it is latched on the
+    // game thread and why completedTricks is a maximum.
     SECTION("registered, it knows the table it is sitting at")
     {
         GameController controller;
@@ -198,8 +207,8 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
         QObject latchContext;
 
         QObject::connect(controller.bridge(), &GameBridge::trickWon, &latchContext,
-                         [&latches, &latch, reckoner](unsigned int, unsigned int)
-                         { latch(latches, *reckoner); },
+                         [&latches, reckoner](unsigned int, unsigned int)
+                         { latch(latches, reckoner->getTracker()); },
                          Qt::DirectConnection);
 
         Outcome outcome(controller);
@@ -274,30 +283,186 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
     }
 }
 
+TEST_CASE("A Cyborg seat is registered with the engine before it starts", "[controller]")
+{
+    // THE CASE ABOVE, FOR THE OTHER STRATEGY THAT WATCHES - same table, same
+    // latches, same negative control, because the registration is the same code
+    // and a level that bypassed it would be the same silent failure. Read that
+    // case for why each of these is here; this one says only what differs.
+    //
+    // TWO THINGS DIFFER. The Cyborg counts the decisions it handed to LowRisk's
+    // heuristics because its memory disagreed with the position, and zero for a
+    // whole game is the healthy answer - worth asserting because finishing proves
+    // nothing. Measured: registered AFTER start(), so reading the wrong seat all
+    // game, it still reached gameOver with nothing raised, having handed 28
+    // decisions to the heuristic. And it has a guard the Reckoner lacks: a name
+    // that matches no seat throws from inside GameEngine::start(), AFTER the setup
+    // has been moved into the engine. That is the one throw GameDeal's lifetime
+    // argument has to cover separately, so it gets a section of its own.
+    const auto cyborgConfig = []
+    {
+        newgame::Config config;
+        config.spectator = true;   // so bot i is seat i, with no human seat shifting them
+        config.botNames = QStringList{ "Ana", "Bogdan", "Cyborg" };
+        config.botLevels = { newgame::BotLevel::LowRisk,
+                             newgame::BotLevel::Ducking,
+                             newgame::BotLevel::Cyborg };
+        config.shuffleSeed = 42u;
+
+        return config;
+    };
+
+    SECTION("registered, it knows the table it is sitting at")
+    {
+        GameController controller;
+        controller.prepare(std::nullopt, instant());
+
+        GameDeal deal = newgame::buildDeal(cyborgConfig());
+
+        REQUIRE(deal.observers.size() == 1);
+
+        CyborgStrategy* cyborg = dynamic_cast<CyborgStrategy*>(deal.observers.front());
+        REQUIRE(cyborg != nullptr);
+
+        Latches latches;
+
+        // Both start where a healthy game cannot leave them, as the latches do.
+        std::atomic<bool> seated{false};
+        std::atomic<std::size_t> fallbacks{99};
+
+        QObject latchContext;
+
+        // THE FALLBACK COUNT IS FINAL AT THE LAST TRICK: a decision precedes the
+        // trick it is played to, so the last trickWon of the game comes after the
+        // last decision there is.
+        QObject::connect(controller.bridge(), &GameBridge::trickWon, &latchContext,
+                         [&latches, &seated, &fallbacks, cyborg](unsigned int, unsigned int)
+                         {
+                             latch(latches, cyborg->getMemory());
+                             seated = cyborg->isSeated();
+                             fallbacks = cyborg->getFallbacksTaken();
+                         },
+                         Qt::DirectConnection);
+
+        Outcome outcome(controller);
+
+        controller.start(std::move(deal));
+
+        REQUIRE(outcome.await());
+        REQUIRE(outcome.overCount == 1);
+        REQUIRE(outcome.failedCount == 0);
+
+        controller.stop();
+
+        REQUIRE(latches.playerCount == 3);
+        REQUIRE(latches.mySeat == 2);
+        REQUIRE(latches.mostCompletedTricks > 0);
+        REQUIRE(seated);
+
+        // The engine asserts the same of a whole game at every table size
+        // (CyborgPlayTests, CyborgRobustnessTests); this is it holding through
+        // this client's deal and this client's registration.
+        REQUIRE(fallbacks == 0);
+    }
+
+    SECTION("unregistered, it refuses to play at all rather than playing badly")
+    {
+        // The Reckoner case's mutation, for its reason: without it nothing here
+        // would notice the observers going missing. The Cyborg was built with this
+        // guard from the start, and it names its own fix.
+        GameController controller;
+        controller.prepare(std::nullopt, instant());
+
+        GameDeal deal = newgame::buildDeal(cyborgConfig());
+
+        REQUIRE(dynamic_cast<CyborgStrategy*>(deal.observers.front()) != nullptr);
+
+        deal.observers.clear();
+
+        Outcome outcome(controller);
+
+        controller.start(std::move(deal));
+
+        REQUIRE(outcome.await());
+        REQUIRE(outcome.failedCount == 1);
+        REQUIRE(outcome.overCount == 0);
+
+        controller.stop();
+
+        const std::string failure = outcome.failureMessage();
+
+        INFO("failure was: " << failure);
+        REQUIRE(failure.find("never registered as an observer") != std::string::npos);
+        REQUIRE(failure.find("makeCyborgSeat") != std::string::npos);
+    }
+
+    SECTION("registered under a name no seat has, it refuses to start")
+    {
+        // UNREACHABLE THROUGH buildDeal(), which gives the strategy and its seat
+        // the one name - so the rename below is the whole of this section's setup.
+        //
+        // WORTH A SECTION ANYWAY, for where the throw lands. Every other way a
+        // deal is refused is GameEngine::start()'s own refusal, made before it
+        // moves anything, so the strategies are still the deal's when runGame()
+        // catches it. This one comes out of an observer's onGameStarted(), which
+        // start() fires LAST - after the seats have been moved into the engine's
+        // Players - so the strategies die with the engine local instead of with the
+        // deal. Correct, and the path GameDeal's lifetime comment names; but only a
+        // sanitizer run of this section can say it is clean.
+        GameController controller;
+        controller.prepare(std::nullopt, instant());
+
+        GameDeal deal = newgame::buildDeal(cyborgConfig());
+
+        REQUIRE(dynamic_cast<CyborgStrategy*>(deal.observers.front()) != nullptr);
+
+        // The strategy still believes it is called "Cyborg"; the table no longer
+        // has anybody by that name.
+        deal.setup.seats.at(2).name = "Cristina";
+
+        Outcome outcome(controller);
+
+        controller.start(std::move(deal));
+
+        REQUIRE(outcome.await());
+        REQUIRE(outcome.failedCount == 1);
+        REQUIRE(outcome.overCount == 0);
+
+        controller.stop();
+
+        const std::string failure = outcome.failureMessage();
+
+        INFO("failure was: " << failure);
+        REQUIRE(failure.find("no seat at this table is named") != std::string::npos);
+        REQUIRE(failure.find("makeCyborgSeat") != std::string::npos);
+    }
+}
+
 TEST_CASE("The default table registers every one of its watching seats", "[controller]")
 {
-    // THE GAME THE CLIENT OPENS ON, which the case above does not cover: that one
-    // is a three-seat WATCHED table with a single Reckoner, and newgame::defaults()
-    // is a five-seat PLAYED one with four. Two things are only true here - four
-    // observers registered in one run rather than one, and a human seat that
-    // GameController::start() has to fill by index on a setup the observer loop
-    // then walks past.
+    // THE GAME THE CLIENT OPENS ON, which the cases above do not cover: they are
+    // three-seat WATCHED tables with a single strategy that watches, and
+    // newgame::defaults() is a four-seat PLAYED one with two - a Reckoner and a
+    // Cyborg, then a LowRisk that watches nothing. Three things are only true
+    // here: two observers of two different types registered in one run, a seat
+    // after them that has none, and a human seat that GameController::start() has
+    // to fill by index on a setup the observer loop then walks past.
     //
-    // EASY AT EVERY SEAT, and the levels are the one thing overridden. A default
-    // table at its real presets is 29 rounds against a Brutal bot sampling four
-    // hundred deals a card - about a second of thinking in a release build and six
-    // in this one, measured - which is not a cost this suite should carry to learn
-    // how many observers a vector holds. What the presets change is the contents of
-    // a knobs struct; what this case is about is the registration, which is the
-    // same code at every level.
+    // THE RECKONER AT EASY, and its level is the one thing overridden. The
+    // default is Hard, which samples two hundred imagined deals a card - not a
+    // cost this suite should carry to learn how many observers a vector holds.
+    // What the presets change is the contents of a knobs struct; what this case
+    // is about is the registration, which is the same code at every level. The
+    // Cyborg and LowRisk cost nothing and are left as dealt.
     newgame::Config config = newgame::defaults();
 
     for(auto& level : config.botLevels)
-        level = newgame::BotLevel::ReckonerEasy;
+        if(newgame::isReckoner(level))
+            level = newgame::BotLevel::ReckonerEasy;
 
     config.shuffleSeed = 42u;
 
-    REQUIRE(config.botNames.size() == 4);
+    REQUIRE(config.botNames.size() == 3);
     REQUIRE_FALSE(config.spectator);
 
     GameController controller;
@@ -307,23 +472,25 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
 
     GameDeal deal = newgame::buildDeal(config);
 
-    // One per bot, and none for the human - whose seat is the null one start() is
-    // about to fill.
-    REQUIRE(deal.observers.size() == 4);
-    REQUIRE(deal.setup.seats.size() == 5);
+    // One per bot that watches, and none for the human - whose seat is the null
+    // one start() is about to fill - or for LowRisk.
+    REQUIRE(deal.observers.size() == 2);
+    REQUIRE(deal.setup.seats.size() == 4);
     REQUIRE(deal.setup.seats.at(newgame::humanSeatOf(config)->index).moveProvider == nullptr);
 
-    std::vector<ReckonerStrategy*> reckoners;
-    for(IGameObserver* observer : deal.observers)
-    {
-        ReckonerStrategy* strategy = dynamic_cast<ReckonerStrategy*>(observer);
-        REQUIRE(strategy != nullptr);
-        reckoners.push_back(strategy);
-    }
+    // EACH THE TYPE ITS SEAT WAS DEALT, in seat order - and then read through the
+    // memory the two share, which is what lets one mask below cover both.
+    ReckonerStrategy* reckoner = dynamic_cast<ReckonerStrategy*>(deal.observers.at(0));
+    CyborgStrategy* cyborg = dynamic_cast<CyborgStrategy*>(deal.observers.at(1));
+    REQUIRE(reckoner != nullptr);
+    REQUIRE(cyborg != nullptr);
 
-    // EVERY SEAT SEPARATELY, because one observer registered four times would
-    // satisfy a count and nothing else - and the seat each one resolves is the
-    // thing that tells them apart. Seats 1..4, since the human holds seat 0.
+    const std::vector<const common::RoundMemory*> memories = { &reckoner->getTracker(),
+                                                               &cyborg->getMemory() };
+
+    // EVERY SEAT SEPARATELY, because one observer registered twice would satisfy
+    // a count and nothing else - and the seat each one resolves is the thing that
+    // tells them apart. Seats 1 and 2, since the human holds seat 0.
     std::atomic<unsigned int> seatsSeen{0};
     std::atomic<unsigned int> tableSize{0};
 
@@ -354,14 +521,14 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
                      Qt::DirectConnection);
 
     QObject::connect(controller.bridge(), &GameBridge::trickWon, &latchContext,
-                     [&reckoners, &seatsSeen, &tableSize](unsigned int, unsigned int)
+                     [&memories, &seatsSeen, &tableSize](unsigned int, unsigned int)
                      {
                          unsigned int mask = 0;
-                         for(const ReckonerStrategy* strategy : reckoners)
-                             mask |= 1u << strategy->getTracker().mySeat;
+                         for(const common::RoundMemory* memory : memories)
+                             mask |= 1u << memory->mySeat;
 
                          seatsSeen = mask;
-                         tableSize = reckoners.front()->getTracker().playerCount;
+                         tableSize = memories.front()->playerCount;
                      },
                      Qt::DirectConnection);
 
@@ -375,12 +542,12 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
 
     controller.stop();
 
-    REQUIRE(tableSize == 5);
+    REQUIRE(tableSize == 4);
 
-    // Seats 1, 2, 3 and 4 and no other - so no two of them think they are the same
-    // player, and none of them fell back to the seat-0 default that an unresolved
-    // name produces.
-    REQUIRE(seatsSeen == 0b11110);
+    // Seats 1 and 2 and no other - so neither thinks it is the other, neither
+    // fell back to the seat-0 default that an unresolved name produces, and
+    // LowRisk's seat 3 is nobody's idea of itself.
+    REQUIRE(seatsSeen == 0b0110);
 }
 
 TEST_CASE("stop() after the game finished on its own is safe", "[controller]")

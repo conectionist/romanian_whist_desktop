@@ -48,6 +48,10 @@ QT_END_NAMESPACE
 // `--reckoner-preset` command-line flag, and a dialog has no equivalent to defer
 // to, so the four presets are named outright instead.
 //
+// AND THE CYBORG, which engine 4.3.0 added and the terminal's 2.4.0 put on its
+// menu as option 5, between Ducking and the Reckoner presets - so it sits there
+// in BotLevel below as well, and the menu is the terminal's again, all nine rows.
+//
 // WHAT IT PRODUCES is a GameDeal - a GameSetup with the human seat's moveProvider
 // left null, which GameController::start() fills with a SeatProvider (sections
 // 4.2, 4.3), plus the observers the engine must be given before it starts. It
@@ -73,9 +77,21 @@ enum class BotLevel
     FirstCard,
     LowRisk,
     Ducking,
-    // APPENDED, NEVER INSERTED - see the static_assert below for what inserting
-    // costs. The four above are the terminal wizard's order; these four are its
-    // Reckoner levels, in its order too, one per engine preset.
+    // INSERTED, NOT APPENDED, and this comment used to forbid exactly that. The
+    // terminal wizard put the Cyborg here - option 5 on its 2.4.0 menu, between
+    // Ducking and the Reckoner presets - and this order is the terminal's.
+    //
+    // WHAT INSERTING USED TO COST IS GONE, for two reasons that both have to stay
+    // true. The static_assert below makes the enum and BotLevels agree or fail to
+    // compile, so an insert made in one and not the other is caught. And nothing
+    // stores a BotLevel as a NUMBER: a Config lives in MainWindow's memory, and
+    // QSettings is section 20 and phase E. When phase E does store one it must
+    // store something stable - the level's name, say - and not the integer.
+    // Stored as an integer, every later insert would quietly re-seat the saved
+    // opponents of every player who upgrades, and this enum would be append-only
+    // for real.
+    Cyborg,
+    // The terminal's Reckoner levels, in its order too, one per engine preset.
     ReckonerEasy,
     ReckonerMedium,
     ReckonerHard,
@@ -88,6 +104,7 @@ inline constexpr BotLevel BotLevels[] = { BotLevel::Random,
                                           BotLevel::FirstCard,
                                           BotLevel::LowRisk,
                                           BotLevel::Ducking,
+                                          BotLevel::Cyborg,
                                           BotLevel::ReckonerEasy,
                                           BotLevel::ReckonerMedium,
                                           BotLevel::ReckonerHard,
@@ -96,10 +113,11 @@ inline constexpr BotLevel BotLevels[] = { BotLevel::Random,
 // THE COMBO'S INDEX *IS* THE ENUM'S VALUE, and until the Reckoner landed that was
 // held by a comment alone. rebuildOpponentRows() writes the row with
 // setCurrentIndex(static_cast<int>(level)) and refresh() reads it back with
-// BotLevels[currentIndex()], so an enumerator INSERTED rather than appended
-// silently offers every player below it a strategy they did not pick - and there
-// is no compiler diagnostic for it and no symptom short of watching a bot play a
-// game it should not be able to play. This is that diagnostic.
+// BotLevels[currentIndex()], so an enumerator inserted into the enum at one place
+// and into BotLevels at another silently offers every player below it a strategy
+// they did not pick - and there is no compiler diagnostic for it and no symptom
+// short of watching a bot play a game it should not be able to play. This is that
+// diagnostic, and it is what let the Cyborg be inserted rather than appended.
 inline constexpr bool botLevelsAreIndexedByValue()
 {
     for(std::size_t i = 0 ; i < std::size(BotLevels) ; i++)
@@ -110,13 +128,23 @@ inline constexpr bool botLevelsAreIndexedByValue()
 }
 
 static_assert(botLevelsAreIndexedByValue(),
-              "BotLevels is indexed by the enum's own value: append, never insert");
+              "BotLevels is indexed by the enum's own value: "
+              "add a level to both, at the same place");
 
 // Which of the levels think by sampling imagined deals. Named rather than
-// inlined at each site because three callers ask: the provider factory, the
-// seeding rule below, and the test that keeps the suite fast by not playing a
-// whole game per preset.
+// inlined because the tests ask it wherever they keep the suite fast: the case
+// that plays a whole game per level plays only the cheapest preset, and the
+// controller case that plays the default table turns its Reckoner into that
+// one. (The provider factory and the seeding rule were once named here as
+// callers too. Neither has ever asked.)
 bool isReckoner(BotLevel level);
+
+// Which of the levels build a strategy that is ALSO an IGameObserver - one the
+// engine has to be given before it starts, or it has nothing to play from: the
+// four Reckoner presets and the Cyborg. buildDeal() does not ask this - it keeps
+// whatever observer a seat comes with - so this is the statement the tests hold
+// it to, kept beside the levels so that adding one forces a decision here.
+bool isObserver(BotLevel level);
 
 // The engine builds its deck from the player count and rejects anything outside
 // this range by name (GameEngine::start). Section 13's rule is that a spinner
@@ -240,20 +268,24 @@ std::optional<romanian_whist::Seat> humanSeatOf(const Config& config);
 // own source contradicts.)
 //
 // TWO STRATEGIES DRAW, NOT ONE, since the Reckoner landed - see providerFor() in
-// the .cpp for which and for what a seeded Reckoner is and is not.
+// the .cpp for which and for what a seeded Reckoner is and is not. The Cyborg is
+// not a third: it draws nothing, takes no seed, and replays under a fixed deal
+// without one.
 //
-// AND IT RETURNS THE OBSERVERS WITH THEM. A Reckoner seat is not a provider
-// alone: the same object is an IGameObserver, and it is useless until the engine
-// has been given it. See GameDeal in engine/GameController.h for the whole of
-// that argument; the rule here is only that the two halves travel together.
+// AND IT RETURNS THE OBSERVERS WITH THEM. A Reckoner or Cyborg seat is not a
+// provider alone: the same object is an IGameObserver, and it is useless until
+// the engine has been given it. See GameDeal in engine/GameController.h for the
+// whole of that argument; the rule here is only that the two halves travel
+// together.
 GameDeal buildDeal(const Config& config);
 
-// The combo's rows and their tooltips. The first four are the engine's
-// STRATEGIES.md lead table; the Reckoner's four are its design doc
+// The combo's rows and their tooltips. The first four and the Cyborg are the
+// engine's STRATEGIES.md lead table; the Reckoner's four are its design doc
 // (libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md, section 9's knobs
-// table), because STRATEGIES.md and the engine README were never updated for it
-// and both still say the engine ships four strategies. Free functions rather than
-// a table in the widget so the test can read them without a window.
+// table). They were written when STRATEGIES.md did not mention the Reckoner at
+// all, and they stay because engine 4.2.0 added it there as ONE row for all four
+// presets, which is a tooltip for none of them. Free functions rather than a
+// table in the widget so the test can read them without a window.
 QString nameOf(BotLevel level);
 QString tooltipFor(BotLevel level);
 
