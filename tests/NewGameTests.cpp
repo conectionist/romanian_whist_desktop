@@ -12,11 +12,13 @@
 #include <romanian_whist/strategies/CyborgStrategy.h>
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/ReckonerStrategy.h>
+#include <romanian_whist/strategies/reckoner/ReckonerKnobs.h>
 
 #include <QComboBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QRegularExpression>
 #include <QSpinBox>
 
 #include <iterator>
@@ -502,6 +504,14 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
     // THE CYBORG PLAYS ITS WHOLE GAME, being no Reckoner: it samples nothing and
     // decides in about half a microsecond, so there is no preset to stand in for
     // it and no cost to save by trying.
+    //
+    // ALPHA'S ZEROES ARE CHECKED, not only stated: a retune that gives it a search
+    // fails the build here, rather than quietly running rollouts in this case
+    // under three sanitizers.
+    static_assert(reckoner::ReckonerKnobs::alpha().K_play == 0 &&
+                      reckoner::ReckonerKnobs::alpha().K_bid == 0,
+                  "the comment above relies on Alpha sampling nothing");
+
     for(const newgame::BotLevel level : newgame::BotLevels)
     {
         newgame::Config config = watchingConfig(2);
@@ -532,6 +542,76 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
         engine.run();
 
         REQUIRE(engine.getStatus() == GameStatus::Finished);
+    }
+}
+
+TEST_CASE("Every Reckoner tooltip quotes the knobs its seat is built with", "[new-game]")
+{
+    // THE NUMBERS ARE ARGUMENTS, and this is what keeps them so. tooltipFor()
+    // reads each preset's figures off the same ReckonerKnobs that providerFor()
+    // builds its seat with. A case that read a neighbour's table, or a figure
+    // typed in by hand, would still read well and be wrong - and a retune is
+    // exactly when nobody rereads a tooltip.
+    //
+    // EVERY FIGURE A PLAYER CAN FEEL: the deals it imagines, how often it plays
+    // or bids at random, and the weight it gives an opponent's points. A zero is
+    // skipped, because its sentence says "no" or "never" instead - and that is
+    // what the static_asserts beside each sentence are for.
+    struct Preset
+    {
+        newgame::BotLevel level;
+        reckoner::ReckonerKnobs knobs;
+    };
+
+    using Knobs = reckoner::ReckonerKnobs;
+
+    const Preset presets[] = { { newgame::BotLevel::ReckonerAlpha, Knobs::alpha() },
+                               { newgame::BotLevel::ReckonerBeta, Knobs::beta() },
+                               { newgame::BotLevel::ReckonerGamma, Knobs::gamma() },
+                               { newgame::BotLevel::ReckonerDelta, Knobs::delta() } };
+
+    const auto percent = [](float fraction)
+    {
+        return QStringLiteral("%1%").arg(qRound(fraction * 100.0f));
+    };
+
+    for(const Preset& preset : presets)
+    {
+        const QString tooltip = newgame::tooltipFor(preset.level);
+
+        INFO("level " << newgame::nameOf(preset.level).toStdString());
+        INFO("tooltip " << tooltip.toStdString());
+
+        QStringList figures;
+
+        if(preset.knobs.epsilon > 0.0f)
+            figures << percent(preset.knobs.epsilon);
+
+        if(preset.knobs.bidNoise > 0.0f)
+            figures << percent(preset.knobs.bidNoise);
+
+        // THE WEIGHTS ACT ONLY INSIDE ROLLOUTS, so a preset that imagines no
+        // deals has none to quote, whatever its lambdas hold.
+        if(preset.knobs.K_play > 0)
+        {
+            figures << QString::number(preset.knobs.K_play);
+
+            for(const float weight : { preset.knobs.lambdaDefault, preset.knobs.lambdaLeader })
+                if(weight > 0.0f)
+                    figures << percent(weight);
+        }
+
+        // AND SOMETHING WAS CHECKED, so a preset cannot pass by quoting nothing.
+        REQUIRE_FALSE(figures.isEmpty());
+
+        // AS A WHOLE FIGURE, so Beta's 5% cannot pass by sitting inside its 15%,
+        // nor a sample count inside a percentage.
+        for(const QString& figure : figures)
+        {
+            INFO("figure " << figure.toStdString());
+            REQUIRE(tooltip.contains(QRegularExpression(
+                QStringLiteral("(?<!\\d)%1(?![\\d%])").arg(QRegularExpression::escape(figure)))));
+        }
     }
 }
 
@@ -618,23 +698,24 @@ TEST_CASE("Every combo row is the level its index names", "[new-game]")
     }
 }
 
-TEST_CASE("The dialog opens on the terminal's quick game", "[new-game]")
+TEST_CASE("The dialog opens on a Reckoner at Beta, the Cyborg and LowRisk", "[new-game]")
 {
-    // THE TERMINAL'S LINE-UPS, which is the whole of what defaults() and
-    // defaultLevel() decide: a player who knows one client sits down at the same
-    // table in the other. Pinned here because nothing else would notice it drift -
-    // every other case that opens on defaults() overrides its levels or only
-    // counts them.
+    // THE TERMINAL'S LINE-UPS BUT FOR ONE PRESET, which is the whole of what
+    // defaults() and defaultLevel() decide: its quick game with Beta where the
+    // terminal seats Gamma - see defaultLevel() for why. Pinned here because
+    // nothing else would notice it drift - every other case that opens on
+    // defaults() overrides its levels or only counts them.
     const newgame::Config config = newgame::defaults();
 
     REQUIRE_FALSE(config.spectator);
-    REQUIRE(config.botLevels == std::vector<newgame::BotLevel>{ newgame::BotLevel::ReckonerGamma,
+    REQUIRE(config.botLevels == std::vector<newgame::BotLevel>{ newgame::BotLevel::ReckonerBeta,
                                                                 newgame::BotLevel::Cyborg,
                                                                 newgame::BotLevel::LowRisk });
     REQUIRE(newgame::roundCount(config) == 26);
 
-    // AND A FOURTH ROW MAKES THE DEMO'S TABLE, whose remaining seat is a Reckoner
-    // at Beta - rather than a second copy of the first seat.
+    // AND A FOURTH ROW MAKES THE DEMO'S FOUR BOTS, the Reckoner there at Gamma
+    // since the first seat took Beta - rather than a second copy of the first
+    // seat.
     NewGameDialog dialog(config);
 
     QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
@@ -643,7 +724,7 @@ TEST_CASE("The dialog opens on the terminal's quick game", "[new-game]")
     count->setValue(4);
 
     REQUIRE(dialog.config().botLevels.size() == 4);
-    REQUIRE(dialog.config().botLevels.at(3) == newgame::BotLevel::ReckonerBeta);
+    REQUIRE(dialog.config().botLevels.at(3) == newgame::BotLevel::ReckonerGamma);
 }
 
 TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")

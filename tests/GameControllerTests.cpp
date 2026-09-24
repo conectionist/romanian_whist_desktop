@@ -13,6 +13,7 @@
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 #include <romanian_whist/strategies/ReckonerStrategy.h>
 #include <romanian_whist/strategies/common/RoundMemory.h>
+#include <romanian_whist/strategies/reckoner/ReckonerKnobs.h>
 
 #include <QCoreApplication>
 #include <QStringList>
@@ -172,6 +173,10 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
     // onGameStarted() resolves it, and completedTricks is empty until onTrickWon()
     // appends to it. An unregistered Reckoner reports all three defaults while
     // playing perfectly legal cards, which is exactly why this case exists.
+    static_assert(reckoner::ReckonerKnobs::alpha().K_play == 0 &&
+                      reckoner::ReckonerKnobs::alpha().K_bid == 0,
+                  "the seat below relies on Alpha sampling nothing");
+
     const auto reckonerConfig = []
     {
         newgame::Config config;
@@ -449,11 +454,15 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
     // to fill by index on a setup the observer loop then walks past.
     //
     // THE RECKONER AT ALPHA, and its level is the one thing overridden. The
-    // default is Gamma, which samples two hundred imagined deals a card - not a
-    // cost this suite should carry to learn how many observers a vector holds.
-    // What the presets change is the contents of a knobs struct; what this case
-    // is about is the registration, which is the same code at every level. The
+    // default is Beta, which samples sixty imagined deals a card - not a cost
+    // this suite should carry to learn how many observers a vector holds. What
+    // the presets change is the contents of a knobs struct; what this case is
+    // about is the registration, which is the same code at every level. The
     // Cyborg and LowRisk cost nothing and are left as dealt.
+    static_assert(reckoner::ReckonerKnobs::alpha().K_play == 0 &&
+                      reckoner::ReckonerKnobs::alpha().K_bid == 0,
+                  "the override below relies on Alpha sampling nothing");
+
     newgame::Config config = newgame::defaults();
 
     for(auto& level : config.botLevels)

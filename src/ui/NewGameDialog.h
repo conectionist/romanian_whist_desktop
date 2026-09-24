@@ -286,12 +286,11 @@ std::optional<romanian_whist::Seat> humanSeatOf(const Config& config);
 GameDeal buildDeal(const Config& config);
 
 // The combo's rows and their tooltips. The first four and the Cyborg are the
-// engine's STRATEGIES.md lead table; the Reckoner's four are its design doc
-// (libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md, section 9's knobs
-// table). They were written when STRATEGIES.md did not mention the Reckoner at
-// all, and they stay because engine 4.2.0 added it there as ONE row for all four
-// presets, which is a tooltip for none of them. Free functions rather than a
-// table in the widget so the test can read them without a window.
+// engine's STRATEGIES.md lead table; the Reckoner's four are read off the
+// ReckonerKnobs each preset's seat is built with, because the engine's prose
+// about the presets claims two behaviours the engine does not have - see
+// tooltipFor(). Free functions rather than a table in the widget so the test can
+// read them without a window.
 QString nameOf(BotLevel level);
 QString tooltipFor(BotLevel level);
 
