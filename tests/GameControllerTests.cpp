@@ -547,8 +547,11 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
     // Seats 1 and 2 and no other - so neither thinks it is the other, the
     // Reckoner did not fall back to the seat-0 default an unresolved name gives
     // it (seat 0 is the human's), and LowRisk's seat 3 is nobody's idea of
-    // itself. The Cyborg has no such default: an unresolved name throws from
-    // start(), and that is failedCount above rather than a bit in this mask.
+    // itself. The Cyborg's NAME has no such default - one matching no seat
+    // throws from start(), which is failedCount above - but a Cyborg that never
+    // hears onGameStarted() sits at seat 0 like the Reckoner, and that IS a bit
+    // here: registered after start(), both land on seat 0 and this mask reads
+    // 0b0001.
     REQUIRE(seatsSeen == 0b0110);
 }
 
