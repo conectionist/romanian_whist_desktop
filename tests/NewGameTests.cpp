@@ -12,11 +12,13 @@
 #include <romanian_whist/strategies/CyborgStrategy.h>
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/ReckonerStrategy.h>
+#include <romanian_whist/strategies/reckoner/ReckonerKnobs.h>
 
 #include <QComboBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QRegularExpression>
 #include <QSpinBox>
 
 #include <iterator>
@@ -485,9 +487,9 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
     // NOT A WHOLE GAME PER LEVEL ANY MORE, and that is a deliberate division of
     // labour rather than a corner cut. The Reckoner's four presets are one code
     // path and four tables of numbers, and the ENGINE's own suite already plays
-    // full games at Easy, Hard and Brutal and asserts seeded replay
+    // full games at Alpha, Gamma and Delta and asserts seeded replay
     // (libs/RomanianWhistEngine/tests/ReckonerStrategyTests.cpp, and a tournament
-    // besides). Hard samples two hundred imagined deals per card and Brutal four
+    // besides). Gamma samples two hundred imagined deals per card and Delta four
     // hundred; playing two more full games here would re-test the engine at this
     // suite's expense, three times over, because LOCAL_VERIFICATION.md builds this
     // binary under three sanitizers.
@@ -495,13 +497,21 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
     // WHAT THIS SUITE OWES IS THE WIRING: that every level names something
     // buildable, and that the thing it builds reaches a seat. The game below is
     // what proves a provider actually answers rather than parking the engine, and
-    // ReckonerEasy is free enough to carry that for all four presets - its K_play
+    // ReckonerAlpha is free enough to carry that for all four presets - its K_play
     // and K_bid are 0, so the rollout engine short-circuits and it is the base
     // policy plus an epsilon roll.
     //
     // THE CYBORG PLAYS ITS WHOLE GAME, being no Reckoner: it samples nothing and
     // decides in about half a microsecond, so there is no preset to stand in for
     // it and no cost to save by trying.
+    //
+    // ALPHA'S ZEROES ARE CHECKED, not only stated: a retune that gives it a search
+    // fails the build here, rather than quietly running rollouts in this case
+    // under three sanitizers.
+    static_assert(reckoner::ReckonerKnobs::alpha().K_play == 0 &&
+                      reckoner::ReckonerKnobs::alpha().K_bid == 0,
+                  "the comment above relies on Alpha sampling nothing");
+
     for(const newgame::BotLevel level : newgame::BotLevels)
     {
         newgame::Config config = watchingConfig(2);
@@ -524,7 +534,7 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
             REQUIRE(seat.moveProvider != nullptr);
         }
 
-        if(newgame::isReckoner(level) && level != newgame::BotLevel::ReckonerEasy)
+        if(newgame::isReckoner(level) && level != newgame::BotLevel::ReckonerAlpha)
             continue;
 
         GameEngine engine;
@@ -532,6 +542,100 @@ TEST_CASE("Every bot level names a strategy that can be built", "[new-game]")
         engine.run();
 
         REQUIRE(engine.getStatus() == GameStatus::Finished);
+    }
+}
+
+TEST_CASE("Every Reckoner tooltip quotes the knobs its seat is built with", "[new-game]")
+{
+    // THE NUMBERS ARE ARGUMENTS, and this is what keeps them so. tooltipFor()
+    // reads each preset's figures off the same ReckonerKnobs that providerFor()
+    // builds its seat with. A case that read a neighbour's table, or a figure
+    // typed in by hand, would still read well and be wrong - and a retune is
+    // exactly when nobody rereads a tooltip.
+    //
+    // EVERY FIGURE A PLAYER CAN FEEL: the deals it imagines, how often it plays
+    // or bids at random, and the weight it gives an opponent's points. A zero is
+    // skipped, because its sentence says "no" or "never" instead - and that is
+    // what the static_asserts beside each sentence are for.
+    //
+    // AND ONLY THOSE. A knob the engine never acts on is a figure nobody can
+    // feel, and quoting one is the other way these tooltips have gone wrong:
+    // Alpha's first rewrite quoted a bid noise that its preset never rolls.
+    struct Preset
+    {
+        newgame::BotLevel level;
+        reckoner::ReckonerKnobs knobs;
+    };
+
+    using Knobs = reckoner::ReckonerKnobs;
+
+    const Preset presets[] = { { newgame::BotLevel::ReckonerAlpha, Knobs::alpha() },
+                               { newgame::BotLevel::ReckonerBeta, Knobs::beta() },
+                               { newgame::BotLevel::ReckonerGamma, Knobs::gamma() },
+                               { newgame::BotLevel::ReckonerDelta, Knobs::delta() } };
+
+    const auto percent = [](float fraction)
+    {
+        return QStringLiteral("%1%").arg(qRound(fraction * 100.0f));
+    };
+
+    // AS A WHOLE FIGURE, so Beta's 5% cannot pass by sitting inside its 15%,
+    // nor a sample count inside a percentage.
+    const auto quotes = [](const QString& tooltip, const QString& figure)
+    {
+        return tooltip.contains(QRegularExpression(
+            QStringLiteral("(?<!\\d)%1(?![\\d%])").arg(QRegularExpression::escape(figure))));
+    };
+
+    for(const Preset& preset : presets)
+    {
+        const QString tooltip = newgame::tooltipFor(preset.level);
+
+        INFO("level " << newgame::nameOf(preset.level).toStdString());
+        INFO("tooltip " << tooltip.toStdString());
+
+        QStringList figures;
+
+        if(preset.knobs.epsilon > 0.0f)
+            figures << percent(preset.knobs.epsilon);
+
+        // BID NOISE ONLY WHERE THE ENGINE ROLLS IT. RolloutEngine::chooseBid()
+        // returns before its noise when K_bid is 0, so at Alpha the knob is
+        // inert whatever it holds.
+        const bool bidNoiseActs = preset.knobs.bidNoise > 0.0f && preset.knobs.K_bid > 0;
+
+        if(bidNoiseActs)
+            figures << percent(preset.knobs.bidNoise);
+
+        // THE WEIGHTS ACT ONLY INSIDE ROLLOUTS, so a preset that imagines no
+        // deals has none to quote, whatever its lambdas hold.
+        if(preset.knobs.K_play > 0)
+        {
+            figures << QString::number(preset.knobs.K_play);
+
+            for(const float weight : { preset.knobs.lambdaDefault, preset.knobs.lambdaLeader })
+                if(weight > 0.0f)
+                    figures << percent(weight);
+        }
+
+        // AND SOMETHING WAS CHECKED, so a preset cannot pass by quoting nothing.
+        REQUIRE_FALSE(figures.isEmpty());
+
+        for(const QString& figure : figures)
+        {
+            INFO("figure " << figure.toStdString());
+            REQUIRE(quotes(tooltip, figure));
+        }
+
+        // AND NOT THE NOISE IT NEVER ROLLS - unless another knob shares the
+        // figure, which the loop above has already required the tooltip to quote.
+        const QString inert = percent(preset.knobs.bidNoise);
+
+        if(preset.knobs.bidNoise > 0.0f && !bidNoiseActs && !figures.contains(inert))
+        {
+            INFO("inert figure " << inert.toStdString());
+            REQUIRE_FALSE(quotes(tooltip, inert));
+        }
     }
 }
 
@@ -580,7 +684,7 @@ TEST_CASE("A Reckoner or Cyborg seat comes with an observer and the others come 
     // right after a seat that does not.
     newgame::Config mixed = watchingConfig(4);
     mixed.botLevels = { newgame::BotLevel::LowRisk,
-                        newgame::BotLevel::ReckonerHard,
+                        newgame::BotLevel::ReckonerGamma,
                         newgame::BotLevel::Ducking,
                         newgame::BotLevel::Cyborg };
 
@@ -618,23 +722,24 @@ TEST_CASE("Every combo row is the level its index names", "[new-game]")
     }
 }
 
-TEST_CASE("The dialog opens on the terminal's quick game", "[new-game]")
+TEST_CASE("The dialog opens on a Reckoner at Beta, the Cyborg and LowRisk", "[new-game]")
 {
-    // THE TERMINAL'S LINE-UPS, which is the whole of what defaults() and
-    // defaultLevel() decide: a player who knows one client sits down at the same
-    // table in the other. Pinned here because nothing else would notice it drift -
-    // every other case that opens on defaults() overrides its levels or only
-    // counts them.
+    // THE TERMINAL'S LINE-UPS BUT FOR ONE PRESET, which is the whole of what
+    // defaults() and defaultLevel() decide: its quick game with Beta where the
+    // terminal seats Gamma - see defaultLevel() for why. Pinned here because
+    // nothing else would notice it drift - every other case that opens on
+    // defaults() overrides its levels or only counts them.
     const newgame::Config config = newgame::defaults();
 
     REQUIRE_FALSE(config.spectator);
-    REQUIRE(config.botLevels == std::vector<newgame::BotLevel>{ newgame::BotLevel::ReckonerHard,
+    REQUIRE(config.botLevels == std::vector<newgame::BotLevel>{ newgame::BotLevel::ReckonerBeta,
                                                                 newgame::BotLevel::Cyborg,
                                                                 newgame::BotLevel::LowRisk });
     REQUIRE(newgame::roundCount(config) == 26);
 
-    // AND A FOURTH ROW MAKES THE DEMO'S TABLE, whose remaining seat is a Reckoner
-    // at Medium - rather than a second copy of the first seat.
+    // AND A FOURTH ROW MAKES THE DEMO'S FOUR BOTS, the Reckoner there at Gamma
+    // since the first seat took Beta - rather than a second copy of the first
+    // seat.
     NewGameDialog dialog(config);
 
     QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
@@ -643,7 +748,7 @@ TEST_CASE("The dialog opens on the terminal's quick game", "[new-game]")
     count->setValue(4);
 
     REQUIRE(dialog.config().botLevels.size() == 4);
-    REQUIRE(dialog.config().botLevels.at(3) == newgame::BotLevel::ReckonerMedium);
+    REQUIRE(dialog.config().botLevels.at(3) == newgame::BotLevel::ReckonerGamma);
 }
 
 TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")

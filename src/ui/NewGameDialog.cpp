@@ -7,6 +7,7 @@
 #include <romanian_whist/strategies/LowRiskStrategy.h>
 #include <romanian_whist/strategies/RandomCardStrategy.h>
 #include <romanian_whist/strategies/ReckonerStrategy.h>
+#include <romanian_whist/strategies/reckoner/ReckonerKnobs.h>
 
 #include <QBoxLayout>
 #include <QButtonGroup>
@@ -50,35 +51,42 @@ const QStringList& stockNames()
     return names;
 }
 
-// The default level for the nth opponent: THE TERMINAL'S LINE-UPS, so a player
-// who knows one client sits down at the same table in the other.
+// The default level for the nth opponent: THE TERMINAL'S LINE-UPS, but for one
+// preset, so a player who knows one client sits down at nearly the same table in
+// the other.
 //
 // THE FIRST THREE ARE ITS QUICK GAME, "you and three bots", and they are what
-// defaults() seats: a Reckoner at Hard - the preset the terminal's
-// --reckoner-preset flag defaults to, since its quick game names no preset of
-// its own - then the Cyborg, then LowRisk. Its reason is the one worth keeping:
-// the table most players judge the bots on seats the two that actually think,
-// and one simple bot for contrast.
+// defaults() seats: a Reckoner, then the Cyborg, then LowRisk. Its reason is the
+// one worth keeping: the table most players judge the bots on seats the two that
+// remember the round, and one simple bot for contrast.
 //
-// THE FOURTH IS ITS DEMO'S REMAINING SEAT. The terminal has no default for a
-// fourth bot at a played table, because its quick game stops at three - but its
-// watched demo seats four, these three and a Reckoner at Medium. So a fourth
-// row, added from the spinner at a played table or a watched one, makes the
-// demo's table rather than a second copy of the first seat. Past four they
-// cycle.
+// THE RECKONER IS AT BETA, AND THAT IS THE DEPARTURE. The terminal seats Gamma,
+// the preset its --reckoner-preset flag defaults to, since its quick game names
+// no preset of its own. Engine 5.0.0 withdrew the reason to: Gamma "is often no
+// stronger than Alpha or Beta". Beta is the preset the engine actually measures -
+// STRATEGIES.md has it beating LowRisk clearly and topping the Cyborg's
+// tournament table - and it does that on sixty imagined deals a card to Gamma's
+// two hundred.
 //
-// THIS REPLACED THE FOUR RECKONER PRESETS, weakest first, which was the most
+// THE FOURTH IS ITS DEMO'S REMAINING SEAT, with the two presets swapped. The
+// terminal has no default for a fourth bot at a played table, because its quick
+// game stops at three - but its watched demo seats four, these three and a
+// Reckoner at Beta. Here that seat is Gamma, so a fourth row, added from the
+// spinner at a played table or a watched one, makes the demo's four bots rather
+// than a second copy of the first seat. Past four they cycle.
+//
+// THIS REPLACED THE FOUR RECKONER PRESETS, cheapest first, which was the most
 // expensive opening table this client could deal and was chosen for being so.
-// Hard samples two hundred imagined deals a card where Brutal sampled four
-// hundred, so the opening game is now the cheaper one; and only its Reckoner
-// draws - the Cyborg and LowRisk are deterministic - so it is the one seat a
-// fixed deal has to seed.
+// Beta samples sixty imagined deals a card where Delta samples four hundred, so
+// the opening game is now the cheaper one; and only its Reckoner draws - the
+// Cyborg and LowRisk are deterministic - so it is the one seat a fixed deal has
+// to seed.
 newgame::BotLevel defaultLevel(int index)
 {
-    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerHard,
+    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerBeta,
                                                     newgame::BotLevel::Cyborg,
                                                     newgame::BotLevel::LowRisk,
-                                                    newgame::BotLevel::ReckonerMedium };
+                                                    newgame::BotLevel::ReckonerGamma };
 
     return levels[static_cast<std::size_t>(index) % std::size(levels)];
 }
@@ -198,17 +206,17 @@ BuiltSeat providerFor(newgame::BotLevel level,
     // THE KNOBS OVERLOAD, not the ReckonerPreset one, so the mapping from a row
     // of this client's menu to a table of the engine's numbers is visible at the
     // call site rather than one enum deep.
-    case newgame::BotLevel::ReckonerEasy:
-        return makeReckoner(name, reckoner::ReckonerKnobs::easy(), seed);
+    case newgame::BotLevel::ReckonerAlpha:
+        return makeReckoner(name, reckoner::ReckonerKnobs::alpha(), seed);
 
-    case newgame::BotLevel::ReckonerMedium:
-        return makeReckoner(name, reckoner::ReckonerKnobs::medium(), seed);
+    case newgame::BotLevel::ReckonerBeta:
+        return makeReckoner(name, reckoner::ReckonerKnobs::beta(), seed);
 
-    case newgame::BotLevel::ReckonerHard:
-        return makeReckoner(name, reckoner::ReckonerKnobs::hard(), seed);
+    case newgame::BotLevel::ReckonerGamma:
+        return makeReckoner(name, reckoner::ReckonerKnobs::gamma(), seed);
 
-    case newgame::BotLevel::ReckonerBrutal:
-        return makeReckoner(name, reckoner::ReckonerKnobs::brutal(), seed);
+    case newgame::BotLevel::ReckonerDelta:
+        return makeReckoner(name, reckoner::ReckonerKnobs::delta(), seed);
     }
 
     // Unreachable for any enumerator above, and not an assert: a switch with no
@@ -230,6 +238,25 @@ QStringList allNames(const newgame::Config& config)
 
     return names;
 }
+
+// A knob that is a probability or a weight, as the whole percent a tooltip
+// quotes it at.
+QString percent(float fraction)
+{
+    return QString::number(qRound(fraction * 100.0f));
+}
+
+// Gamma's tooltip and Delta's, which differ only in their numbers - so one
+// sentence, and the two cannot drift apart in wording. What it says in words is
+// checked where each is called, since a parameter cannot be static_asserted.
+QString searchingTooltip(const reckoner::ReckonerKnobs& knobs)
+{
+    return QCoreApplication::translate("newgame",
+                                       "Weighs %1 imagined deals before each card, never plays at "
+                                       "random, and counts %2% of every point an opponent scores "
+                                       "against its own, %3% of the leader's.")
+        .arg(QString::number(knobs.K_play), percent(knobs.lambdaDefault), percent(knobs.lambdaLeader));
+}
 }
 
 newgame::Config newgame::defaults()
@@ -242,8 +269,8 @@ newgame::Config newgame::defaults()
     // is a name to replace, not a label.
     config.humanName = QCoreApplication::translate("newgame", "Player");
 
-    // THREE, the terminal's quick game - see defaultLevel() for who they are and
-    // why. Three bots plus the human is four seats and 26 rounds, where the four
+    // THREE, as in the terminal's quick game - see defaultLevel() for who they
+    // are and why. Three bots plus the human is four seats and 26 rounds, where the four
     // Reckoner presets this replaced made five and 29.
     for(int i = 0 ; i < 3 ; i++)
     {
@@ -383,10 +410,10 @@ bool newgame::isReckoner(BotLevel level)
 {
     switch(level)
     {
-    case BotLevel::ReckonerEasy:
-    case BotLevel::ReckonerMedium:
-    case BotLevel::ReckonerHard:
-    case BotLevel::ReckonerBrutal:
+    case BotLevel::ReckonerAlpha:
+    case BotLevel::ReckonerBeta:
+    case BotLevel::ReckonerGamma:
+    case BotLevel::ReckonerDelta:
         return true;
 
     case BotLevel::Random:
@@ -474,14 +501,14 @@ QString newgame::nameOf(BotLevel level)
     // and all, so a player who knows one client reads the other.
     case BotLevel::Cyborg:
         return QCoreApplication::translate("newgame", "Cyborg");
-    case BotLevel::ReckonerEasy:
-        return QCoreApplication::translate("newgame", "Reckoner (Easy)");
-    case BotLevel::ReckonerMedium:
-        return QCoreApplication::translate("newgame", "Reckoner (Medium)");
-    case BotLevel::ReckonerHard:
-        return QCoreApplication::translate("newgame", "Reckoner (Hard)");
-    case BotLevel::ReckonerBrutal:
-        return QCoreApplication::translate("newgame", "Reckoner (Brutal)");
+    case BotLevel::ReckonerAlpha:
+        return QCoreApplication::translate("newgame", "Reckoner (Alpha)");
+    case BotLevel::ReckonerBeta:
+        return QCoreApplication::translate("newgame", "Reckoner (Beta)");
+    case BotLevel::ReckonerGamma:
+        return QCoreApplication::translate("newgame", "Reckoner (Gamma)");
+    case BotLevel::ReckonerDelta:
+        return QCoreApplication::translate("newgame", "Reckoner (Delta)");
     }
 
     return QString();
@@ -493,12 +520,25 @@ QString newgame::tooltipFor(BotLevel level)
     // something to a player who has never read the source (section 13). The
     // Cyborg's is its row there, bids then play, like the four before it.
     //
-    // EXCEPT THE RECKONER'S FOUR. When they were written STRATEGIES.md did not
-    // mention the strategy at all; engine 4.2.0 added it, but as one row for all
-    // four presets, which is a tooltip for none of them. So those four lines are
-    // still section 9 of libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md,
-    // read as prose: the preset's memory, its rollout count, and the one thing it
-    // does that the preset below it does not.
+    // EXCEPT THE RECKONER'S FOUR, WHICH ARE READ OFF THEIR KNOBS. Engine 5.0.0
+    // gave STRATEGIES.md a row per preset, and that is not the source either: it
+    // says Alpha remembers only the current trick and Delta solves the last two
+    // tricks exactly, and the engine reads neither knob behind those - fullMemory
+    // and endgameN appear in ReckonerKnobs and nowhere else, and
+    // RolloutEngine::endgameSearch() is declared and never written. These four
+    // tooltips used to make the same two claims. So every number below comes
+    // from the table providerFor() builds the seat with, and a retune moves the
+    // tooltip with it.
+    //
+    // ONE SHAPE FOR ALL FOUR: how many deals it imagines, how often it plays at
+    // random, and how much of an opponent's score it counts against its own. The
+    // old shape was "the one thing this preset does that the one below does not",
+    // which is the ladder engine 5.0.0 withdrew - and it had Gamma alone playing
+    // against the leader's bid, when Beta weighs every opponent's points too.
+    //
+    // WHAT A SENTENCE SAYS IN WORDS IS PINNED BY A static_assert BESIDE IT, since
+    // no argument can carry "never" or "no deals". A retune that makes one false
+    // stops this file compiling rather than shipping a tooltip that is wrong.
     switch(level)
     {
     case BotLevel::Random:
@@ -522,22 +562,71 @@ QString newgame::tooltipFor(BotLevel level)
                                            "odds on every card, and re-plans every trick which cards "
                                            "win and which go.");
 
-    case BotLevel::ReckonerEasy:
+    // NO SABOTAGE CLAUSE, and none is owed: with no deals imagined there are no
+    // rollouts for the lambdas to weigh, so Alpha's are moot whatever they are.
+    //
+    // AND NO BID CLAUSE, though Alpha's bidNoise is 0.20. RolloutEngine::chooseBid()
+    // returns before its noise when K_bid is 0, which the first assert pins - so
+    // the knob never nudges a bid, and seeded games play the same with it at 0.20
+    // and at 0 (engine issue #36). Quoting it is how this tooltip first went wrong.
+    case BotLevel::ReckonerAlpha:
+    {
+        constexpr reckoner::ReckonerKnobs knobs = reckoner::ReckonerKnobs::alpha();
+        static_assert(knobs.K_play == 0 && knobs.K_bid == 0,
+                      "the tooltip says it imagines no deals, and has no bid noise to quote");
+        static_assert(knobs.epsilon > 0.0f,
+                      "the tooltip says it plays a random card");
+
         return QCoreApplication::translate("newgame",
-                                           "Remembers only the trick in front of it, and plays a "
-                                           "random legal card one time in seven.");
-    case BotLevel::ReckonerMedium:
+                                           "Imagines no deals and plays by rule, but plays a random "
+                                           "legal card %1% of the time.")
+            .arg(percent(knobs.epsilon));
+    }
+
+    // NO LEADER CLAUSE, because Beta weighs the score leader like everyone else.
+    case BotLevel::ReckonerBeta:
+    {
+        constexpr reckoner::ReckonerKnobs knobs = reckoner::ReckonerKnobs::beta();
+        static_assert(knobs.K_play > 0,
+                      "the tooltip says it imagines deals, and weighs opponents in them");
+        static_assert(knobs.lambdaLeader == knobs.lambdaDefault,
+                      "the tooltip gives no leader weight");
+        static_assert(knobs.epsilon > 0.0f && knobs.bidNoise > 0.0f,
+                      "the tooltip says it plays at random");
+        static_assert(knobs.K_bid > 0,
+                      "the tooltip says it nudges its bid, which chooseBid() does only after sampling");
+
+        // "BY UP TO ONE", not "one off": bid noise, when it fires, adds -1, 0 or +1.
         return QCoreApplication::translate("newgame",
-                                           "Remembers every card played, and weighs sixty imagined "
-                                           "deals before each card.");
-    case BotLevel::ReckonerHard:
-        return QCoreApplication::translate("newgame",
-                                           "Two hundred imagined deals a card, and it plays to break "
-                                           "the leader's bid as well as to make its own.");
-    case BotLevel::ReckonerBrutal:
-        return QCoreApplication::translate("newgame",
-                                           "Four hundred imagined deals a card, and it solves the "
-                                           "last two tricks exactly rather than guessing them.");
+                                           "Weighs %1 imagined deals before each card and counts %2% "
+                                           "of every point an opponent scores against its own, but "
+                                           "plays a random legal card %3% of the time and nudges its "
+                                           "bid by up to one %4% of the time.")
+            .arg(QString::number(knobs.K_play), percent(knobs.lambdaDefault),
+                 percent(knobs.epsilon), percent(knobs.bidNoise));
+    }
+
+    case BotLevel::ReckonerGamma:
+    {
+        constexpr reckoner::ReckonerKnobs knobs = reckoner::ReckonerKnobs::gamma();
+        static_assert(knobs.K_play > 0,
+                      "the tooltip says it imagines deals, and weighs opponents in them");
+        static_assert(knobs.epsilon == 0.0f && knobs.bidNoise == 0.0f,
+                      "the tooltip says it never plays at random");
+
+        return searchingTooltip(knobs);
+    }
+
+    case BotLevel::ReckonerDelta:
+    {
+        constexpr reckoner::ReckonerKnobs knobs = reckoner::ReckonerKnobs::delta();
+        static_assert(knobs.K_play > 0,
+                      "the tooltip says it imagines deals, and weighs opponents in them");
+        static_assert(knobs.epsilon == 0.0f && knobs.bidNoise == 0.0f,
+                      "the tooltip says it never plays at random");
+
+        return searchingTooltip(knobs);
+    }
     }
 
     return QString();
