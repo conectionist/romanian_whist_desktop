@@ -564,20 +564,23 @@ QString newgame::tooltipFor(BotLevel level)
 
     // NO SABOTAGE CLAUSE, and none is owed: with no deals imagined there are no
     // rollouts for the lambdas to weigh, so Alpha's are moot whatever they are.
+    //
+    // AND NO BID CLAUSE, though Alpha's bidNoise is 0.20. RolloutEngine::chooseBid()
+    // returns before its noise when K_bid is 0, which the first assert pins - so
+    // the knob never nudges a bid, and seeded games play the same with it at 0.20
+    // and at 0 (engine issue #36). Quoting it is how this tooltip first went wrong.
     case BotLevel::ReckonerAlpha:
     {
         constexpr reckoner::ReckonerKnobs knobs = reckoner::ReckonerKnobs::alpha();
         static_assert(knobs.K_play == 0 && knobs.K_bid == 0,
-                      "the tooltip says it imagines no deals");
-        static_assert(knobs.epsilon > 0.0f && knobs.bidNoise > 0.0f,
-                      "the tooltip says it plays at random");
+                      "the tooltip says it imagines no deals, and has no bid noise to quote");
+        static_assert(knobs.epsilon > 0.0f,
+                      "the tooltip says it plays a random card");
 
-        // "BY UP TO ONE", not "one off": bid noise, when it fires, adds -1, 0 or +1.
         return QCoreApplication::translate("newgame",
                                            "Imagines no deals and plays by rule, but plays a random "
-                                           "legal card %1% of the time and nudges its bid by up to "
-                                           "one %2% of the time.")
-            .arg(percent(knobs.epsilon), percent(knobs.bidNoise));
+                                           "legal card %1% of the time.")
+            .arg(percent(knobs.epsilon));
     }
 
     // NO LEADER CLAUSE, because Beta weighs the score leader like everyone else.
@@ -590,7 +593,10 @@ QString newgame::tooltipFor(BotLevel level)
                       "the tooltip gives no leader weight");
         static_assert(knobs.epsilon > 0.0f && knobs.bidNoise > 0.0f,
                       "the tooltip says it plays at random");
+        static_assert(knobs.K_bid > 0,
+                      "the tooltip says it nudges its bid, which chooseBid() does only after sampling");
 
+        // "BY UP TO ONE", not "one off": bid noise, when it fires, adds -1, 0 or +1.
         return QCoreApplication::translate("newgame",
                                            "Weighs %1 imagined deals before each card and counts %2% "
                                            "of every point an opponent scores against its own, but "

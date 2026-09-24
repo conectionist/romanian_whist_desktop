@@ -557,6 +557,10 @@ TEST_CASE("Every Reckoner tooltip quotes the knobs its seat is built with", "[ne
     // or bids at random, and the weight it gives an opponent's points. A zero is
     // skipped, because its sentence says "no" or "never" instead - and that is
     // what the static_asserts beside each sentence are for.
+    //
+    // AND ONLY THOSE. A knob the engine never acts on is a figure nobody can
+    // feel, and quoting one is the other way these tooltips have gone wrong:
+    // Alpha's first rewrite quoted a bid noise that its preset never rolls.
     struct Preset
     {
         newgame::BotLevel level;
@@ -575,6 +579,14 @@ TEST_CASE("Every Reckoner tooltip quotes the knobs its seat is built with", "[ne
         return QStringLiteral("%1%").arg(qRound(fraction * 100.0f));
     };
 
+    // AS A WHOLE FIGURE, so Beta's 5% cannot pass by sitting inside its 15%,
+    // nor a sample count inside a percentage.
+    const auto quotes = [](const QString& tooltip, const QString& figure)
+    {
+        return tooltip.contains(QRegularExpression(
+            QStringLiteral("(?<!\\d)%1(?![\\d%])").arg(QRegularExpression::escape(figure))));
+    };
+
     for(const Preset& preset : presets)
     {
         const QString tooltip = newgame::tooltipFor(preset.level);
@@ -587,7 +599,12 @@ TEST_CASE("Every Reckoner tooltip quotes the knobs its seat is built with", "[ne
         if(preset.knobs.epsilon > 0.0f)
             figures << percent(preset.knobs.epsilon);
 
-        if(preset.knobs.bidNoise > 0.0f)
+        // BID NOISE ONLY WHERE THE ENGINE ROLLS IT. RolloutEngine::chooseBid()
+        // returns before its noise when K_bid is 0, so at Alpha the knob is
+        // inert whatever it holds.
+        const bool bidNoiseActs = preset.knobs.bidNoise > 0.0f && preset.knobs.K_bid > 0;
+
+        if(bidNoiseActs)
             figures << percent(preset.knobs.bidNoise);
 
         // THE WEIGHTS ACT ONLY INSIDE ROLLOUTS, so a preset that imagines no
@@ -604,13 +621,20 @@ TEST_CASE("Every Reckoner tooltip quotes the knobs its seat is built with", "[ne
         // AND SOMETHING WAS CHECKED, so a preset cannot pass by quoting nothing.
         REQUIRE_FALSE(figures.isEmpty());
 
-        // AS A WHOLE FIGURE, so Beta's 5% cannot pass by sitting inside its 15%,
-        // nor a sample count inside a percentage.
         for(const QString& figure : figures)
         {
             INFO("figure " << figure.toStdString());
-            REQUIRE(tooltip.contains(QRegularExpression(
-                QStringLiteral("(?<!\\d)%1(?![\\d%])").arg(QRegularExpression::escape(figure)))));
+            REQUIRE(quotes(tooltip, figure));
+        }
+
+        // AND NOT THE NOISE IT NEVER ROLLS - unless another knob shares the
+        // figure, which the loop above has already required the tooltip to quote.
+        const QString inert = percent(preset.knobs.bidNoise);
+
+        if(preset.knobs.bidNoise > 0.0f && !bidNoiseActs && !figures.contains(inert))
+        {
+            INFO("inert figure " << inert.toStdString());
+            REQUIRE_FALSE(quotes(tooltip, inert));
         }
     }
 }
