@@ -22,15 +22,16 @@
 // `observers` aims at an object `setup` itself owns, so a caller who moves one
 // without the other has either a strategy playing blind or a dangling pointer.
 //
-// WHY IT EXISTS AT ALL. ReckonerStrategy is an IStrategy *and* an IGameObserver
-// - it plays out of a card-counting tracker that only the observer callbacks
-// fill - and GameEngine::addObserver() is neither safe off the game thread nor
-// useful after start(), which fires onGameStarted() as its last act. The seats
-// are built on the GUI thread, where no engine exists; the registration has to
-// happen on the game thread between the engine's construction and its start().
-// This is what carries the pointers across, and it is the arrangement that does
-// NOT also move seat construction over the boundary - start() still fills the
-// human's seat by index, on the GUI thread, where .at() can throw at the caller.
+// WHY IT EXISTS AT ALL. ReckonerStrategy and CyborgStrategy are each an
+// IStrategy *and* an IGameObserver - each plays out of a card-counting memory
+// that only the observer callbacks fill - and GameEngine::addObserver() is
+// neither safe off the game thread nor useful after start(), which fires
+// onGameStarted() as its last act. The seats are built on the GUI thread, where
+// no engine exists; the registration has to happen on the game thread between
+// the engine's construction and its start(). This is what carries the pointers
+// across, and it is the arrangement that does NOT also move seat construction
+// over the boundary - start() still fills the human's seat by index, on the GUI
+// thread, where .at() can throw at the caller.
 //
 // LIFETIME IS CORRECT BY CONSTRUCTION, which is why there is no removeObserver()
 // anywhere. runGame() takes this BY VALUE, so it is constructed before the local
@@ -38,8 +39,15 @@
 // `setup` and outlive the engine, and after a successful start() they are owned
 // by the engine's Players and die WITH it, taking this list of pointers into them
 // along. GameEngine::start() validates everything before it moves anything, so
-// the throwing path leaves them in `setup` too. No path lets an observer outlive
-// the engine it was registered with.
+// its own refusals leave them in `setup` too.
+//
+// ONE THROW COMES AFTER THE MOVE, and it is an observer's rather than the
+// engine's: start() fires onGameStarted() as its last act, and CyborgStrategy
+// throws from there when its name matches no seat. By then the strategies are
+// the engine's Players', so they die with the engine local - still before this
+// deal - and the pointers left in `observers` are never read again. So the
+// conclusion holds on every path: no observer outlives the engine it was
+// registered with.
 //
 // NOT A GameController MEMBER, and that is the same decision as stopRequested's.
 // A member survives prepare(), which is where "play again" joins and rebuilds -

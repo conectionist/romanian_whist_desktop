@@ -1,6 +1,7 @@
 #include "NewGameDialog.h"
 
 #include <romanian_whist/AiMoveProvider.h>
+#include <romanian_whist/strategies/CyborgStrategy.h>
 #include <romanian_whist/strategies/DuckingStrategy.h>
 #include <romanian_whist/strategies/FirstCardStrategy.h>
 #include <romanian_whist/strategies/LowRiskStrategy.h>
@@ -49,72 +50,106 @@ const QStringList& stockNames()
     return names;
 }
 
-// The default level for the nth opponent: THE FOUR RECKONER PRESETS, weakest
-// first, one per seat.
+// The default level for the nth opponent: THE TERMINAL'S LINE-UPS, so a player
+// who knows one client sits down at the same table in the other.
 //
-// THE DEFAULT TABLE IS DELIBERATELY THE EXPENSIVE ONE. Every bot a new player
-// meets counts cards, and the fourth one samples four hundred imagined deals per
-// decision - so the opening game is the slowest this client can deal, and that is
-// the choice rather than an oversight. The weakest-first order is what makes it
-// legible: the scoreboard should separate into the order of this array, and a
-// table where it does not is a finding about the engine's presets.
+// THE FIRST THREE ARE ITS QUICK GAME, "you and three bots", and they are what
+// defaults() seats: a Reckoner at Hard - the preset the terminal's
+// --reckoner-preset flag defaults to, since its quick game names no preset of
+// its own - then the Cyborg, then LowRisk. Its reason is the one worth keeping:
+// the table most players judge the bots on seats the two that actually think,
+// and one simple bot for contrast.
 //
-// EVERY ONE OF THEM DRAWS, which the old array was arranged to avoid - it put the
-// deterministic strategies first and Random last so that a default table needed
-// nothing said about seeding. A fixed deal is still reproducible, but now it is
-// because buildDeal() passes seed + index to all four rather than because three
-// of them ignore it.
+// THE FOURTH IS ITS DEMO'S REMAINING SEAT. The terminal has no default for a
+// fourth bot at a played table, because its quick game stops at three - but its
+// watched demo seats four, these three and a Reckoner at Medium. So a fourth
+// row, added from the spinner at a played table or a watched one, makes the
+// demo's table rather than a second copy of the first seat. Past four they
+// cycle.
+//
+// THIS REPLACED THE FOUR RECKONER PRESETS, weakest first, which was the most
+// expensive opening table this client could deal and was chosen for being so.
+// Hard samples two hundred imagined deals a card where Brutal sampled four
+// hundred, so the opening game is now the cheaper one; and only its Reckoner
+// draws - the Cyborg and LowRisk are deterministic - so it is the one seat a
+// fixed deal has to seed.
 newgame::BotLevel defaultLevel(int index)
 {
-    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerEasy,
-                                                    newgame::BotLevel::ReckonerMedium,
-                                                    newgame::BotLevel::ReckonerHard,
-                                                    newgame::BotLevel::ReckonerBrutal };
+    static constexpr newgame::BotLevel levels[] = { newgame::BotLevel::ReckonerHard,
+                                                    newgame::BotLevel::Cyborg,
+                                                    newgame::BotLevel::LowRisk,
+                                                    newgame::BotLevel::ReckonerMedium };
 
     return levels[static_cast<std::size_t>(index) % std::size(levels)];
 }
 
 // A seat's provider, and - for the levels that also WATCH the game - the observer
 // that has to reach the engine before it starts. Two fields rather than a return
-// value because a Reckoner seat is genuinely two things; see GameDeal in
-// engine/GameController.h.
+// value because a Reckoner or Cyborg seat is genuinely two things; see GameDeal
+// in engine/GameController.h.
 struct BuiltSeat
 {
     std::unique_ptr<IMoveProvider> provider;
     IGameObserver* observer = nullptr;
 };
 
-// THE ENGINE'S OWN makeReckonerSeat() DOES EXACTLY THIS and cannot be used here.
-// It takes a GameEngine& and calls addObserver() on it itself, which is right for
-// a caller that owns its engine as a member (the terminal client does) and
-// impossible for this one: buildDeal() runs on the GUI thread, where the game's
-// engine does not exist yet and will not until GameController's run slot
-// constructs it. So the registration is deferred and this is the helper minus
-// that one line. Kept line-for-line otherwise, so a fix landing there is findable
-// here.
+// A STRATEGY THAT ALSO WATCHES, AS A SEAT: the engine's own makeReckonerSeat()
+// and makeCyborgSeat() minus their one addObserver() line, and the one place the
+// two rules below are written down, so the next strategy that watches cannot
+// take one of them and not the other.
 //
-// setPlayerName() AND NOT setSeat(), which is the engine helper's choice and
+// THE REGISTRATION IS THE LINE LEFT OUT, because it cannot be made here. Both
+// engine helpers take a GameEngine& and call addObserver() on it themselves,
+// which is right for a caller that owns its engine as a member (the terminal
+// client does) and impossible for this one: buildDeal() runs on the GUI thread,
+// where the game's engine does not exist yet and will not until
+// GameController's run slot constructs it. Kept line-for-line with them
+// otherwise, so a fix landing there is findable here.
+//
+// setPlayerName() AND NOT setSeat(), which is the engine helpers' choice and
 // worth keeping for a second reason of our own: the strategy resolves its seat
 // from its name inside onGameStarted(), so a seat that is right here would be
 // right even for a strategy that was never registered - and the test proving the
 // registration happened would be asserting nothing. The name cannot mis-resolve,
 // because firstError() rejects duplicates more strictly than the engine does
 // (case-insensitively).
+template<typename Strategy>
+BuiltSeat makeWatchingSeat(std::unique_ptr<Strategy> strategy, const std::string& name)
+{
+    strategy->setPlayerName(name);
+
+    // TAKEN FROM Strategy*, and taken BEFORE the move, in a named local. Both
+    // strategies derive from IStrategy and IGameObserver, so the two base
+    // subobjects sit at different addresses within each - upcasting from the
+    // wrong one compiles and hands the engine a pointer to the wrong vtable. A
+    // dynamic_cast in the test is what pins this down. The template closes the
+    // one gap left: handed a unique_ptr<IStrategy>, this line does not compile.
+    IGameObserver* observer = strategy.get();
+
+    return BuiltSeat{ std::make_unique<AiMoveProvider>(std::move(strategy)), observer };
+}
+
+// A Reckoner seat, from one of the engine's knob tables.
 BuiltSeat makeReckoner(const std::string& name,
                        const reckoner::ReckonerKnobs& knobs,
                        std::optional<std::uint32_t> seed)
 {
-    auto strategy = std::make_unique<ReckonerStrategy>(knobs, seed);
-    strategy->setPlayerName(name);
+    return makeWatchingSeat(std::make_unique<ReckonerStrategy>(knobs, seed), name);
+}
 
-    // TAKEN FROM ReckonerStrategy*, and taken BEFORE the move, in a named local.
-    // The class derives from IStrategy and IGameObserver both, so the two base
-    // subobjects sit at different addresses within it - upcasting from the wrong
-    // one compiles and hands the engine a pointer to the wrong vtable. A
-    // dynamic_cast in the test is what pins this down.
-    IGameObserver* observer = strategy.get();
-
-    return BuiltSeat{ std::make_unique<AiMoveProvider>(std::move(strategy)), observer };
+// THE CYBORG'S NAME CARRIES ONE MORE CHECK. A Cyborg whose name matches no seat
+// does not play as seat 0 the way a Reckoner does - it throws from
+// onGameStarted(), the last thing GameEngine::start() does. buildDeal() cannot
+// trip that, because the one `name` it builds per seat is the one both this and
+// the SeatSetup are given.
+//
+// NO KNOBS AND NO SEED, which is not makeReckoner()'s shape and is deliberate
+// both times. The knobs are "development tuning, not a difficulty dial"
+// (CyborgKnobs.h) - the Cyborg ships as one strength, and the engine's defaults
+// are that strength - and it draws nothing, so there is nothing to seed.
+BuiltSeat makeCyborg(const std::string& name)
+{
+    return makeWatchingSeat(std::make_unique<CyborgStrategy>(), name);
 }
 
 // One seat, from a level.
@@ -124,7 +159,8 @@ BuiltSeat makeReckoner(const std::string& name,
 // Reckoner made it false: RandomCardStrategy seeds its mt19937 once from the
 // seed, and ReckonerStrategy does the same for its deal sampler, its epsilon roll
 // and its bid noise. Unseeded, both fall back to std::random_device exactly once,
-// at construction. The other three are deterministic and ignore it.
+// at construction. The other four are deterministic and ignore it - the Cyborg
+// included, which is why a fixed deal replays it with no seed of its own.
 //
 // WHAT A SEEDED RECKONER IS AND IS NOT. It replays a game card for card given the
 // same deal and the same opponents - the engine's own suite asserts that
@@ -155,6 +191,9 @@ BuiltSeat providerFor(newgame::BotLevel level,
     case newgame::BotLevel::Ducking:
         return BuiltSeat{ std::make_unique<AiMoveProvider>(std::make_unique<DuckingStrategy>()),
                           nullptr };
+
+    case newgame::BotLevel::Cyborg:
+        return makeCyborg(name);
 
     // THE KNOBS OVERLOAD, not the ReckonerPreset one, so the mapping from a row
     // of this client's menu to a table of the engine's numbers is visible at the
@@ -203,11 +242,10 @@ newgame::Config newgame::defaults()
     // is a name to replace, not a label.
     config.humanName = QCoreApplication::translate("newgame", "Player");
 
-    // FOUR, one per Reckoner preset, so every level defaultLevel() cycles is on
-    // the opening table and the weakest-to-strongest order is something a player
-    // can read off the scoreboard. Four bots plus the human is five seats, inside
-    // the played range applyOpponentRange() allows, and stockNames() has six.
-    for(int i = 0 ; i < 4 ; i++)
+    // THREE, the terminal's quick game - see defaultLevel() for who they are and
+    // why. Three bots plus the human is four seats and 26 rounds, where the four
+    // Reckoner presets this replaced made five and 29.
+    for(int i = 0 ; i < 3 ; i++)
     {
         config.botNames.push_back(stockNames().at(i));
         config.botLevels.push_back(defaultLevel(i));
@@ -355,6 +393,9 @@ bool newgame::isReckoner(BotLevel level)
     case BotLevel::FirstCard:
     case BotLevel::LowRisk:
     case BotLevel::Ducking:
+    // Watches, but does not sample - which is why isObserver() names it on its
+    // own rather than taking it from here.
+    case BotLevel::Cyborg:
         return false;
     }
 
@@ -362,6 +403,16 @@ bool newgame::isReckoner(BotLevel level)
     // providerFor() carries and for the same reason: no default:, so a level added
     // without a decision here is a warning rather than a silent false.
     return false;
+}
+
+// FROM isReckoner() RATHER THAN A SWITCH OF ITS OWN, so a new level is decided
+// once - in isReckoner(), whose switch warns until it is - and not twice in two
+// switches that could each be satisfied and still disagree. A level that watches
+// and is left out of this line is not silent either: the observer-count case in
+// NewGameTests compares it against the observers buildDeal() actually built.
+bool newgame::isObserver(BotLevel level)
+{
+    return isReckoner(level) || level == BotLevel::Cyborg;
 }
 
 GameDeal newgame::buildDeal(const Config& config)
@@ -421,6 +472,8 @@ QString newgame::nameOf(BotLevel level)
 
     // THE TERMINAL WIZARD'S STRINGS VERBATIM (section 21.4), parenthesised preset
     // and all, so a player who knows one client reads the other.
+    case BotLevel::Cyborg:
+        return QCoreApplication::translate("newgame", "Cyborg");
     case BotLevel::ReckonerEasy:
         return QCoreApplication::translate("newgame", "Reckoner (Easy)");
     case BotLevel::ReckonerMedium:
@@ -437,14 +490,15 @@ QString newgame::nameOf(BotLevel level)
 QString newgame::tooltipFor(BotLevel level)
 {
     // The engine's STRATEGIES.md lead table, one row each, so the choice means
-    // something to a player who has never read the source (section 13).
+    // something to a player who has never read the source (section 13). The
+    // Cyborg's is its row there, bids then play, like the four before it.
     //
-    // EXCEPT THE RECKONER'S FOUR, which are not in STRATEGIES.md at all - it and
-    // the engine README were never updated when the strategy landed and both still
-    // say the engine ships four. Those four lines are section 9 of
-    // libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md, read as prose:
-    // the preset's memory, its rollout count, and the one thing it does that the
-    // preset below it does not.
+    // EXCEPT THE RECKONER'S FOUR. When they were written STRATEGIES.md did not
+    // mention the strategy at all; engine 4.2.0 added it, but as one row for all
+    // four presets, which is a tooltip for none of them. So those four lines are
+    // still section 9 of libs/RomanianWhistEngine/docs/romanian-whist-reckoner-ai.md,
+    // read as prose: the preset's memory, its rollout count, and the one thing it
+    // does that the preset below it does not.
     switch(level)
     {
     case BotLevel::Random:
@@ -462,6 +516,11 @@ QString newgame::tooltipFor(BotLevel level)
         return QCoreApplication::translate("newgame",
                                            "Bids 0 come what may, and sheds its highest cards "
                                            "whenever they cannot win.");
+    case BotLevel::Cyborg:
+        return QCoreApplication::translate("newgame",
+                                           "Bids the count with the best expected score, from exact "
+                                           "odds on every card, and re-plans every trick which cards "
+                                           "win and which go.");
 
     case BotLevel::ReckonerEasy:
         return QCoreApplication::translate("newgame",

@@ -187,10 +187,25 @@ void GameController::runGame(GameDeal deal)
 
         // AND THE STRATEGIES THAT WATCH, on THIS thread for the reason
         // GameController's own class comment gives, and before start() for a
-        // second and sharper one: ReckonerStrategy resolves its own SEAT inside
-        // onGameStarted(), from its name. One attached afterwards does not merely
-        // miss a callback - it plays the whole game believing it sits at seat 0,
-        // legally and badly, with nothing raised anywhere.
+        // second and sharper one: ReckonerStrategy and CyborgStrategy both resolve
+        // their own SEAT inside onGameStarted(), from their names. One attached
+        // afterwards does not merely miss a callback - it plays the whole game
+        // believing it sits at seat 0, legally and badly, with nothing raised
+        // anywhere.
+        //
+        // THE LOUD FAILURES ARE THE OTHER TWO, and neither needs anything here. A
+        // strategy never attached at all throws from its first decision, and a
+        // Cyborg attached under a name no seat has throws from inside start()
+        // itself; both leave through the catch-all below, as gameFailed.
+        //
+        // THE SECOND ONE IS NOT THE FIRST THING THE WINDOW HEARS. The bridge is
+        // registered above and publishes from its own onGameStarted(), which the
+        // engine calls before the Cyborg's - so one stateChanged goes out ahead of
+        // the throw, and gameFailed arrives on a table already drawn. Nothing is
+        // dealt by onGameStarted(), so that table is names and zero scores, and
+        // showFailure() puts its panel over it. buildDeal() cannot produce the
+        // name that gets here, which is why it does not outweigh the ordering
+        // below.
         //
         // AFTER THE BRIDGE, which is only an ordering of who hears a card first
         // and is deliberately this way round: the bridge is the one observer that
