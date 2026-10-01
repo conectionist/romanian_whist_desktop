@@ -1,9 +1,9 @@
 name: CI (self-hosted)
 
-# Temporary replacement for ci.yml while GitHub-hosted runner jobs are
-# blocked by a failed account payment. Targets the self-hosted runners
-# (Windows and Linux). macOS and the release job are omitted intentionally:
-# there is no self-hosted macOS runner, and release needs all three builds.
+# Manual backup workflow for self-hosted runners (Linux + Windows).
+# Kept as a fallback for ci.yml in case GitHub-hosted runner limits are hit again.
+# macOS and the release job are omitted: no self-hosted macOS runner, and release
+# needs all three builds.
 #
 # build-linux targets whatever machine is registered with the self-hosted +
 # Linux labels - no per-machine targeting there, so bringing up a
@@ -18,47 +18,10 @@ name: CI (self-hosted)
 # fixed: it broke on sudo needing a password, then on a broken Python stdlib
 # (types.py being shadowed) once that was fixed, and linux_old_laptop - a
 # native Linux machine - sidesteps that whole class of problem.
-#
-# Once billing is resolved:
-#   1. Re-enable ci.yml (restore its push/pull_request trigger block).
-#   2. Delete or disable this file.
-
-# PUSH IS RESTRICTED TO master, AND THAT IS WHAT STOPS EVERY PR BUILDING TWICE.
-# Unfiltered, pushing a branch that has a PR fires BOTH events, and with no
-# concurrency group below neither run cancelled the other: two identical builds
-# per platform, ~6 minutes each, on machines that are now ours rather than
-# GitHub's.
-#
-# THE pull_request RUN IS THE ONE WORTH KEEPING of the two. It builds
-# refs/pull/N/merge - this branch already merged into master - which is the
-# thing that is actually about to happen. A push run builds the branch in
-# isolation, so it can pass while the merge would not.
-#
-# WHAT THIS GIVES UP: a branch with no PR open gets no CI at all. That suits a
-# flow of branch -> PR -> squash-merge, which is this repository's. Push a WIP
-# branch expecting a build and you will wait for one that is never coming - open
-# a draft PR, or run this workflow by hand.
 on:
-  push:
-    branches: [master]
-    paths-ignore:
-      - '**/*.md'
-  pull_request:
-    paths-ignore:
-      - '**/*.md'
-  workflow_dispatch:   # a branch with no PR, when one is genuinely wanted
+  workflow_dispatch:   # manual trigger only
 
-# ONE RUN PER PR, AND THE LATEST ONE WINS. This fixes a second kind of waste
-# that the branch filter above does not touch: pushing twice to a live PR left
-# the first build running to completion against code nobody was waiting on.
-#
-# The key deliberately collapses the push and pull_request views of the same
-# work - github.ref differs between them (refs/heads/x against
-# refs/pull/N/merge), so keying on ref alone would put them in separate groups
-# and cancel neither. Belt and braces against the duplication above.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+
 
 # See ci.yml for the full rationale behind this version pin.
 env:
