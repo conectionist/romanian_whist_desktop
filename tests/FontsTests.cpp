@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QGuiApplication>
 #include <QString>
 #include <QStringList>
 
@@ -62,4 +63,20 @@ TEST_CASE("Each fallback chain resolves to its bundled family", "[fonts]")
 
         REQUIRE(QFontInfo(font).family() == chain.first());
     }
+}
+
+// BUNDLING A FACE MUST NOT CHANGE THE DEFAULT ONE. On a real desktop the platform
+// supplies the UI font, so it cannot happen there. In the offscreen test platform
+// on Windows it DID: a default family that is missing gets filled alphabetically,
+// and "Alegreya Sans" sorts in front of Arial (TestApp.cpp has the detail). The
+// first sign of it was text wrapping differently in a test about the bid strip.
+// Asserted here, so the next time it happens the failure names its cause.
+TEST_CASE("Registering the bundled typefaces leaves the default font alone", "[fonts]")
+{
+    const QString family = QFontInfo(QGuiApplication::font()).family();
+
+    INFO("default font: " << family.toStdString());
+
+    for(const QStringList& chain : { fonts::logo(), fonts::heading(), fonts::body() })
+        REQUIRE(family != chain.first());
 }

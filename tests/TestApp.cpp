@@ -6,6 +6,7 @@
 #include "paint/Fonts.h"
 
 #include <QApplication>
+#include <QFont>
 
 #include <memory>
 
@@ -96,6 +97,28 @@ public:
         // The same call main() makes, for the same reason as the line above:
         // without it every test lays text out in a face the program never uses.
         fonts::registerBundled();
+
+#ifdef Q_OS_WIN
+        // WINDOWS ONLY, and a consequence of the call above. The offscreen
+        // platform asks for "Helvetica" as its default font. On Linux and macOS,
+        // fontconfig and CoreText substitute a real face for it; on Windows this
+        // FreeType database has no substitution, so Qt takes the best-matching
+        // family and breaks the tie ALPHABETICALLY. Registering the bundled
+        // fonts put "Alegreya Sans" in front of every system face, and the whole
+        // suite silently started laying text out in it - found by TableViewTests'
+        // squeezed-strip case, where the narrower face stopped wrapping the bid
+        // explanation.
+        //
+        // So the default is pinned rather than left to the alphabet. Arial,
+        // because it sorts first among Windows' own sans faces and so should be
+        // what that tie-break picked before the bundled fonts arrived. The
+        // shipped program is unaffected: the windows platform plugin reads the
+        // system's own UI font. FontsTests asserts the default is no bundled
+        // face, so if this ever stops holding it fails by name.
+        QFont font = QApplication::font();
+        font.setFamilies({ QStringLiteral("Arial") });
+        QApplication::setFont(font);
+#endif
     }
 
     void testRunEnded(const Catch::TestRunStats&) override

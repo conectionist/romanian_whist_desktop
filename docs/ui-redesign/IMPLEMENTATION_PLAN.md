@@ -450,7 +450,7 @@ Done when: the app still looks as it did, but the resources, fonts and tokens ex
 
 **Outcome:**
 
-- **The count is 266 tests** (259 + 7), passing on the `default`, `release` and `clang` presets
+- **The count is 267 tests** (259 + 8), passing on the `default`, `release` and `clang` presets
   with Qt 6.11.2 and building without a warning. The screenshot tool's five pictures are
   pixel-identical to phase 0's, so the client really does look as it did.
 - **Q1 and Q2 were decided by the owner** on 2026-10-17, both as the defaults (see section 7).
@@ -467,9 +467,16 @@ Done when: the app still looks as it did, but the resources, fonts and tokens ex
     `body()` give section 2.3's fallback chains for `QFont::setFamilies()`. Take family names from
     there rather than writing them again.
 - **Alegreya Sans Medium has two family names**: the typographic "Alegreya Sans" and the legacy
-  "Alegreya Sans Medium". On Linux, Qt files it as weight 500 of "Alegreya Sans", which
-  `FontsTests.cpp` asserts. Windows is unverified until CI runs there again. If that assertion
-  fails there, look at this first.
+  "Alegreya Sans Medium". Qt files it as weight 500 of "Alegreya Sans" on Linux and on the
+  Windows CI runner, which `FontsTests.cpp` asserts.
+- **Pitfall: the bundled fonts changed the Windows test suite's default font.** The offscreen
+  platform's default family is "Helvetica". Linux and macOS substitute a real face for it.
+  Windows has no substitution there, so Qt picks the best match and breaks ties alphabetically,
+  and "Alegreya Sans" sorts in front of every system face. The first CI run failed
+  `TableViewTests`' squeezed-strip case because the narrower face stopped wrapping.
+  `tests/TestApp.cpp` now pins the Windows default to Arial. A `FontsTests` case asserts that the
+  default is none of the bundled faces, so a recurrence fails by name. The shipped app is
+  unaffected: the windows platform plugin uses the system UI font.
 - **Pitfall:** Qt's `.qrc` dependency scan is a regex, not an XML parser. Writing the entry tag's
   name in angle brackets inside a comment produces a Makefile that fails with "missing separator".
   `resources/fonts.qrc` says so where it happened.
