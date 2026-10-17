@@ -4,7 +4,9 @@
 #include "table/CardItem.h"
 
 #include <QFontMetricsF>
+#include <QGraphicsSceneMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 
 #include <algorithm>
 
@@ -16,6 +18,10 @@ namespace
 // moves the plaque with it rather than leaving it stranded at a pixel size.
 constexpr qreal plaqueWidthInCards = 1.60;
 constexpr qreal plaqueHeightInCards = 0.56;
+
+// The plaque's corner radius, as a fraction of its height. Shared by paint() and
+// shape(), so what blocks the mouse is exactly what is drawn.
+constexpr qreal cornerInPlaques = 0.18;
 
 // The turn ring, drawn OUTSIDE the plaque, so the bounding rect has to leave
 // room for it whether it is showing or not - a seat's rect changing every time
@@ -96,6 +102,12 @@ SeatItem::SeatItem(const CardRenderer* _renderer, QGraphicsItem* parent)
 {
     face = new CardItem(renderer, this);
     face->hide();
+
+    // YOUR PLAQUE COVERS THE BOTTOM OF YOUR HAND (section 2.8), and Qt sends hover
+    // only to the topmost item that asks for it. Without this the hand is that
+    // item, and lifts a card the plaque is hiding. See mousePressEvent() for the
+    // other half.
+    setAcceptHoverEvents(true);
 }
 
 QSizeF SeatItem::plaqueSize(qreal cardHeight)
@@ -171,6 +183,32 @@ QRectF SeatItem::boundingRect() const
     return QRectF(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 }
 
+// THE PLAQUE AS DRAWN, not the bounding rect. The rect leaves room for the turn
+// ring whether it is showing or not, and in that margin the card under the plaque
+// is still visible - so it has to stay clickable there.
+QPainterPath SeatItem::shape() const
+{
+    QPainterPath path;
+
+    if(cardHeight <= 0.0)
+        return path;
+
+    const qreal radius = cardHeight * plaqueHeightInCards * cornerInPlaques;
+
+    path.addRoundedRect(layoutFor().plaque, radius, radius);
+
+    return path;
+}
+
+// TAKEN, AND NOTHING DONE WITH IT. QGraphicsItem's own handler ignores a press on
+// an item that is neither movable nor selectable, and an ignored press goes on to
+// the item beneath: your own plaque let a click on your name through to the card
+// under it, and played that card.
+void SeatItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
+{
+    event->accept();
+}
+
 bool SeatItem::showsFace() const
 {
     // NOT "is this a Forehead round". The snapshot does not need to be asked:
@@ -230,7 +268,7 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     const qreal height = cardHeight * plaqueHeightInCards;
     const QRectF plaque = layout.plaque;
-    const qreal radius = height * 0.18;
+    const qreal radius = height * cornerInPlaques;
 
     painter->setPen(Qt::NoPen);
     painter->setBrush(theme.seatPlaque);

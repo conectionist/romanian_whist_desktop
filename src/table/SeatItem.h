@@ -98,6 +98,10 @@ public:
 
     QRectF boundingRect() const override;
 
+    // The plaque's rounded rect, ring margin excluded: the part of the item that
+    // takes the mouse, so a click on it never reaches the hand beneath.
+    QPainterPath shape() const override;
+
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
     // WHAT THIS PLAQUE DECIDED, exposed because it is a pure query and because
@@ -109,6 +113,9 @@ public:
     seatitem::Layout layoutFor() const;
 
     bool showsFace() const;
+
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
     // Section 14's three states. `NoBid` is the fourth thing that can be true

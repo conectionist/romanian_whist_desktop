@@ -13,7 +13,10 @@
 
 #include <romanian_whist/Card.h>
 
+#include <QCoreApplication>
 #include <QGraphicsItem>
+#include <QGraphicsSceneHoverEvent>
+#include <QGraphicsSceneMouseEvent>
 #include <QImage>
 #include <QPainter>
 #include <QPixmap>
@@ -342,6 +345,161 @@ TEST_CASE("Your own plaque is drawn over your hand", "[table]")
     REQUIRE(mine->sceneBoundingRect().intersects(scene.handItem()->sceneBoundingRect()));
 
     REQUIRE(mine->zValue() > scene.handItem()->zValue());
+}
+
+// ---- your plaque over your hand, and the mouse ----
+//
+// DRAWN ON TOP IS NOT THE SAME AS ON TOP FOR THE MOUSE. Qt hands a press to the
+// items under it top first, but an item that does not take the press passes it
+// down - and a plain QGraphicsItem does not take one. So the plaque covering the
+// bottom of your fan let a click on your own name through to the card under it,
+// and played that card. Hover went the same way: the hand is the only item that
+// asks for hover, so it lifted a card the plaque was hiding.
+
+namespace
+{
+
+// Your turn, with the three cards holdingThree() deals, all of them legal.
+PlayPrompt playingThree()
+{
+    PlayPrompt prompt;
+
+    prompt.promptId = 9;
+    prompt.entries = holdingThree(4, 1).hand;
+    prompt.handIndex = { 0, 1, 2 };
+
+    return prompt;
+}
+
+// WHERE YOUR PLAQUE AND YOUR FAN OVERLAP. The plaque is drawn from y = 1063 (its
+// centre at 1105, 84 tall) and the cards reach down to 1075 (section 2.8: 850 plus
+// 225).
+//
+// AND ON TWO CARDS AT ONCE, x = 808 being where the third card overlaps the
+// second. A press reaches the scene with a hover in front of it, and a hover
+// lifts the card under the point - which moves it out from under the point. On
+// one card alone the press then finds nothing and the case passes whether the
+// plaque blocks it or not; here the second card is still underneath, and a press
+// that gets through plays it.
+const QPointF underYourPlaque(808.0, 1070.0);
+
+// The middle card, well clear of the plaque.
+const QPointF onTheCardAlone(768.0, 950.0);
+
+// THROUGH THE SCENE, not to an item, because which item gets the event is the
+// question. No view, so the scene finds the items under the point itself.
+void pressAt(QGraphicsScene& scene, QPointF where)
+{
+    QGraphicsSceneMouseEvent press(QEvent::GraphicsSceneMousePress);
+
+    press.setScenePos(where);
+    press.setButton(Qt::LeftButton);
+    press.setButtons(Qt::LeftButton);
+
+    QCoreApplication::sendEvent(&scene, &press);
+
+    // And let go, so whatever took the press is not still holding the mouse when
+    // the next one arrives.
+    QGraphicsSceneMouseEvent release(QEvent::GraphicsSceneMouseRelease);
+
+    release.setScenePos(where);
+    release.setButton(Qt::LeftButton);
+
+    QCoreApplication::sendEvent(&scene, &release);
+}
+
+void hoverAt(QGraphicsScene& scene, QPointF where)
+{
+    QGraphicsSceneHoverEvent hover(QEvent::GraphicsSceneHoverMove);
+
+    hover.setScenePos(where);
+
+    QCoreApplication::sendEvent(&scene, &hover);
+}
+
+// A lifted card is one moved up off the fan's line, which is y = 0.
+bool aCardIsLifted(const HandItem& hand)
+{
+    for(QGraphicsItem* child : hand.childItems())
+    {
+        if(child->pos().y() < 0.0)
+            return true;
+    }
+
+    return false;
+}
+
+// The premise both cases below rest on: the point really is on your plaque as
+// drawn, and on one of your cards.
+void requireOverlapAt(const TableScene& scene, QPointF where)
+{
+    SeatItem* mine = plaqueAtBottom(scene);
+    REQUIRE(mine != nullptr);
+    REQUIRE(mine->contains(mine->mapFromScene(where)));
+
+    bool onACard = false;
+
+    for(QGraphicsItem* child : scene.handItem()->childItems())
+        onACard = onACard || child->sceneBoundingRect().contains(where);
+
+    REQUIRE(onACard);
+}
+
+}
+
+TEST_CASE("A click on your plaque does not play the card beneath it", "[table]")
+{
+    TableScene scene;
+
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
+
+    HandItem* hand = scene.handItem();
+
+    hand->setPrompt(playingThree());
+    hand->setPlayable(true);
+
+    int clicks = 0;
+    QObject::connect(hand, &HandItem::cardClicked, [&clicks](std::size_t) { clicks++; });
+
+    requireOverlapAt(scene, underYourPlaque);
+
+    pressAt(scene, underYourPlaque);
+
+    REQUIRE(clicks == 0);
+
+    // The control: the same card, clicked where nothing covers it, is played -
+    // so the zero above is the plaque's doing and not a click that went nowhere.
+    pressAt(scene, onTheCardAlone);
+
+    REQUIRE(clicks == 1);
+}
+
+TEST_CASE("Hovering your plaque lifts no card", "[table]")
+{
+    TableScene scene;
+
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
+
+    HandItem* hand = scene.handItem();
+
+    hand->setPrompt(playingThree());
+    hand->setPlayable(true);
+
+    requireOverlapAt(scene, underYourPlaque);
+
+    // From nowhere straight onto the plaque. Not from the card first: a lifted
+    // card rises out from under this point, which would clear the lift on its
+    // own and hide the defect.
+    hoverAt(scene, underYourPlaque);
+
+    REQUIRE_FALSE(aCardIsLifted(*hand));
+
+    // The control: the card lifts where nothing covers it.
+    hoverAt(scene, onTheCardAlone);
+
+    REQUIRE(aCardIsLifted(*hand));
 }
 
 TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]")
