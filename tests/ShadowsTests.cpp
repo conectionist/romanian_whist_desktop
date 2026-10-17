@@ -144,7 +144,7 @@ TEST_CASE("A circle over its shadow from beneath meets it in one edge", "[shadow
     REQUIRE(rim == Catch::Approx(1.0 - 0.5 * (1.0 - edgeAlpha)).margin(0.03));
 }
 
-TEST_CASE("A shape's shadow is the same profile, outside the shape only", "[shadows]")
+TEST_CASE("A shape's shadow is the same profile and lies outside the shape only", "[shadows]")
 {
     QImage image = canvas();
 

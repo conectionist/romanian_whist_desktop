@@ -644,15 +644,20 @@ window edge with a full table on it stays smooth, with each frame of the drag un
     2.5, the cards about 1.2, the plaques up to 1.2, and the table under 1. The rest is the window
     itself being resized on each step.
   - The one frame when a resize settles costs about 75 ms, most of it the court cards' SVG art.
+  - After the review of #28 a drag's first step is drawn sharp too, so a one-off resize is never
+    soft. That step costs 65–68 ms, once per drag. The frames after it stay at 7.2–7.5 ms median,
+    8.1–8.3 ms worst, over four runs.
 - **What later phases take from here:**
   - **The stacking order:** `tablespace::z` in `TableSpace.h`, with gaps of ten (`table`, `racks`,
     `playedCards`, `leadMark`, `hand`, `humanPanel`, `panels`, `hud`). Phase 5's racks and phase 6's
     rhombus take their rungs from it.
   - **Shadows:** `src/paint/Shadows.h`, CSS `box-shadow` with CSS's blur numbers.
-    - `drawCircleShadow()` is analytic, from the error function.
+    - `drawCircleShadow()` is analytic, from the error function. `Side::Beneath` is the outer shadow
+      for an opaque circle drawn over it, filled as a disc so the two meet in one anti-aliased edge.
     - `drawShapeShadow()` blurs any path with three box passes and cuts the shape out by its own
-      anti-aliased coverage. Phases 4 and 8 use it for the panels' 0 12 26 shadow, phase 6 for the
-      gold glows.
+      anti-aliased coverage, laid on the device's pixels so the cut-out lines up with the shape.
+      Phases 4 and 8 use it for the panels' 0 12 26 shadow, phase 6 for the gold glows.
+    - `shadows::reach(blur)` is how far a shadow reaches; size anything that holds one by it.
   - **Gradients:** `gradients::cssRadial()` is CSS's farthest-corner `radial-gradient()`. It draws
     the room, the felt's vignette and the logo.
   - **The colours:** section 2.4's colours are in `Theme::table`, from `woodDark` to `logoOrnament`
@@ -687,13 +692,17 @@ window edge with a full table on it stays smooth, with each frame of the drag un
   a jagged rim. Everything on the table is an anti-aliased fill instead: the textures are brushes, and
   the bead is stacked discs under the felt.
 - **Pitfall: a texture brush half a pixel off the grid blurs every texel.** The disc's corner falls
-  at 80.6 px at a ratio of 0.767, so each texture's corner is snapped to a whole pixel. Before the
-  snap, the grain's edge energy was 16.6 against the mock-up's 21.3; after it, 20.8.
+  at 80.6 px at a ratio of 0.767, so each texture's corner is snapped to a whole pixel with
+  `devicepixels::snapped()`. Before the snap, the grain's edge energy was 16.6 against the mock-up's
+  21.3; after it, 20.8. A shape's shadow is snapped the same way.
 - **Pitfall: CSS's paint order.** Outer shadows go under the background. Inset shadows go over it,
   with the last one listed lowest. The border goes over the inset shadows. And `transparent` in a CSS
-  gradient blends premultiplied: in Qt, put a clear stop in each side's own colour at the same point.
+  gradient blends premultiplied, which Qt's default `ColorInterpolation` also does, so one
+  transparent stop ports as it is (`GradientsTests.cpp`). Don't switch to `ComponentInterpolation`:
+  that one passes through grey.
 - **Pitfall: a Catch2 test name with a comma cannot be run by its name.** The comma separates
-  filters, so `"While a resize settles, no card…"` matches nothing, silently. Use a wildcard,
+  filters, so `"While a resize settles, no card…"` matches nothing: Catch2 prints "No tests ran"
+  and exits 2. Leave commas out of new test names; for an old one, use a wildcard,
   `"While a resize settles*"`.
 
 ### Phase 4: seats and name panels

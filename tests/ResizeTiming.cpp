@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "TableFixtures.h"
+
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "paint/Theme.h"
-
-#include <romanian_whist/Card.h>
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -33,48 +33,6 @@
 // resize settles - and this measures what that is worth.
 namespace
 {
-using romanian_whist::Card;
-using romanian_whist::Rank;
-using romanian_whist::Suit;
-
-// Six plaques, eight cards in your hand and five on the felt, court cards among
-// both: the court cards' art is the slow kind to rasterize.
-GameSnapshot fullTable()
-{
-    GameSnapshot snapshot;
-
-    snapshot.humanSeat = 0;
-    snapshot.roundNumber = 10;
-    snapshot.roundCount = 32;
-    snapshot.trickCount = 8;
-    snapshot.seats.resize(6);
-
-    for(unsigned int i = 0 ; i < 6 ; i++)
-    {
-        snapshot.seats[i].seatIndex = i;
-        snapshot.seats[i].name = "Seat " + std::to_string(i);
-        snapshot.seats[i].cardsLeft = 8;
-    }
-
-    snapshot.seats[0].isHuman = true;
-
-    snapshot.hand = { HandEntry{ Card(Rank::Two, Suit::Clubs) },
-                      HandEntry{ Card(Rank::Seven, Suit::Clubs) },
-                      HandEntry{ Card(Rank::Jack, Suit::Clubs) },
-                      HandEntry{ Card(Rank::Nine, Suit::Diamonds) },
-                      HandEntry{ Card(Rank::Queen, Suit::Diamonds) },
-                      HandEntry{ Card(Rank::Ten, Suit::Hearts) },
-                      HandEntry{ Card(Rank::King, Suit::Hearts) },
-                      HandEntry{ Card(Rank::Ace, Suit::Spades) } };
-
-    snapshot.table = { PlayedCardView{ 1, Card(Rank::King, Suit::Spades) },
-                       PlayedCardView{ 2, Card(Rank::Queen, Suit::Spades) },
-                       PlayedCardView{ 3, Card(Rank::Jack, Suit::Spades) },
-                       PlayedCardView{ 4, Card(Rank::Eight, Suit::Spades) },
-                       PlayedCardView{ 5, Card(Rank::Three, Suit::Spades) } };
-
-    return snapshot;
-}
 
 constexpr int steps = 40;
 

@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "TableFixtures.h"
+
 #include "table/TableView.h"
 #include "table/SeatItem.h"
 #include "table/TableScene.h"
@@ -481,22 +483,7 @@ TEST_CASE("Rendered into part of a larger image, the room is still the view's", 
 namespace
 {
 
-// A table with something of every kind on it: six plaques, three cards in your
-// hand, two on the felt.
-GameSnapshot fullTable()
-{
-    GameSnapshot snapshot = seatedTable(6, 1);
-
-    snapshot.seats[1].isHuman = true;
-    snapshot.hand = { HandEntry{ Card(Rank::Jack, Suit::Hearts) },
-                      HandEntry{ Card(Rank::Ten, Suit::Clubs) },
-                      HandEntry{ Card(Rank::Ace, Suit::Spades) } };
-    snapshot.table = { PlayedCardView{ 2, Card(Rank::King, Suit::Hearts) },
-                       PlayedCardView{ 3, Card(Rank::Queen, Suit::Diamonds) } };
-
-    return snapshot;
-}
-
+// fullTable() (TableFixtures.h), in the dark theme.
 void dealFullTable(TableScene& scene)
 {
     scene.setTheme(Theme::dark());
@@ -519,8 +506,8 @@ qreal liveRatio(const TableView& view)
     return view.viewport()->devicePixelRatioF() * view.transform().m11();
 }
 
-// Whether the table's picture and a card from your hand are both cached at
-// `ratio` - asked for there, neither count moves.
+// Whether the table's picture and a card from your hand - fullTable()'s Ace of
+// Spades - are both cached at `ratio`: asked for there, neither count moves.
 bool cachedAt(const TableScene& scene, qreal ratio)
 {
     const std::size_t tables = scene.tableTop()->renders();
@@ -528,7 +515,7 @@ bool cachedAt(const TableScene& scene, qreal ratio)
 
     const CardRenderer& cards = scene.cardRenderer();
     const std::size_t rasterized = cards.rasterizations();
-    cards.face(Card(Rank::Jack, Suit::Hearts), cards.sizeForHeight(tablespace::handCardHeight),
+    cards.face(Card(Rank::Ace, Suit::Spades), cards.sizeForHeight(tablespace::handCardHeight),
                ratio);
 
     return scene.tableTop()->renders() == tables && cards.rasterizations() == rasterized;

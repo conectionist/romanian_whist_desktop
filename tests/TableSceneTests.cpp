@@ -199,7 +199,7 @@ TEST_CASE("Your own plaque is drawn over your hand", "[table]")
 // against the next, so a rung put in the wrong place fails here by name rather
 // than as a card drawn under the felt.
 
-TEST_CASE("The scene stacks the table, the cards, your hand and the plaques in order", "[table]")
+TEST_CASE("The scene stacks the table then the cards then your hand then the plaques", "[table]")
 {
     GameSnapshot snapshot = holdingThree(4, 1);
     snapshot.table = { PlayedCardView{ 2, Card(Rank::King, Suit::Hearts) } };

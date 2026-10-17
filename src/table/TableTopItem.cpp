@@ -194,20 +194,13 @@ void paintTable(QPainter& painter, const Theme& theme, qreal ratio)
     // edge at 440 shows the dark stop only seven tenths of the way in, at about
     // 0.18, not the 0.38 section 2.4 reads as the edge's.
     //
-    // AND TWO STOPS AT THE CLEAR POINT. CSS blends gradient stops premultiplied, so
-    // its transparent middle fades the white out and the black in; Qt blends the
-    // colour and the alpha apart, and one transparent black there would turn the
-    // white grey on its way out. A transparent white just before it and a
-    // transparent black at it give each side only its own colour to fade.
-    QColor clearLight = table.feltVignetteLight;
-    clearLight.setAlpha(0);
-
-    QColor clearDark = table.feltVignetteDark;
-    clearDark.setAlpha(0);
-
+    // ONE TRANSPARENT STOP AT THE CLEAR POINT, as CSS writes it. CSS blends
+    // gradient stops premultiplied, so its transparent middle fades the white out
+    // and the black in rather than passing through grey - and so does Qt's
+    // default ColorInterpolation (GradientsTests holds it to that), so a clear
+    // stop of any colour does the same here.
     const QGradientStops vignette = { { 0.0, table.feltVignetteLight },
-                                      { vignetteClear - 1e-4, clearLight },
-                                      { vignetteClear, clearDark },
+                                      { vignetteClear, QColor(Qt::transparent) },
                                       { 1.0, table.feltVignetteDark } };
 
     const QRectF feltBox = tablespace::squareAround(tablespace::feltRadius);
