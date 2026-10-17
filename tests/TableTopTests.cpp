@@ -103,6 +103,23 @@ TEST_CASE("The table item keeps its picture until the ratio or the colours chang
     REQUIRE(item.renders() == 3);
 }
 
+// THE TABLE IS THE SAME IN LIGHT AND DARK - ThemeTests holds the palette to that -
+// so the system's colour scheme flipping, which changes the rest of the theme,
+// must not paint it again.
+TEST_CASE("Switching between light and dark leaves the table's picture alone", "[table-top]")
+{
+    TableTopItem item;
+    item.setTheme(Theme::light());
+
+    const QPixmap first = item.picture(0.5);
+    REQUIRE(item.renders() == 1);
+
+    item.setTheme(Theme::dark());
+
+    REQUIRE(item.picture(0.5).cacheKey() == first.cacheKey());
+    REQUIRE(item.renders() == 1);
+}
+
 // SECTION 2.4'S BEAD: three rings between the felt and the wood, 440 to 449 the
 // inner brown, to 451 the lighter, to 453 the dark - each opaque, so each is
 // exactly its colour in its middle.

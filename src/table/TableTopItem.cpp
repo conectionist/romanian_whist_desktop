@@ -3,6 +3,7 @@
 #include "paint/DevicePixels.h"
 #include "paint/Fonts.h"
 #include "paint/Gradients.h"
+#include "paint/Paths.h"
 #include "paint/Shadows.h"
 #include "table/TableSpace.h"
 
@@ -77,19 +78,15 @@ constexpr qreal letterGradientMiddle = 0.48;
 constexpr QPointF logoGradientAt(0.5, 0.4);
 constexpr qreal logoGradientMiddle = 0.7;
 
+// Every circle on the table is about its centre.
 QPainterPath disc(qreal radius)
 {
-    QPainterPath path;
-    path.addEllipse(tablespace::centre, radius, radius);
-    return path;
+    return paths::disc(tablespace::centre, radius);
 }
 
-// Two circles in one path, which QPainterPath fills odd-even: the band between.
 QPainterPath ring(qreal inner, qreal outer)
 {
-    QPainterPath path = disc(outer);
-    path.addEllipse(tablespace::centre, inner, inner);
-    return path;
+    return paths::ring(tablespace::centre, inner, outer);
 }
 
 QPainterPath rounded(const QRectF& rect, qreal radius)
@@ -129,8 +126,7 @@ void fillWithTexture(QPainter& painter, const QPixmap& texture, qreal radius, qr
     if(texture.isNull())
         return;
 
-    const QRectF square(tablespace::centre.x() - radius, tablespace::centre.y() - radius,
-                        2.0 * radius, 2.0 * radius);
+    const QRectF square = tablespace::squareAround(radius);
 
     const QSize pixels(std::max(1, qRound(square.width() * ratio)),
                        std::max(1, qRound(square.height() * ratio)));
@@ -157,9 +153,11 @@ void paintTable(QPainter& painter, const Theme& theme, qreal ratio, QPointF orig
     const Theme::TablePalette& table = theme.table;
 
     // .wood: 0 0 70px rgba(0, 0, 0, 0.75), straight down from overhead light.
+    // BENEATH the rim rather than round it, since the wood is opaque: one
+    // anti-aliased edge at 510 instead of a ring's inner edge under the wood's.
     shadows::drawCircleShadow(painter, tablespace::centre, tablespace::woodRadius,
                               tablespace::tableShadowBlur, table.tableShadow,
-                              shadows::Side::Outer);
+                              shadows::Side::Beneath);
 
     // The rim, the texture over its base colour.
     painter.fillPath(disc(tablespace::woodRadius), table.woodBase);
@@ -168,6 +166,12 @@ void paintTable(QPainter& painter, const Theme& theme, qreal ratio, QPointF orig
     // Its inset shadows, bottom up: the blur of 22, the 4-unit highlight, the
     // 2-unit dark stroke - which leaves the highlight showing as a fine warm line
     // 2 units inside the edge.
+    //
+    // ALL THREE END ON THE WOOD'S OWN EDGE, so the rim's outermost pixels are
+    // covered once by the wood and again by each of them. That only darkens those
+    // pixels, toward the stroke over the shadow, which is the colour they are
+    // anyway; making each layer a disc under the next would take moving the
+    // texture's anchor and cutting the inset profile short, for no visible change.
     shadows::drawCircleShadow(painter, tablespace::centre, tablespace::woodRadius,
                               woodInnerShadowBlur, table.woodInnerShadow, shadows::Side::Inset);
 
@@ -209,9 +213,7 @@ void paintTable(QPainter& painter, const Theme& theme, qreal ratio, QPointF orig
                                       { vignetteClear, clearDark },
                                       { 1.0, table.feltVignetteDark } };
 
-    const QRectF feltBox(tablespace::centre.x() - tablespace::feltRadius,
-                         tablespace::centre.y() - tablespace::feltRadius,
-                         2.0 * tablespace::feltRadius, 2.0 * tablespace::feltRadius);
+    const QRectF feltBox = tablespace::squareAround(tablespace::feltRadius);
 
     painter.fillPath(disc(tablespace::feltRadius),
                      gradients::cssRadial(feltBox, QPointF(0.5, 0.5), gradients::Shape::Circle,
@@ -445,9 +447,7 @@ void paintLogo(QPainter& painter, const Theme& theme)
 
 QRectF tabletop::bounds()
 {
-    return QRectF(tablespace::centre.x() - tablespace::tableReach,
-                  tablespace::centre.y() - tablespace::tableReach,
-                  2.0 * tablespace::tableReach, 2.0 * tablespace::tableReach);
+    return tablespace::squareAround(tablespace::tableReach);
 }
 
 QPixmap tabletop::render(const Theme& theme, qreal ratio)
@@ -500,14 +500,13 @@ QRectF TableTopItem::boundingRect() const
 
 QPixmap TableTopItem::picture(qreal ratio) const
 {
-    const ThemeColours& colours = theme;
     const int key = devicepixels::ratioKey(ratio);
 
-    if(cached.isNull() || cachedRatio != key || cachedColours != colours)
+    if(cached.isNull() || cachedRatio != key || cachedPalette != theme.table)
     {
         cached = tabletop::render(theme, ratio);
         cachedRatio = key;
-        cachedColours = colours;
+        cachedPalette = theme.table;
         renderCount++;
     }
 

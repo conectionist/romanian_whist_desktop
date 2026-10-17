@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QPainterPath>
 #include <QPointF>
+#include <QtGlobal>
 
 class QPainter;
 
@@ -21,10 +22,27 @@ class QPainter;
 namespace shadows
 {
 
-// CSS's two kinds of box-shadow: outside the shape, or inside it.
+// The Gaussian's standard deviation for CSS's blur radius.
+constexpr qreal sigma(qreal blur)
+{
+    return blur / 2.0;
+}
+
+// HOW FAR A SHADOW REACHES past the edge it blurs, in the same units: three
+// sigmas, where a Gaussian is under 0.2% of its peak - below a step of eight-bit
+// alpha for any colour on the table. Every shadow here stops there, so anything
+// sized to hold one is sized by this.
+constexpr qreal reach(qreal blur)
+{
+    return 3.0 * sigma(blur);
+}
+
+// CSS's two kinds of box-shadow: outside the shape, or inside it - and the outer
+// kind again, for a shape drawn opaque straight over it.
 enum class Side
 {
     Outer,
+    Beneath,
     Inset
 };
 
@@ -41,6 +59,13 @@ enum class Side
 //
 // Outer is drawn outside the circle only and Inset inside it only, as CSS clips
 // them.
+//
+// BENEATH IS OUTER FOR A CIRCLE THAT IS OPAQUE AND PAINTED OVER IT, the table's
+// rim on the room: the shadow fills the whole disc, its inside at the edge's own
+// value, so the circle laid over it meets one anti-aliased edge. Cut to a ring,
+// the shadow's inner edge and the circle's would each half-cover the rim's
+// pixels, and the room would show through the two of them more than through
+// either.
 void drawCircleShadow(QPainter& painter, QPointF centre, qreal radius, qreal blur,
                       const QColor& colour, Side side);
 

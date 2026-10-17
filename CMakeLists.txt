@@ -82,6 +82,7 @@ qt_add_library(desktop_core STATIC
     src/paint/DevicePixels.cpp
     src/paint/Gradients.h
     src/paint/Gradients.cpp
+    src/paint/Paths.h
     src/paint/Shadows.h
     src/paint/Shadows.cpp
 

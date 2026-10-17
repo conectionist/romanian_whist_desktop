@@ -10,6 +10,8 @@
 #include <QPointF>
 #include <QRectF>
 
+#include <QtMath>
+
 #include <cmath>
 
 // CSS'S box-shadow, as the redesign draws it: a blur radius is a Gaussian of half
@@ -95,6 +97,51 @@ TEST_CASE("A circle's inset shadow mirrors the outer one inside the circle", "[s
     // Nothing in the middle, and nothing outside the circle.
     REQUIRE(alphaAt(image, centre) < 0.01);
     REQUIRE(alphaAt(image, centre + QPointF(radius + 5.0, 0.0)) == 0.0);
+}
+
+// BENEATH, for an opaque circle painted over its own shadow - the table's rim.
+// The shadow fills the disc, its inside at the edge's value, so the circle over it
+// meets one anti-aliased edge. A ring's inner edge under the circle's would leave
+// the rim's pixels each half-covered twice, and more of what is below showing
+// through them than through either.
+TEST_CASE("A circle over its shadow from beneath meets it in one edge", "[shadows]")
+{
+    const QColor shade(0, 0, 0, 191);
+    const qreal edgeAlpha = shade.alphaF() * 0.5;
+
+    // Inside, the edge's own value, all the way in.
+    {
+        QImage image = canvas();
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        shadows::drawCircleShadow(painter, centre, radius, blur, shade, shadows::Side::Beneath);
+        painter.end();
+
+        REQUIRE(alphaAt(image, centre) == Catch::Approx(edgeAlpha).margin(0.01));
+        REQUIRE(alphaAt(image, centre + QPointF(radius - 5.0, 0.0))
+                == Catch::Approx(edgeAlpha).margin(0.01));
+    }
+
+    // And the circle's edge through the middle of a pixel: half covered by the
+    // circle, the rest by the shadow at its edge's value, so 1 - (1 - c)(1 - a).
+    // A ring there would leave about 0.59 where this is 0.69.
+    QImage image = canvas();
+
+    const qreal halfPixel = radius + 0.5;
+    const QPointF onRow(centre.x(), centre.y() + 0.5);
+
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        shadows::drawCircleShadow(painter, onRow, halfPixel, blur, shade, shadows::Side::Beneath);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::white);
+        painter.drawEllipse(onRow, halfPixel, halfPixel);
+    }
+
+    const qreal rim = image.pixelColor(qFloor(onRow.x() + halfPixel), qFloor(onRow.y())).alphaF();
+
+    REQUIRE(rim == Catch::Approx(1.0 - 0.5 * (1.0 - edgeAlpha)).margin(0.03));
 }
 
 TEST_CASE("A shape's shadow is the same profile, outside the shape only", "[shadows]")

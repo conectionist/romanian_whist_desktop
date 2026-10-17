@@ -1,6 +1,7 @@
 #include "Shadows.h"
 
 #include "paint/DevicePixels.h"
+#include "paint/Paths.h"
 
 #include <QGradientStops>
 #include <QImage>
@@ -16,19 +17,10 @@
 namespace
 {
 
-// A blur reaches three sigmas: past that a Gaussian is under 0.2% of its peak,
-// below a step of eight-bit alpha for any colour on the table.
-constexpr qreal sigmasReached = 3.0;
-
 // How finely the circle's profile is sampled. The error function is smooth, and
 // two dozen stops over three sigmas put the gradient's straight segments within a
 // fraction of a step of alpha of the curve.
 constexpr int profileSteps = 24;
-
-qreal sigmaOf(qreal blur)
-{
-    return blur / 2.0;
-}
 
 // The three box widths whose successive blurs approximate a Gaussian of `sigma`,
 // in pixels: the standard derivation, which makes the variance of the three boxes
@@ -139,19 +131,20 @@ void shadows::drawCircleShadow(QPainter& painter, QPointF centre, qreal radius, 
     if(radius <= 0.0 || blur <= 0.0 || colour.alpha() == 0)
         return;
 
-    const qreal sigma = sigmaOf(blur);
-    const qreal reach = sigmasReached * sigma;
+    const qreal sigma = shadows::sigma(blur);
+    const qreal reach = shadows::reach(blur);
 
-    // The ring the shadow occupies: from the circle outward, or inward from it.
-    const qreal inner = side == Side::Outer ? radius : std::max(0.0, radius - reach);
-    const qreal outer = side == Side::Outer ? radius + reach : radius;
+    // The ring the profile runs across: from the circle outward, or inward from it.
+    const bool outside = side != Side::Inset;
+    const qreal inner = outside ? radius : std::max(0.0, radius - reach);
+    const qreal outer = outside ? radius + reach : radius;
 
     QGradientStops stops;
 
     for(int i = 0 ; i <= profileSteps ; i++)
     {
         const qreal at = inner + (outer - inner) * i / profileSteps;
-        const qreal fromEdge = side == Side::Outer ? at - radius : radius - at;
+        const qreal fromEdge = outside ? at - radius : radius - at;
 
         QColor sample = colour;
         sample.setAlphaF(colour.alphaF() * 0.5 * std::erfc(fromEdge / (sigma * std::sqrt(2.0))));
@@ -163,15 +156,16 @@ void shadows::drawCircleShadow(QPainter& painter, QPointF centre, qreal radius, 
     gradient.setStops(stops);
 
     // The ring itself, so an outer shadow never reaches inside the circle and an
-    // inset one never outside it. Two circles in one path, filled odd-even.
-    QPainterPath ring;
-    ring.addEllipse(centre, outer, outer);
-    ring.addEllipse(centre, inner, inner);
+    // inset one never outside it - or, beneath a circle that will cover it, the
+    // whole disc: inside the profile's first stop the gradient pads with that
+    // stop, the edge's own value, and the circle hides it.
+    const QPainterPath area = side == Side::Beneath ? paths::disc(centre, outer)
+                                                    : paths::ring(centre, inner, outer);
 
     painter.save();
     painter.setPen(Qt::NoPen);
     painter.setBrush(gradient);
-    painter.drawPath(ring);
+    painter.drawPath(area);
     painter.restore();
 }
 
@@ -186,8 +180,9 @@ void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPoi
     if(ratio <= 0.0)
         return;
 
-    const qreal sigma = std::max(0.0, sigmaOf(blur));
-    const qreal reach = sigmasReached * sigma;
+    // A negative blur is no blur, as CSS has it.
+    const qreal sigma = shadows::sigma(std::max(0.0, blur));
+    const qreal reach = shadows::reach(std::max(0.0, blur));
 
     // Where the shadow can fall, in the painter's units: the moved shape, grown by
     // the blur's reach.

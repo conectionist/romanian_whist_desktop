@@ -1,6 +1,8 @@
 #ifndef TABLE_SPACE_H
 #define TABLE_SPACE_H
 
+#include "paint/Shadows.h"
+
 #include <QPointF>
 #include <QRectF>
 #include <QSize>
@@ -55,6 +57,13 @@ inline constexpr qreal minimumScale = 0.30;
 
 // THE TABLE (section 2.4), every circle centred on `centre`.
 //
+// The square a circle of `radius` about the centre sits in: what a texture is
+// laid over, a gradient sized to, the table's picture bounded by.
+constexpr QRectF squareAround(qreal radius)
+{
+    return QRectF(centre.x() - radius, centre.y() - radius, 2.0 * radius, 2.0 * radius);
+}
+//
 // The wooden rim, a true circle seen from straight above. Its shadow falls evenly
 // round it: the light is directly overhead, so there is no offset.
 inline constexpr qreal woodRadius = 510.0;
@@ -82,10 +91,10 @@ inline constexpr QSizeF logoBox(270.0, 142.0);
 inline constexpr qreal logoScale = 0.9;
 
 // The table's shadow: CSS's blur of 70 round the rim, which is a Gaussian of
-// sigma 35 - and three sigma is where it has faded to nothing, so the picture of
-// the table reaches that far and no further.
+// sigma 35 - and shadows::reach() is where it has faded to nothing, so the
+// picture of the table reaches that far and no further.
 inline constexpr qreal tableShadowBlur = 70.0;
-inline constexpr qreal tableReach = woodRadius + 3.0 * tableShadowBlur / 2.0;
+inline constexpr qreal tableReach = woodRadius + shadows::reach(tableShadowBlur);
 
 // THE HAND'S CARD HEIGHT, from section 2.8. Only the height: the width follows from
 // the art through CardRenderer::sizeForHeight(), which is the one place the aspect

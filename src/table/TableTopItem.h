@@ -53,8 +53,8 @@ public:
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
-    // THE PICTURE AT `ratio`, from the cache when it holds that ratio and these
-    // colours. What paint() blits; public because it is the contract a test can
+    // THE PICTURE AT `ratio`, from the cache when it holds that ratio and the
+    // table's colours. What paint() blits; public because it is the contract a test can
     // check without a view.
     QPixmap picture(qreal ratio) const;
 
@@ -67,9 +67,15 @@ private:
 
     // ONE PICTURE AT A TIME. A new ratio means the window was resized, and the
     // old one is never asked for again.
+    //
+    // KEYED ON THE TABLE'S OWN PALETTE, theme.table, which is all of the theme the
+    // picture reads besides the textures and the logo's font - and those are fixed
+    // resources. The rest of the theme changes between light and dark while the
+    // table does not, so a key on all of it would paint the same picture again
+    // whenever the system's colour scheme flipped.
     mutable QPixmap cached;
     mutable int cachedRatio = 0;
-    mutable ThemeColours cachedColours;
+    mutable Theme::TablePalette cachedPalette;
     mutable std::size_t renderCount = 0;
 };
 
