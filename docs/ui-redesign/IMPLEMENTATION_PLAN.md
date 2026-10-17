@@ -439,12 +439,15 @@ Files: `CMakeLists.txt`, `tests/CMakeLists.txt`, new `resources/table.qrc`, new
 3. Theme: add the palette tokens from section 2.2 as members (the struct's own comment says every
    colour lives there and nowhere else). Add `QPixmap woodTexture() / feltTexture()` accessors that
    load once from the resource and share the result like the other caches. Update `paletteKey()`
-   (the comment above it explains why every colour must be in it).
+   (the comment above it explains why every colour must be in it). *Done, and then replaced in
+   the phase's review: `paletteKey()` no longer exists. The caches compare a copy of
+   `ThemeColours` instead; see the outcome below.*
 4. Decide Q1 (light/dark). Default: the table page uses the new dark palette in both schemes; keep
    `Theme::light()` / `dark()` alive for the main-menu page and dialogs. Write the decision into
    the comment at the top of `Theme.h`.
 5. Tests: both textures load from the resource at their expected sizes; every new colour is in
-   `paletteKey()`; fonts are registered (`QFontDatabase::families()` contains them).
+   `paletteKey()` (now: recolouring invalidates both caches, as above); fonts are registered
+   (`QFontDatabase::families()` contains them).
 
 Done when: the app still looks as it did, but the resources, fonts and tokens exist and are tested.
 

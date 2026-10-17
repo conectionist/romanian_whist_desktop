@@ -4,7 +4,6 @@
 #include <QColor>
 #include <QPixmap>
 #include <QSize>
-#include <QString>
 
 #include <memory>
 

@@ -214,8 +214,9 @@ target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 # failures above, from a fourth cause.
 #
 # tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc
-# files (WHIST_DESKTOP_RESOURCES above), for its own target. That looks redundant and is not - see the comment there,
-# which records the two ways of sharing this one that were tried and failed.
+# files (WHIST_DESKTOP_RESOURCES above), for its own target. That looks
+# redundant and is not - see the comment there, which records the two ways of
+# sharing this one that were tried and failed.
 #
 # NOT by moving this into desktop_core, which is the obvious-looking fix. A
 # static library's qrc_*.cpp is a translation unit nothing references - the

@@ -112,7 +112,9 @@ public:
         // So the default is pinned rather than left to the alphabet, and pinned
         // to Segoe UI: the face the shipped program gets, since the windows
         // platform plugin reads the system's UI font and that is Segoe UI. The
-        // tests then measure text in the face players see it in.
+        // tests then lay text out in the typeface players see, though not at
+        // their size: only the family is pinned, so the size stays offscreen's
+        // 12 pt where the Windows UI font is normally 9 pt.
         //
         // NOT under any other platform. A QT_QPA_PLATFORM=windows run, which the
         // block at the top lets through, has no tie-break to work around - its
