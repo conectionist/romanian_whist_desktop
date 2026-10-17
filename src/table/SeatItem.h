@@ -92,8 +92,11 @@ public:
     // half-updated plaque is a state nothing should be able to reach.
     void setSeat(const SeatView& seat, bool active, const Theme& theme);
 
-    // In LOGICAL pixels. The plaque derives from the card height, which section
-    // 18.1 makes the one unit every other metric on the table comes from.
+    // The plaque's unit, in TABLE units, which the view scales to the window.
+    // Every metric on the plaque derives from it; on the table it is
+    // TableScene's fixed plaqueUnit, and the name "card height" is from when it
+    // was the hand's card height, derived from the window, before the table
+    // redesign's phase 2.
     void setCardHeight(qreal height);
 
     QRectF boundingRect() const override;

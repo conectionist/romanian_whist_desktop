@@ -10,10 +10,11 @@ namespace
 // filling it, so a seat never sits exactly on the boundary.
 //
 // It is NOT reduced to leave room for the plaque around each centre. This
-// function is handed the rect a seat's CENTRE may occupy, and it is the
-// caller - TableScene, which is the only thing that knows how big a plaque is -
-// that insets by half of one before calling. Doing it here would mean this
-// function knowing what is drawn at the points it returns.
+// function is handed the rect a seat's CENTRE may occupy, and choosing that rect
+// is the caller's business - TableScene's, which hands it a fixed ring through
+// ringRect() below, at the radii that put each plaque where section 2.5 does.
+// Doing it here would mean this function knowing what is drawn at the points it
+// returns.
 constexpr qreal radiusFractionX = 0.46;
 constexpr qreal radiusFractionY = 0.44;
 

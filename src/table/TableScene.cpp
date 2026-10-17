@@ -133,15 +133,16 @@ std::vector<QPointF> TableScene::trickPositions(std::size_t seatCount) const
     const qreal cardHeight = tablespace::playedCardHeight(seatCount);
     const qreal radius = tablespace::feltRadius - playedInset - cardHeight / 2.0;
 
-    const int humanSeat = snapshot ? snapshot->humanSeat : -1;
-
     std::vector<QPointF> positions =
-        seatlayout::seatCentres(static_cast<unsigned int>(seatCount), humanSeat,
+        seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
+                                snapshot ? snapshot->humanSeat : -1,
                                 seatlayout::ringRect(tablespace::centre, radius));
 
-    if(humanSeat >= 0 && static_cast<std::size_t>(humanSeat) < positions.size())
+    // seated() and not a range test of its own, so this and the hand cannot
+    // disagree about whether you are at the table.
+    if(snapshot && seated(*snapshot) && positions.size() == snapshot->seats.size())
     {
-        positions[static_cast<std::size_t>(humanSeat)] =
+        positions[static_cast<std::size_t>(snapshot->humanSeat)] =
             QPointF(tablespace::centre.x(),
                     tablespace::handTop - playedInset - cardHeight / 2.0);
     }

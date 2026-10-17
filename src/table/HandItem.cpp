@@ -237,8 +237,9 @@ void HandItem::layOut()
 
     const qreal span = card.width() + step * static_cast<qreal>(fan.size() - 1);
 
-    // CENTRED ON THIS ITEM'S ORIGIN, which TableScene puts at the middle of the
-    // reserved strip. Section 14: "the fan is centred".
+    // CENTRED ON THIS ITEM'S ORIGIN, which TableScene puts on the table's centre
+    // line, half a card below section 2.8's hand top. Section 14: "the fan is
+    // centred".
     const qreal left = -span / 2.0 + card.width() / 2.0;
 
     for(std::size_t i = 0 ; i < fan.size() ; i++)

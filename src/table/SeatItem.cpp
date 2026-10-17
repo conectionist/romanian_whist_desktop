@@ -13,9 +13,10 @@
 namespace
 {
 
-// The plaque, in card heights - which is section 18.1's rule that every metric
-// on the table derives from the one unit. New art with a different card aspect
-// moves the plaque with it rather than leaving it stranded at a pixel size.
+// The plaque, in multiples of its unit (setCardHeight()), so every metric on it
+// scales together. On the table that unit is TableScene's fixed plaqueUnit, in
+// table units; until the table redesign's phase 2 it was the hand's card height,
+// derived from the window.
 constexpr qreal plaqueWidthInCards = 1.60;
 constexpr qreal plaqueHeightInCards = 0.56;
 
@@ -289,6 +290,9 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     const QRectF inner = layout.text;
 
+    // THE FLOORS HERE ARE IN TABLE UNITS, so they bind only at a unit far below
+    // TableScene's and promise nothing on screen. What keeps the name readable
+    // there is tablespace::minimumScale, which the window cannot shrink past.
     QFont nameFont = painter->font();
     nameFont.setPointSizeF(std::max(6.0, height * 0.26));
     nameFont.setBold(true);

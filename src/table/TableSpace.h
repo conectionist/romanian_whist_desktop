@@ -56,11 +56,11 @@ inline constexpr qreal minimumScale = 0.30;
 // The felt's radius (section 2.4). Played cards are placed relative to its edge.
 inline constexpr qreal feltRadius = 440.0;
 
-// CARD HEIGHTS, from section 2. Only the heights: the widths follow from the art
-// through CardRenderer::sizeForHeight(), which is the one place the aspect is known
-// (225 tall comes back 155 wide, the mock-up's 154.9).
+// THE HAND'S CARD HEIGHT, from section 2.8. Only the height: the width follows from
+// the art through CardRenderer::sizeForHeight(), which is the one place the aspect
+// is known (225 tall comes back 155 wide, the mock-up's 154.9). Played cards are
+// playedCardHeight() below; the racks' cards arrive with the racks, in phase 5.
 inline constexpr qreal handCardHeight = 225.0;
-inline constexpr qreal rackCardHeight = 90.0;
 
 // Where the top of the human's hand is (section 2.8). Their played card sits 60
 // above it.

@@ -393,6 +393,9 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
     snapshot.seats[4].seatIndex = 4;
     scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
 
+    // Still both cards, or the loop below checks nothing.
+    REQUIRE(playedCards(scene).size() == 2);
+
     for(CardItem* card : playedCards(scene))
     {
         REQUIRE(card->boundingRect().height()
@@ -504,7 +507,8 @@ TEST_CASE("A card under a scaled view is rasterized at the size it is drawn", "[
     const QSize full = renderer.sizeForHeight(200.0);
     const QRectF source = item->boundingRect();
 
-    // Half size, which is the scale a 1000-pixel-tall window gives the table.
+    // Half size, which is the scale a viewport 680 pixels tall gives the table:
+    // (680 - 18) / 1324, its margins taken off first.
     const QSize half(full.width() / 2, full.height() / 2);
 
     // An even width and height, so half of it is whole pixels and the card's
