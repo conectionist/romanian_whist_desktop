@@ -3,8 +3,10 @@
 #include <catch2/reporters/catch_reporter_registrars.hpp>
 
 #include "engine/MetaTypes.h"
+#include "paint/Fonts.h"
 
 #include <QApplication>
+#include <QFont>
 
 #include <memory>
 
@@ -91,6 +93,44 @@ public:
         app = std::make_unique<QApplication>(argc, argv);
 
         registerMetaTypes();
+
+        // The same call main() makes, for the same reason as the line above:
+        // without it every test lays text out in a face the program never uses.
+        fonts::registerBundled();
+
+#ifdef Q_OS_WIN
+        // WINDOWS OFFSCREEN ONLY, and a consequence of the call above. The
+        // offscreen platform asks for "Helvetica" as its default font. On Linux
+        // and macOS, fontconfig and CoreText substitute a real face for it; on
+        // Windows this FreeType database has no substitution, so Qt takes the
+        // best-matching family and breaks the tie ALPHABETICALLY. Registering
+        // the bundled fonts put "Alegreya Sans" in front of every system face,
+        // and the whole suite silently started laying text out in it - found by
+        // TableViewTests' squeezed-strip case, where the narrower face stopped
+        // wrapping the bid explanation.
+        //
+        // So the default is pinned rather than left to the alphabet, and pinned
+        // to Segoe UI: the face the shipped program gets, since the windows
+        // platform plugin reads the system's UI font and that is Segoe UI. The
+        // tests then lay text out in the typeface players see, though not at
+        // their size: only the family is pinned, so the size stays offscreen's
+        // 12 pt where the Windows UI font is normally 9 pt.
+        //
+        // NOT under any other platform. A QT_QPA_PLATFORM=windows run, which the
+        // block at the top lets through, has no tie-break to work around - its
+        // plugin supplies the real font, and pinning over it would quietly make
+        // that run something other than the shipped configuration it is for.
+        //
+        // FontsTests asserts the default is no bundled face, so if this ever
+        // stops holding - Segoe UI missing from the fonts directory included -
+        // it fails by name.
+        if(QApplication::platformName() == QLatin1String("offscreen"))
+        {
+            QFont font = QApplication::font();
+            font.setFamilies({ QStringLiteral("Segoe UI") });
+            QApplication::setFont(font);
+        }
+#endif
     }
 
     void testRunEnded(const Catch::TestRunStats&) override

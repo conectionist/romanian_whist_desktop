@@ -169,7 +169,7 @@ TEST_CASE("Recolouring the accent invalidates the cached avatars", "[theme]")
 
 // THE KEY LEADS ITS PAINTERS, which is the half of the rule above that only a
 // colour NOTHING READS YET can assert. B2 added the three bid/won colours to the
-// struct and left paletteKey() hashing the five that came before them - the
+// struct and left the cache key hashing the five that came before them - the
 // identical omission the accent case above records, caught this time before a
 // painter existed to make it visible.
 //
@@ -363,4 +363,163 @@ TEST_CASE("Recolouring the text accent invalidates the cached background", "[the
     theme.accentText = Theme::dark().accentText;
 
     REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
+}
+
+// ---------------------------------------------------------------------------
+// The table redesign (docs/ui-redesign/), phase 1: the textures and the palette
+// arrive before anything draws them, so these assert what can be asserted of an
+// input - that it is there, that it is shared, and that the key sees it.
+// ---------------------------------------------------------------------------
+
+// RESOURCE EMBEDDING FAILS SILENTLY, and CMakeLists.txt lists the ways. A size is
+// the cheapest assertion that the right file was compiled into the right binary
+// and decoded - a null pixmap is 0x0, and the two textures differ in size from
+// each other, so a swapped alias fails too.
+TEST_CASE("The table textures load from the resources at their native sizes", "[theme]")
+{
+    const Theme theme = Theme::dark();
+
+    const QPixmap wood = theme.woodTexture();
+    REQUIRE(wood.size() == QSize(1020, 1020));
+
+    // THE RIM IS A RING. Its middle is transparent so the felt can show through,
+    // and its corners are outside the table; a load that dropped the alpha would
+    // paint a brown square over everything. The rim itself is opaque.
+    REQUIRE(wood.hasAlphaChannel());
+    const QImage woodImage = wood.toImage();
+    REQUIRE(woodImage.pixelColor(510, 510).alpha() == 0);
+    REQUIRE(woodImage.pixelColor(0, 0).alpha() == 0);
+    REQUIRE(woodImage.pixelColor(510, 40).alpha() == 255);
+
+    REQUIRE(theme.feltTexture().size() == QSize(880, 880));
+
+    // Source art, not a raster for any one screen: scaling to the view and its
+    // ratio is the composed table's job, not this accessor's.
+    REQUIRE(wood.devicePixelRatio() == Catch::Approx(1.0));
+
+    // A default-constructed Theme has no cache, and still gets its textures -
+    // the same fallback background() makes.
+    const Theme bare;
+    REQUIRE(bare.woodTexture().size() == QSize(1020, 1020));
+    REQUIRE(bare.feltTexture().size() == QSize(880, 880));
+}
+
+// The background cache's property, for the textures: Theme is held by value in
+// a dozen widgets, and each copy decoding its own megabyte of PNG is the cost
+// the shared cache exists to avoid.
+TEST_CASE("Copies of a theme share one load of each texture", "[theme]")
+{
+    const Theme theme = Theme::light();
+
+    const QPixmap wood = theme.woodTexture();
+    const QPixmap felt = theme.feltTexture();
+
+    // THE CONTROL: a theme with no cache of its own loads afresh and gets
+    // different pixels. Without it, every identity below could hold with Theme
+    // caching nothing at all. It is also the line that fails if the load goes
+    // back to QPixmap(path), which files every file it reads in the process-wide
+    // QPixmapCache and would hand this load the same pixels (Theme.cpp has why
+    // that cache is avoided).
+    REQUIRE(Theme().woodTexture().cacheKey() != wood.cacheKey());
+
+    REQUIRE(theme.woodTexture().cacheKey() == wood.cacheKey());
+
+    const Theme copy = theme;
+    REQUIRE(copy.woodTexture().cacheKey() == wood.cacheKey());
+    REQUIRE(copy.feltTexture().cacheKey() == felt.cacheKey());
+
+    // And a recolour does not reload: a texture is not a colour, so the palette
+    // is no part of its key. The base colour UNDER it changes; the grain does not.
+    Theme recoloured = theme;
+    recoloured.table.woodBase = Theme::light().table.feltBase;
+    REQUIRE(recoloured.woodTexture().cacheKey() == wood.cacheKey());
+}
+
+// Q1, decided by the owner on 2026-10-17: the redesign is dark only, so the
+// table page does not follow the system scheme. The case that matters is the
+// first one - a player whose desktop is light still gets the dark table.
+TEST_CASE("The table page is the same dark palette in every scheme", "[theme]")
+{
+    REQUIRE(Theme::light().table == Theme::dark().table);
+    REQUIRE(Theme::forScheme(Qt::ColorScheme::Unknown).table == Theme::dark().table);
+
+    // Not merely the same, but dark: light text on darker surfaces. Two copies
+    // of a LIGHT palette would pass the equality above.
+    const Theme::TablePalette table = Theme::light().table;
+    REQUIRE(table.cream.lightness() > table.panelTop.lightness());
+    REQUIRE(table.cream.lightness() > table.roomCentre.lightness());
+    REQUIRE(table.cream.lightness() > table.feltBase.lightness());
+}
+
+// THE CACHES COMPARE EVERY COLOUR BY CONSTRUCTION: what they store is a copy of
+// ThemeColours, compared with its defaulted operator==, so no list of members
+// exists anywhere for a new colour to be left off. One table colour stands for
+// all twenty-three here - a case per member would test the compiler.
+//
+// The LAST member, because a hand-written comparison that stopped short would
+// miss it first; and both caches, because each keeps its own copy.
+TEST_CASE("Recolouring a table colour invalidates both caches", "[theme]")
+{
+    Theme theme = Theme::light();
+    const QSize view(320, 200);
+    const QSize box(48, 48);
+
+    const QPixmap background = theme.background(view, 1.0);
+    const QPixmap avatar = theme.avatar(0, box, 1.0);
+
+    // A colour the palette does not hold, so the assignment is a change.
+    const QColor recolour(1, 2, 3);
+    REQUIRE(theme.table.buttonBorder != recolour);
+    theme.table.buttonBorder = recolour;
+
+    REQUIRE(theme.background(view, 1.0).cacheKey() != background.cacheKey());
+    REQUIRE(theme.avatar(0, box, 1.0).cacheKey() != avatar.cacheKey());
+}
+
+// What a translucent colour looks like once it is painted over an opaque one:
+// QPainter's source-over, channel by channel in sRGB, as it blends by default.
+static QColor over(const QColor& top, const QColor& backdrop)
+{
+    const float alpha = top.alphaF();
+    auto blend = [alpha](float source, float destination) {
+        return alpha * source + (1.0f - alpha) * destination;
+    };
+
+    return QColor::fromRgbF(blend(top.redF(), backdrop.redF()),
+                            blend(top.greenF(), backdrop.greenF()),
+                            blend(top.blueF(), backdrop.blueF()));
+}
+
+// The plaque case above, for the redesign's panel - the surface every word on
+// the new table page is written on. Both ends of its gradient.
+//
+// COMPOSITED OVER WHITE, because the panel is translucent and its backdrop is
+// the worst case, not the panel's own colour. At 0.95 a panel lets a little of
+// whatever is under it through - the room's centre, the wood, the felt, a card -
+// and every one of those is lighter than panelTop, so the panel as drawn is
+// lighter than the panel as declared. White is the lightest backdrop there is,
+// which makes this a bound for wherever a later phase puts a panel. It costs
+// about a tenth of each ratio, and every colour here clears its floor anyway.
+TEST_CASE("Every table-page text colour holds AA against the panel", "[theme]")
+{
+    const Theme::TablePalette table = Theme::dark().table;
+
+    for(const QColor& translucent : { table.panelTop, table.panelBottom })
+    {
+        const QColor panel = over(translucent, Qt::white);
+
+        for(const QColor& text : { table.cream, table.muted, table.gold, table.goldBright,
+                                   table.good, table.warn, table.bad })
+        {
+            INFO(text.name().toStdString() << " on " << panel.name().toStdString());
+            REQUIRE(contrastRatio(text, panel) >= 4.5);
+        }
+
+        // THE RED SUIT IS A MARK, NOT A WORD - accentText's argument, the other
+        // way round. A ♥ or ♦ is recognised by its shape, which says the suit on
+        // its own, so it is held to the 3:1 non-text floor rather than to AA.
+        // It measures about 3.7:1 on the lighter end; if a later phase starts
+        // writing words in it, this is the line that needs to become 4.5.
+        REQUIRE(contrastRatio(table.redSuit, panel) >= 3.0);
+    }
 }

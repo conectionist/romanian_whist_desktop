@@ -74,6 +74,8 @@ qt_add_library(desktop_core STATIC
 
     src/paint/Theme.h
     src/paint/Theme.cpp
+    src/paint/Fonts.h
+    src/paint/Fonts.cpp
     src/paint/CardRenderer.h
     src/paint/CardRenderer.cpp
 
@@ -166,6 +168,12 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # the runtime path is :/cards/ace_of_spades.png (and likewise ace_of_spades.svg
 # for the vector set) - moving the files on disk does not move the URLs.
 #
+# Two more .qrc files follow the same pattern, both added by the table redesign
+# (docs/ui-redesign/): resources/table.qrc puts the wood and felt textures under
+# /table, and resources/fonts.qrc puts the three bundled typefaces and their
+# licences under /fonts. Everything below applies to all three - they are one
+# call because they share every one of its pitfalls.
+#
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
 #
@@ -184,9 +192,19 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # This is the form that actually consumes a .qrc: an output variable, then the
 # .qrc files, with the generated .cpp put into the target by hand. It does not
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
-# build tree - no such file means nothing was embedded.
-qt_add_resources(CARD_RESOURCES resources/cards.qrc)
-target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
+# build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
+# for the textures and qrc_fonts.cpp for the typefaces.
+#
+# The list is a variable because tests/CMakeLists.txt consumes the same one (see
+# below), and absolute because that directory would resolve a relative path
+# against itself. A .qrc added here reaches both binaries.
+set(WHIST_DESKTOP_RESOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/cards.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/table.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts.qrc
+)
+qt_add_resources(APP_RESOURCES ${WHIST_DESKTOP_RESOURCES})
+target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 
 # The TESTS need the same blob, and it is not inherited. CardRenderer lives in
 # desktop_core, but resources are not a library property: the generated
@@ -195,9 +213,10 @@ target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
 # there, and every card would come back null - the same symptom as all three
 # failures above, from a fourth cause.
 #
-# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc,
-# for its own target. That looks redundant and is not - see the comment there,
-# which records the two ways of sharing this one that were tried and failed.
+# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc
+# files (WHIST_DESKTOP_RESOURCES above), for its own target. That looks
+# redundant and is not - see the comment there, which records the two ways of
+# sharing this one that were tried and failed.
 #
 # NOT by moving this into desktop_core, which is the obvious-looking fix. A
 # static library's qrc_*.cpp is a translation unit nothing references - the

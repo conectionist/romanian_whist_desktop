@@ -423,7 +423,7 @@ Done when: the baseline builds and passes, and you can produce a screenshot of t
   setting pinned, and checks which moment each picture shows, so pictures taken before and after
   a phase are comparable.
 
-### Phase 1: assets and theme
+### Phase 1: assets and theme ✅ COMPLETE
 
 Files: `CMakeLists.txt`, `tests/CMakeLists.txt`, new `resources/table.qrc`, new
 `resources/fonts.qrc` + `resources/fonts/`, `src/paint/Theme.h/.cpp`, `src/main.cpp`,
@@ -439,14 +439,59 @@ Files: `CMakeLists.txt`, `tests/CMakeLists.txt`, new `resources/table.qrc`, new
 3. Theme: add the palette tokens from section 2.2 as members (the struct's own comment says every
    colour lives there and nowhere else). Add `QPixmap woodTexture() / feltTexture()` accessors that
    load once from the resource and share the result like the other caches. Update `paletteKey()`
-   (the comment above it explains why every colour must be in it).
+   (the comment above it explains why every colour must be in it). *Done, and then replaced in
+   the phase's review: `paletteKey()` no longer exists. The caches compare a copy of
+   `ThemeColours` instead; see the outcome below.*
 4. Decide Q1 (light/dark). Default: the table page uses the new dark palette in both schemes; keep
    `Theme::light()` / `dark()` alive for the main-menu page and dialogs. Write the decision into
    the comment at the top of `Theme.h`.
 5. Tests: both textures load from the resource at their expected sizes; every new colour is in
-   `paletteKey()`; fonts are registered (`QFontDatabase::families()` contains them).
+   `paletteKey()` (now: recolouring invalidates both caches, as above); fonts are registered
+   (`QFontDatabase::families()` contains them).
 
 Done when: the app still looks as it did, but the resources, fonts and tokens exist and are tested.
+
+**Outcome:**
+
+- **The count is 267 tests** (259 + 8), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. The screenshot tool's five pictures are
+  pixel-identical to phase 0's, so the client really does look as it did.
+- **Q1 and Q2 were decided by the owner** on 2026-10-17, both as the defaults (see section 7).
+- **What later phases take from here:**
+  - **Colours:** `Theme::table`, a `Theme::TablePalette` holding section 2.2's tokens under
+    camelCase names (`panelTop`, `goldBright`, `good`/`warn`/`bad`, `redSuit`, `buttonTop`, …).
+    `light()` and `dark()` fill it from one function, so the table cannot drift between schemes.
+    The old members stay until their last reader moves across. **Every colour goes in
+    `ThemeColours`** (which `TablePalette` is part of), never on `Theme` itself: the caches
+    compare `ThemeColours` with its defaulted `==`, so a member added there needs no other edit,
+    and `Theme.cpp` static_asserts that `Theme` adds nothing beside its cache.
+  - **Textures:** `Theme::woodTexture()` and `Theme::feltTexture()` return the source art at its
+    native size. Phase 3 composes and caches the table at view size × dpr.
+  - **Fonts:** `src/paint/Fonts.h`. `fonts::registerBundled()` is called by `main.cpp` and by
+    `tests/TestApp.cpp`, as `registerMetaTypes()` is, and `fonts::logo()` / `heading()` /
+    `body()` return section 2.3's fallback chains as `QFont`s, with the CSS generic family as a
+    style hint (Qt does not read `serif` or `sans-serif` as names). Copy one and set the size and
+    weight on the copy, rather than writing the family names again.
+- **Alegreya Sans Medium has two family names**: the typographic "Alegreya Sans" and the legacy
+  "Alegreya Sans Medium". Qt files it as weight 500 of "Alegreya Sans" on Linux and on the
+  Windows CI runner, which `FontsTests.cpp` asserts.
+- **Pitfall: the bundled fonts changed the Windows test suite's default font.** The offscreen
+  platform's default family is "Helvetica". Linux and macOS substitute a real face for it.
+  Windows has no substitution there, so Qt picks the best match and breaks ties alphabetically,
+  and "Alegreya Sans" sorts in front of every system face. The first CI run failed
+  `TableViewTests`' squeezed-strip case because the narrower face stopped wrapping.
+  `tests/TestApp.cpp` now pins the Windows offscreen default to Segoe UI, the system UI font the
+  shipped app gets from the windows platform plugin, and leaves any other platform alone. A
+  `FontsTests` case asserts that the default is none of the bundled faces, so a recurrence fails
+  by name.
+- **Pitfall:** Qt's `.qrc` dependency scan is a regex, not an XML parser. Writing the entry tag's
+  name in angle brackets inside a comment produces a Makefile that fails with "missing separator".
+  `resources/fonts.qrc` says so where it happened.
+- **Pitfall:** `QPixmap(fileName)` files every load in the process-wide `QPixmapCache` (10 MB by
+  default, shared with QStyle and QIcon), so two loads of one file share a `cacheKey` even with no
+  cache of our own. Theme reads its textures through `QImageReader` and `QPixmap::fromImage()`
+  instead, which keeps ~7 MB of textures out of that budget. Load any other large art the same
+  way.
 
 ### Phase 2: table space and the view transform
 
@@ -661,8 +706,8 @@ Ask the owner if possible. If not, use the default and record it.
 
 | # | Question | Default |
 |---|---|---|
-| Q1 | Light/dark: the mock-up is dark only. Should the table follow the system scheme? | No: the table page is always the dark design; menus and dialogs may keep following the system |
-| Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes |
+| Q1 | Light/dark: the mock-up is dark only. Should the table follow the system scheme? | No: the table page is always the dark design; menus and dialogs may keep following the system. **Decided by the owner, 2026-10-17: as the default** (phase 1) |
+| Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes. **Decided by the owner, 2026-10-17: yes** (phase 1) |
 | Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too |
 | Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later |
 | Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off |
