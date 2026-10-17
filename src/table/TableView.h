@@ -17,9 +17,12 @@ class TableScene;
 // was B1's: CardRenderer rasterizes each card at exactly the size it is drawn at,
 // times the device pixel ratio, and a view transform would resample that pixmap
 // on its way to the screen and undo it at the last step. That contract still
-// holds - it moved into CardItem::paint(), which now asks for the size the card
-// lands on the screen rather than its size in the scene. So the scale costs the
-// cards nothing, and everything drawn as vectors was never at risk.
+// holds - every pixmap now asks devicepixels::effectiveRatio() for the pixels it
+// lands on, the view's scale included. So the scale costs the cards nothing, and
+// everything drawn as vectors was never at risk.
+//
+// AND THE ROOM BEHIND THE TABLE, which is this view's background: it fills the
+// whole viewport, the letterbox the fit box leaves included.
 class TableView : public QGraphicsView
 {
     Q_OBJECT
@@ -39,7 +42,7 @@ public:
     // table for the whole game. An overlay changes no geometry at all.
     //
     // HERE RATHER THAN IN MainWindow BECAUSE THIS IS WHAT KNOWS THE VIEWPORT AND
-    // THE TRANSFORM. The band the strip sits in is in table space, and only the
+    // THE TRANSFORM. The floor the strip sits on is in table space, and only the
     // view can say where that lands on the screen.
     //
     // NOT OWNED. Qt's parent/child owns the widget; this only places it, and
@@ -54,6 +57,9 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+
+    // The room, over the whole viewport - see the definition.
+    void drawBackground(QPainter* painter, const QRectF& rect) override;
 
     // Watches the overlay, whose size changes with the prompt it is showing -
     // see the definition.

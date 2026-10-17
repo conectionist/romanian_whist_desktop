@@ -23,171 +23,15 @@
 #include <QPointF>
 #include <QRectF>
 #include <QSize>
-#include <QTransform>
 
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <vector>
 
 using romanian_whist::Card;
 using romanian_whist::Rank;
 using romanian_whist::Suit;
-
-// THE HALF OF THE dpr CONTRACT THAT IS NOT THE PIXMAP'S.
-//
-// Theme::room() rasterizes at view * dpr and stamps the ratio on, and ThemeTests
-// already holds that to account. What no test there covers is the other end:
-// drawBackground() handing that pixmap to a painter. A drawPixmap TARGET rect is
-// logical and a SOURCE rect is not - Qt reads the source in the pixmap's own
-// pixels - so a scene that passes the same rect as both samples the top-left
-// 1/dpr of the room and stretches it over the whole viewport.
-//
-// That is invisible at dpr 1, which is where the suite and the developer's
-// screen both are, and it is the reason this file renders at 2 rather than
-// asserting anything about the picture itself.
-//
-// AND UNDER A VIEW TRANSFORM, since the table redesign's phase 2: the scene is in
-// table space, the view scales it, and the room is drawn in the viewport's own
-// pixels regardless. So each case paints through the kind of transform TableView
-// sets - a scale and an offset - and expects the room laid over the canvas as if
-// there were none.
-namespace
-{
-
-// drawBackground() is protected, which is right - nothing outside the scene
-// should be able to repaint the table. A using-declaration is the whole of what
-// a test needs to reach it, and it needs no friend on the class under test.
-struct ProbeScene : TableScene
-{
-    using TableScene::drawBackground;
-};
-
-const QSize view(320, 200);
-
-constexpr qreal ratio = 2.0;
-
-// WHAT A VIEW WOULD SET: table space scaled down and moved in. Powers of two and
-// whole numbers, so the transform and its inverse are exact in floating point and
-// a pixel comparison compares the blit rather than a rounding error. The fit box
-// lands at (58.5, 21.25), 235 x 165.5 - inside the canvas with room all round,
-// which is the letterbox the room has to cover as well.
-const QTransform viewTransform = QTransform::fromTranslate(80.0, 40.0).scale(0.125, 0.125);
-
-// A device-pixel-ratio-2 canvas the size the scene believes it is: 640x400
-// physical pixels laid out over 320x200 logical ones, which is exactly what a
-// viewport on a retina screen hands its scene.
-QImage canvas()
-{
-    QImage image(view * ratio, QImage::Format_ARGB32);
-
-    image.setDevicePixelRatio(ratio);
-    image.fill(Qt::transparent);
-
-    return image;
-}
-
-// The canvas region given, as the scene rect QGraphicsView would report exposed.
-QRectF exposedScene(const QRectF& onCanvas)
-{
-    return viewTransform.inverted().mapRect(onCanvas);
-}
-
-QImage expectedRoom()
-{
-    return Theme::light().room(view, ratio).toImage().convertToFormat(QImage::Format_ARGB32);
-}
-
-}
-
-TEST_CASE("The room is blitted 1:1 at a device pixel ratio of 2", "[table]")
-{
-    ProbeScene scene;
-
-    scene.setTheme(Theme::light());
-
-    QImage rendered = canvas();
-
-    {
-        QPainter painter(&rendered);
-        painter.setWorldTransform(viewTransform);
-        scene.drawBackground(&painter, exposedScene(QRectF(QPointF(0.0, 0.0), view)));
-    }
-
-    // The pixmap the scene should have drawn, asked for exactly as the scene
-    // asks for it. Painted at 640x400, drawn over 320x200 logical pixels: one
-    // pixmap pixel per canvas pixel, no scaling anywhere - and no trace of the
-    // world transform, because the room belongs to the viewport, not the table.
-    const QImage expected = expectedRoom();
-
-    REQUIRE(rendered.size() == expected.size());
-
-    // Before the dpr fix this is the pixmap's top-left quarter blown up 2x: the
-    // gradient runs at half speed and its centre sits toward the bottom-right
-    // corner. Drawn through the view's transform instead, it is the room shrunk
-    // into the fit box.
-    REQUIRE(rendered == expected);
-}
-
-// The size is only half of it. The source rect is also OFFSET by the exposed
-// rect, so a partial repaint - which is what every repaint is once a card is
-// moving over the table - reads from the wrong place besides being the wrong
-// size. A fix that scaled the size and left the origin alone would pass the case
-// above and fail every frame of a real game.
-TEST_CASE("A partial repaint samples its own region of the room", "[table]")
-{
-    ProbeScene scene;
-
-    scene.setTheme(Theme::light());
-
-    const QRectF exposed(160.0, 0.0, 160.0, 200.0);
-
-    QImage rendered = canvas();
-
-    {
-        QPainter painter(&rendered);
-        painter.setWorldTransform(viewTransform);
-        scene.drawBackground(&painter, exposedScene(exposed));
-    }
-
-    const QImage expected = expectedRoom();
-
-    // The same region, in the physical pixels both images are addressed in.
-    const QRect region(static_cast<int>(exposed.x() * ratio),
-                       static_cast<int>(exposed.y() * ratio),
-                       static_cast<int>(exposed.width() * ratio),
-                       static_cast<int>(exposed.height() * ratio));
-
-    REQUIRE(rendered.copy(region) == expected.copy(region));
-
-    // And nothing outside it was touched, which is what the exposed rect is for.
-    REQUIRE(rendered.pixelColor(0, 0).alpha() == 0);
-}
-
-// THE LETTERBOX. The fit box keeps the table's shape, so a window of any other
-// shape shows bands of room beside or above it - and those bands are outside the
-// scene rect. A room drawn into the scene rect leaves them unpainted, which on a
-// wide screen is two black strips down the sides of the table.
-TEST_CASE("The room covers the viewport, not just the table", "[table]")
-{
-    ProbeScene scene;
-
-    scene.setTheme(Theme::light());
-
-    QImage rendered = canvas();
-
-    {
-        QPainter painter(&rendered);
-        painter.setWorldTransform(viewTransform);
-        scene.drawBackground(&painter, exposedScene(QRectF(QPointF(0.0, 0.0), view)));
-    }
-
-    // The premise: the canvas's corner is outside the table as it was drawn.
-    const QRectF table = viewTransform.mapRect(scene.sceneRect());
-    REQUIRE_FALSE(table.contains(QPointF(0.0, 0.0)));
-
-    REQUIRE(rendered.pixelColor(0, 0).alpha() == 255);
-    REQUIRE(rendered.pixelColor(0, 0) == expectedRoom().pixelColor(0, 0));
-}
 
 // ---- table space, added in the table redesign's phase 2 ----
 //
@@ -556,7 +400,7 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
     }
 }
 
-// ---- the band the bid strip sits in, added in C2 ----
+// ---- the floor the bid strip sits on, added in C2 ----
 //
 // SECTION 15.1's strip "rises over the bottom of the table", and the bottom of
 // the table is where your hand and your own plaque are. So "the bottom" and
@@ -565,41 +409,40 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
 //
 // Geometry with a right answer, which is what this file is for.
 
-TEST_CASE("The bottom band clears your hand and your own plaque", "[table]")
+TEST_CASE("The strip's floor clears your hand and your own plaque", "[table]")
 {
     TableScene scene;
 
     scene.setTheme(Theme::light());
     scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
 
-    const QRectF band = scene.overlayBand();
+    const std::optional<qreal> floor = scene.overlayBottom();
 
-    // NOT EMPTY, which is the assertion that actually failed first. An empty
-    // band sends TableView to its fallback - the viewport's own bottom edge -
-    // and the strip lands under the plaque instead of above it, which looks
-    // like a placement bug rather than a band that was never computed.
-    REQUIRE_FALSE(band.isEmpty());
-    REQUIRE(band.top() == Catch::Approx(scene.sceneRect().top()));
+    // THERE IS ONE, which is the assertion that actually failed first. No floor
+    // sends TableView to its fallback - the viewport's own bottom edge - and the
+    // strip lands under the plaque instead of above it, which looks like a
+    // placement bug rather than a floor that was never computed.
+    REQUIRE(floor.has_value());
 
     // ABOVE THE CARDS YOU ARE BIDDING ON, which in table space sit higher than
     // your plaque: C3's half of this, and the one the new layout turned round.
-    REQUIRE(band.bottom() <= tablespace::handTop);
+    REQUIRE(*floor <= tablespace::handTop);
 
     // And above your plaque, C2's half, bounded by the item itself rather than
     // by the scene's arithmetic.
     SeatItem* mine = plaqueAtBottom(scene);
     REQUIRE(mine != nullptr);
-    REQUIRE(band.bottom() <= mine->sceneBoundingRect().top());
+    REQUIRE(*floor <= mine->sceneBoundingRect().top());
 }
 
-TEST_CASE("The bottom band is empty before there is anything to place it against", "[table]")
+TEST_CASE("The strip has no floor before there is anything to place it against", "[table]")
 {
-    // No snapshot means no seats, so there is no plaque to clear and no band -
-    // and the caller is handed an empty rect to fall back on rather than a
-    // negative one to lay a widget out in.
+    // No snapshot means no seats, so there is no plaque to clear - and the caller
+    // is told so, and falls back, rather than being handed a number to lay a
+    // widget out against.
     TableScene scene;
 
-    REQUIRE(scene.overlayBand().isEmpty());
+    REQUIRE_FALSE(scene.overlayBottom().has_value());
 }
 
 TEST_CASE("A theme change during a play prompt leaves the prompt's fan standing", "[table]")

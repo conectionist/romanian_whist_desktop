@@ -7,10 +7,6 @@
 #include "table/TableSpace.h"
 #include "table/TrickItem.h"
 
-#include <QPainter>
-#include <QPaintDevice>
-#include <QSizeF>
-#include <QTransform>
 
 #include <algorithm>
 
@@ -57,24 +53,6 @@ bool seated(const GameSnapshot& snapshot)
            && static_cast<std::size_t>(snapshot.humanSeat) < snapshot.seats.size();
 }
 
-// A PAINT DEVICE'S SIZE IN LOGICAL PIXELS, which Qt does not answer in one call.
-// A widget reports its width in logical pixels already; an image or a pixmap
-// reports its PHYSICAL width, with the ratio beside it - measured, not assumed:
-// a 640x400 image at a ratio of 2 says 640, the 320x200 widget a painter paints
-// on a HiDPI screen says 320. So the ratio is divided out of everything but a
-// widget. The viewport is the device in a real game, and is still the device
-// under QWidget::grab(), which is how the screenshot tool takes its pictures; an
-// image is what the tests paint into.
-QSize logicalSize(const QPaintDevice& device)
-{
-    const QSize reported(device.width(), device.height());
-
-    if(device.devType() == QInternal::Widget)
-        return reported;
-
-    return (QSizeF(reported) / device.devicePixelRatioF()).toSize();
-}
-
 }
 
 TableScene::TableScene(QObject* parent)
@@ -107,8 +85,9 @@ void TableScene::setTheme(const Theme& palette)
 
     hand->setTheme(theme);
 
-    // The background is drawn by drawBackground() rather than held in an item,
-    // so this has to say so - nothing else would repaint it.
+    // The room is drawn by TableView::drawBackground() rather than held in an
+    // item, so this has to say so - nothing else would repaint it. Invalidating
+    // the scene's background layer is what tells every view to redraw its own.
     invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
     relayout();
 }
@@ -170,16 +149,16 @@ std::vector<QPointF> TableScene::trickPositions(std::size_t seatCount) const
     return positions;
 }
 
-QRectF TableScene::overlayBand() const
+std::optional<qreal> TableScene::overlayBottom() const
 {
     if(!snapshot || snapshot->seats.empty())
-        return QRectF();
+        return std::nullopt;
 
     const std::size_t seatCount = snapshot->seats.size();
     const std::vector<QPointF> centres = seatPositions(seatCount);
 
     if(centres.size() != seatCount)
-        return QRectF();
+        return std::nullopt;
 
     const qreal plaqueHeight = SeatItem::plaqueSize(plaqueUnit).height();
 
@@ -202,14 +181,7 @@ QRectF TableScene::overlayBand() const
     // A GAP, so the strip does not sit flush against what it clears and read as
     // one object with it. A fraction of the plaque rather than a constant of its
     // own, as it always was.
-    bottom -= plaqueHeight / 8.0;
-
-    const QRectF box = sceneRect();
-
-    if(bottom <= box.top())
-        return QRectF();
-
-    return QRectF(box.left(), box.top(), box.width(), bottom - box.top());
+    return bottom - plaqueHeight / 8.0;
 }
 
 void TableScene::relayout()
@@ -264,56 +236,4 @@ void TableScene::relayout()
     // fan's origin is the middle of its cards, hence the half card.
     hand->setPos(tablespace::centre.x(), tablespace::handTop + tablespace::handCardHeight / 2.0);
     hand->setVisible(seated(*snapshot));
-}
-
-void TableScene::drawBackground(QPainter* painter, const QRectF& rect)
-{
-    QPaintDevice* device = painter->device();
-
-    if(!device)
-        return;
-
-    // IN THE VIEWPORT'S OWN PIXELS, not in table space. The fit box keeps the
-    // table's aspect, so a window of any other shape shows bands beside or above
-    // it, and the room has to fill those too - the mock-up's room is the
-    // viewport's background, not the stage's. So the exposed rect is taken out of
-    // table space through the transform the view painted it with, and the room is
-    // drawn without one.
-    //
-    // The logical size, so a viewport on a HiDPI screen is asked for at the size
-    // it is laid out at and the ratio below makes it sharp - the half of B1's dpr
-    // contract that applies to the table rather than to the cards.
-    const QSize view = logicalSize(*device);
-    const qreal dpr = device->devicePixelRatioF();
-
-    const QPixmap room = theme.room(view, dpr);
-
-    if(room.isNull())
-        return;
-
-    // Only the exposed part, which is what `rect` is for: a card moving in the
-    // middle of the table must not repaint the whole room behind it. Clipped to
-    // the room itself, so the source rect below never reaches outside the pixmap.
-    const QRectF exposed =
-        painter->worldTransform().mapRect(rect).intersected(QRectF(QPointF(0.0, 0.0), view));
-
-    if(exposed.isEmpty())
-        return;
-
-    // THE TARGET RECT IS LOGICAL AND THE SOURCE RECT IS NOT. Qt reads a
-    // drawPixmap source rect in the PIXMAP's own pixels, and room() above
-    // rasterized this one at view * dpr - so passing the same logical rect as
-    // both samples the top-left 1/dpr of the room and stretches it over the
-    // whole viewport, with each partial repaint reading from a different wrong
-    // place besides.
-    //
-    // QRectF throughout - rounding here would put a seam in the room at the
-    // fractional ratios (1.25, 1.5) that most Linux and Windows screens use.
-    const qreal ratio = room.devicePixelRatio();
-
-    painter->save();
-    painter->setWorldTransform(QTransform());
-    painter->drawPixmap(exposed, room,
-                        QRectF(exposed.topLeft() * ratio, exposed.size() * ratio));
-    painter->restore();
 }

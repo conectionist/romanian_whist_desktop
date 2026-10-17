@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "table/TableView.h"
+#include "table/SeatItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "ui/BidStrip.h"
@@ -8,6 +9,8 @@
 #include "paint/Theme.h"
 
 #include <QGraphicsItem>
+#include <QImage>
+#include <QPainter>
 #include <QPointF>
 #include <QRect>
 #include <QRectF>
@@ -19,17 +22,17 @@
 
 // WHERE THE STRIP LANDS, which TableSceneTests can only half answer.
 //
-// That file holds overlayBand() to account - the band clears your hand and your
-// plaque - but the band is only the room available, and in table space besides.
+// That file holds overlayBottom() to account - the floor clears your hand and
+// your plaque - but in table space, and the floor is only where the strip may go.
 // This one covers the other half: what placeOverlay() actually does with it once
 // the view has mapped it to the screen.
 //
 // The two strip cases are the two ways the placement went wrong in C2. The strip
 // is AS TALL AS ITS WRAPPED TEXT NEEDS, because sizeHint() answers for the width
 // the strip asked for rather than the width it got, and a narrow table clipped
-// the second line of the forbidden-bid reason off the bottom. And it STAYS INSIDE
-// THE BAND, because clamping the y without clamping the height pushes the bottom
-// edge back down over the plaque the band was computed to clear.
+// the second line of the forbidden-bid reason off the bottom. And it STAYS CLEAR
+// OF YOUR HAND AND PLAQUE, because clamping the y without clamping the height
+// pushes the bottom edge back down over what the floor was computed to clear.
 //
 // AND THE SCALE ITSELF, since the table redesign's phase 2: the view fits a fixed
 // table to the window, centred, and a resize changes that scale and nothing in
@@ -81,12 +84,28 @@ const QSize cramped(430, 460);
 // missing would sit unseen until the day something else made the strip taller.
 const QSize squashed(400, 120);
 
-// The band, where the view puts it: the viewport's pixels, in the view's own
-// coordinates, which is where the strip - the view's child - is placed.
-QRect bandOnScreen(const TableView& view, const TableScene& scene)
+// A table-space height, where it lands in the view's own coordinates - which is
+// where the strip, the view's child, is placed. Through Qt's own mapFromScene()
+// and the items' own positions, NOT through the arithmetic placeOverlay() does: a
+// test that repeated that would agree with any mistake in it.
+int onScreen(const TableView& view, qreal sceneY)
 {
-    return view.mapFromScene(scene.overlayBand()).boundingRect()
-        .translated(view.viewport()->geometry().topLeft());
+    return view.mapFromScene(QPointF(tablespace::centre.x(), sceneY)).y()
+         + view.viewport()->geometry().top();
+}
+
+// Your plaque, found by where section 2.5 puts it rather than by seat index.
+const SeatItem* yourPlaque(const TableScene& scene)
+{
+    for(const QGraphicsItem* item : scene.items())
+    {
+        const auto* seat = dynamic_cast<const SeatItem*>(item);
+
+        if(seat && seat->isVisible() && seat->sceneBoundingRect().contains(QPointF(768.0, 1105.0)))
+            return seat;
+    }
+
+    return nullptr;
 }
 
 // Windows of every shape the scale has to handle: the screenshot size, a laptop,
@@ -131,7 +150,7 @@ TEST_CASE("A squeezed strip is as tall as its wrapped explanation needs", "[tabl
     REQUIRE(strip.height() >= strip.heightForWidth(strip.width()));
 }
 
-TEST_CASE("The strip stays inside the band at every size", "[table]")
+TEST_CASE("The strip stays clear of your hand and your plaque at every size", "[table]")
 {
     TableScene scene;
 
@@ -146,22 +165,34 @@ TEST_CASE("The strip stays inside the band at every size", "[table]")
     view.setBottomOverlay(&strip);
     view.show();
 
+    const SeatItem* plaque = yourPlaque(scene);
+    REQUIRE(plaque != nullptr);
+
     for(const QSize& size : {played, cramped, squashed})
     {
         INFO("table " << size.width() << "x" << size.height());
 
         view.resize(size);
 
-        const QRect band = bandOnScreen(view, scene);
+        const QRect placed = strip.geometry();
 
-        REQUIRE_FALSE(band.isEmpty());
+        // THE BOTTOM EDGE, which is what the floor exists for: above the top of
+        // the cards you are bidding on, and above your plaque. y + height is the
+        // edge itself, where QRect::bottom() is the last row inside it.
+        REQUIRE(placed.y() + placed.height() <= onScreen(view, tablespace::handTop));
+        REQUIRE(placed.y() + placed.height() <= onScreen(view, plaque->sceneBoundingRect().top()));
 
-        // BOTH EDGES. The bottom one is the hand and the plaque the band exists to
-        // clear; the top one is the clamp that keeps a tall strip from being
-        // pushed back down through them.
-        REQUIRE(strip.geometry().bottom() <= band.bottom());
-        REQUIRE(strip.geometry().top() >= band.top());
+        // And on the view at all.
+        REQUIRE(placed.top() >= 0);
     }
+
+    // THE ROOM ABOVE THE TABLE IS THE STRIP'S TOO. At this size the table is a
+    // short band across a wide window and the strip is taller than the space
+    // between the fit box's top and your hand; it used to be cut to that, though
+    // the window's top edge was further up. It may rise to the view's own top.
+    view.resize(squashed);
+
+    REQUIRE(strip.geometry().top() < onScreen(view, tablespace::fitBox.top()));
 }
 
 // SECTION 2.1, and the mock-up's fit(): one scale for both axes, the largest that
@@ -212,12 +243,20 @@ TEST_CASE("The table is scaled to fit the window and centred in it", "[table]")
 
         REQUIRE((widthLimited || heightLimited));
 
-        // AND CENTRED: the table's own centre lands on the viewport's, to within
-        // the pixel the 10-and-8 vertical margins leave between them.
-        const QPoint centre = view.mapFromScene(tablespace::centre);
+        // AND CENTRED IN THE PADDED AREA, as fit() centres it: the margins are 16
+        // either side but 10 above and 8 below, so the table's centre sits a
+        // pixel below the viewport's. EXACTLY, through the transform itself
+        // rather than a rounded QPoint: QGraphicsView's own centring halved the
+        // viewport in whole pixels and truncated its scroll, and was up to a
+        // pixel off on either axis.
+        const QPointF centre = view.viewportTransform().map(tablespace::centre);
 
-        REQUIRE(std::abs(centre.x() - viewport.width() / 2.0) <= 1.0);
-        REQUIRE(std::abs(centre.y() - viewport.height() / 2.0) <= 1.5);
+        const qreal paddedMiddle =
+            tablespace::marginTop
+            + (viewport.height() - tablespace::marginTop - tablespace::marginBottom) / 2.0;
+
+        REQUIRE(std::abs(centre.x() - viewport.width() / 2.0) <= 1e-6);
+        REQUIRE(std::abs(centre.y() - paddedMiddle) <= 1e-6);
     }
 }
 
@@ -260,4 +299,147 @@ TEST_CASE("A resize moves nothing in the scene", "[table]")
         for(const QGraphicsItem* item : scene.items())
             REQUIRE(item->sceneBoundingRect() == before.at(item));
     }
+}
+
+// ---- the room, which the view draws ----
+//
+// THE ROOM IS THE VIEWPORT'S BACKGROUND, not the table's: the fit box keeps the
+// table's shape, so a window of any other shape shows bands beside or above it,
+// and the room fills those too. So it is drawn by the view, which knows its own
+// viewport, rather than by the scene, which had to work out the viewport's size
+// from whatever device it was handed - and guessed the whole device when that
+// was not a viewport.
+//
+// AND AT A RATIO OF 2, because that is where the blit can go wrong. A drawPixmap
+// TARGET rect is logical and a SOURCE rect is not - Qt reads the source in the
+// pixmap's own pixels - so passing the same rect as both samples the top-left
+// quarter of the room and stretches it over the whole viewport. That is invisible
+// at a ratio of 1, which is where the suite and the developer's screen both are.
+
+namespace
+{
+
+const QSize roomView(320, 200);
+
+constexpr qreal roomRatio = 2.0;
+
+// A ratio-2 canvas the size of the viewport: 640 x 400 physical pixels laid out
+// over 320 x 200 logical ones, which is what a viewport on a retina screen is.
+QImage roomCanvas()
+{
+    QImage image(roomView * roomRatio, QImage::Format_ARGB32);
+
+    image.setDevicePixelRatio(roomRatio);
+    image.fill(Qt::transparent);
+
+    return image;
+}
+
+QImage expectedRoom(QSize size, qreal ratio)
+{
+    return Theme::light().room(size, ratio).toImage().convertToFormat(QImage::Format_ARGB32);
+}
+
+// A view of an empty table, so the room is the only thing drawn.
+struct RoomView
+{
+    TableScene scene;
+    TableView view{ &scene };
+
+    RoomView()
+    {
+        scene.setTheme(Theme::light());
+
+        view.resize(roomView);
+        view.show();
+    }
+};
+
+// Part of the viewport, rendered onto the same part of the canvas: source and
+// target are one logical rect, so the canvas's ratio is the only scale between
+// them - which is what painting the viewport on screen is.
+void renderRegion(TableView& view, QImage& canvas, const QRect& region)
+{
+    QPainter painter(&canvas);
+
+    view.render(&painter, QRectF(region), region);
+}
+
+}
+
+TEST_CASE("The room is blitted 1:1 at a device pixel ratio of 2", "[table]")
+{
+    RoomView table;
+
+    REQUIRE(table.view.viewport()->size() == roomView);
+
+    QImage rendered = roomCanvas();
+    renderRegion(table.view, rendered, QRect(QPoint(0, 0), roomView));
+
+    // Painted at 640 x 400, drawn over 320 x 200 logical pixels: one pixmap pixel
+    // per canvas pixel, and no trace of the table's transform, because the room
+    // belongs to the viewport.
+    REQUIRE(rendered == expectedRoom(roomView, roomRatio));
+}
+
+// The size is only half of it. The source rect is also OFFSET by the exposed
+// rect, so a partial repaint - which is what every repaint is once a card is
+// moving over the table - reads from the wrong place besides being the wrong
+// size. A fix that scaled the size and left the origin alone would pass the case
+// above and fail every frame of a real game.
+TEST_CASE("A partial repaint samples its own region of the room", "[table]")
+{
+    RoomView table;
+
+    const QRect exposed(160, 0, 160, 200);
+
+    QImage rendered = roomCanvas();
+    renderRegion(table.view, rendered, exposed);
+
+    // The same region, in the physical pixels both images are addressed in.
+    const QRect physical(exposed.topLeft() * roomRatio, exposed.size() * roomRatio);
+
+    REQUIRE(rendered.copy(physical) == expectedRoom(roomView, roomRatio).copy(physical));
+
+    // And nothing outside it was touched, which is what the exposed rect is for.
+    REQUIRE(rendered.pixelColor(0, 0).alpha() == 0);
+}
+
+// THE LETTERBOX. The corner of the viewport is outside the table as it is drawn,
+// and a room drawn into the scene rect would leave it unpainted - on a wide
+// screen, two black strips down the sides of the table.
+TEST_CASE("The room covers the viewport, not just the table", "[table]")
+{
+    RoomView table;
+
+    QImage rendered = roomCanvas();
+    renderRegion(table.view, rendered, QRect(QPoint(0, 0), roomView));
+
+    // The premise: the corner is outside the table.
+    REQUIRE_FALSE(table.view.mapFromScene(table.scene.sceneRect()).boundingRect()
+                      .contains(QPoint(0, 0)));
+
+    REQUIRE(rendered.pixelColor(0, 0).alpha() == 255);
+    REQUIRE(rendered.pixelColor(0, 0) == expectedRoom(roomView, roomRatio).pixelColor(0, 0));
+}
+
+// THE VIEW'S ROOM WHEREVER IT IS DRAWN. Rendered into one corner of a larger
+// image, the room is the viewport's - its gradient centred on the view - and not
+// a corner cut from a room the size of the whole image, which is what the scene
+// drew when it took the device it was painting on for the viewport.
+TEST_CASE("Rendered into part of a larger image, the room is still the view's", "[table]")
+{
+    RoomView table;
+
+    QImage rendered(roomView * 2, QImage::Format_ARGB32);
+    rendered.fill(Qt::transparent);
+
+    const QRect corner(QPoint(roomView.width(), roomView.height()), roomView);
+
+    {
+        QPainter painter(&rendered);
+        table.view.render(&painter, QRectF(corner), QRect(QPoint(0, 0), roomView));
+    }
+
+    REQUIRE(rendered.copy(corner) == expectedRoom(roomView, 1.0));
 }

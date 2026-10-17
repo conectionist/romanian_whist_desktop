@@ -10,6 +10,7 @@
 #include <QRectF>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 class HandItem;
@@ -61,36 +62,29 @@ public:
 
     void setTheme(const Theme& theme);
 
-    // WHAT AN OVERLAY MAY COVER: the fit box's width, from its top down to just
-    // above your hand - or, at a table with no hand, above the lowest plaque.
-    // Section 15.1's bid strip is bottom-aligned in it until the redesign's phase
-    // 10 moves the strip onto the felt. In SCENE units: TableView maps it to the
-    // viewport before placing anything in it.
+    // The theme the table is drawn in. TableView draws the room behind it from
+    // this, so the room and the table cannot be in two different themes.
+    const Theme& currentTheme() const { return theme; }
+
+    // WHERE AN OVERLAY MUST STOP: the table-space y just above your hand - or, at
+    // a table with no hand, above the lowest plaque. Section 15.1's bid strip is
+    // bottom-aligned above it until the redesign's phase 10 moves the strip onto
+    // the felt. In SCENE units: TableView maps it to the viewport.
     //
     // IT HAS TO COME FROM HERE because the bottom of the table is not where the
     // strip goes. Your hand and your own plaque are both down there, and a strip
     // pinned to the viewport's bottom edge draws straight through them - which is
     // what C2's first run did, through the plaque.
     //
-    // AND IT REACHES UP OVER THE TRICK, which is not a compromise. What makes
-    // covering the middle harmless is WHEN this is used: bidding finishes before
-    // the first card of the round is played, so the trick area is empty for the
-    // whole time the strip is up. The hand is a different matter - you bid on the
-    // cards you are holding - so the band stops above it.
+    // A FLOOR AND NO CEILING. The strip may rise over the trick, which is not a
+    // compromise: bidding finishes before the first card of the round is played,
+    // so the trick area is empty for the whole time the strip is up. And it may
+    // rise past the top of the table into the room above, which is the view's to
+    // give - so only the bottom is the scene's to say. The hand is a different
+    // matter, because you bid on the cards you are holding.
     //
-    // Empty before the first snapshot; the caller falls back rather than being
-    // handed a negative rect.
-    QRectF overlayBand() const;
-
-protected:
-    // The room behind the table, through Theme - which is what keeps it
-    // replaceable (section 18.1). NOT a QGraphicsRectItem with a brush, which
-    // would put a colour decision in the scene.
-    //
-    // OVER THE WHOLE VIEWPORT, not the scene rect. The fit box is scaled to fit,
-    // so a window of any other shape shows bands beside or above it, and those are
-    // still the room. See the definition.
-    void drawBackground(QPainter* painter, const QRectF& rect) override;
+    // Nothing before the first snapshot, and the caller falls back.
+    std::optional<qreal> overlayBottom() const;
 
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
