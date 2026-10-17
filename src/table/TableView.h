@@ -22,8 +22,8 @@ class TableScene;
 // on its way to the screen and undo it at the last step. That contract still
 // holds - every pixmap now asks devicepixels::effectiveRatio() for the pixels it
 // lands on, the view's scale included, and while a resize settles this view
-// freezes that answer on its viewport (resizeEvent()). So the scale costs the cards nothing, and
-// everything drawn as vectors was never at risk.
+// freezes that answer on its viewport (resizeEvent()). So the scale costs the
+// cards nothing, and everything drawn as vectors was never at risk.
 //
 // AND THE ROOM BEHIND THE TABLE, which is this view's background: it fills the
 // whole viewport, the letterbox the fit box leaves included.

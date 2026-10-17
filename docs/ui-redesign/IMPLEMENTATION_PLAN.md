@@ -625,7 +625,8 @@ window edge with a full table on it stays smooth, with each frame of the drag un
 **Outcome:**
 
 - **The count is 309 tests** (290 + 19, none retired), passing on the `default`, `release` and
-  `clang` presets with Qt 6.11.2 and building without a warning.
+  `clang` presets with Qt 6.11.2 and building without a warning. **The review of PR #28 brought it
+  to 322**, still with none retired.
 - **The empty table matches the mock-up.** The screenshot tool's new `table-empty.png` is a bare
   `TableView` at 1920×1034: the mock-up's viewport less its 46 px menu bar, so both tables are drawn at
   one scale in one place.
