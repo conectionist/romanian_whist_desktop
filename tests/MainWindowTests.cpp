@@ -4,6 +4,8 @@
 #include "WindowDriving.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
+#include "table/TableSpace.h"
+#include "table/TableView.h"
 #include "ui/BidStrip.h"
 #include "ui/GameOverPanel.h"
 #include "ui/NewGameDialog.h"
@@ -847,4 +849,42 @@ TEST_CASE("The pause menu and the round sheet do not release each other",
     const int held = log->blockCount();
     pump(800);
     REQUIRE(log->blockCount() == held);
+}
+
+// A READABLE TABLE AT ANY WINDOW SIZE. The table is a fixed space the view scales
+// to fit, and nothing stopped that scale reaching a size nobody can read: a small
+// window with the scoreboard beside it put the plaque names at six pixels. The
+// view's minimum size is the floor, and the layouts carry it up to the window -
+// so the window refuses the size rather than drawing the table smaller.
+//
+// THE TABLE PAGE, shown without a game: a stacked page that is not showing is not
+// laid out, and starting a game for this would be three seconds spent on a
+// question about geometry.
+TEST_CASE("The window cannot shrink the table below a readable scale", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    TableView* table = window.findChild<TableView*>();
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    REQUIRE(table != nullptr);
+    REQUIRE(pages != nullptr);
+
+    QWidget* page = table;
+    while(page && page->parentWidget() != pages)
+        page = page->parentWidget();
+
+    REQUIRE(page != nullptr);
+    pages->setCurrentWidget(page);
+
+    window.resize(300, 200);
+    pump(100);
+
+    const qreal scale = tablespace::fitScale(table->viewport()->size());
+
+    INFO("table " << table->viewport()->width() << "x" << table->viewport()->height()
+                  << ", window " << window.width() << "x" << window.height());
+    REQUIRE(scale >= tablespace::minimumScale - 1e-9);
 }

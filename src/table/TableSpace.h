@@ -3,6 +3,7 @@
 
 #include <QPointF>
 #include <QRectF>
+#include <QSize>
 #include <QSizeF>
 
 #include <cstddef>
@@ -45,6 +46,13 @@ inline constexpr qreal marginX = 16.0;
 inline constexpr qreal marginTop = 10.0;
 inline constexpr qreal marginBottom = 8.0;
 
+// THE SMALLEST SCALE THE TABLE IS DRAWN AT. Below it the plaque names fall under
+// nine pixels and the cards under seventy, which is past reading - and nothing
+// else would stop it: the table is a fixed space the view scales, so a small
+// window used to draw it as small as it liked. Decided by the owner on 2026-10-17,
+// at the size that still leaves a 1000 x 700 window room for the scoreboard.
+inline constexpr qreal minimumScale = 0.30;
+
 // The felt's radius (section 2.4). Played cards are placed relative to its edge.
 inline constexpr qreal feltRadius = 440.0;
 
@@ -62,6 +70,11 @@ inline constexpr qreal handTop = 850.0;
 // table.js fit()'s `scale`. Zero when the viewport has no room left inside its
 // margins, which a caller reads as "leave the transform alone".
 qreal fitScale(QSizeF viewport);
+
+// The smallest viewport that fits the box at minimumScale, margins and all, in
+// whole pixels: 596 x 416. TableView's minimum size, which the layouts carry up
+// to the window.
+QSize minimumViewport();
 
 // A played card's height (section 2.7): the larger size up to four seats, the
 // smaller from five, where six cards have to share the felt.

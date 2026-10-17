@@ -46,6 +46,12 @@ public:
     // passing nullptr forgets it.
     void setBottomOverlay(QWidget* overlay);
 
+    // tablespace::minimumViewport(): the size that draws the table at its
+    // minimum scale. A HINT rather than a minimum size, so the layouts carry it up
+    // to the window - which then refuses a size that would draw the table too
+    // small to read - while a bare view, as the tests use, can still be squeezed.
+    QSize minimumSizeHint() const override;
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
 

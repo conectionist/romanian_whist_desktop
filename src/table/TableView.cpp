@@ -44,6 +44,12 @@ TableView::TableView(TableScene* scene, QWidget* parent)
     setResizeAnchor(QGraphicsView::NoAnchor);
 }
 
+// The view has no frame and no scrollbars, so its own size is the viewport's.
+QSize TableView::minimumSizeHint() const
+{
+    return tablespace::minimumViewport();
+}
+
 // table.js fit(): one scale for both axes, so the table stays round, and the
 // largest that fits the fit box inside the viewport's margins.
 //

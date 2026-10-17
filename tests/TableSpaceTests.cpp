@@ -5,6 +5,7 @@
 
 #include <QPointF>
 #include <QRectF>
+#include <QSize>
 #include <QSizeF>
 
 #include <cstddef>
@@ -62,6 +63,19 @@ TEST_CASE("The fit box is centred on the table", "[table-space]")
 {
     REQUIRE(tablespace::fitBox.center() == tablespace::centre);
     REQUIRE(tablespace::fitBox.contains(QRectF(QPointF(0.0, 0.0), tablespace::stage)));
+}
+
+// THE FLOOR TableView's minimum size holds: a viewport of minimumViewport() fits
+// the box at minimumScale or more, and a pixel less in either direction would not.
+TEST_CASE("The minimum viewport fits the table at the minimum scale", "[table-space]")
+{
+    const QSize minimum = tablespace::minimumViewport();
+
+    REQUIRE(minimum == QSize(596, 416));
+
+    REQUIRE(tablespace::fitScale(minimum) >= tablespace::minimumScale - 1e-9);
+    REQUIRE(tablespace::fitScale(minimum - QSize(1, 0)) < tablespace::minimumScale);
+    REQUIRE(tablespace::fitScale(minimum - QSize(0, 1)) < tablespace::minimumScale);
 }
 
 // Section 2.7: the larger card up to four seats, the smaller from five.
