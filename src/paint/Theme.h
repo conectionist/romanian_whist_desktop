@@ -7,8 +7,13 @@
 
 #include <memory>
 
-// The first of the two seams of plan section 18.1: THE ONLY PLACE A COLOUR OR A
-// TABLE METRIC EXISTS.
+// The first of the two seams of plan section 18.1: THE ONLY PLACE A COLOUR
+// EXISTS.
+//
+// It was the only place a table METRIC existed too, a card height derived from
+// the window, until the table redesign's phase 2 replaced that with a fixed table
+// space the view scales. Those numbers are the mock-up's now, and they live in
+// table/TableSpace.h.
 //
 // The design in section 18 will change - the background, the seat art and the
 // card size are all things anyone building this wants to swap once they have
@@ -175,6 +180,16 @@ struct Theme : ThemeColours
     // table is visibly soft beside cards that are not.
     QPixmap background(QSize view, qreal dpr) const;
 
+    // THE ROOM BEHIND THE REDESIGNED TABLE: section 2.2's radial gradient from
+    // `table`, dark wood fading to near black, over the whole of the table page's
+    // viewport. Same logical-size-and-dpr contract as background() above.
+    //
+    // A SECOND METHOD RATHER THAN A NEW BODY FOR background(), because that one is
+    // also the main menu's and the Card art window's, and the redesign keeps those
+    // on today's palette (open question Q1). The table page draws this; nothing
+    // else does until a later phase moves it across.
+    QPixmap room(QSize view, qreal dpr) const;
+
     // Stick figures today, portraits tomorrow. THE BOX IS WHAT THE SEAT PLAQUE
     // RESERVES, which is the whole reason this takes a QSize rather than a
     // scale: replacing the art then never reflows the layout, because the
@@ -196,10 +211,6 @@ struct Theme : ThemeColours
     QPixmap woodTexture() const;
     QPixmap feltTexture() const;
 
-    // One unit. Every other metric on the table derives from it, so new art with
-    // a different aspect ratio does not mean re-tuning the layout.
-    qreal cardHeightFor(QSize view) const;
-
 private:
     // The painted implementations, each in one place and reached only through
     // the method above it. THAT SEPARATION IS THE POINT: swapping in real art
@@ -213,6 +224,7 @@ private:
     // is the same picture at more pixels and nothing here has to know about a
     // ratio. Attaching the ratio is the caller's half, done above.
     QPixmap paintBackground(QSize physical) const;
+    QPixmap paintRoom(QSize physical) const;
     QPixmap paintAvatar(unsigned int seat, QSize physical) const;
 
     // The other half: stamping the ratio onto what a painter returned. Static

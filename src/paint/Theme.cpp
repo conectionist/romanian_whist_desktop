@@ -1,5 +1,8 @@
 #include "Theme.h"
 
+#include "paint/DevicePixels.h"
+
+#include <QBrush>
 #include <QHash>
 #include <QImage>
 #include <QImageReader>
@@ -7,6 +10,7 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QString>
+#include <QTransform>
 #include <QtLogging>
 
 #include <algorithm>
@@ -16,34 +20,6 @@
 
 namespace
 {
-
-// THE TABLE'S METRICS, all of them, and the derivation of the one that is not
-// obvious.
-//
-// The hand row's share of the window height is a straight choice. The width
-// limit is not: section 14 fans at most eight cards overlapping by 40% of a
-// card's width, so the fan spans cardWidth * (1 + 7 * 0.6) = 5.2 card widths,
-// and a playing card is roughly 0.69 as wide as it is tall - so a fan spans
-// about 3.58 card HEIGHTS. Allowing it 55% of the window width gives the
-// coefficient below.
-//
-// That 0.69 is deliberately NOT a constant here and is not read from the art.
-// Section 18.1's rule is that every table metric derives from the card height,
-// so that new art with a different aspect does not mean re-tuning the layout;
-// the exact aspect belongs to CardRenderer::sizeForHeight(), which is the only
-// thing that has to be right about it. What this file needs is a reserve, and a
-// reserve computed once from a nominal card shape is the correct amount of
-// precision for one.
-constexpr qreal handHeightFraction = 0.22;
-constexpr qreal fanWidthFraction = 0.55;
-constexpr qreal fanSpanInCardHeights = 3.58;
-
-// Below the floor a rank pip stops being readable; above the ceiling a card
-// stops looking like a card and starts looking like a poster. Both are LOGICAL
-// pixels: a metric is what the layout reserves, and the ratio it is rasterized
-// at never changes what the table looks like, only how sharp it is.
-constexpr qreal minimumCardHeight = 44.0;
-constexpr qreal maximumCardHeight = 220.0;
 
 // A per-seat hue rotation off the accent, so six seats are distinguishable
 // without six literals. 47 degrees is a step that does not repeat or collide
@@ -57,15 +33,6 @@ QSize physicalSize(QSize size, qreal dpr)
 {
     return QSize(std::max(1, qRound(size.width() * dpr)),
                  std::max(1, qRound(size.height() * dpr)));
-}
-
-// Quantized to hundredths rather than compared as a float, for the reason
-// CardRenderer's cache key gives: the ratio arrives as 1, 1.25, 1.5 or 2 in
-// practice, and two bit patterns that differ in the last place are the same
-// ratio for this purpose.
-int dprKey(qreal dpr)
-{
-    return qRound(dpr * 100.0);
 }
 
 // CSS's spelling, so each value below can be checked against the mock-up's
@@ -164,6 +131,58 @@ QPixmap cachedTexture(QPixmap* slot, const QString& path)
     return *slot;
 }
 
+// WHAT A CACHED PICTURE WAS PAINTED FOR: a size, a ratio and the colours. One
+// struct, compared whole by its own operator==, so the day the key gains a field
+// it gains it for every cache below at once - which is the drift the note on
+// Theme::Cache records happening twice when each cache spelled its key out.
+//
+// ALL OF ThemeColours, not the colours the painter beneath it reads today. Which
+// members a painter depends on is not visible from the cache lookup, and the
+// answer changes: a per-colour key was how the avatar cache came to miss accent,
+// which paintAvatar() reads and seatPlaque alone did not cover. A copy of the
+// colours rather than a hash of them, so the comparison can neither collide nor
+// miss a member.
+//
+// The ratio through devicepixels::ratioKey() rather than compared as a float, so
+// two bit patterns of the same ratio are one key and the quantization is the one
+// CardRenderer's cache uses.
+struct PictureKey
+{
+    QSize size;
+    int dpr = 0;
+    ThemeColours colours;
+
+    bool operator==(const PictureKey&) const = default;
+};
+
+PictureKey keyFor(QSize size, qreal dpr, const ThemeColours& colours)
+{
+    return PictureKey{ size, devicepixels::ratioKey(dpr), colours };
+}
+
+// One picture and the key it was painted for. Held one at a time, because there
+// is one table page and one main menu, each with one viewport.
+struct CachedPicture
+{
+    PictureKey key;
+    QPixmap pixmap;
+};
+
+// THE LOOKUP background() AND room() SHARE. `draw` paints and rasterizes on a
+// miss; it is the caller's because the painters are Theme's private members. A
+// null slot is a Theme with no Cache, which paints every time.
+template<typename Draw>
+QPixmap cachedPicture(CachedPicture* slot, const PictureKey& key, Draw draw)
+{
+    if(!slot)
+        return draw();
+
+    if(slot->pixmap.isNull() || slot->key != key)
+        *slot = CachedPicture{ key, draw() };
+
+    return slot->pixmap;
+}
+
 // Theme's layout with nothing added to the colours but the cache pointer, for
 // the assertion below.
 struct ColoursAndCache : ThemeColours
@@ -182,23 +201,13 @@ static_assert(sizeof(Theme) == sizeof(ColoursAndCache),
 // Keyed on the COLOURS it was painted from as well as the size, because the
 // colour members are public and a caller is free to assign one. Without them in
 // the key, a recoloured Theme would keep serving the old pixmap and look like
-// the assignment had not taken.
-//
-// ALL OF ThemeColours, not the colours the painter beneath it reads today. Which
-// members a painter depends on is not visible from the cache lookup, and the
-// answer changes: a per-colour key was how the avatar cache came to miss
-// accent, which paintAvatar() reads and seatPlaque alone did not cover. So the
-// bid, score and table colours are compared too, though neither painter here
-// reads one - the next painter that does needs no edit to this file.
-//
-// A copy of the colours rather than a hash of them, so the comparison is the
-// struct's own operator== and can neither collide nor miss a member.
+// the assignment had not taken. PictureKey above says why it is all of them.
 struct Theme::Cache
 {
-    QSize backgroundSize;
-    int backgroundDpr = 0;
-    ThemeColours backgroundColours;
-    QPixmap background;
+    CachedPicture background;
+
+    // The redesign's room, held exactly as the background above is.
+    CachedPicture room;
 
     // ONE BOX SIZE AT A TIME, rather than a growing map keyed on the size. Every
     // seat's plaque reserves the same box at any given moment, so a second size
@@ -207,9 +216,7 @@ struct Theme::Cache
     // drag lasted. CardRenderer solves the same problem with a QCache because
     // its sizes genuinely differ from each other within one frame; here they do
     // not, and discarding the old set is both simpler and more complete.
-    QSize avatarBox;
-    int avatarDpr = 0;
-    ThemeColours avatarColours;
+    PictureKey avatarKey;
     QHash<unsigned int, QPixmap> avatars;
 
     // Keyed on nothing. A texture is source art, not a colour and not a size,
@@ -303,17 +310,6 @@ Theme Theme::forScheme(Qt::ColorScheme scheme)
     return light();
 }
 
-qreal Theme::cardHeightFor(QSize view) const
-{
-    if(view.isEmpty())
-        return minimumCardHeight;
-
-    const qreal fromHeight = view.height() * handHeightFraction;
-    const qreal fromWidth = view.width() * fanWidthFraction / fanSpanInCardHeights;
-
-    return std::clamp(std::min(fromHeight, fromWidth), minimumCardHeight, maximumCardHeight);
-}
-
 // BOTH HALVES OF THE HiDPI STORY ON ONE PATH, which is the discipline
 // CardRenderer::finish() spells out: rasterizing at size * dpr without setting
 // the ratio produces a pixmap drawn at dpr times the size it should be, and
@@ -330,25 +326,17 @@ QPixmap Theme::background(QSize view, qreal dpr) const
     if(view.isEmpty() || dpr <= 0.0)
         return QPixmap();
 
-    // No cache at all rather than a wrong one: a default-constructed Theme has
-    // no Cache, and painting is still the right answer for it.
-    if(!cache)
-        return rasterize(paintBackground(physicalSize(view, dpr)), dpr);
+    return cachedPicture(cache ? &cache->background : nullptr, keyFor(view, dpr, *this),
+                         [&] { return rasterize(paintBackground(physicalSize(view, dpr)), dpr); });
+}
 
-    const ThemeColours& colours = *this;
+QPixmap Theme::room(QSize view, qreal dpr) const
+{
+    if(view.isEmpty() || dpr <= 0.0)
+        return QPixmap();
 
-    if(cache->background.isNull()
-        || cache->backgroundSize != view
-        || cache->backgroundDpr != dprKey(dpr)
-        || cache->backgroundColours != colours)
-    {
-        cache->background = rasterize(paintBackground(physicalSize(view, dpr)), dpr);
-        cache->backgroundSize = view;
-        cache->backgroundDpr = dprKey(dpr);
-        cache->backgroundColours = colours;
-    }
-
-    return cache->background;
+    return cachedPicture(cache ? &cache->room : nullptr, keyFor(view, dpr, *this),
+                         [&] { return rasterize(paintRoom(physicalSize(view, dpr)), dpr); });
 }
 
 QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
@@ -362,16 +350,12 @@ QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
     // A changed ratio discards the set exactly as a changed box does, and for
     // the same reason: the window moved to another screen, so every avatar in
     // the old set is one nothing will ask for again.
-    const ThemeColours& colours = *this;
+    const PictureKey key = keyFor(box, dpr, *this);
 
-    if(cache->avatarBox != box
-        || cache->avatarDpr != dprKey(dpr)
-        || cache->avatarColours != colours)
+    if(cache->avatarKey != key)
     {
         cache->avatars.clear();
-        cache->avatarBox = box;
-        cache->avatarDpr = dprKey(dpr);
-        cache->avatarColours = colours;
+        cache->avatarKey = key;
     }
 
     auto found = cache->avatars.constFind(seat);
@@ -419,6 +403,47 @@ QPixmap Theme::paintBackground(QSize physical) const
     gradient.setColorAt(1.0, tableSurface.darker(128));
 
     painter.fillRect(pixmap.rect(), gradient);
+
+    return pixmap;
+}
+
+// page.html's #viewport: radial-gradient(ellipse at 50% 42%, #3b2414 0%,
+// #1c110a 58%, #0b0704 100%).
+//
+// THE ELLIPSE IS CSS'S DEFAULT SIZE, farthest-corner, which the declaration does
+// not spell out. CSS sizes it with the aspect of farthest-side - half the width
+// across, and the 58% of the height below a centre at 42% - and grows that until
+// it passes through the farthest corner. The two fractions then sum their
+// squares to 2, so both radii are farthest-side's times the square root of two.
+// A circle, or radii of half the box, would put the darkest band well inside the
+// window rather than at its corners.
+//
+// QRadialGradient is a circle, so the ellipse is a unit circle in a brush
+// transform scaled to the two radii.
+//
+// PHYSICAL PIXELS, as paintBackground() above and for the same reason.
+QPixmap Theme::paintRoom(QSize physical) const
+{
+    QPixmap pixmap(physical);
+    pixmap.fill(table.roomEdge);
+
+    QPainter painter(&pixmap);
+
+    const qreal width = physical.width();
+    const qreal height = physical.height();
+
+    QRadialGradient gradient(QPointF(0.0, 0.0), 1.0);
+    gradient.setColorAt(0.0, table.roomCentre);
+    gradient.setColorAt(0.58, table.roomMiddle);
+    gradient.setColorAt(1.0, table.roomEdge);
+
+    QTransform ellipse = QTransform::fromTranslate(width * 0.5, height * 0.42);
+    ellipse.scale(std::sqrt(2.0) * width * 0.5, std::sqrt(2.0) * height * 0.58);
+
+    QBrush brush(gradient);
+    brush.setTransform(ellipse);
+
+    painter.fillRect(pixmap.rect(), brush);
 
     return pixmap;
 }

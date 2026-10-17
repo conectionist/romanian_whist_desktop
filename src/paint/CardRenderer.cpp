@@ -1,5 +1,7 @@
 #include "CardRenderer.h"
 
+#include "paint/DevicePixels.h"
+
 #include <QPainter>
 #include <QString>
 #include <QSvgRenderer>
@@ -55,7 +57,7 @@ unsigned int indexOf(Card card)
 // reached by any arithmetic over the enums, whatever the engine does to them.
 // The back still lives in the same QCache under the same budget and the same
 // eviction, which is what section 18.1's argument for back() was actually about.
-constexpr int backBit = 56;
+constexpr int backBit = 60;
 
 // ALL FOUR COMPONENTS section 18.1 names: card, size, state and dpr. Dropping
 // any one of them is a real bug with a real symptom - dpr is the one the build
@@ -66,19 +68,20 @@ constexpr int backBit = 56;
 // logical at dpr 1 rasterize to the same 200 physical pixels and are laid out at
 // different sizes on screen.
 //
-// dpr is quantized to hundredths rather than hashed as a float. It arrives from
-// QWindow::devicePixelRatio() as 1, 1.25, 1.5 or 2 in practice, and two bit
-// patterns that differ in the last place are the same ratio for this purpose.
+// dpr is quantized by devicepixels::ratioKey() rather than hashed as a float, to
+// ten-thousandths. Since the table redesign's phase 2 it is the screen's ratio
+// times the view's scale, which is continuous - see DevicePixels.h for why
+// hundredths were not fine enough. 20 bits of it reach a ratio of 104.
 //
-// Bit layout: back@56, state@55, card@48-54, dpr@32-47, height@16-31, width@0-15.
+// Bit layout: back@60, state@59, card@52-58, dpr@32-51, height@16-31, width@0-15.
 quint64 cacheKey(unsigned int cardIndex, bool isBack, CardRenderer::State state, QSize size,
                  qreal dpr)
 {
-    const quint64 dprKey = static_cast<quint64>(qRound(dpr * 100.0)) & 0xFFFF;
+    const quint64 dprKey = static_cast<quint64>(devicepixels::ratioKey(dpr)) & 0xFFFFF;
 
     return (static_cast<quint64>(isBack ? 1 : 0) << backBit)
-         | (static_cast<quint64>(state == CardRenderer::State::Dimmed ? 1 : 0) << 55)
-         | (static_cast<quint64>(cardIndex & 0x7F) << 48)
+         | (static_cast<quint64>(state == CardRenderer::State::Dimmed ? 1 : 0) << 59)
+         | (static_cast<quint64>(cardIndex & 0x7F) << 52)
          | (dprKey << 32)
          | (static_cast<quint64>(size.height() & 0xFFFF) << 16)
          | (static_cast<quint64>(size.width() & 0xFFFF));
@@ -185,6 +188,9 @@ CardRenderer::CardRenderer()
     cache.setMaxCost(cacheBudgetKb);
 }
 
+// Out of line, where QSvgRenderer is a complete type for the map's unique_ptrs.
+CardRenderer::~CardRenderer() = default;
+
 QSize CardRenderer::sizeForHeight(qreal height) const
 {
     if(height <= 0.0)
@@ -256,13 +262,20 @@ QPixmap CardRenderer::finish(const QImage& image, quint64 key, qreal dpr) const
 
 QImage CardRenderer::rasterizeFace(Card card, QSize physical) const
 {
-    const QString path = filePath(card);
-    if(path.isEmpty())
-        return QImage();
+    std::unique_ptr<QSvgRenderer>& renderer = art[indexOf(card)];
 
-    QSvgRenderer renderer(path);
-    if(!renderer.isValid())
-        return QImage();
+    if(!renderer)
+    {
+        const QString path = filePath(card);
+        if(path.isEmpty())
+            return QImage();
+
+        auto parsed = std::make_unique<QSvgRenderer>(path);
+        if(!parsed->isValid())
+            return QImage();
+
+        renderer = std::move(parsed);
+    }
 
     QImage image(physical, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
@@ -273,7 +286,7 @@ QImage CardRenderer::rasterizeFace(Card card, QSize physical) const
     // Onto transparency, with no card-shaped background painted first: the art
     // draws its own white body with rounded corners and a hairline border, so
     // filling behind it would only square off the corners it just rounded.
-    renderer.render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(physical)));
+    renderer->render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(physical)));
 
     return image;
 }

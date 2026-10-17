@@ -81,11 +81,9 @@ public:
     // What a plaque occupies at a given card height, ring included.
     //
     // Static and public because the LAYOUT needs it before any seat exists:
-    // seatlayout::seatCentres() places centres inside the rect it is given, and
-    // a centre inside the rect is not the same as a plaque inside it - the two
-    // side seats hang half a plaque past the edge otherwise. TableScene insets
-    // by this before laying out, which is the same "the caller passes a shorter
-    // rect" the hand strip will use in B2b.
+    // TableScene stops the bid strip's band above the lowest plaque with it.
+    // Until the table redesign's phase 2 it also inset the rect the seat ring
+    // was laid in, so that a plaque, and not just its centre, fitted the window.
     static QSizeF plaqueSize(qreal cardHeight);
 
     // Everything this draws, from one snapshot's SeatView plus the two facts
@@ -94,11 +92,18 @@ public:
     // half-updated plaque is a state nothing should be able to reach.
     void setSeat(const SeatView& seat, bool active, const Theme& theme);
 
-    // In LOGICAL pixels. The plaque derives from the card height, which section
-    // 18.1 makes the one unit every other metric on the table comes from.
+    // The plaque's unit, in TABLE units, which the view scales to the window.
+    // Every metric on the plaque derives from it; on the table it is
+    // TableScene's fixed plaqueUnit, and the name "card height" is from when it
+    // was the hand's card height, derived from the window, before the table
+    // redesign's phase 2.
     void setCardHeight(qreal height);
 
     QRectF boundingRect() const override;
+
+    // The plaque's rounded rect, ring margin excluded: the part of the item that
+    // takes the mouse, so a click on it never reaches the hand beneath.
+    QPainterPath shape() const override;
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
@@ -111,6 +116,9 @@ public:
     seatitem::Layout layoutFor() const;
 
     bool showsFace() const;
+
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
     // Section 14's three states. `NoBid` is the fourth thing that can be true
@@ -133,7 +141,7 @@ private:
     const CardRenderer* renderer;
 
     // ONE CARD, and a child rather than something this paints. CardItem already
-    // resolves the device pixel ratio off the widget being painted into, so a
+    // resolves the pixels it covers off the device being painted into, so a
     // window dragged to another screen re-rasterizes rather than scaling what it
     // had - reusing it inherits that instead of solving it a second time here.
     //

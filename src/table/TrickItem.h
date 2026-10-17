@@ -33,19 +33,12 @@ class TrickItem : public QGraphicsObject
 public:
     explicit TrickItem(const CardRenderer* renderer, QGraphicsItem* parent = nullptr);
 
-    // The axis-aligned box a played card actually occupies, TILT INCLUDED.
+    // `positions` is indexed BY SEAT, in the same ordering the plaques use, so a
+    // card lands on the side of the table its owner sits on. The other seats'
+    // entries are a ring - seatlayout::seatCentres() over seatlayout::ringRect() -
+    // and yours is not: TableScene::trickPositions() puts it above your hand.
     //
-    // Public and static because TableScene has to know it before any card
-    // exists: it sizes the cards so that none of them lands under a plaque, and
-    // a card rotated by t is w*cos(t) + h*sin(t) across rather than w. Asking
-    // the item that does the rotating is what keeps the two from disagreeing.
-    static QSizeF cardFootprint(QSizeF cardSize);
-
-    // `positions` is a ring indexed BY SEAT - seatlayout::seatCentres() over
-    // seatlayout::ringRect(), so it is the same ordering the plaques use and a
-    // card lands on the side of the table its owner sits on.
-    //
-    // A RING OF ITS OWN, not a fraction of the way to each seat. The obvious
+    // THE RING IS ITS OWN, not a fraction of the way to each seat. The obvious
     // version places each card along the line from the middle to its owner, and
     // it is what the first draft did; at six seats on a window wider than it is
     // tall it puts two cards in the same place, because the seat ellipse bunches

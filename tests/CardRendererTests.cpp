@@ -169,6 +169,30 @@ TEST_CASE("The cache is keyed on the device pixel ratio", "[card-renderer]")
     REQUIRE(retina.size() == QSize(82, 120));
 }
 
+// AND FINELY ENOUGH FOR A SCALED VIEW. Since the table redesign's phase 2 the ratio
+// a card asks for is the screen's times the view's scale, which is continuous -
+// not the 1, 1.25, 1.5 or 2 a screen reports. A key quantized to hundredths served
+// one of these two the other's pixmap: 127 pixels tall where 125 were asked for,
+// stamped with the wrong ratio, so it was resampled on screen and missed its own
+// card rect by a pixel or two. These are the ratios a resize from one window size
+// to the next really produces, for the hand's 225-unit card.
+TEST_CASE("Ratios a hundredth apart are cached apart", "[card-renderer]")
+{
+    const CardRenderer renderer;
+    const Card card(Rank::Ace, Suit::Spades);
+    const QSize size(155, 225);
+
+    REQUIRE(renderer.face(card, size, 0.5649).height() == 127);
+
+    const QPixmap next = renderer.face(card, size, 0.5551);
+
+    REQUIRE(next.height() == 125);
+    REQUIRE(next.devicePixelRatio() == Catch::Approx(0.5551));
+
+    REQUIRE(renderer.back(size, 0.5649).height() == 127);
+    REQUIRE(renderer.back(size, 0.5551).height() == 125);
+}
+
 // The size half of the key, which the dpr test above does NOT cover: it varies
 // the ratio at one size, so dropping the size from the key leaves it passing.
 // The window is what sets this, so the cards would stop resizing with it - and

@@ -1,10 +1,9 @@
 #include "CardItem.h"
 
 #include "paint/CardRenderer.h"
+#include "paint/DevicePixels.h"
 
 #include <QPainter>
-#include <QStyleOptionGraphicsItem>
-#include <QWidget>
 
 namespace
 {
@@ -98,18 +97,25 @@ QRectF CardItem::boundingRect() const
                   size.height() + margin * 2.0);
 }
 
-void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget* widget)
+void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
 {
     const QSizeF size = cardSize();
 
     if(!renderer || size.isEmpty())
         return;
 
-    // Off the widget being painted into, which is the viewport - so a window
-    // dragged to a screen with a different ratio rasterizes again at the new one
-    // rather than scaling what it had. `widget` is null when a scene is rendered
-    // somewhere other than a view, and 1.0 is the honest answer there.
-    const qreal dpr = widget ? widget->devicePixelRatioF() : 1.0;
+    // AT THE PIXELS IT WILL COVER, which is devicepixels::effectiveRatio(): the
+    // device's ratio, so a window dragged to a screen with a different one
+    // rasterizes again rather than scaling what it had, times the scale the view
+    // draws the table at. A card 225 table units tall can land 175 pixels tall,
+    // and a pixmap rasterized at 225 would be resampled down to that on its way to
+    // the screen - the softness CardRenderer exists to prevent. The ratio stamped
+    // on the pixmap is then below 1 on a small window, which Qt draws the same way
+    // as any other.
+    //
+    // THE DEVICE'S RATIO, not the widget's: a scene rendered into an image has no
+    // widget, and the image's own ratio is what the card has to match there.
+    const qreal dpr = devicepixels::effectiveRatio(*painter);
 
     const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 

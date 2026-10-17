@@ -10,10 +10,11 @@ namespace
 // filling it, so a seat never sits exactly on the boundary.
 //
 // It is NOT reduced to leave room for the plaque around each centre. This
-// function is handed the rect a seat's CENTRE may occupy, and it is the
-// caller - TableScene, which is the only thing that knows how big a plaque is -
-// that insets by half of one before calling. Doing it here would mean this
-// function knowing what is drawn at the points it returns.
+// function is handed the rect a seat's CENTRE may occupy, and choosing that rect
+// is the caller's business - TableScene's, which hands it a fixed ring through
+// ringRect() below, at the radii that put each plaque where section 2.5 does.
+// Doing it here would mean this function knowing what is drawn at the points it
+// returns.
 constexpr qreal radiusFractionX = 0.46;
 constexpr qreal radiusFractionY = 0.44;
 
@@ -79,10 +80,15 @@ std::vector<QPointF> seatlayout::seatCentres(unsigned int seatCount, int humanSe
 // The inverse of the radius fractions above: hand the result to seatCentres()
 // and it lays a ring of exactly `radius` about `centre`. Dividing by each
 // fraction separately is what makes it a circle rather than an ellipse of the
-// window's shape.
+// window's shape - or, with two radii, an ellipse of the shape asked for.
 QRectF seatlayout::ringRect(QPointF centre, qreal radius)
 {
-    if(radius <= 0.0)
+    return ringRect(centre, radius, radius);
+}
+
+QRectF seatlayout::ringRect(QPointF centre, qreal radiusX, qreal radiusY)
+{
+    if(radiusX <= 0.0 || radiusY <= 0.0)
         return QRectF();
 
     // seatCentres() takes a FRACTION of the rect's full width as the radius, so
@@ -90,8 +96,8 @@ QRectF seatlayout::ringRect(QPointF centre, qreal radius)
     // this wrong produces a ring of exactly double the radius asked for, which
     // looks like a plausible table and is silently wrong; the test that
     // measures the radius back out is what caught it.
-    const qreal width = radius / radiusFractionX;
-    const qreal height = radius / radiusFractionY;
+    const qreal width = radiusX / radiusFractionX;
+    const qreal height = radiusY / radiusFractionY;
 
     return QRectF(centre.x() - width / 2.0, centre.y() - height / 2.0, width, height);
 }

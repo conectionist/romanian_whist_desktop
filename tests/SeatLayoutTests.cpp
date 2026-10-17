@@ -312,3 +312,34 @@ TEST_CASE("A ring rect spaces neighbours evenly", "[seat-layout]")
 
     REQUIRE(seatlayout::ringRect(centre, 0.0).isEmpty());
 }
+
+// THE TWO-RADIUS FORM, added in the table redesign's phase 2 for the interim seat
+// ring: a seat straight below or above the centre sits at the vertical radius
+// and one straight beside it at the horizontal one - which is what "an ellipse of
+// exactly those radii" means, and what dividing each radius by its OWN fraction
+// buys. Four seats are the count that puts a seat on each of the four axes.
+TEST_CASE("A two-radius ring rect lays an ellipse of exactly those radii", "[seat-layout]")
+{
+    const QPointF centre(768.0, 512.0);
+    const qreal radiusX = 662.0;
+    const qreal radiusY = 593.0;
+
+    const std::vector<QPointF> ring =
+        seatlayout::seatCentres(4, 0, seatlayout::ringRect(centre, radiusX, radiusY));
+
+    REQUIRE(ring.size() == 4);
+
+    // Bottom, left, top, right: clockwise from seat 0 at the bottom.
+    REQUIRE(ring[0].x() == Catch::Approx(centre.x()));
+    REQUIRE(ring[0].y() == Catch::Approx(centre.y() + radiusY));
+    REQUIRE(ring[1].x() == Catch::Approx(centre.x() - radiusX));
+    REQUIRE(ring[1].y() == Catch::Approx(centre.y()));
+    REQUIRE(ring[2].y() == Catch::Approx(centre.y() - radiusY));
+    REQUIRE(ring[3].x() == Catch::Approx(centre.x() + radiusX));
+
+    // Equal radii are the one-radius form, so the circle above is a special case
+    // of this and not a second implementation of it.
+    REQUIRE(seatlayout::ringRect(centre, 120.0, 120.0) == seatlayout::ringRect(centre, 120.0));
+
+    REQUIRE(seatlayout::ringRect(centre, 120.0, 0.0).isEmpty());
+}

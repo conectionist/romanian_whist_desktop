@@ -293,9 +293,10 @@ TEST_CASE("A snapshot hand replaces a prompt's, and is never playable", "[hand]"
 TEST_CASE("A snapshot arriving mid-prompt does not take the fan", "[hand]")
 {
     // THE RESIZE THAT HUNG THE GAME. TableScene::relayout() re-sources the fan
-    // from the snapshot, and it runs on every viewport resize and every theme
-    // change - including while the engine is parked in playCard() waiting for
-    // this fan to be answered. This is that call, made at that moment.
+    // from the snapshot, and it runs on every theme change - and, until the table
+    // redesign's phase 2, on every viewport resize - including while the engine
+    // is parked in playCard() waiting for this fan to be answered. This is that
+    // call, made at that moment.
     //
     // The hand below holds the same three cards the prompt does and calls them
     // all legal, which is what every snapshot hand says. Taking it would light up

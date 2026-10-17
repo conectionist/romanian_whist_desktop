@@ -16,7 +16,7 @@ namespace
 constexpr qreal overlap = 0.40;
 
 // How far a hovered card rises, as a fraction of its height. Enough to read as
-// picked out; TableScene reserves the strip for it through liftFraction().
+// picked out; boundingRect() includes it, so the raised part is still hit.
 constexpr qreal lift = 0.12;
 
 // WHETHER TWO HANDS WOULD FAN THE SAME, which is the only question setHand()
@@ -39,11 +39,6 @@ bool sameEntries(const std::vector<HandEntry>& left, const std::vector<HandEntry
 }
 }
 
-qreal HandItem::liftFraction()
-{
-    return lift;
-}
-
 HandItem::HandItem(const CardRenderer* _renderer, QGraphicsItem* parent)
     : QGraphicsObject(parent), renderer(_renderer)
 {
@@ -53,10 +48,11 @@ HandItem::HandItem(const CardRenderer* _renderer, QGraphicsItem* parent)
 void HandItem::setHand(const std::vector<HandEntry>& hand)
 {
     // THE PROMPT OUTRANKS THE SNAPSHOT while it is live, and this line is the
-    // whole of what stops a resize from hanging the game. TableScene::relayout()
-    // re-sources the fan from the snapshot, and it runs on every viewport resize
-    // and every theme change - including while the engine is parked in playCard()
-    // waiting for this fan to be clicked.
+    // whole of what stops a relayout from hanging the game. TableScene::relayout()
+    // re-sources the fan from the snapshot, and it runs on every theme change -
+    // including while the engine is parked in playCard() waiting for this fan to
+    // be clicked. Until the table redesign's phase 2 it ran on every viewport
+    // resize as well, which is how this was found.
     //
     // In a Forehead or Hidden round the snapshot's hand is EMPTY by design, so
     // taking it here would leave no card to click, no digit key in range, and
@@ -68,7 +64,7 @@ void HandItem::setHand(const std::vector<HandEntry>& hand)
         return;
 
     // NOTHING TO DO IF NOTHING CHANGED. A game publishes about 1300 snapshots and
-    // every resize frame arrives here as well; rebuilding deletes and re-news
+    // every theme change arrives here as well; rebuilding deletes and re-news
     // every CardItem in the fan, which is the churn TableScene's class comment
     // rules out for the seats and the trick - and, from 18.2 on, a card deleted
     // out from under the animation moving it.
@@ -241,8 +237,9 @@ void HandItem::layOut()
 
     const qreal span = card.width() + step * static_cast<qreal>(fan.size() - 1);
 
-    // CENTRED ON THIS ITEM'S ORIGIN, which TableScene puts at the middle of the
-    // reserved strip. Section 14: "the fan is centred".
+    // CENTRED ON THIS ITEM'S ORIGIN, which TableScene puts on the table's centre
+    // line, half a card below section 2.8's hand top. Section 14: "the fan is
+    // centred".
     const qreal left = -span / 2.0 + card.width() / 2.0;
 
     for(std::size_t i = 0 ; i < fan.size() ; i++)

@@ -32,8 +32,8 @@ namespace seatlayout
 // distributes every seat around the full ellipse, which is what this already
 // does with seat 0 at the bottom - so -1 is handled by placing seat 0 where the
 // human would have gone, and nothing else changes. The real difference is that
-// no bottom strip is reserved for a hand, and that is the caller's business:
-// it passes a shorter rect.
+// there is no hand, and that is the caller's business: TableScene passes the
+// same rect and simply does not draw one.
 //
 // Returns an empty vector for `seatCount == 0` or an empty rect. `humanSeat`
 // outside the table is read as -1 rather than trusted into a modulo.
@@ -44,12 +44,20 @@ std::vector<QPointF> seatCentres(unsigned int seatCount, int humanSeat, QRectF t
 // radius about `centre`.
 //
 // The trick is laid out this way and the seats are not, which is the whole
-// reason this exists. Seats want the room the window has, so they take an
-// ellipse of it. The trick wants its cards not to touch each other, which is a
-// question about the card size and the number of seats and not about the window
-// at all - and an ellipse is exactly wrong for it, because a wide one bunches
-// adjacent directions toward the horizontal and puts two cards in one place.
+// reason this exists. Seats sit on an ellipse round the table, the form below.
+// The trick wants its cards not to touch each other, which is a question about
+// the card size and the number of seats - and an ellipse is exactly wrong for
+// it, because a wide one bunches adjacent directions toward the horizontal and
+// puts two cards in one place.
 QRectF ringRect(QPointF centre, qreal radius);
+
+// The same with two radii, so the ring is an ELLIPSE of exactly those radii about
+// `centre`. The one-radius form above is this with both equal.
+//
+// For a layout that knows the shape it wants in a fixed space rather than the
+// room a window happens to have - the table redesign's phase 2 lays the seats on
+// one such ellipse round the table until phase 4 gives every seat its own spot.
+QRectF ringRect(QPointF centre, qreal radiusX, qreal radiusY);
 
 } // namespace seatlayout
 

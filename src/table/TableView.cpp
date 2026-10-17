@@ -1,18 +1,26 @@
 #include "TableView.h"
 
+#include "paint/DevicePixels.h"
 #include "table/TableScene.h"
+#include "table/TableSpace.h"
 
+#include <QPainter>
+#include <QPixmap>
+#include <QRect>
 #include <QResizeEvent>
+#include <QTransform>
+#include <QtMath>
 
 #include <algorithm>
+#include <optional>
 
 TableView::TableView(TableScene* scene, QWidget* parent)
     : QGraphicsView(scene, parent)
     , table(scene)
 {
-    // Nothing scrolls: the scene is exactly the viewport, always. Scrollbars
+    // Nothing scrolls: the scaled table always fits inside the viewport. Scrollbars
     // would also change the viewport size when they appeared, which is a resize
-    // that causes a relayout that can bring them back.
+    // that rescales the table and can bring them back.
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
@@ -20,8 +28,8 @@ TableView::TableView(TableScene* scene, QWidget* parent)
     setRenderHint(QPainter::Antialiasing);
     setRenderHint(QPainter::SmoothPixmapTransform);
 
-    // The background comes from Theme through TableScene::drawBackground(), so
-    // the viewport must not paint its own beneath it.
+    // The room comes from Theme through drawBackground() below, which covers the
+    // whole viewport, so the viewport must not paint its own beneath it.
     setBackgroundBrush(Qt::NoBrush);
     viewport()->setAutoFillBackground(false);
 
@@ -30,12 +38,120 @@ TableView::TableView(TableScene* scene, QWidget* parent)
     // changes, and the table is small enough that the whole viewport is cheap.
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
-    // Anchored at the top left rather than the centre: with the scene rect
-    // pinned to the viewport there is nothing to keep centred, and
-    // AnchorViewCenter would fight the resize below.
+    // PLACED BY THE TRANSFORM, not by the alignment or a scroll. fitTable() puts
+    // the table exactly where fit() does and makes this view's scene rect exactly
+    // the viewport, so QGraphicsView has nothing to align and nothing to scroll -
+    // and a rect that IS the viewport, aligned to its top-left, does not move.
+    //
+    // QGraphicsView's own centring could not do this. It halves the viewport in
+    // whole pixels and truncates its scroll offset, which put the table up to a
+    // pixel off on either axis - and it centres in the whole viewport, where fit()
+    // centres in what the 10-and-8 margins leave. The anchors are moot, and
+    // NoAnchor says so rather than leaving a default to wonder about.
     setAlignment(Qt::AlignLeft | Qt::AlignTop);
     setTransformationAnchor(QGraphicsView::NoAnchor);
     setResizeAnchor(QGraphicsView::NoAnchor);
+}
+
+// The view has no frame and no scrollbars, so its own size is the viewport's.
+QSize TableView::minimumSizeHint() const
+{
+    return tablespace::minimumViewport();
+}
+
+// table.js fit(): one scale for both axes, so the table stays round; the largest
+// that fits the fit box inside the viewport's margins; and the box centred in
+// what the margins leave, which with 10 above and 8 below is a pixel under the
+// viewport's own middle.
+//
+// SET BY HAND RATHER THAN THROUGH fitInView(), which would get the same scale
+// less a 2-pixel margin of its own that nothing in the mock-up has.
+void TableView::fitTable()
+{
+    const QSizeF size = viewport()->size();
+    const qreal scale = tablespace::fitScale(size);
+
+    // A viewport with no room inside its margins - a window being created, or one
+    // squashed to nothing. The last transform stays rather than a zero one that
+    // would make it singular.
+    if(scale <= 0.0)
+        return;
+
+    const QSizeF padded(size.width() - 2.0 * tablespace::marginX,
+                        size.height() - tablespace::marginTop - tablespace::marginBottom);
+
+    // Where the box's top-left corner lands, in viewport pixels - fractional, and
+    // kept that way.
+    const QPointF corner(
+        tablespace::marginX + (padded.width() - tablespace::fitBox.width() * scale) / 2.0,
+        tablespace::marginTop + (padded.height() - tablespace::fitBox.height() * scale) / 2.0);
+
+    QTransform transform = QTransform::fromTranslate(corner.x(), corner.y());
+    transform.scale(scale, scale);
+    transform.translate(-tablespace::fitBox.left(), -tablespace::fitBox.top());
+
+    setTransform(transform);
+
+    // THIS VIEW'S scene rect, not the scene's, which stays the fit box: the
+    // viewport itself, in table space. See the constructor for why that leaves
+    // the translation above as the whole of where the table is drawn.
+    setSceneRect(transform.inverted().mapRect(QRectF(QPointF(0.0, 0.0), size)));
+}
+
+// THE ROOM, over the whole viewport. The fit box keeps the table's shape, so a
+// window of any other shape shows bands beside or above it, and the mock-up's
+// room is the viewport's background rather than the stage's - so it fills those
+// too. Through Theme, which is what keeps it replaceable (section 18.1).
+//
+// HERE RATHER THAN IN THE SCENE because the room is the viewport's, and only the
+// view knows its viewport. The scene had to work it out from whatever device it
+// was handed, by device type, and took the whole device for the viewport - which
+// is wrong for anything drawn into part of an image.
+void TableView::drawBackground(QPainter* painter, const QRectF& rect)
+{
+    if(!table)
+        return;
+
+    const QSize view = viewport()->size();
+
+    painter->save();
+
+    // IN VIEWPORT PIXELS, not table space. The painter arrives in table space,
+    // through this view's transform and whatever the caller put in front of it -
+    // nothing when painting the screen, the target's mapping under render() - so
+    // taking this view's transform back out leaves exactly the map from viewport
+    // pixels to the device.
+    painter->setWorldTransform(viewportTransform().inverted() * painter->worldTransform());
+
+    // At the pixels the room will cover, by the rule every pixmap in the table
+    // follows: the device's ratio, times any scale render() put between the
+    // viewport and the device.
+    const QPixmap room = table->currentTheme().room(view, devicepixels::effectiveRatio(*painter));
+
+    // Only the exposed part, which is what `rect` is for: a card moving in the
+    // middle of the table must not repaint the whole room behind it. Clipped to
+    // the room itself, so the source rect below never reaches outside the pixmap.
+    const QRectF exposed =
+        viewportTransform().mapRect(rect).intersected(QRectF(QPointF(0.0, 0.0), QSizeF(view)));
+
+    if(!room.isNull() && !exposed.isEmpty())
+    {
+        // THE TARGET RECT IS LOGICAL AND THE SOURCE RECT IS NOT. Qt reads a
+        // drawPixmap source rect in the PIXMAP's own pixels, and room() above
+        // rasterized this one at view * ratio - so passing the same logical rect
+        // as both samples the top-left 1/ratio of the room and stretches it over
+        // the whole viewport, with each partial repaint reading from a different
+        // wrong place besides.
+        //
+        // QRectF throughout - rounding here would put a seam in the room at the
+        // fractional ratios (1.25, 1.5) that most Linux and Windows screens use.
+        const qreal ratio = room.devicePixelRatio();
+
+        painter->drawPixmap(exposed, room,
+                            QRectF(exposed.topLeft() * ratio, exposed.size() * ratio));
+    }
+
+    painter->restore();
 }
 
 void TableView::setBottomOverlay(QWidget* overlay)
@@ -85,28 +201,35 @@ void TableView::placeOverlay()
     const int preferred = hfw > 0 ? hfw : hint.height();
 
     // ASKED OF THE SCENE, not measured off the viewport. The bottom of the table
-    // is where the HUMAN'S PLAQUE is - seatlayout puts the seated player at
-    // bottom-centre - so a strip pinned to the viewport's bottom edge lands on
-    // top of it. That is not a hypothetical: it is what C2's first run drew.
-    const QRectF band = table ? table->overlayBand() : QRectF();
+    // is where your hand and your plaque are, so a strip pinned to the viewport's
+    // bottom edge lands on top of them. That is not a hypothetical: it is what
+    // C2's first run drew, through the plaque.
+    const std::optional<qreal> floor = table ? table->overlayBottom() : std::nullopt;
 
-    // Bottom-aligned within the band, so the strip sits just above the lowest
-    // plaque and grows UPWARD over the middle of the table. That is deliberate:
-    // there is no gap between the trick and the bottom plaque to fit a strip in
-    // - thirteen pixels on a 1000x700 table - and bidding finishes before the
-    // round's first card is played, so the middle is empty while this is up.
+    // The viewport's offset in this widget, which is the strip's parent. Zero with
+    // no frame, which is this view's - but a frame added one day would otherwise
+    // move every strip.
+    const QPoint offset = viewport()->geometry().topLeft();
+
+    // FROM THE VIEWPORT'S TOP DOWN TO THE FLOOR. The strip is bottom-aligned on
+    // the floor, so it sits just above your hand and grows UPWARD over the middle
+    // of the table - deliberately: bidding finishes before the round's first card
+    // is played, so the middle is empty while this is up. And past the table's own
+    // top edge if it has to, into the room above it, which on a short, wide window
+    // is where the room is.
     //
-    // The fallback is the viewport itself, which is only reached before the
-    // first snapshot or on a table too short to have a band - and at that point
-    // there is no plaque drawn to collide with anyway.
-    const int top = band.isEmpty() ? 0 : static_cast<int>(band.top());
-    const int bottom = band.isEmpty() ? viewportSize.height()
-                                      : static_cast<int>(band.bottom());
+    // The floor is in table space, so it goes through the transform; floored to a
+    // whole pixel, so the strip's bottom edge never reaches into the row the floor
+    // falls in. With no floor - only before the first snapshot, when there is
+    // nothing drawn to collide with - the strip may use the whole viewport.
+    const int top = offset.y();
+    const int bottom = floor ? qFloor(viewportTransform().map(QPointF(0.0, *floor)).y()) + offset.y()
+                             : offset.y() + viewportSize.height();
 
-    // CLAMPED TO THE BAND, not to the viewport. A strip taller than the room
-    // above the plaque has to lose the difference somewhere, and clamping only
-    // the y below would leave the height intact and push the bottom edge back
-    // down over the plaque - the exact collision the band exists to prevent.
+    // CLAMPED ABOVE THE FLOOR, not to the viewport. A strip taller than the room
+    // above your hand has to lose the difference somewhere, and clamping only the
+    // y below would leave the height intact and push the bottom edge back down
+    // over the cards - the exact collision the floor exists to prevent.
     const int height = std::min(preferred, bottom - top);
 
     bottomOverlay->setGeometry((viewportSize.width() - width) / 2,
@@ -138,18 +261,13 @@ void TableView::resizeEvent(QResizeEvent* event)
 {
     QGraphicsView::resizeEvent(event);
 
-    if(table)
-    {
-        // THE VIEWPORT, not the widget: they differ by the frame, and a scene
-        // rect set from the widget puts the bottom of the table under the edge.
-        table->setSceneRect(QRectF(QPointF(0.0, 0.0), viewport()->size()));
-        table->relayout();
-    }
+    // THE SCALE AND NOTHING ELSE. The scene is in table space and does not know
+    // the window has changed size; nothing in it moves.
+    fitTable();
 
-    // AFTER the relayout above, and the order is load-bearing: the overlay is
-    // placed against overlayBand(), which is derived from the seat positions the
-    // relayout has just recomputed. Placed first, it would be positioned against
-    // the PREVIOUS size on every resize - correct only by one frame's delay, and
-    // visibly wrong while a window is being dragged.
+    // AFTER the scale, and the order is load-bearing: the overlay is placed by
+    // mapping overlayBottom() through the transform just set. Placed first, it
+    // would be positioned against the PREVIOUS scale on every resize - correct
+    // only by one frame's delay, and visibly wrong while a window is dragged.
     placeOverlay();
 }

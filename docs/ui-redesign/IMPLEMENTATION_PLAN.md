@@ -383,7 +383,7 @@ chosen in `NewGameDialog`).
 | Current-trick panel | `PromptBar` (bottom) | Pinned top-right panel (phase 8) |
 | Round history / Last trick buttons | Nothing | New (phases 8 and 11) |
 | Menu bar | `QMenuBar` with a View menu; main-menu page and pause menu | Styled bar, new top-level actions (phase 9) |
-| Bid strip in the felt | `BidStrip` overlay in `TableScene::overlayBand()` | Restyle, reposition (phase 10) |
+| Bid strip in the felt | `BidStrip` overlay above `TableScene::overlayBottom()` | Restyle, reposition (phase 10) |
 
 **Recommended structure for the pinned panels.** Keep them as `QWidget`s (so their existing pure
 functions and tests survive) but host them **in the scene through `QGraphicsProxyWidget`**, so they
@@ -493,7 +493,7 @@ Done when: the app still looks as it did, but the resources, fonts and tokens ex
   instead, which keeps ~7 MB of textures out of that budget. Load any other large art the same
   way.
 
-### Phase 2: table space and the view transform
+### Phase 2: table space and the view transform ✅ COMPLETE
 
 Files: `src/table/TableView.*`, `src/table/TableScene.*`, `src/paint/Theme.*`, tests
 `TableViewTests.cpp`, `TableSceneTests.cpp`, `ThemeTests.cpp`.
@@ -514,6 +514,84 @@ Files: `src/table/TableView.*`, `src/table/TableScene.*`, `src/paint/Theme.*`, t
 Done when: resizing the window scales everything uniformly, with no layout jumps, and the tests that
 remain pass.
 
+**Outcome:**
+
+- **The count is 279 tests**, passing on the `default`, `release` and `clang` presets with Qt 6.11.2
+  and building without a warning. The phase started from 268, not phase 1's 267: phase 1's review
+  added a case after its outcome was written. Six cases were retired (the two `Theme::cardHeightFor()`
+  cases, and the four `TableSceneTests` cases that asserted `handRect()` / `tableRect()`) and 17 added.
+  **The review of PR #27 brought it to 290.**
+- **Three decisions by the owner, 2026-10-17:**
+  - **Interim seats:** today's plaques on one fixed ellipse,
+    `seatlayout::seatCentres(n, humanSeat, ringRect(centre, 662, 593))`, at a plaque unit of 150. That
+    is 275×119, close to section 2.5's 280×118. The three constants are in `TableScene.cpp`'s anonymous
+    namespace, and **phase 4 deletes them** when it brings in section 2.5's position table. The
+    diagonal plaques reach about 25 units onto the wooden rim until then, never the felt.
+  - **The room now:** `Theme::room()` paints section 2.2's gradient for the table page.
+    `Theme::background()` stays green for the main menu and the Card art window.
+  - **A minimum table scale of 0.30**, decided in PR #27's review. `tablespace::minimumViewport()`
+    (596×416) is `TableView`'s minimum size hint, and the layouts carry it up to the window, which
+    stops at 832×580 with the scoreboard. At the floor, hand cards are about 68 px and plaque names
+    about 9 px.
+- **What later phases take from here:**
+  - **Coordinates:** `src/table/TableSpace.h`, a namespace of the section-2 numbers (`centre`,
+    `fitBox`, `feltRadius`, `handTop`, the hand's card height, the view margins, `minimumScale`), plus
+    `fitScale()`, `minimumViewport()` and `playedCardHeight()`. Phase 5 adds the rack card's height
+    with the racks. No other file writes those numbers. The scene rect is `fitBox` and never
+    changes. `TableScene::relayout()` is private and runs on a snapshot or a theme change only; a
+    resize changes `TableView`'s transform and nothing else, which `TableViewTests` asserts item by
+    item.
+  - **Placement:** the hand is at section 2.8's height and card size, still today's flat fan
+    (phase 7). Played cards use section 2.7's sizes, on one ring 60 inside the felt along each
+    seat's nominal angle, with yours above your hand. Phase 6 turns them towards the racks.
+  - **Stacking:** hand at z 1, plaques at z 2, so your plaque covers the bottom of your hand.
+    Phase 3 sets out the rest of section 3's z ladder. **Drawn on top is not on top for the mouse:**
+    a `QGraphicsItem` that does not take a press passes it to the item beneath. So `SeatItem` takes
+    presses and hover over its drawn `shape()`, and clicking your own name never plays the card under
+    it. Phase 4's panel, and anything else a later phase lays over the hand, must do the same.
+  - **The bid strip's floor:** `TableScene::overlayBottom()` is the table-space y above your hand.
+    `TableView` maps it to the viewport, and the strip rises from there, as far as the viewport's
+    top if it has to.
+- **The B1 crispness contract is `devicepixels::effectiveRatio(painter)`** (`src/paint/DevicePixels.h`).
+  Under a scaled view, a pixmap rasterized at its table-space size would be resampled on its way to the
+  screen. The function returns the paint device's ratio times
+  `QStyleOptionGraphicsItem::levelOfDetailFromTransform()`, so a pixmap is rasterized at the size it
+  lands. It reads the ratio from the painter's *device*, not from a `widget` argument, so a scene
+  rendered into a HiDPI image gets that image's ratio. The ratio is below 1 on a small window, which Qt
+  draws correctly. **Every pixmap a later phase blits in the scene must call it:** phase 3's cached
+  table, phase 4's `Theme::avatar()` portraits, phase 5's rack cards. Tests render a card at half
+  scale, and into a ratio-2 image, and compare pixel for pixel.
+- **Pixmap caches key the ratio on `devicepixels::ratioKey()`, in ten-thousandths.** The ratio is
+  continuous now, and the hundredths key the caches used to share served a resized window another
+  size's pixmap (127 px for 125), resampled after all. `CardRenderer` and `Theme` both use it.
+- **The room is the view's background.** `TableView::drawBackground()` draws it in viewport pixels
+  over the whole viewport, letterbox included, through the scene's `currentTheme()`. The scene used to
+  draw it, and had to work out the viewport's logical size from the paint device by type. That is
+  harder than it looks, because `QPaintDevice` has no `deviceIndependentSize()`: a widget reports
+  logical pixels, while an image or a pixmap reports physical ones beside its ratio. It also took the
+  whole device for the viewport, which is wrong for a render into part of an image.
+- **Pitfall: `fitInView()` adds a 2-pixel margin of its own, and `Qt::AlignCenter` centres in whole
+  pixels.** The scale is set by hand. QGraphicsView's centring halves the viewport with integer
+  division and truncates its scroll offset, which measured almost a pixel off at 1920×1080, and it
+  centres in the whole viewport where fit() centres in what the 16 / 10 / 8 margins leave.
+  `TableView::fitTable()` therefore puts fit()'s offset into the transform and sets the view's scene
+  rect to the viewport itself, aligned top-left, so the view has nothing to align or scroll. The
+  centring test is exact to 1e-6.
+- **Pitfall: a resize re-rasterizes every card on the table.** The ratio changes with the scale, so
+  dragging the window edge misses the pixmap cache for every card on every frame. `CardRenderer` keeps
+  each card's parsed `QSvgRenderer`, which took a 20-card frame from 135 ms to 75 ms per resize
+  step. The rest is the court cards' art: J, Q and K take 8–11 ms each to render at about 124 px,
+  against 0.1–0.6 ms for a pip card. A real frame still costs about 20–30 ms per step. **Phase 3 takes
+  this on (its task 4):** defer re-rasterizing until a resize settles. Quantizing the scale would undo
+  the `ratioKey()` fix.
+- **Pitfall: listing a file in `tests/CMakeLists.txt` before the file exists.** The automatic
+  re-configure fails on the missing source and leaves a test target that still links, with no test
+  sources in it, so `desktop_tests` reports **0 test cases**. A fresh `cmake --preset` fixes it.
+  This is the count check of `docs/LOCAL_VERIFICATION.md` again.
+- **Removed as dead once their callers went:** `TrickItem::cardFootprint()` and
+  `HandItem::liftFraction()`. Both existed only so the old layout could reserve room before any card
+  existed.
+
 ### Phase 3: the table itself
 
 Files: new `src/table/TableTopItem.h/.cpp` (wood, bead, felt, gold circle), new
@@ -525,8 +603,18 @@ Files: new `src/table/TableTopItem.h/.cpp` (wood, bead, felt, gold circle), new
 2. Z order, bottom to top: room (background) < table < logo < racks < played cards < lead rhombus <
    hand < human's panel < other panels < pinned HUD < bid strip < modal sheets.
 3. Compare with `screenshots/table-4-players.jpg` ignoring seats and cards.
+4. **Settle a resize before re-rasterizing**, carried over from phase 2's review (PR #27). Every
+   pixmap in the scene is rasterized at the device ratio × the view's scale, so each step of a window
+   drag misses every cache. Phase 2 measured 20–30 ms per step from the court cards alone, and the
+   composed table from task 1 adds to that. While a resize is in progress, draw each pixmap item (the
+   cards, the composed table) from what it already holds, scaled to its rect, and re-rasterize at the
+   exact ratio about 150 ms after the last resize event. Build it as one mechanism in `TableView`
+   (for example a settling flag the items read, plus a single-shot timer that repaints the scene), not
+   a copy per item. Do not quantize the ratio instead: that brings back the soft, misplaced cards
+   `devicepixels::ratioKey()` fixed.
 
-Done when: an empty table at 1920×1080 matches the mock-up's table, rim and logo.
+Done when: an empty table at 1920×1080 matches the mock-up's table, rim and logo, and dragging the
+window edge with a full table on it stays smooth, with each frame of the drag under about 8 ms.
 
 ### Phase 4: seats and name panels
 
@@ -629,7 +717,7 @@ Done when: the menu bar matches the mock-up and every item works.
 ### Phase 10: bid strip and sheets
 
 Files: `src/ui/BidStrip.*`, `src/ui/RoundSheet.*`, `src/ui/GameOverPanel.*`,
-`src/ui/PauseOverlay.*`, `src/ui/MainMenuPage.*`, `src/table/TableScene.*` (`overlayBand()`), tests.
+`src/ui/PauseOverlay.*`, `src/ui/MainMenuPage.*`, `src/table/TableScene.*` (`overlayBottom()`), tests.
 
 1. Bid strip look and position per section 2.13 (table (428, 486), width 680, drawn over the felt).
 2. Restyle the sheets per section 2.13. Their content and buttons stay; only the look changes.

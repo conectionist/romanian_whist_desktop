@@ -3,7 +3,6 @@
 #include "table/CardItem.h"
 
 #include <QPainter>
-#include <QtMath>
 
 #include <cmath>
 
@@ -16,7 +15,9 @@ namespace
 //
 // KEPT SMALL BECAUSE IT COSTS CLEARANCE. A card tilted by t occupies
 // w*cos(t) + h*sin(t) across, which at nine degrees is a sixth wider than the
-// card - and that sixth comes straight off the gap the ring was sized to leave.
+// card - and that sixth comes straight off the gap between neighbours. The
+// redesign's phase 6 replaces it with a turn that lines each card up with its
+// owner's rack.
 constexpr qreal maximumTilt = 6.0;
 
 constexpr qreal pipRadiusInCards = 0.045;
@@ -28,16 +29,6 @@ TrickItem::TrickItem(const CardRenderer* renderer, QGraphicsItem* parent)
     : QGraphicsObject(parent)
     , renderer(renderer)
 {
-}
-
-QSizeF TrickItem::cardFootprint(QSizeF cardSize)
-{
-    const qreal tilt = qDegreesToRadians(maximumTilt);
-    const qreal cosine = std::cos(tilt);
-    const qreal sine = std::sin(tilt);
-
-    return QSizeF(cardSize.width() * cosine + cardSize.height() * sine,
-                  cardSize.width() * sine + cardSize.height() * cosine);
 }
 
 CardItem* TrickItem::cardAt(std::size_t index)
