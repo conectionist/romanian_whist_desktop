@@ -3,8 +3,11 @@
 #include <QPaintDevice>
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
+#include <QTransform>
 #include <QVariant>
 #include <QWidget>
+
+#include <cmath>
 
 namespace
 {
@@ -36,6 +39,16 @@ void devicepixels::setFreeze(QWidget& widget, std::optional<qreal> factor)
 {
     // An invalid QVariant removes the property, so a thawed widget carries nothing.
     widget.setProperty(freezeProperty, factor ? QVariant(*factor) : QVariant());
+}
+
+QPointF devicepixels::snapped(const QPainter& painter, QPointF point)
+{
+    // The device transform carries the device's ratio as well as the painter's
+    // own transform, so this is the point in the device's actual pixels.
+    const QTransform toDevice = painter.deviceTransform();
+    const QPointF onDevice = toDevice.map(point);
+
+    return toDevice.inverted().map(QPointF(std::round(onDevice.x()), std::round(onDevice.y())));
 }
 
 int devicepixels::ratioKey(qreal ratio)

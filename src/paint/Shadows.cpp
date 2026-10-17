@@ -186,8 +186,16 @@ void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPoi
 
     // Where the shadow can fall, in the painter's units: the moved shape, grown by
     // the blur's reach.
-    const QRectF bounds =
+    const QRectF reached =
         shape.boundingRect().translated(offset).adjusted(-reach, -reach, reach, reach);
+
+    // ITS CORNER ON A WHOLE DEVICE PIXEL, so the picture below is blitted 1:1 onto
+    // the pixels it was rasterized for. Laid at a fraction, the blit rounds it, and
+    // the shadow and the cut-out in it slide by up to half a pixel off the shape
+    // they were made from - a gap between a panel and its shadow on one side, the
+    // shadow under its edge on the other. The half pixel the corner may move in by
+    // is at the blur's reach, where there is nothing left to draw.
+    const QRectF bounds(devicepixels::snapped(painter, reached.topLeft()), reached.bottomRight());
 
     const QSize pixels(std::max(1, qCeil(bounds.width() * ratio)),
                        std::max(1, qCeil(bounds.height() * ratio)));

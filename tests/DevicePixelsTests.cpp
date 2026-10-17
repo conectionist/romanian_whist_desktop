@@ -5,6 +5,7 @@
 
 #include <QImage>
 #include <QPainter>
+#include <QPointF>
 #include <QTransform>
 #include <QWidget>
 
@@ -114,6 +115,22 @@ TEST_CASE("A freeze on a widget leaves a painter on an image alone", "[device-pi
     QPainter painter(&image);
 
     REQUIRE(devicepixels::effectiveRatio(painter) == Catch::Approx(1.5));
+}
+
+// THE DEVICE'S PIXELS, not the painter's units: at a ratio of 2 and a painter
+// moved 0.3, the point 10.1 lands 20.8 pixels in, rounds to 21, and comes back as
+// 10.2. A snap that ignored the ratio would give 9.7.
+TEST_CASE("A snapped point lands on a whole device pixel", "[device-pixels]")
+{
+    QImage image = canvas(2.0);
+    QPainter painter(&image);
+
+    painter.translate(0.3, 0.0);
+
+    const QPointF snapped = devicepixels::snapped(painter, QPointF(10.1, 4.0));
+
+    REQUIRE(snapped.x() == Catch::Approx(10.2));
+    REQUIRE(snapped.y() == Catch::Approx(4.0));
 }
 
 // Ten-thousandths: the two ratios a resize really produced, which a hundredths

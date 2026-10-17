@@ -1,6 +1,7 @@
 #ifndef DEVICE_PIXELS_H
 #define DEVICE_PIXELS_H
 
+#include <QPointF>
 #include <QtGlobal>
 
 #include <optional>
@@ -54,6 +55,14 @@ qreal effectiveRatio(const QPainter& painter);
 // A FACTOR, not a scale to put in place of the live one, so an item drawn at a
 // scale of its own keeps it.
 void setFreeze(QWidget& widget, std::optional<qreal> factor);
+
+// `point`, moved by under half a pixel so that it lands on a WHOLE DEVICE PIXEL
+// through the painter's transform and the device's ratio. A picture laid at a
+// fraction of a pixel is sampled between its pixels or rounded by the blit,
+// either of which slides it off what it was made to line up with - a texture's
+// grain blurred, a shadow's cut-out beside its shape. For a painter that only
+// scales and translates, which is every painter on the table.
+QPointF snapped(const QPainter& painter, QPointF point);
 
 // A ratio as a cache key, quantized to TEN-THOUSANDTHS.
 //

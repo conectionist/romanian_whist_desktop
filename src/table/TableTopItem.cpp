@@ -20,7 +20,6 @@
 #include <QtMath>
 
 #include <algorithm>
-#include <cmath>
 
 namespace
 {
@@ -118,10 +117,9 @@ QPainterPath roundedBand(const QRectF& outer, qreal outerRadius, const QRectF& i
 // it - 105 units in at a ratio of 0.767 is 80.6 pixels - and a brush laid half a
 // pixel off the grid is sampled between its texels, every one of them blurred
 // into its neighbour. That is the grain going soft, measured against the mock-up
-// as a fifth less edge in the wood. `origin` is where the picture's own pixel
-// grid starts, in table units, so the corner can be snapped onto it.
-void fillWithTexture(QPainter& painter, const QPixmap& texture, qreal radius, qreal ratio,
-                     QPointF origin)
+// as a fifth less edge in the wood. devicepixels::snapped() puts the corner on
+// the picture's own pixel grid.
+void fillWithTexture(QPainter& painter, const QPixmap& texture, qreal radius, qreal ratio)
 {
     if(texture.isNull())
         return;
@@ -133,8 +131,7 @@ void fillWithTexture(QPainter& painter, const QPixmap& texture, qreal radius, qr
 
     const QPixmap scaled = texture.scaled(pixels, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
-    const QPointF onGrid = (square.topLeft() - origin) * ratio;
-    const QPointF corner = origin + QPointF(std::round(onGrid.x()), std::round(onGrid.y())) / ratio;
+    const QPointF corner = devicepixels::snapped(painter, square.topLeft());
 
     QTransform placed = QTransform::fromTranslate(corner.x(), corner.y());
     placed.scale(1.0 / ratio, 1.0 / ratio);
@@ -148,7 +145,7 @@ void fillWithTexture(QPainter& painter, const QPixmap& texture, qreal radius, qr
 // THE WOOD, THE BEAD AND THE FELT, in page.html's paint order. CSS paints an
 // element's outer shadows, then its background, then its inset shadows - the last
 // one listed lowest - and then its children.
-void paintTable(QPainter& painter, const Theme& theme, qreal ratio, QPointF origin)
+void paintTable(QPainter& painter, const Theme& theme, qreal ratio)
 {
     const Theme::TablePalette& table = theme.table;
 
@@ -161,7 +158,7 @@ void paintTable(QPainter& painter, const Theme& theme, qreal ratio, QPointF orig
 
     // The rim, the texture over its base colour.
     painter.fillPath(disc(tablespace::woodRadius), table.woodBase);
-    fillWithTexture(painter, theme.woodTexture(), tablespace::woodRadius, ratio, origin);
+    fillWithTexture(painter, theme.woodTexture(), tablespace::woodRadius, ratio);
 
     // Its inset shadows, bottom up: the blur of 22, the 4-unit highlight, the
     // 2-unit dark stroke - which leaves the highlight showing as a fine warm line
@@ -190,7 +187,7 @@ void paintTable(QPainter& painter, const Theme& theme, qreal ratio, QPointF orig
 
     // The felt: its base colour, its texture, and the vignette over both.
     painter.fillPath(disc(tablespace::feltRadius), table.feltBase);
-    fillWithTexture(painter, theme.feltTexture(), tablespace::feltRadius, ratio, origin);
+    fillWithTexture(painter, theme.feltTexture(), tablespace::feltRadius, ratio);
 
     // THE VIGNETTE IS SIZED TO THE FELT'S BOX, NOT TO THE FELT. radial-gradient(circle)
     // reaches farthest-corner, the corner of the 880 box, 622 out - so the felt's
@@ -473,7 +470,7 @@ QPixmap tabletop::render(const Theme& theme, qreal ratio)
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     painter.translate(-box.topLeft());
 
-    paintTable(painter, theme, ratio, box.topLeft());
+    paintTable(painter, theme, ratio);
     paintLogo(painter, theme);
 
     return picture;

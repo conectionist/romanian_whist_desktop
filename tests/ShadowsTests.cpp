@@ -214,3 +214,30 @@ TEST_CASE("A shadow is rasterized at the pixels it lands on", "[shadows]")
     REQUIRE(image.pixelColor(400 + 20, 400).alphaF()
             == Catch::Approx(profile(10.0, blur)).margin(0.04));
 }
+
+// OFF THE PIXEL GRID, the shadow and its cut-out land where the shape does. A
+// shape whose left edge falls 0.3 into a pixel and whose right edge falls 0.7 into
+// one has rims that mirror each other, so its shadow does too - but only if the
+// shadow's picture is laid on the device's pixels. Laid at the fraction and
+// rounded by the blit, the whole shadow slides, the hole with it, toward one side.
+TEST_CASE("A shape's shadow off the pixel grid is laid where the shape is", "[shadows]")
+{
+    QImage image = canvas();
+
+    QPainterPath box;
+    box.addRect(QRectF(100.0, 100.0, 120.4, 120.0));
+
+    {
+        QPainter painter(&image);
+        painter.translate(0.3, 0.6);
+        shadows::drawShapeShadow(painter, box, QPointF(), 10.0, black);
+    }
+
+    // Along a row through the middle: pixel 100 holds the left rim, 220 the right.
+    for(int k = 0 ; k <= 8 ; k++)
+    {
+        INFO(k << " pixels out from the rim");
+        REQUIRE(image.pixelColor(100 - k, 160).alphaF()
+                == Catch::Approx(image.pixelColor(220 + k, 160).alphaF()).margin(0.01));
+    }
+}
