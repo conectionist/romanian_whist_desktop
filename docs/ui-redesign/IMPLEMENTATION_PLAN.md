@@ -147,17 +147,23 @@ All centred on (768, 512). `page.html` `.wood`, `.felt`, `.felt-line`, `.logo`.
 | Table shadow | circle r = 510 | blurred 70, `rgba(0,0,0,0.75)`, no offset (light is straight above) |
 | Wood | circle r = 510 | `table_wood.png` scaled to 1020×1020 over `#5a331a`; inset stroke 2 `#2a160a`, then 4 `rgba(255,210,150,0.12)`; inner shadow blur 22 `rgba(0,0,0,0.5)` |
 | Bead | three rings just outside the felt | r 440→449 `#3b210f`, 449→451 `#7a4c27`, 451→453 `#2a160a` |
-| Felt | circle r = 440 | `table_felt.png` scaled to 880×880 over `#1d5a3a`, then a radial vignette: `rgba(255,255,255,0.07)` at 0%, transparent at 45%, `rgba(0,0,0,0.38)` at 100%; inner shadows blur 60 `rgba(0,0,0,0.55)` and blur 18 `rgba(0,0,0,0.45)` |
-| Gold circle | circle r = **416**, 1.5 wide | `rgba(201,164,92,0.2)` |
+| Felt | circle r = 440 | `table_felt.png` scaled to 880×880 over `#1d5a3a`, then a radial vignette: `rgba(255,255,255,0.07)` at 0%, transparent at 45%, `rgba(0,0,0,0.38)` at 100%; inner shadows blur 60 `rgba(0,0,0,0.55)` and blur 18 `rgba(0,0,0,0.45)`. **The vignette's 100% is at r ≈ 622, not at the felt's edge**: it is `radial-gradient(circle, …)`, whose default size is farthest-corner of the 880 box, so the edge at 440 shows the dark stop at about 0.18 |
+| Gold circle | circle r = **416**, 1.5 wide | `rgba(201,164,92,0.2)`. **r 416 is its outer edge**: the mock-up draws it as a CSS border inside a box inset 24, so the line runs 414.5–416, centred at 415.25 |
 | Logo plaque | 243 × 128 centred (270×142 scaled 0.9) | see below |
 
 **Logo plaque** (`.logo`, scaled 0.9 about its centre): radial gradient at (50%, 40%) `#2a6142` 0% →
-`#17402a` 70% → `#0f2c1d` 100%; border 2 `#b8924a`, radius 14; inner line inset 6, 1 px
-`rgba(232,200,130,0.55)`, radius 9. Text "ROMANIAN" / "WHIST" on two lines, Cinzel Decorative 700,
-37 px, line height 1.0, filled with a vertical gradient `#fbe7b2` 0% → `#e2b866` 48% → `#a77a35` 100%
-and a 2 px drop shadow `rgba(0,0,0,0.55)`. A ♣ in `#d9b46a`, 22 px, 16 px in from each side,
-vertically centred. A thin ornament line above and below the text (120×12: two strokes with a small
-diamond in the middle; see the inline SVGs in `page.html`). Draw it under the played cards.
+`#17402a` 70% → `#0f2c1d` 100%, sized farthest-corner over the padding box; border 2 `#b8924a`, radius
+14; inner line inset 6, 1 px `rgba(232,200,130,0.55)`, radius 9. **It is `class="panel logo"`, so it
+also has `.panel`'s box-shadows:** a drop shadow 0 12 26 `rgba(0,0,0,0.55)`, and inset rings of 3 px
+`rgba(18,12,7,0.9)` over 4 px `rgba(201,164,92,0.3)`, which leave a 1 px gold line 3 px inside the
+border. Text **"Romanian" / "Whist", in mixed case** (Cinzel Decorative draws a lowercase letter as a
+small capital, so uppercase would look different) on two lines, Cinzel Decorative 700, 37 px, line
+height 1.0, letter-spacing 0.01em, filled with one vertical gradient over both lines `#fbe7b2` 0% →
+`#e2b866` 48% → `#a77a35` 100%, and a 2 px drop shadow `rgba(0,0,0,0.55)`. A ♣ in `#d9b46a`, 22 px,
+16 px in from each side of the padding box, vertically centred. **Two different ornaments**, 120×12,
+stroke 1.2 in `#d9b46a`: above the text two straight strokes with a diamond between and a dot either
+side of it; below, the same strokes as waves and the diamond, no dots (the inline SVGs in
+`page.html`). Draw it under the played cards.
 
 ### 2.5 Seats
 
@@ -592,7 +598,7 @@ remain pass.
   `HandItem::liftFraction()`. Both existed only so the old layout could reserve room before any card
   existed.
 
-### Phase 3: the table itself
+### Phase 3: the table itself ✅ COMPLETE
 
 Files: new `src/table/TableTopItem.h/.cpp` (wood, bead, felt, gold circle), new
 `src/table/LogoItem.h/.cpp` (or one item for both), `TableScene.cpp`.
@@ -615,6 +621,90 @@ Files: new `src/table/TableTopItem.h/.cpp` (wood, bead, felt, gold circle), new
 
 Done when: an empty table at 1920×1080 matches the mock-up's table, rim and logo, and dragging the
 window edge with a full table on it stays smooth, with each frame of the drag under about 8 ms.
+
+**Outcome:**
+
+- **The count is 309 tests** (290 + 19, none retired), passing on the `default`, `release` and
+  `clang` presets with Qt 6.11.2 and building without a warning. **The review of PR #28 brought it
+  to 322**, still with none retired.
+- **The empty table matches the mock-up.** The screenshot tool's new `table-empty.png` is a bare
+  `TableView` at 1920×1034: the mock-up's viewport less its 46 px menu bar, so both tables are drawn at
+  one scale in one place.
+  - The rim's outer edge lands on the same pixel radius as the mock-up's in each of 8 directions.
+  - Averaged over 52 angles, the luminance across the rim (felt, bead, wood, shadow) is within ±3.5
+    levels of the mock-up's.
+  - The wood grain correlates with the mock-up's at 0.87, within a pixel.
+  - The logo's lettering, ornaments and lines are in place.
+  - What still differs: the ♣ comes from a fallback font, as it does in the browser. On Linux it is
+    about 20% larger and 3 units lower than in the mock-up's picture.
+- **Resizing is smooth.** `tests/ResizeTiming.cpp` (`[.timing]`, hidden) drags a full six-player table
+  on the release build, offscreen, at 1600×900.
+  - A drag frame now costs 7.3–8.2 ms at the median over six runs, and 8–15 ms at worst. Every step
+    used to cost about 80 ms, because it re-rasterized every card and the table.
+  - About 5–6 ms of the frame is painting, measured with the window held at one size: the room about
+    2.5, the cards about 1.2, the plaques up to 1.2, and the table under 1. The rest is the window
+    itself being resized on each step.
+  - The one frame when a resize settles costs about 75 ms, most of it the court cards' SVG art.
+  - After the review of #28 a drag's first step is drawn sharp too, so a one-off resize is never
+    soft. That step costs 65–68 ms, once per drag. The frames after it stay at 7.2–7.5 ms median,
+    8.1–8.3 ms worst, over four runs.
+- **What later phases take from here:**
+  - **The stacking order:** `tablespace::z` in `TableSpace.h`, with gaps of ten (`table`, `racks`,
+    `playedCards`, `leadMark`, `hand`, `humanPanel`, `panels`, `hud`). Phase 5's racks and phase 6's
+    rhombus take their rungs from it.
+  - **Shadows:** `src/paint/Shadows.h`, CSS `box-shadow` with CSS's blur numbers.
+    - `drawCircleShadow()` is analytic, from the error function. `Side::Beneath` is the outer shadow
+      for an opaque circle drawn over it, filled as a disc so the two meet in one anti-aliased edge.
+    - `drawShapeShadow()` blurs any path with three box passes and cuts the shape out by its own
+      anti-aliased coverage, laid on the device's pixels so the cut-out lines up with the shape.
+      Phases 4 and 8 use it for the panels' 0 12 26 shadow, phase 6 for the gold glows.
+    - `shadows::reach(blur)` is how far a shadow reaches; size anything that holds one by it.
+  - **Gradients:** `gradients::cssRadial()` is CSS's farthest-corner `radial-gradient()`. It draws
+    the room, the felt's vignette and the logo.
+  - **The colours:** section 2.4's colours are in `Theme::table`, from `woodDark` to `logoOrnament`
+    (44 tokens in all).
+  - **The table:** `TableTopItem`, a cached `tabletop::render(theme, ratio)` holding the table and
+    its logo in one picture.
+  - **Settling a resize:**
+    - A resize's first step is drawn sharp, at full cost, so a one-off resize (maximize, a dock)
+      is never soft. A second resize within 150 ms is a drag: `TableView` freezes a scale the drag
+      has already painted at, and sets it on its viewport with `devicepixels::setFreeze()`.
+    - The freeze is a factor, the frozen scale over the live one. `devicepixels::effectiveRatio()`
+      applies it to any painter on that viewport, so caches hit and Qt scales what they hold.
+      A scene rendered into an image paints on the image and gets its exact ratio.
+    - It starts on a change of size, not of scale, so a wide window dragged sideways (same scale)
+      still spares the room.
+    - `TableView` ends the freeze 150 ms after the last resize event, or at once through
+      `finishResize()`.
+    - **Phase 4's portraits and phase 5's rack cards have nothing to pass:** asking
+      `effectiveRatio()`, as every pixmap does, is enough.
+  - **Read-only counters for tests:** `CardRenderer::rasterizations()`, `TableTopItem::renders()`,
+    `TableScene::cardRenderer()` / `tableTop()`, `TableView::isSettling()`.
+- **Where the build departed from this phase's plan, and why:**
+  - **The room is filled straight from its gradient while a resize settles**, through
+    `Theme::roomBrush()`, which `paintRoom()` also uses. The plan had the last room stretched.
+    Measured in the real frame, a stretched room cost 8.9 ms a frame, painting a new room each step
+    10.6, and the gradient fill 7.4. A micro-benchmark of the room on its own had said the opposite.
+  - **The letter spacing is `QFont::AbsoluteSpacing` 0.37.** CSS's 0.01em is a fixed amount after
+    every letter, which `PercentageSpacing` is not.
+  - **The logo is part of the table's picture**, not a `LogoItem`, because nothing in the ladder comes
+    between them.
+- **Pitfall: Qt's raster engine draws clip paths aliased.** A textured disc clipped to a circle has
+  a jagged rim. Everything on the table is an anti-aliased fill instead: the textures are brushes, and
+  the bead is stacked discs under the felt.
+- **Pitfall: a texture brush half a pixel off the grid blurs every texel.** The disc's corner falls
+  at 80.6 px at a ratio of 0.767, so each texture's corner is snapped to a whole pixel with
+  `devicepixels::snapped()`. Before the snap, the grain's edge energy was 16.6 against the mock-up's
+  21.3; after it, 20.8. A shape's shadow is snapped the same way.
+- **Pitfall: CSS's paint order.** Outer shadows go under the background. Inset shadows go over it,
+  with the last one listed lowest. The border goes over the inset shadows. And `transparent` in a CSS
+  gradient blends premultiplied, which Qt's default `ColorInterpolation` also does, so one
+  transparent stop ports as it is (`GradientsTests.cpp`). Don't switch to `ComponentInterpolation`:
+  that one passes through grey.
+- **Pitfall: a Catch2 test name with a comma cannot be run by its name.** The comma separates
+  filters, so `"While a resize settles, no card…"` matches nothing: Catch2 prints "No tests ran"
+  and exits 2. Leave commas out of new test names; for an old one, use a wildcard,
+  `"While a resize settles*"`.
 
 ### Phase 4: seats and name panels
 

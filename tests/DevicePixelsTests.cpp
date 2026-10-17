@@ -5,7 +5,11 @@
 
 #include <QImage>
 #include <QPainter>
+#include <QPointF>
 #include <QTransform>
+#include <QWidget>
+
+#include <optional>
 
 // THE ONE RULE FOR HOW MANY PIXELS A PIXMAP NEEDS, and the one quantization every
 // pixmap cache keys that number on. Both have a right answer that does not need a
@@ -24,6 +28,21 @@ QImage canvas(qreal ratio)
 
     return image;
 }
+
+// A widget that asks effectiveRatio() from its own paint event, which is the only
+// place a painter can be opened on a widget.
+class RatioProbe : public QWidget
+{
+public:
+    std::optional<qreal> seen;
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        seen = devicepixels::effectiveRatio(painter);
+    }
+};
 
 }
 
@@ -62,6 +81,56 @@ TEST_CASE("The effective ratio ignores rotation and translation", "[device-pixel
     painter.setWorldTransform(transform);
 
     REQUIRE(devicepixels::effectiveRatio(painter) == Catch::Approx(0.75));
+}
+
+// A RESIZE'S FREEZE, which every pixmap item on a frozen view gets without asking:
+// the live ratio times the factor, until the freeze is lifted.
+TEST_CASE("A frozen widget's painters get its live ratio times the freeze", "[device-pixels]")
+{
+    RatioProbe probe;
+    probe.resize(32, 32);
+
+    const qreal live = probe.devicePixelRatioF();
+
+    devicepixels::setFreeze(probe, 0.5);
+    probe.grab();
+
+    REQUIRE(probe.seen.has_value());
+    REQUIRE(*probe.seen == Catch::Approx(live * 0.5));
+
+    devicepixels::setFreeze(probe, std::nullopt);
+    probe.grab();
+
+    REQUIRE(*probe.seen == Catch::Approx(live));
+}
+
+// The freeze is the widget's: a scene rendered into an image while its view is
+// frozen is drawn at the image's own pixels.
+TEST_CASE("A freeze on a widget leaves a painter on an image alone", "[device-pixels]")
+{
+    QWidget frozen;
+    devicepixels::setFreeze(frozen, 0.5);
+
+    QImage image = canvas(1.5);
+    QPainter painter(&image);
+
+    REQUIRE(devicepixels::effectiveRatio(painter) == Catch::Approx(1.5));
+}
+
+// THE DEVICE'S PIXELS, not the painter's units: at a ratio of 2 and a painter
+// moved 0.3, the point 10.1 lands 20.8 pixels in, rounds to 21, and comes back as
+// 10.2. A snap that ignored the ratio would give 9.7.
+TEST_CASE("A snapped point lands on a whole device pixel", "[device-pixels]")
+{
+    QImage image = canvas(2.0);
+    QPainter painter(&image);
+
+    painter.translate(0.3, 0.0);
+
+    const QPointF snapped = devicepixels::snapped(painter, QPointF(10.1, 4.0));
+
+    REQUIRE(snapped.x() == Catch::Approx(10.2));
+    REQUIRE(snapped.y() == Catch::Approx(4.0));
 }
 
 // Ten-thousandths: the two ratios a resize really produced, which a hundredths

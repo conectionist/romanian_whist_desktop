@@ -8,6 +8,7 @@
 #include <QPixmap>
 #include <QSize>
 
+#include <cstddef>
 #include <memory>
 #include <unordered_map>
 
@@ -79,6 +80,11 @@ public:
     // art with a different aspect changes one function rather than the layout.
     QSize sizeForHeight(qreal height) const;
 
+    // How many pictures this has painted rather than found in its cache: faces
+    // and backs both. READ-ONLY and for tests, which are how a window being resized
+    // is shown to leave the cards alone until it settles (TableViewTests).
+    std::size_t rasterizations() const { return misses; }
+
 private:
     // Both produce a QImage rather than a QPixmap, and both take PHYSICAL
     // pixels. The device pixel ratio is stamped on in one place, at the end of
@@ -114,6 +120,9 @@ private:
     // every frame, and an unbounded map would grow without limit for as long as
     // the drag lasted. QCache evicts the least recently used instead.
     mutable QCache<quint64, QPixmap> cache;
+
+    // See rasterizations().
+    mutable std::size_t misses = 0;
 };
 
 #endif

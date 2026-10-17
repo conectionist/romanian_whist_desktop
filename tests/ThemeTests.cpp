@@ -429,7 +429,7 @@ TEST_CASE("The table page is the same dark palette in every scheme", "[theme]")
 // THE CACHES COMPARE EVERY COLOUR BY CONSTRUCTION: what they store is a copy of
 // ThemeColours, compared with its defaulted operator==, so no list of members
 // exists anywhere for a new colour to be left off. One table colour stands for
-// all twenty-three here - a case per member would test the compiler.
+// all forty-four here - a case per member would test the compiler.
 //
 // The LAST member, because a hand-written comparison that stopped short would
 // miss it first; and every cache, because each keeps its own copy - the room's
@@ -446,8 +446,8 @@ TEST_CASE("Recolouring a table colour invalidates every cache", "[theme]")
 
     // A colour the palette does not hold, so the assignment is a change.
     const QColor recolour(1, 2, 3);
-    REQUIRE(theme.table.buttonBorder != recolour);
-    theme.table.buttonBorder = recolour;
+    REQUIRE(theme.table.logoOrnament != recolour);
+    theme.table.logoOrnament = recolour;
 
     REQUIRE(theme.background(view, 1.0).cacheKey() != background.cacheKey());
     REQUIRE(theme.room(view, 1.0).cacheKey() != room.cacheKey());

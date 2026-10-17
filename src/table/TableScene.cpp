@@ -5,6 +5,7 @@
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
+#include "table/TableTopItem.h"
 #include "table/TrickItem.h"
 
 #include <algorithm>
@@ -35,14 +36,6 @@ constexpr qreal plaqueUnit = 150.0;
 // the hand the human's card does (section 2.7: 60 in both places).
 constexpr qreal playedInset = 60.0;
 
-// THE HAND UNDER EVERY PLAQUE. Your own plaque overlaps the bottom of your fan
-// (section 2.8: "the human's panel covers the bottom of the hand; that is
-// intended"), and it is the plaque that has to win - it carries your name and
-// your pill. The first rung of section 3's stacking order, which phase 3 sets out
-// in full.
-constexpr qreal handZ = 1.0;
-constexpr qreal seatZ = 2.0;
-
 // NOBODY SEATED, NO HAND. Section 14: a spectated table "has no human... and the
 // bottom hand area is not drawn at all". The same range test seatlayout applies,
 // so the two cannot disagree about whether somebody is sitting there.
@@ -61,11 +54,18 @@ TableScene::TableScene(QObject* parent)
     // this box to the window; nothing in the scene is told the window's size.
     setSceneRect(tablespace::fitBox);
 
+    // Every item's place in the stack comes from tablespace::z, so no two files
+    // can disagree about what is drawn over what.
+    top = new TableTopItem;
+    top->setTheme(theme);
+    addItem(top);
+
     trick = new TrickItem(&cards);
+    trick->setZValue(tablespace::z::playedCards);
     addItem(trick);
 
     hand = new HandItem(&cards);
-    hand->setZValue(handZ);
+    hand->setZValue(tablespace::z::hand);
     addItem(hand);
 }
 
@@ -82,6 +82,7 @@ void TableScene::setTheme(const Theme& palette)
 {
     theme = palette;
 
+    top->setTheme(theme);
     hand->setTheme(theme);
 
     // The room is drawn by TableView::drawBackground() rather than held in an
@@ -96,7 +97,6 @@ void TableScene::ensureSeats(std::size_t count)
     while(seats.size() < count)
     {
         SeatItem* seat = new SeatItem(&cards);
-        seat->setZValue(seatZ);
         addItem(seat);
         seats.push_back(seat);
     }
@@ -204,6 +204,12 @@ void TableScene::relayout()
 
         item->setCardHeight(plaqueUnit);
         item->setPos(centres[i]);
+
+        // YOURS UNDER THE OTHERS, AND OVER YOUR HAND (tablespace::z). Set here
+        // rather than when the plaque is made, because which plaque is yours is a
+        // fact about this game: the items are reused from the last one.
+        item->setZValue(static_cast<int>(i) == snapshot->humanSeat ? tablespace::z::humanPanel
+                                                                   : tablespace::z::panels);
 
         // activeSeat is -1 between turns, which is a real state and not a
         // missing one: no ring anywhere is what the table should show while

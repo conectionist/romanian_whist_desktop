@@ -1,9 +1,13 @@
 #ifndef DEVICE_PIXELS_H
 #define DEVICE_PIXELS_H
 
+#include <QPointF>
 #include <QtGlobal>
 
+#include <optional>
+
 class QPainter;
+class QWidget;
 
 // HOW MANY PIXELS A PIXMAP NEEDS, in one place.
 //
@@ -28,7 +32,37 @@ namespace devicepixels
 // The scale is QStyleOptionGraphicsItem::levelOfDetailFromTransform(), which
 // ignores rotation and translation - a tilted card asks for the same pixels as a
 // straight one.
+//
+// TIMES A FREEZE, when the device is a widget a resize has frozen (setFreeze()
+// below). Without one it is exactly the ratio above.
 qreal effectiveRatio(const QPainter& painter);
+
+// FREEZES WHAT effectiveRatio() ANSWERS FOR A WIDGET, while a window is being
+// resized (TableView). Each step of a drag changes the view's scale, so every
+// pixmap asked for at the live one would miss its cache and be rasterized again,
+// every frame. With a freeze, a painter on `widget` is answered with its live ratio
+// times `factor` - the scale the resize began from over the live one - so the
+// pixmaps already made are asked for again, and Qt scales them to where they now
+// land. Nothing clears it but this, with std::nullopt.
+//
+// ON THE WIDGET, NOT THE SCENE, AND APPLIED HERE RATHER THAN BY THE ITEMS. Every
+// pixmap item on the table - the cards and the table now, the portraits and the
+// rack cards in later phases - asks effectiveRatio() anyway, so none of them can
+// forget the freeze. A scene rendered into an image paints on the image, not on
+// the widget, so it gets that image's own ratio, frozen or not; and the freeze
+// dies with the widget, whatever happens to the scene.
+//
+// A FACTOR, not a scale to put in place of the live one, so an item drawn at a
+// scale of its own keeps it.
+void setFreeze(QWidget& widget, std::optional<qreal> factor);
+
+// `point`, moved by under half a pixel so that it lands on a WHOLE DEVICE PIXEL
+// through the painter's transform and the device's ratio. A picture laid at a
+// fraction of a pixel is sampled between its pixels or rounded by the blit,
+// either of which slides it off what it was made to line up with - a texture's
+// grain blurred, a shadow's cut-out beside its shape. For a painter that only
+// scales and translates, which is every painter on the table.
+QPointF snapped(const QPainter& painter, QPointF point);
 
 // A ratio as a cache key, quantized to TEN-THOUSANDTHS.
 //

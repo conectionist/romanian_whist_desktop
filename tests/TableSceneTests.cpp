@@ -6,6 +6,7 @@
 #include "table/HandItem.h"
 #include "table/SeatItem.h"
 #include "table/TableSpace.h"
+#include "table/TableTopItem.h"
 #include "table/TrickItem.h"
 #include "engine/Prompts.h"
 #include "paint/CardRenderer.h"
@@ -189,6 +190,86 @@ TEST_CASE("Your own plaque is drawn over your hand", "[table]")
     REQUIRE(mine->sceneBoundingRect().intersects(scene.handItem()->sceneBoundingRect()));
 
     REQUIRE(mine->zValue() > scene.handItem()->zValue());
+}
+
+// ---- the stacking order, set out in the redesign's phase 3 ----
+//
+// SECTION 3'S LADDER, read off the items as the scene built them: the table under
+// the played cards under your hand under your plaque under everyone else's. Each
+// against the next, so a rung put in the wrong place fails here by name rather
+// than as a card drawn under the felt.
+
+TEST_CASE("The scene stacks the table then the cards then your hand then the plaques", "[table]")
+{
+    GameSnapshot snapshot = holdingThree(4, 1);
+    snapshot.table = { PlayedCardView{ 2, Card(Rank::King, Suit::Hearts) } };
+
+    TableScene scene;
+
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    const std::vector<TableTopItem*> tables = itemsOf<TableTopItem>(scene);
+    const std::vector<TrickItem*> tricks = itemsOf<TrickItem>(scene);
+
+    REQUIRE(tables.size() == 1);
+    REQUIRE(tricks.size() == 1);
+
+    SeatItem* mine = plaqueAtBottom(scene);
+    REQUIRE(mine != nullptr);
+
+    REQUIRE(tables.front()->zValue() < tricks.front()->zValue());
+    REQUIRE(tricks.front()->zValue() < scene.handItem()->zValue());
+    REQUIRE(scene.handItem()->zValue() < mine->zValue());
+
+    for(SeatItem* seat : itemsOf<SeatItem>(scene))
+    {
+        if(seat != mine && seat->isVisible())
+            REQUIRE(mine->zValue() < seat->zValue());
+    }
+
+    // And the table is the lowest thing in the scene, whatever is added to it.
+    for(QGraphicsItem* item : scene.items())
+    {
+        if(item != tables.front() && !item->parentItem())
+            REQUIRE(tables.front()->zValue() < item->zValue());
+    }
+}
+
+TEST_CASE("The table is there before the first snapshot", "[table]")
+{
+    // An empty table is still a table: the room and the felt are the first thing
+    // the page shows, before a game has dealt anything onto it.
+    TableScene scene;
+
+    const std::vector<TableTopItem*> tables = itemsOf<TableTopItem>(scene);
+
+    REQUIRE(tables.size() == 1);
+    REQUIRE(tables.front()->isVisible());
+    REQUIRE(tables.front()->sceneBoundingRect().center() == tablespace::centre);
+}
+
+// THE PLAQUE THAT IS YOURS CHANGES WITH THE GAME, and so does its rung. The items
+// are reused from one game to the next, so a z set once, when a plaque was made,
+// would leave last game's human above or below the wrong hand.
+TEST_CASE("Your plaque's place in the stack follows who you are this game", "[table]")
+{
+    TableScene scene;
+
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
+
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 3)));
+
+    SeatItem* mine = plaqueAtBottom(scene);
+    REQUIRE(mine != nullptr);
+    REQUIRE(mine->zValue() == tablespace::z::humanPanel);
+
+    for(SeatItem* seat : itemsOf<SeatItem>(scene))
+    {
+        if(seat != mine)
+            REQUIRE(seat->zValue() == tablespace::z::panels);
+    }
 }
 
 // ---- your plaque over your hand, and the mouse ----

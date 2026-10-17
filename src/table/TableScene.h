@@ -15,6 +15,7 @@
 
 class HandItem;
 class SeatItem;
+class TableTopItem;
 class TrickItem;
 
 // The table: seats on an ellipse, the trick in the middle.
@@ -86,6 +87,12 @@ public:
     // Nothing before the first snapshot, and the caller falls back.
     std::optional<qreal> overlayBottom() const;
 
+    // The table itself, and the renderer every card on it is drawn by. READ-ONLY
+    // and for tests, which count what each of them paints to show that a resize
+    // leaves their caches alone (TableViewTests).
+    const TableTopItem* tableTop() const { return top; }
+    const CardRenderer& cardRenderer() const { return cards; }
+
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
@@ -110,6 +117,9 @@ private:
     CardRenderer cards;
 
     std::shared_ptr<const GameSnapshot> snapshot;
+
+    // The table and its logo, under everything else (tablespace::z).
+    TableTopItem* top = nullptr;
 
     std::vector<SeatItem*> seats;
     TrickItem* trick = nullptr;

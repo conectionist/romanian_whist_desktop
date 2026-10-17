@@ -115,6 +115,11 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     //
     // THE DEVICE'S RATIO, not the widget's: a scene rendered into an image has no
     // widget, and the image's own ratio is what the card has to match there.
+    //
+    // AND WHILE A RESIZE SETTLES, the scale it began from, which effectiveRatio()
+    // answers with on its own (TableView): the pixmap the renderer already holds is
+    // asked for again and drawn scaled, rather than every card being rasterized
+    // afresh on every step of the drag.
     const qreal dpr = devicepixels::effectiveRatio(*painter);
 
     const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());

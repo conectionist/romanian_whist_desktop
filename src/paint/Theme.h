@@ -1,8 +1,10 @@
 #ifndef THEME_H
 #define THEME_H
 
+#include <QBrush>
 #include <QColor>
 #include <QPixmap>
+#include <QRectF>
 #include <QSize>
 
 #include <memory>
@@ -149,6 +151,45 @@ struct ThemeColours
         QColor buttonBottom;
         QColor buttonBorder;
 
+        // THE TABLE ITSELF (section 2.4), added in the redesign's phase 3.
+        //
+        // The wood's edge: a dark stroke round the rim, a faint warm highlight
+        // inside it, and the darkest of the three bead rings, which is the same
+        // brown as the stroke.
+        QColor woodDark;
+        QColor woodHighlight;
+
+        // The bead's other two rings, from the felt outward.
+        QColor beadInner;
+        QColor beadMiddle;
+
+        // The felt's vignette, light at the centre and darker toward the rim, and
+        // the faint gold circle inset on it.
+        QColor feltVignetteLight;
+        QColor feltVignetteDark;
+        QColor feltLine;
+
+        // The shadows: the table's on the room, the rim's into the wood, and two
+        // into the felt, one wide and one close to the edge.
+        QColor tableShadow;
+        QColor woodInnerShadow;
+        QColor feltInnerShadowWide;
+        QColor feltInnerShadowNear;
+
+        // The logo plaque: its green from the centre out, the gold border and the
+        // fine line inside it, the lettering's gold from top to bottom and the
+        // shadow under it, and the clubs and ornaments.
+        QColor logoCentre;
+        QColor logoMiddle;
+        QColor logoEdge;
+        QColor logoBorder;
+        QColor logoInnerLine;
+        QColor logoTextTop;
+        QColor logoTextMiddle;
+        QColor logoTextBottom;
+        QColor logoTextShadow;
+        QColor logoOrnament;
+
         bool operator==(const TablePalette&) const = default;
     };
 
@@ -189,6 +230,12 @@ struct Theme : ThemeColours
     // on today's palette (open question Q1). The table page draws this; nothing
     // else does until a later phase moves it across.
     QPixmap room(QSize view, qreal dpr) const;
+
+    // The room as a brush over `view` in whatever units the caller paints in: what
+    // room() rasterizes, for a caller that fills straight from the gradient
+    // instead - TableView, while a resize settles, when the size changes every
+    // frame and a cached picture of the old size would only be thrown away.
+    QBrush roomBrush(const QRectF& view) const;
 
     // Stick figures today, portraits tomorrow. THE BOX IS WHAT THE SEAT PLAQUE
     // RESERVES, which is the whole reason this takes a QSize rather than a
