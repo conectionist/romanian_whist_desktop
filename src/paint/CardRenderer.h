@@ -104,8 +104,8 @@ private:
     // for the reason backBit gives in the .cpp.
     //
     // Unbounded, because it cannot grow past the deck: one entry per card art.
-    // A file that fails to parse is not stored, so it fails again on every call
-    // rather than once.
+    // A file that fails to parse leaves its entry empty, so it is tried again,
+    // and fails again, on every call rather than once.
     mutable std::unordered_map<unsigned int, std::unique_ptr<QSvgRenderer>> art;
 
     // MUTABLE AND BOUNDED. Mutable because caching is not observable through

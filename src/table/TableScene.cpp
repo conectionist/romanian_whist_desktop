@@ -7,7 +7,6 @@
 #include "table/TableSpace.h"
 #include "table/TrickItem.h"
 
-
 #include <algorithm>
 
 namespace
