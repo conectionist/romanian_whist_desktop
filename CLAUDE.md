@@ -15,11 +15,13 @@ The owner wants to see each phase's visual result without running the app. When 
 
 1. Run the screenshot tool (`tests/ScreenshotTool.cpp`) from the phase branch's `default` build:
    `WHIST_SHOTS_DIR=build/shots/phase-N ./build/tests/desktop_tests "[.screenshot]"`.
-   It writes `table-3-players.png` … `table-6-players.png` and `bidding.png` at 1920×1080.
+   It writes `table-3-players.png` … `table-6-players.png` and `bidding.png` at 1920×1080, and
+   `table-empty.png`: the table alone at 1920×1034, which is exactly the mock-up's scale and place.
 2. Pair each one with the mock-up picture of the same name in `docs/ui-redesign/screenshots/`
    (`.jpg`): client on the left, mock-up on the right, each labelled. Save the pair as
    `build/shots/phase-N/compare-<name>.png` (Pillow is installed). `build/` is git-ignored, so
-   these are never committed.
+   these are never committed. `table-empty.png` has no namesake: pair it with
+   `table-4-players.jpg` cropped below its 46 px menu bar (y 46–1080), as `compare-table-empty.png`.
 3. Link the comparison images in the message. Add a line or two on what moved closer to the
    mock-up and what still differs. Until phase 8 replaces the side panels, the page is expected to
    be a mix of new and old.

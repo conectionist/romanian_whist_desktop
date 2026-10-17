@@ -29,6 +29,8 @@ add_executable(desktop_tests
     CardRendererTests.cpp
     DevicePixelsTests.cpp
     TableSpaceTests.cpp
+    TableTopTests.cpp
+    ShadowsTests.cpp
     SeatLayoutTests.cpp
     TrickItemTests.cpp
     SeatItemTests.cpp
@@ -37,6 +39,7 @@ add_executable(desktop_tests
     InfoStripTests.cpp
     ScoreboardTests.cpp
     ScreenshotTool.cpp
+    ResizeTiming.cpp
     TestApp.cpp
 )
 

@@ -1,8 +1,9 @@
 #include "Theme.h"
 
 #include "paint/DevicePixels.h"
+#include "paint/Gradients.h"
 
-#include <QBrush>
+#include <QGradientStops>
 #include <QHash>
 #include <QImage>
 #include <QImageReader>
@@ -10,7 +11,6 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QString>
-#include <QTransform>
 #include <QtLogging>
 
 #include <algorithm>
@@ -85,6 +85,48 @@ Theme::TablePalette tablePalette()
     table.buttonTop = QColor(0x2A, 0x61, 0x42);
     table.buttonBottom = QColor(0x17, 0x40, 0x2A);
     table.buttonBorder = QColor(0xA3, 0x82, 0x4A);
+
+    // Section 2.4, from page.html's .wood, .felt, .felt-line and .logo.
+    //
+    // inset 0 0 0 2px #2a160a, inset 0 0 0 4px rgba(255, 210, 150, 0.12) - and the
+    // felt's outermost bead ring, 0 0 0 13px #2a160a, is the same brown.
+    table.woodDark = QColor(0x2A, 0x16, 0x0A);
+    table.woodHighlight = rgba(255, 210, 150, 0.12);
+
+    // 0 0 0 9px #3b210f, 0 0 0 11px #7a4c27
+    table.beadInner = QColor(0x3B, 0x21, 0x0F);
+    table.beadMiddle = QColor(0x7A, 0x4C, 0x27);
+
+    // radial-gradient(circle, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0) 45%,
+    // rgba(0, 0, 0, 0.38) 100%); border: 1.5px solid rgba(201, 164, 92, 0.2)
+    table.feltVignetteLight = rgba(255, 255, 255, 0.07);
+    table.feltVignetteDark = rgba(0, 0, 0, 0.38);
+    table.feltLine = rgba(201, 164, 92, 0.2);
+
+    // 0 0 70px rgba(0, 0, 0, 0.75); inset 0 0 22px rgba(0, 0, 0, 0.5);
+    // inset 0 0 60px rgba(0, 0, 0, 0.55), inset 0 0 18px rgba(0, 0, 0, 0.45)
+    table.tableShadow = rgba(0, 0, 0, 0.75);
+    table.woodInnerShadow = rgba(0, 0, 0, 0.5);
+    table.feltInnerShadowWide = rgba(0, 0, 0, 0.55);
+    table.feltInnerShadowNear = rgba(0, 0, 0, 0.45);
+
+    // radial-gradient(ellipse at 50% 40%, #2a6142 0%, #17402a 70%, #0f2c1d 100%):
+    // the first two ARE the buttons' green, assigned for the reason blackSuit is.
+    table.logoCentre = table.buttonTop;
+    table.logoMiddle = table.buttonBottom;
+    table.logoEdge = QColor(0x0F, 0x2C, 0x1D);
+
+    // border: 2px solid #b8924a; ::before border: 1px solid rgba(232, 200, 130, 0.55)
+    table.logoBorder = QColor(0xB8, 0x92, 0x4A);
+    table.logoInnerLine = rgba(232, 200, 130, 0.55);
+
+    // linear-gradient(180deg, #fbe7b2 0%, #e2b866 48%, #a77a35 100%);
+    // drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)); the clubs and ornaments #d9b46a
+    table.logoTextTop = QColor(0xFB, 0xE7, 0xB2);
+    table.logoTextMiddle = QColor(0xE2, 0xB8, 0x66);
+    table.logoTextBottom = QColor(0xA7, 0x7A, 0x35);
+    table.logoTextShadow = rgba(0, 0, 0, 0.55);
+    table.logoOrnament = QColor(0xD9, 0xB4, 0x6A);
 
     return table;
 }
@@ -411,15 +453,9 @@ QPixmap Theme::paintBackground(QSize physical) const
 // #1c110a 58%, #0b0704 100%).
 //
 // THE ELLIPSE IS CSS'S DEFAULT SIZE, farthest-corner, which the declaration does
-// not spell out. CSS sizes it with the aspect of farthest-side - half the width
-// across, and the 58% of the height below a centre at 42% - and grows that until
-// it passes through the farthest corner. The two fractions then sum their
-// squares to 2, so both radii are farthest-side's times the square root of two.
-// A circle, or radii of half the box, would put the darkest band well inside the
-// window rather than at its corners.
-//
-// QRadialGradient is a circle, so the ellipse is a unit circle in a brush
-// transform scaled to the two radii.
+// not spell out - gradients::cssRadial() says what that means. A circle, or radii
+// of half the box, would put the darkest band well inside the window rather than
+// at its corners.
 //
 // PHYSICAL PIXELS, as paintBackground() above and for the same reason.
 QPixmap Theme::paintRoom(QSize physical) const
@@ -428,24 +464,18 @@ QPixmap Theme::paintRoom(QSize physical) const
     pixmap.fill(table.roomEdge);
 
     QPainter painter(&pixmap);
-
-    const qreal width = physical.width();
-    const qreal height = physical.height();
-
-    QRadialGradient gradient(QPointF(0.0, 0.0), 1.0);
-    gradient.setColorAt(0.0, table.roomCentre);
-    gradient.setColorAt(0.58, table.roomMiddle);
-    gradient.setColorAt(1.0, table.roomEdge);
-
-    QTransform ellipse = QTransform::fromTranslate(width * 0.5, height * 0.42);
-    ellipse.scale(std::sqrt(2.0) * width * 0.5, std::sqrt(2.0) * height * 0.58);
-
-    QBrush brush(gradient);
-    brush.setTransform(ellipse);
-
-    painter.fillRect(pixmap.rect(), brush);
+    painter.fillRect(pixmap.rect(), roomBrush(QRectF(pixmap.rect())));
 
     return pixmap;
+}
+
+QBrush Theme::roomBrush(const QRectF& view) const
+{
+    const QGradientStops stops = { { 0.0, table.roomCentre },
+                                   { 0.58, table.roomMiddle },
+                                   { 1.0, table.roomEdge } };
+
+    return gradients::cssRadial(view, QPointF(0.5, 0.42), gradients::Shape::Ellipse, stops);
 }
 
 // A flat silhouette in a disc, filling the box it was given. Deliberately plain:

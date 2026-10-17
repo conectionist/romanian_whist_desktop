@@ -212,6 +212,8 @@ QPixmap CardRenderer::face(Card card, QSize size, qreal dpr, State state) const
     if(const QPixmap* cached = cache.object(key))
         return *cached;
 
+    misses++;
+
     QImage image = rasterizeFace(card, physicalSize(size, dpr));
     if(image.isNull())
         return QPixmap();
@@ -233,6 +235,8 @@ QPixmap CardRenderer::back(QSize size, qreal dpr) const
 
     if(const QPixmap* cached = cache.object(key))
         return *cached;
+
+    misses++;
 
     return finish(paintBack(physicalSize(size, dpr)), key, dpr);
 }

@@ -14,7 +14,9 @@
 #include <vector>
 
 class HandItem;
+class QGraphicsItem;
 class SeatItem;
+class TableTopItem;
 class TrickItem;
 
 // The table: seats on an ellipse, the trick in the middle.
@@ -86,6 +88,28 @@ public:
     // Nothing before the first snapshot, and the caller falls back.
     std::optional<qreal> overlayBottom() const;
 
+    // THE SCALE PIXMAPS ARE RASTERIZED AT WHILE A RESIZE SETTLES, or nothing when
+    // none is - see devicepixels::effectiveRatio(). TableView sets it when a resize
+    // begins and clears it once the window has stopped changing size, and every
+    // pixmap item on the table reads it through frozenScaleOf() below.
+    //
+    // ON THE SCENE BECAUSE THE ITEMS CAN REACH IT, which assumes the one view this
+    // scene has: a second view at another scale would need its own.
+    //
+    // Clearing it repaints the scene, so everything comes back sharp at once.
+    void setFrozenScale(std::optional<qreal> scale);
+    std::optional<qreal> frozenScale() const { return frozen; }
+
+    // The frozen scale of whatever TableScene `item` is in, or nothing - which is
+    // also the answer for an item in a plain QGraphicsScene, as the tests build.
+    static std::optional<qreal> frozenScaleOf(const QGraphicsItem& item);
+
+    // The table itself, and the renderer every card on it is drawn by. READ-ONLY
+    // and for tests, which count what each of them paints to show that a resize
+    // leaves their caches alone (TableViewTests).
+    const TableTopItem* tableTop() const { return top; }
+    const CardRenderer& cardRenderer() const { return cards; }
+
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
@@ -110,6 +134,11 @@ private:
     CardRenderer cards;
 
     std::shared_ptr<const GameSnapshot> snapshot;
+
+    std::optional<qreal> frozen;
+
+    // The table and its logo, under everything else (tablespace::z).
+    TableTopItem* top = nullptr;
 
     std::vector<SeatItem*> seats;
     TrickItem* trick = nullptr;

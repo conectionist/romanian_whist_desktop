@@ -3,6 +3,8 @@
 
 #include <QtGlobal>
 
+#include <optional>
+
 class QPainter;
 
 // HOW MANY PIXELS A PIXMAP NEEDS, in one place.
@@ -28,7 +30,16 @@ namespace devicepixels
 // The scale is QStyleOptionGraphicsItem::levelOfDetailFromTransform(), which
 // ignores rotation and translation - a tilted card asks for the same pixels as a
 // straight one.
-qreal effectiveRatio(const QPainter& painter);
+//
+// OR A FROZEN SCALE IN ITS PLACE, while a window is being resized (TableView). Each
+// step of a drag changes the view's scale, so every pixmap asked for at the live
+// one would miss its cache and be rasterized again, every frame. Given `frozen`,
+// the answer is the device's ratio times that instead: the pixmaps already made
+// are asked for again, and Qt scales them to where they now land until the resize
+// settles and the live scale takes over. It replaces the WHOLE of the painter's
+// scale, so it is only right for an item drawn under the view's scale and no scale
+// of its own - which is every pixmap item on the table.
+qreal effectiveRatio(const QPainter& painter, std::optional<qreal> frozen = std::nullopt);
 
 // A ratio as a cache key, quantized to TEN-THOUSANDTHS.
 //

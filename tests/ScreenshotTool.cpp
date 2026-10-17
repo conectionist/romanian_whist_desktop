@@ -5,6 +5,8 @@
 #include "core/GameSnapshot.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
+#include "table/TableView.h"
+#include "paint/Theme.h"
 #include "ui/BidStrip.h"
 #include "ui/NewGameDialog.h"
 
@@ -335,14 +337,23 @@ void capture(MainWindow& window, const TableScene& scene, const Capture& shot, c
 }
 }
 
+namespace
+{
+// Where the pictures go: WHIST_SHOTS_DIR, or shots/ under the current directory.
+//
+// EMPTY COUNTS AS UNSET. qEnvironmentVariable()'s default applies only to a
+// variable that is not there at all, so `WHIST_SHOTS_DIR= ...` would hand mkpath()
+// an empty string.
+QString shotsDirectory()
+{
+    return qEnvironmentVariableIsEmpty("WHIST_SHOTS_DIR") ? QStringLiteral("shots")
+                                                          : qEnvironmentVariable("WHIST_SHOTS_DIR");
+}
+}
+
 TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 {
-    // EMPTY COUNTS AS UNSET. qEnvironmentVariable()'s default applies only to a
-    // variable that is not there at all, so `WHIST_SHOTS_DIR= ...` would hand
-    // mkpath() an empty string.
-    const QString dir = qEnvironmentVariableIsEmpty("WHIST_SHOTS_DIR")
-                            ? QStringLiteral("shots")
-                            : qEnvironmentVariable("WHIST_SHOTS_DIR");
+    const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
     for(const Game& game : games)
@@ -434,4 +445,36 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
             REQUIRE(window.close());
         }
     }
+}
+
+// THE TABLE AND NOTHING ELSE, AT THE MOCK-UP'S OWN SCALE, for the redesign's
+// phase 3: table-empty.png, to set beside screenshots/table-4-players.jpg below
+// its 46-pixel menu bar.
+//
+// A BARE VIEW, NOT THE WINDOW. The window still has the info strip, the
+// scoreboard and the prompt bar round the table until phase 8, so its table is
+// smaller than the mock-up's and lies elsewhere. A view of 1920 x 1034 is the
+// mock-up's viewport less its menu bar: inside the margins both leave 1888 x 1016,
+// so the two tables are drawn at one scale in one place, and the rim, the bead,
+// the gold circle and the logo can be compared pixel for pixel.
+TEST_CASE("A screenshot of the empty table at the mock-up's own scale", "[.screenshot]")
+{
+    const QString dir = shotsDirectory();
+    REQUIRE(QDir().mkpath(dir));
+
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+
+    TableView view(&scene);
+    view.resize(1920, 1034);
+    view.show();
+    pump(200);
+
+    const QPixmap picture = view.grab();
+    const QString path = QDir(dir).filePath(QStringLiteral("table-empty.png"));
+    REQUIRE(picture.save(path));
+
+    std::cout << path.toStdString() << ": the empty table\n";
+
+    CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1034));
 }

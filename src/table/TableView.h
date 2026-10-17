@@ -2,6 +2,7 @@
 #define TABLE_VIEW_H
 
 #include <QGraphicsView>
+#include <QTimer>
 
 class TableScene;
 
@@ -55,6 +56,16 @@ public:
     // small to read - while a bare view, as the tests use, can still be squeezed.
     QSize minimumSizeHint() const override;
 
+    // ENDS A RESIZE'S SETTLING, which the settle timer does on its own 150 ms after
+    // the last resize event - see resizeEvent(). Public so a test can settle the
+    // view at once rather than wait for it.
+    void finishResize();
+
+    // Whether a resize is settling: the pixmaps on the table are being drawn
+    // scaled from the scale the resize began at, and are rasterized afresh once
+    // it ends.
+    bool isSettling() const { return settling; }
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
 
@@ -79,6 +90,13 @@ private:
 
     // Non-owning; null until a caller sets one. See setBottomOverlay().
     QWidget* bottomOverlay = nullptr;
+
+    // THE RESIZE SETTLING. `fittedScale` is the scale of the last fit, zero before
+    // the first; `settling` says a resize is under way; the timer ends it once the
+    // window has stopped changing size. See resizeEvent().
+    qreal fittedScale = 0.0;
+    bool settling = false;
+    QTimer settleTimer;
 };
 
 #endif
