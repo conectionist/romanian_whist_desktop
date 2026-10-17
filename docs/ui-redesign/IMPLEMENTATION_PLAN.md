@@ -400,7 +400,7 @@ Whichever you choose, choose it once for all pinned panels.
 
 Each phase lists files, steps, tests, and how to know it is done. Commit at the end of each one.
 
-### Phase 0: baseline
+### Phase 0: baseline ✅ COMPLETE
 
 1. Install Qt 6.5 or newer with the Widgets, Svg and LinguistTools modules (system packages such as
    `qt6-base-dev qt6-svg-dev qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools`, or
@@ -411,6 +411,17 @@ Each phase lists files, steps, tests, and how to know it is done. Commit at the 
    seeded game with 4 and 6 players and saves PNGs, to compare against `screenshots/`.
 
 Done when: the baseline builds and passes, and you can produce a screenshot of the current client.
+
+**Outcome** (PR #25):
+
+- **The baseline is 259 tests**, passing on the `default`, `release` and `clang` presets with
+  Qt 6.11.2. Later phases compare their count against this one.
+- **The screenshot helper was worth keeping**, so it is committed as a hidden Catch2 case,
+  `tests/ScreenshotTool.cpp`. Run it with
+  `WHIST_SHOTS_DIR=<dir> ./build/tests/desktop_tests "[.screenshot]"`. It saves
+  `table-3-players.png` to `table-6-players.png` and `bidding.png` from a seeded game with every
+  setting pinned, and checks which moment each picture shows, so pictures taken before and after
+  a phase are comparable.
 
 ### Phase 1: assets and theme
 
