@@ -697,3 +697,54 @@ TEST_CASE("A card under a scaled view is rasterized at the size it is drawn", "[
 
     REQUIRE(rendered == expected);
 }
+
+// THE RATIO IS THE TARGET'S, not the widget's. A scene rendered somewhere other
+// than a view - QGraphicsScene::render() into an image, as the case above does -
+// paints with no widget, and CardItem used to read 1.0 there whatever the image's
+// own ratio was. Into a ratio-2 image at half scale the card has to be rasterized
+// at 2 x 0.5 = 1, its full size; reading the ratio as 1 gives a half-size pixmap
+// stretched over twice its pixels.
+TEST_CASE("A card rendered into a HiDPI image is rasterized at the image's ratio", "[table]")
+{
+    CardRenderer renderer;
+    QGraphicsScene scene;
+
+    const Card card(Rank::Queen, Suit::Hearts);
+
+    auto* item = new CardItem(&renderer);
+    item->setFace(card);
+    item->setCardHeight(200.0);
+    scene.addItem(item);
+
+    const QSize full = renderer.sizeForHeight(200.0);
+    const QRectF source = item->boundingRect();
+
+    REQUIRE(full.width() % 2 == 0);
+    REQUIRE(full.height() % 2 == 0);
+
+    // Half the card in logical pixels, which at a ratio of 2 is all of it in
+    // physical ones.
+    const QSize half(full.width() / 2, full.height() / 2);
+
+    QImage rendered(full, QImage::Format_ARGB32_Premultiplied);
+    rendered.setDevicePixelRatio(2.0);
+    rendered.fill(Qt::transparent);
+
+    {
+        QPainter painter(&rendered);
+        scene.render(&painter, QRectF(QPointF(0.0, 0.0), half), source);
+    }
+
+    QImage expected(full, QImage::Format_ARGB32_Premultiplied);
+    expected.fill(Qt::transparent);
+
+    {
+        QPainter painter(&expected);
+        painter.drawImage(QPointF(0.0, 0.0), renderer.face(card, full, 1.0).toImage());
+    }
+
+    // Compared as pixels: the ratio was the input, not part of the answer.
+    rendered.setDevicePixelRatio(1.0);
+
+    REQUIRE(rendered == expected);
+}

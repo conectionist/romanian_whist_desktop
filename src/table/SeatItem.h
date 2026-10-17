@@ -138,7 +138,7 @@ private:
     const CardRenderer* renderer;
 
     // ONE CARD, and a child rather than something this paints. CardItem already
-    // resolves the device pixel ratio off the widget being painted into, so a
+    // resolves the pixels it covers off the device being painted into, so a
     // window dragged to another screen re-rasterizes rather than scaling what it
     // had - reusing it inherits that instead of solving it a second time here.
     //
