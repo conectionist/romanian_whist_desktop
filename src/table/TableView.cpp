@@ -27,7 +27,6 @@ constexpr int settleDelayMs = 150;
 
 TableView::TableView(TableScene* scene, QWidget* parent)
     : QGraphicsView(scene, parent)
-    , table(scene)
 {
     // Nothing scrolls: the scaled table always fits inside the viewport. Scrollbars
     // would also change the viewport size when they appeared, which is a resize
@@ -129,6 +128,8 @@ void TableView::fitTable()
 // is wrong for anything drawn into part of an image.
 void TableView::drawBackground(QPainter* painter, const QRectF& rect)
 {
+    const TableScene* table = tableScene();
+
     if(!table)
         return;
 
@@ -157,7 +158,7 @@ void TableView::drawBackground(QPainter* painter, const QRectF& rect)
     // drag: 10.6 ms painting a new room each step, 8.9 stretching the last one,
     // 7.4 filling from the gradient. The fill is exact, too, where a stretch is
     // not.
-    if(settling)
+    if(frozenScale)
     {
         if(!exposed.isEmpty())
             painter->fillRect(exposed, table->currentTheme().roomBrush(whole));
@@ -195,17 +196,23 @@ void TableView::drawBackground(QPainter* painter, const QRectF& rect)
 void TableView::finishResize()
 {
     settleTimer.stop();
+    paintedInBurst.reset();
 
-    if(!settling)
+    if(!frozenScale)
         return;
 
-    settling = false;
+    frozenScale.reset();
+    devicepixels::setFreeze(*viewport(), std::nullopt);
 
-    // Everything on the table is repainted at the scale the window stopped at.
-    if(table)
-        table->setFrozenScale(std::nullopt);
-
+    // Everything on the table is repainted at the scale the window stopped at. The
+    // one repaint the settling asks for: freezing asked for none, because it only
+    // ever happens inside a resize, which repaints the viewport anyway.
     viewport()->update();
+}
+
+TableScene* TableView::tableScene() const
+{
+    return qobject_cast<TableScene*>(scene());
 }
 
 void TableView::setBottomOverlay(QWidget* overlay)
@@ -258,6 +265,7 @@ void TableView::placeOverlay()
     // is where your hand and your plaque are, so a strip pinned to the viewport's
     // bottom edge lands on top of them. That is not a hypothetical: it is what
     // C2's first run drew, through the plaque.
+    const TableScene* table = tableScene();
     const std::optional<qreal> floor = table ? table->overlayBottom() : std::nullopt;
 
     // The viewport's offset in this widget, which is the strip's parent. Zero with
@@ -315,30 +323,51 @@ void TableView::resizeEvent(QResizeEvent* event)
 {
     QGraphicsView::resizeEvent(event);
 
-    const qreal before = fittedScale;
-
     // THE SCALE AND NOTHING ELSE. The scene is in table space and does not know
     // the window has changed size; nothing in it moves.
     fitTable();
 
     // AND THE PIXMAPS WAIT FOR THE WINDOW TO STOP. Every pixmap on the table is
-    // rasterized at the screen's ratio times the scale, so each step of a drag
-    // would miss every cache - every card painted again from its SVG, the table
-    // composed again - for a picture shown for one frame.
-    // Instead the scale the resize began from is frozen: the pixmaps already made
-    // are drawn scaled, a little soft, and the timer ends it 150 ms after the last
-    // step, when everything is rasterized once at the scale the window stopped at.
+    // rasterized at the screen's ratio times the scale - and the room behind it at
+    // the viewport's size - so each step of a drag would miss every cache: every
+    // card painted again from its SVG, the table composed again, a new room, for a
+    // picture shown for one frame. Instead, once a resize is shown to be a drag,
+    // its scale is frozen: devicepixels::effectiveRatio() answers for the viewport
+    // with a scale the drag has already painted at, the pixmaps already made are
+    // drawn scaled, a little soft, and the room is filled straight from its
+    // gradient (drawBackground()). The timer ends it 150 ms after the last step,
+    // when everything is rasterized once at the scale the window stopped at.
     //
-    // NOT THE FIRST FIT, and not a hidden view's: there is nothing drawn yet to
-    // scale, and a first frame drawn soft would be soft for no reason. And not
-    // the ratio rounded to a coarser key instead - that brings back the soft,
-    // misplaced cards devicepixels::ratioKey() was made fine to fix.
-    if(before > 0.0 && isVisible() && !qFuzzyCompare(before, fittedScale))
+    // ON A CHANGE OF SIZE, not of scale. A wide window is fitted by its height, so
+    // dragging its side edge leaves the scale where it was - and still asks for a
+    // room the new size on every step. Frozen at the same scale, the cards are
+    // drawn exactly as they were and only the room is spared.
+    //
+    // NOT AT A RESIZE'S FIRST STEP, which is drawn sharp at full cost. Maximizing,
+    // restoring, a dock shown or hidden: each is one resize, and frozen it would be
+    // drawn soft for 150 ms and then rasterized again anyway. Only a second resize
+    // while the timer is still running freezes - a drag, which pays for one sharp
+    // frame where it began.
+    //
+    // AND ONLY AT A SCALE THE BURST HAS PAINTED AT (paintEvent()), which is the one
+    // whose pixmaps are in their caches. Two resizes with no frame between them -
+    // a window manager's double configure, a relayout before the first paint -
+    // would otherwise freeze a scale nothing was drawn at: soft for no reason, and
+    // everything rasterized twice. Not a hidden view's, which paints nothing; and
+    // not the first fit, which has no old size.
+    //
+    // A FACTOR ON THE VIEWPORT, the frozen scale over the live one, set again at
+    // every step because the live one moves. Not the ratio rounded to a coarser key
+    // instead - that brings back the soft, misplaced cards devicepixels::ratioKey()
+    // was made fine to fix.
+    if(isVisible() && event->oldSize().isValid() && event->oldSize() != event->size())
     {
-        if(!settling && table)
-            table->setFrozenScale(before);
+        if(!frozenScale && paintedInBurst)
+            frozenScale = paintedInBurst;
 
-        settling = true;
+        if(frozenScale)
+            devicepixels::setFreeze(*viewport(), *frozenScale / fittedScale);
+
         settleTimer.start();
     }
 
@@ -347,4 +376,15 @@ void TableView::resizeEvent(QResizeEvent* event)
     // would be positioned against the PREVIOUS scale on every resize - correct
     // only by one frame's delay, and visibly wrong while a window is dragged.
     placeOverlay();
+}
+
+void TableView::paintEvent(QPaintEvent* event)
+{
+    QGraphicsView::paintEvent(event);
+
+    // A frame of a burst drawn sharp, so its pixmaps are now cached at this scale:
+    // the one the rest of the burst may freeze at. Never a frozen frame's, whose
+    // pixmaps are still the earlier scale's.
+    if(settleTimer.isActive() && !frozenScale)
+        paintedInBurst = fittedScale;
 }

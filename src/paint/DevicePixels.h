@@ -6,6 +6,7 @@
 #include <optional>
 
 class QPainter;
+class QWidget;
 
 // HOW MANY PIXELS A PIXMAP NEEDS, in one place.
 //
@@ -31,15 +32,28 @@ namespace devicepixels
 // ignores rotation and translation - a tilted card asks for the same pixels as a
 // straight one.
 //
-// OR A FROZEN SCALE IN ITS PLACE, while a window is being resized (TableView). Each
-// step of a drag changes the view's scale, so every pixmap asked for at the live
-// one would miss its cache and be rasterized again, every frame. Given `frozen`,
-// the answer is the device's ratio times that instead: the pixmaps already made
-// are asked for again, and Qt scales them to where they now land until the resize
-// settles and the live scale takes over. It replaces the WHOLE of the painter's
-// scale, so it is only right for an item drawn under the view's scale and no scale
-// of its own - which is every pixmap item on the table.
-qreal effectiveRatio(const QPainter& painter, std::optional<qreal> frozen = std::nullopt);
+// TIMES A FREEZE, when the device is a widget a resize has frozen (setFreeze()
+// below). Without one it is exactly the ratio above.
+qreal effectiveRatio(const QPainter& painter);
+
+// FREEZES WHAT effectiveRatio() ANSWERS FOR A WIDGET, while a window is being
+// resized (TableView). Each step of a drag changes the view's scale, so every
+// pixmap asked for at the live one would miss its cache and be rasterized again,
+// every frame. With a freeze, a painter on `widget` is answered with its live ratio
+// times `factor` - the scale the resize began from over the live one - so the
+// pixmaps already made are asked for again, and Qt scales them to where they now
+// land. Nothing clears it but this, with std::nullopt.
+//
+// ON THE WIDGET, NOT THE SCENE, AND APPLIED HERE RATHER THAN BY THE ITEMS. Every
+// pixmap item on the table - the cards and the table now, the portraits and the
+// rack cards in later phases - asks effectiveRatio() anyway, so none of them can
+// forget the freeze. A scene rendered into an image paints on the image, not on
+// the widget, so it gets that image's own ratio, frozen or not; and the freeze
+// dies with the widget, whatever happens to the scene.
+//
+// A FACTOR, not a scale to put in place of the live one, so an item drawn at a
+// scale of its own keeps it.
+void setFreeze(QWidget& widget, std::optional<qreal> factor);
 
 // A ratio as a cache key, quantized to TEN-THOUSANDTHS.
 //

@@ -660,13 +660,18 @@ window edge with a full table on it stays smooth, with each frame of the drag un
   - **The table:** `TableTopItem`, a cached `tabletop::render(theme, ratio)` holding the table and
     its logo in one picture.
   - **Settling a resize:**
-    - While a resize is in progress, `TableScene::setFrozenScale()` holds the scale it began at.
-      Every pixmap item calls `devicepixels::effectiveRatio(painter, TableScene::frozenScaleOf(*this))`,
-      so caches hit and Qt scales what they hold.
+    - A resize's first step is drawn sharp, at full cost, so a one-off resize (maximize, a dock)
+      is never soft. A second resize within 150 ms is a drag: `TableView` freezes a scale the drag
+      has already painted at, and sets it on its viewport with `devicepixels::setFreeze()`.
+    - The freeze is a factor, the frozen scale over the live one. `devicepixels::effectiveRatio()`
+      applies it to any painter on that viewport, so caches hit and Qt scales what they hold.
+      A scene rendered into an image paints on the image and gets its exact ratio.
+    - It starts on a change of size, not of scale, so a wide window dragged sideways (same scale)
+      still spares the room.
     - `TableView` ends the freeze 150 ms after the last resize event, or at once through
       `finishResize()`.
-    - **Phase 4's portraits and phase 5's rack cards must pass the frozen scale too**, or every drag
-      re-rasterizes them.
+    - **Phase 4's portraits and phase 5's rack cards have nothing to pass:** asking
+      `effectiveRatio()`, as every pixmap does, is enough.
   - **Read-only counters for tests:** `CardRenderer::rasterizations()`, `TableTopItem::renders()`,
     `TableScene::cardRenderer()` / `tableTop()`, `TableView::isSettling()`.
 - **Where the build departed from this phase's plan, and why:**

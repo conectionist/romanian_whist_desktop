@@ -4,7 +4,6 @@
 #include "paint/Fonts.h"
 #include "paint/Gradients.h"
 #include "paint/Shadows.h"
-#include "table/TableScene.h"
 #include "table/TableSpace.h"
 
 #include <QBrush>
@@ -518,10 +517,10 @@ QPixmap TableTopItem::picture(qreal ratio) const
 void TableTopItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
 {
     // At the pixels it lands on - or, while the window is being resized, at the
-    // scale the resize began from, so the cached picture is drawn scaled rather
-    // than painted again on every step of the drag (TableView).
-    const QPixmap table =
-        picture(devicepixels::effectiveRatio(*painter, TableScene::frozenScaleOf(*this)));
+    // scale the resize began from, which effectiveRatio() answers with on its own,
+    // so the cached picture is drawn scaled rather than painted again on every
+    // step of the drag (TableView).
+    const QPixmap table = picture(devicepixels::effectiveRatio(*painter));
 
     if(table.isNull())
         return;

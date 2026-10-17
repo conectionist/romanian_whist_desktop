@@ -243,22 +243,3 @@ void TableScene::relayout()
     hand->setPos(tablespace::centre.x(), tablespace::handTop + tablespace::handCardHeight / 2.0);
     hand->setVisible(seated(*snapshot));
 }
-
-void TableScene::setFrozenScale(std::optional<qreal> scale)
-{
-    if(frozen == scale)
-        return;
-
-    frozen = scale;
-
-    // Everything at once: the items draw at a different ratio now, and nothing
-    // about their geometry changed to tell the scene so.
-    update();
-}
-
-std::optional<qreal> TableScene::frozenScaleOf(const QGraphicsItem& item)
-{
-    const auto* table = qobject_cast<const TableScene*>(item.scene());
-
-    return table ? table->frozenScale() : std::nullopt;
-}

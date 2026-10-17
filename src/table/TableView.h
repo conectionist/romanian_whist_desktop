@@ -4,6 +4,8 @@
 #include <QGraphicsView>
 #include <QTimer>
 
+#include <optional>
+
 class TableScene;
 
 // The window onto the table.
@@ -19,7 +21,8 @@ class TableScene;
 // times the device pixel ratio, and a view transform would resample that pixmap
 // on its way to the screen and undo it at the last step. That contract still
 // holds - every pixmap now asks devicepixels::effectiveRatio() for the pixels it
-// lands on, the view's scale included. So the scale costs the cards nothing, and
+// lands on, the view's scale included, and while a resize settles this view
+// freezes that answer on its viewport (resizeEvent()). So the scale costs the cards nothing, and
 // everything drawn as vectors was never at risk.
 //
 // AND THE ROOM BEHIND THE TABLE, which is this view's background: it fills the
@@ -62,12 +65,16 @@ public:
     void finishResize();
 
     // Whether a resize is settling: the pixmaps on the table are being drawn
-    // scaled from the scale the resize began at, and are rasterized afresh once
-    // it ends.
-    bool isSettling() const { return settling; }
+    // scaled from a scale the resize painted them at, and are rasterized afresh
+    // once it ends. Not true of a resize's first step, which is drawn sharp.
+    bool isSettling() const { return frozenScale.has_value(); }
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+
+    // Notes the scale a resize painted at, which is the one it may freeze - see
+    // resizeEvent().
+    void paintEvent(QPaintEvent* event) override;
 
     // The room, over the whole viewport - see the definition.
     void drawBackground(QPainter* painter, const QRectF& rect) override;
@@ -86,17 +93,25 @@ private:
     // window nobody drags is forever.
     void placeOverlay();
 
-    TableScene* table;
+    // The scene, as the TableScene it is - or null when it has none. ASKED OF
+    // QGraphicsView each time rather than kept: Qt drops a scene from its views
+    // when it is destroyed, so this cannot dangle.
+    TableScene* tableScene() const;
 
     // Non-owning; null until a caller sets one. See setBottomOverlay().
     QWidget* bottomOverlay = nullptr;
 
-    // THE RESIZE SETTLING. `fittedScale` is the scale of the last fit, zero before
-    // the first; `settling` says a resize is under way; the timer ends it once the
-    // window has stopped changing size. See resizeEvent().
+    // THE RESIZE SETTLING. See resizeEvent().
+    //
+    // `fittedScale` is the scale of the last fit, zero before the first. The timer
+    // runs from a resize until the window has stopped changing size for 150 ms -
+    // a burst. `paintedInBurst` is a scale the viewport was painted at, unfrozen,
+    // during the burst; `frozenScale`, the one the pixmaps are frozen at, once the
+    // burst has gone on long enough to be a drag.
     qreal fittedScale = 0.0;
-    bool settling = false;
     QTimer settleTimer;
+    std::optional<qreal> paintedInBurst;
+    std::optional<qreal> frozenScale;
 };
 
 #endif

@@ -23,6 +23,7 @@
 #include <QRectF>
 #include <QSize>
 #include <QTimer>
+#include <QtMath>
 
 #include <cmath>
 #include <cstddef>
@@ -470,10 +471,12 @@ TEST_CASE("Rendered into part of a larger image, the room is still the view's", 
 // EVERY STEP OF A WINDOW DRAG CHANGES THE SCALE, and every pixmap on the table is
 // rasterized at the screen's ratio times the scale - so a drag drawn honestly
 // paints every card from its SVG and composes the table again on every frame. The
-// view freezes the scale a resize began from instead: the pixmaps already made are
-// drawn scaled, and everything is rasterized once at the new scale when the
-// window stops. Counted here rather than timed, through the read-only counts the
-// renderer and the table keep: a timing would be a fact about the machine.
+// view freezes a scale the drag has painted at instead: the pixmaps already made
+// are drawn scaled, and everything is rasterized once at the new scale when the
+// window stops. A resize's FIRST step is drawn sharp, so a one-off resize -
+// maximizing, a dock shown - is never soft. Counted here rather than timed,
+// through the read-only counts the renderer and the table keep: a timing would be
+// a fact about the machine.
 
 namespace
 {
@@ -494,6 +497,43 @@ GameSnapshot fullTable()
     return snapshot;
 }
 
+void dealFullTable(TableScene& scene)
+{
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+}
+
+// Shown at `size` and painted once, so every pixmap it needs is in its cache.
+void showAndPaint(TableView& view, QSize size)
+{
+    view.resize(size);
+    view.show();
+    QCoreApplication::processEvents();
+
+    view.viewport()->grab();
+}
+
+// The ratio a pixmap drawn in `view` now, at its live scale, is made at.
+qreal liveRatio(const TableView& view)
+{
+    return view.viewport()->devicePixelRatioF() * view.transform().m11();
+}
+
+// Whether the table's picture and a card from your hand are both cached at
+// `ratio` - asked for there, neither count moves.
+bool cachedAt(const TableScene& scene, qreal ratio)
+{
+    const std::size_t tables = scene.tableTop()->renders();
+    scene.tableTop()->picture(ratio);
+
+    const CardRenderer& cards = scene.cardRenderer();
+    const std::size_t rasterized = cards.rasterizations();
+    cards.face(Card(Rank::Jack, Suit::Hearts), cards.sizeForHeight(tablespace::handCardHeight),
+               ratio);
+
+    return scene.tableTop()->renders() == tables && cards.rasterizations() == rasterized;
+}
+
 // A view of fullTable(), shown, fitted, and painted once at its settled scale -
 // so every pixmap it needs is in its cache before a case begins.
 struct ShownTable
@@ -501,22 +541,23 @@ struct ShownTable
     TableScene scene;
     TableView view{ &scene };
 
-    ShownTable()
+    explicit ShownTable(QSize size = QSize(1000, 700))
     {
-        scene.setTheme(Theme::dark());
-        scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
-
-        view.resize(1000, 700);
-        view.show();
-        QCoreApplication::processEvents();
-
-        paint();
+        dealFullTable(scene);
+        showAndPaint(view, size);
     }
 
     // One frame, painted now: what a screen refresh during the drag would do.
     void paint()
     {
         view.viewport()->grab();
+    }
+
+    // Step `at` of a drag outward from 1000 x 700, and its frame.
+    void step(int at)
+    {
+        view.resize(1000 + 7 * at, 700 + 3 * at);
+        paint();
     }
 
     std::size_t rasterizedCards() const
@@ -527,12 +568,6 @@ struct ShownTable
     std::size_t paintedTables() const
     {
         return scene.tableTop()->renders();
-    }
-
-    // The ratio a pixmap drawn now, at the live scale, is made at.
-    qreal liveRatio() const
-    {
-        return view.viewport()->devicePixelRatioF() * view.transform().m11();
     }
 };
 
@@ -553,27 +588,57 @@ TEST_CASE("A new view is drawn sharp from its first frame", "[table]")
     ShownTable table;
 
     REQUIRE_FALSE(table.view.isSettling());
-    REQUIRE_FALSE(table.scene.frozenScale().has_value());
+    REQUIRE(cachedAt(table.scene, liveRatio(table.view)));
 }
 
-TEST_CASE("While a resize settles, no card is rasterized again and the table is not repainted", "[table]")
+TEST_CASE("A single resize is drawn sharp at once and not painted again", "[table]")
+{
+    // Maximizing, restoring, a dock shown or hidden: one resize, and the table
+    // redrawn at its new scale in the very next frame. Frozen, it would be soft
+    // for 150 ms and then rasterized a second time.
+    ShownTable table;
+
+    const std::size_t tables = table.paintedTables();
+
+    table.view.resize(1400, 900);
+    table.paint();
+
+    REQUIRE_FALSE(table.view.isSettling());
+    REQUIRE(table.paintedTables() == tables + 1);
+    REQUIRE(cachedAt(table.scene, liveRatio(table.view)));
+
+    // And when the timer ends the burst, nothing is left to redo.
+    const std::size_t cards = table.rasterizedCards();
+    const std::size_t settled = table.paintedTables();
+
+    wait(400);
+    table.paint();
+
+    REQUIRE(table.rasterizedCards() == cards);
+    REQUIRE(table.paintedTables() == settled);
+}
+
+TEST_CASE("While a drag settles no card is rasterized again and the table is not repainted", "[table]")
 {
     ShownTable table;
+
+    // The drag's first step is drawn sharp, at full cost.
+    table.step(1);
+    REQUIRE_FALSE(table.view.isSettling());
 
     const std::size_t cards = table.rasterizedCards();
     const std::size_t tables = table.paintedTables();
 
-    // The premise: the first frame did rasterize, so the counts below are counts
-    // of something.
+    // The premise: the frames did rasterize, so the counts below are counts of
+    // something.
     REQUIRE(cards > 0);
     REQUIRE(tables > 0);
 
-    for(int step = 1 ; step <= 5 ; step++)
+    for(int step = 2 ; step <= 6 ; step++)
     {
         INFO("step " << step);
 
-        table.view.resize(1000 + 7 * step, 700 + 3 * step);
-        table.paint();
+        table.step(step);
 
         REQUIRE(table.view.isSettling());
         REQUIRE(table.rasterizedCards() == cards);
@@ -581,12 +646,13 @@ TEST_CASE("While a resize settles, no card is rasterized again and the table is 
     }
 }
 
-TEST_CASE("Once a resize settles, everything is rasterized at the new scale", "[table]")
+TEST_CASE("Once a drag settles everything is rasterized at the new scale", "[table]")
 {
     ShownTable table;
 
-    table.view.resize(1100, 760);
-    table.paint();
+    table.step(1);
+    table.step(2);
+    REQUIRE(table.view.isSettling());
 
     const std::size_t cards = table.rasterizedCards();
     const std::size_t tables = table.paintedTables();
@@ -595,38 +661,156 @@ TEST_CASE("Once a resize settles, everything is rasterized at the new scale", "[
     table.paint();
 
     REQUIRE_FALSE(table.view.isSettling());
-    REQUIRE_FALSE(table.scene.frozenScale().has_value());
 
     // Painted again, once, at the scale the window stopped at.
     REQUIRE(table.rasterizedCards() > cards);
     REQUIRE(table.paintedTables() == tables + 1);
 
     // AT THE LIVE SCALE, which is the point: asked for again at it, the table's
-    // picture and a card from your hand are both already there, so neither count
-    // moves.
-    const std::size_t paintedSince = table.paintedTables();
-    table.scene.tableTop()->picture(table.liveRatio());
-    REQUIRE(table.paintedTables() == paintedSince);
-
-    const std::size_t rasterizedSince = table.rasterizedCards();
-    table.scene.cardRenderer().face(Card(Rank::Jack, Suit::Hearts),
-                                    table.scene.cardRenderer().sizeForHeight(tablespace::handCardHeight),
-                                    table.liveRatio());
-    REQUIRE(table.rasterizedCards() == rasterizedSince);
+    // picture and a card from your hand are both already there.
+    REQUIRE(cachedAt(table.scene, liveRatio(table.view)));
 }
 
-TEST_CASE("A resize settles by itself once the window stops changing size", "[table]")
+TEST_CASE("A drag settles by itself once the window stops changing size", "[table]")
 {
     ShownTable table;
 
-    table.view.resize(1100, 760);
+    table.step(1);
+    table.step(2);
     REQUIRE(table.view.isSettling());
 
     // The timer's 150 ms, with room to spare.
     wait(400);
 
     REQUIRE_FALSE(table.view.isSettling());
-    REQUIRE_FALSE(table.scene.frozenScale().has_value());
+}
+
+TEST_CASE("A drag that leaves the scale alone still settles", "[table]")
+{
+    // A wide window is fitted by its height, so dragging its side edge keeps the
+    // scale - and still asks for a room the new size at every step, unless the
+    // drag is frozen like any other. Frozen at the same scale, the cards and the
+    // table are drawn exactly as they were.
+    ShownTable table(QSize(1800, 700));
+
+    const qreal scale = table.view.transform().m11();
+
+    table.view.resize(1810, 700);
+    table.paint();
+
+    const std::size_t cards = table.rasterizedCards();
+    const std::size_t tables = table.paintedTables();
+
+    table.view.resize(1820, 700);
+    table.paint();
+
+    // The premise: the width did not move the scale.
+    REQUIRE(table.view.transform().m11() == scale);
+
+    REQUIRE(table.view.isSettling());
+    REQUIRE(table.rasterizedCards() == cards);
+    REQUIRE(table.paintedTables() == tables);
+}
+
+TEST_CASE("Two resizes with no frame between them freeze nothing", "[table]")
+{
+    // A window manager's double configure, or a relayout before the first paint:
+    // the scale the second resize found was never drawn, so there is nothing to
+    // freeze at - only a frame that would be soft, and everything rasterized twice.
+    ShownTable table;
+
+    table.view.resize(1050, 730);
+    table.view.resize(1100, 760);
+
+    REQUIRE_FALSE(table.view.isSettling());
+
+    // Once a frame of the burst is painted, the next resize freezes at its scale -
+    // whose pixmaps are the ones in the caches, so the frame after rasterizes
+    // nothing.
+    table.paint();
+    table.view.resize(1110, 765);
+    REQUIRE(table.view.isSettling());
+
+    const std::size_t cards = table.rasterizedCards();
+    const std::size_t tables = table.paintedTables();
+
+    table.paint();
+
+    REQUIRE(table.rasterizedCards() == cards);
+    REQUIRE(table.paintedTables() == tables);
+}
+
+TEST_CASE("A scene rendered into an image while its view settles is drawn at the image's ratio", "[table]")
+{
+    // The freeze is the view's viewport's. Rendered anywhere else - an export, a
+    // thumbnail - the scene is drawn at the pixels of what it is rendered into.
+    ShownTable table;
+
+    table.step(1);
+    table.step(2);
+    REQUIRE(table.view.isSettling());
+
+    // The fit box, one image pixel per table unit.
+    const QRectF box = tablespace::fitBox;
+    QImage image(QSize(qCeil(box.width()), qCeil(box.height())), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    {
+        QPainter painter(&image);
+        table.scene.render(&painter, QRectF(QPointF(0.0, 0.0), box.size()), box);
+    }
+
+    REQUIRE(cachedAt(table.scene, 1.0));
+}
+
+TEST_CASE("A view destroyed while it settles leaves the next view sharp", "[table]")
+{
+    // The freeze dies with the view. Kept on the scene, it would outlive a view
+    // closed mid-drag, and every view after it would draw the table soft.
+    TableScene scene;
+    dealFullTable(scene);
+
+    {
+        TableView first(&scene);
+        showAndPaint(first, QSize(1000, 700));
+
+        first.resize(1010, 705);
+        first.viewport()->grab();
+        first.resize(1020, 710);
+
+        REQUIRE(first.isSettling());
+    }
+
+    TableView second(&scene);
+    showAndPaint(second, QSize(900, 650));
+
+    REQUIRE_FALSE(second.isSettling());
+    REQUIRE(cachedAt(scene, liveRatio(second)));
+}
+
+TEST_CASE("A view whose scene is destroyed while it settles settles safely", "[table]")
+{
+    // Qt drops a destroyed scene from its views, and the view asks for its scene
+    // each time rather than keeping a pointer that the settle timer would then
+    // reach through.
+    auto scene = std::make_unique<TableScene>();
+    dealFullTable(*scene);
+
+    TableView view(scene.get());
+    showAndPaint(view, QSize(1000, 700));
+
+    view.resize(1010, 705);
+    view.viewport()->grab();
+    view.resize(1020, 710);
+    REQUIRE(view.isSettling());
+
+    scene.reset();
+    REQUIRE(view.scene() == nullptr);
+
+    wait(400);
+    view.viewport()->grab();
+
+    REQUIRE_FALSE(view.isSettling());
 }
 
 TEST_CASE("A settling view still paints the room into its corners", "[table]")
@@ -636,6 +820,7 @@ TEST_CASE("A settling view still paints the room into its corners", "[table]")
     // edges.
     ShownTable table;
 
+    table.step(1);
     table.view.resize(1200, 800);
     REQUIRE(table.view.isSettling());
 
