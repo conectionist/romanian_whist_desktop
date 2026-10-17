@@ -458,14 +458,17 @@ Done when: the app still looks as it did, but the resources, fonts and tokens ex
   - **Colours:** `Theme::table`, a `Theme::TablePalette` holding section 2.2's tokens under
     camelCase names (`panelTop`, `goldBright`, `good`/`warn`/`bad`, `redSuit`, `buttonTop`, …).
     `light()` and `dark()` fill it from one function, so the table cannot drift between schemes.
-    The old members stay until their last reader moves across. ThemeTests counts
-    `TablePalette`'s members from `sizeof`, so it must hold nothing but `QColor`s.
+    The old members stay until their last reader moves across. **Every colour goes in
+    `ThemeColours`** (which `TablePalette` is part of), never on `Theme` itself: the caches
+    compare `ThemeColours` with its defaulted `==`, so a member added there needs no other edit,
+    and `Theme.cpp` static_asserts that `Theme` adds nothing beside its cache.
   - **Textures:** `Theme::woodTexture()` and `Theme::feltTexture()` return the source art at its
     native size. Phase 3 composes and caches the table at view size × dpr.
   - **Fonts:** `src/paint/Fonts.h`. `fonts::registerBundled()` is called by `main.cpp` and by
     `tests/TestApp.cpp`, as `registerMetaTypes()` is, and `fonts::logo()` / `heading()` /
-    `body()` give section 2.3's fallback chains for `QFont::setFamilies()`. Take family names from
-    there rather than writing them again.
+    `body()` return section 2.3's fallback chains as `QFont`s, with the CSS generic family as a
+    style hint (Qt does not read `serif` or `sans-serif` as names). Copy one and set the size and
+    weight on the copy, rather than writing the family names again.
 - **Alegreya Sans Medium has two family names**: the typographic "Alegreya Sans" and the legacy
   "Alegreya Sans Medium". Qt files it as weight 500 of "Alegreya Sans" on Linux and on the
   Windows CI runner, which `FontsTests.cpp` asserts.
@@ -474,15 +477,18 @@ Done when: the app still looks as it did, but the resources, fonts and tokens ex
   Windows has no substitution there, so Qt picks the best match and breaks ties alphabetically,
   and "Alegreya Sans" sorts in front of every system face. The first CI run failed
   `TableViewTests`' squeezed-strip case because the narrower face stopped wrapping.
-  `tests/TestApp.cpp` now pins the Windows default to Arial. A `FontsTests` case asserts that the
-  default is none of the bundled faces, so a recurrence fails by name. The shipped app is
-  unaffected: the windows platform plugin uses the system UI font.
+  `tests/TestApp.cpp` now pins the Windows offscreen default to Segoe UI, the system UI font the
+  shipped app gets from the windows platform plugin, and leaves any other platform alone. A
+  `FontsTests` case asserts that the default is none of the bundled faces, so a recurrence fails
+  by name.
 - **Pitfall:** Qt's `.qrc` dependency scan is a regex, not an XML parser. Writing the entry tag's
   name in angle brackets inside a comment produces a Makefile that fails with "missing separator".
   `resources/fonts.qrc` says so where it happened.
-- **Pitfall:** `QPixmap(fileName)` consults the process-wide `QPixmapCache`. So two loads of one
-  file share a `cacheKey` even with no cache of our own. A test of our caching must clear it
-  first, as the texture-sharing case does.
+- **Pitfall:** `QPixmap(fileName)` files every load in the process-wide `QPixmapCache` (10 MB by
+  default, shared with QStyle and QIcon), so two loads of one file share a `cacheKey` even with no
+  cache of our own. Theme reads its textures through `QImageReader` and `QPixmap::fromImage()`
+  instead, which keeps ~7 MB of textures out of that budget. Load any other large art the same
+  way.
 
 ### Phase 2: table space and the view transform
 

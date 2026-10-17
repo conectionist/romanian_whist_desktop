@@ -65,14 +65,13 @@ add_executable(desktop_tests
 # generated source a second time; the alternative is a suite that cannot be run
 # under a sanitizer.
 #
-# The SAME LIST as the parent's call, file for file. A .qrc left off here is not
-# a build error: it is a test that loads nothing and fails as though the code
-# under it were broken.
-qt_add_resources(TEST_RESOURCES
-    ${CMAKE_SOURCE_DIR}/resources/cards.qrc
-    ${CMAKE_SOURCE_DIR}/resources/table.qrc
-    ${CMAKE_SOURCE_DIR}/resources/fonts.qrc
-)
+# THE INPUT LIST IS SHARED; THE OUTPUT IS NOT. WHIST_DESKTOP_RESOURCES is the
+# parent's list of .qrc files - plain paths, which any scope can read - while
+# TEST_RESOURCES is this scope's own generated files, which is the distinction
+# attempt 1 above failed on. A second copy of the list would drift, and a .qrc
+# left off it is not a build error: it is a test that loads nothing and fails as
+# though the code under it were broken.
+qt_add_resources(TEST_RESOURCES ${WHIST_DESKTOP_RESOURCES})
 target_sources(desktop_tests PRIVATE ${TEST_RESOURCES})
 
 target_link_libraries(desktop_tests PRIVATE

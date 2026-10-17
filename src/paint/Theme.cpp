@@ -1,6 +1,8 @@
 #include "Theme.h"
 
 #include <QHash>
+#include <QImage>
+#include <QImageReader>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
@@ -8,7 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iterator>
+#include <memory>
+#include <utility>
 
 namespace
 {
@@ -118,21 +121,82 @@ Theme::TablePalette tablePalette()
     return table;
 }
 
+// The one place a texture is read, so the warning on a missing resource cannot
+// be left off one of the two.
+//
+// THROUGH QImageReader, NOT QPixmap(path). The QPixmap constructor also files
+// every load in the process-wide QPixmapCache, whose default budget is 10 MB and
+// is shared with QStyle and QIcon. The two textures decode to about 7 MB of it,
+// so they would evict the style's own pixmaps, and all to hold a second
+// reference to pixels the Cache below already holds.
+//
+// A failed load is NOT remembered, so a missing resource warns on every call
+// rather than once. Nothing about a missing resource gets better with time, so
+// the repetition costs nothing - and a cache that stored the null would make
+// the warning easy to scroll past and never see again.
+QPixmap loadTexture(const QString& path)
+{
+    QImageReader reader(path);
+    QImage image = reader.read();
+
+    if(image.isNull())
+    {
+        qWarning("Theme: could not load %s (%s) - is table.qrc compiled into this binary?",
+                 qUtf8Printable(path), qUtf8Printable(reader.errorString()));
+        return QPixmap();
+    }
+
+    return QPixmap::fromImage(std::move(image));
 }
 
-// Keyed on the PALETTE it was painted from as well as the size, because the
-// palette members above are public and a caller is free to assign one. Without
-// the tint in the key, a recoloured Theme would keep serving the old pixmap and
-// look like the assignment had not taken.
+// Both textures' share of the Cache, in one place. `slot` is that texture's
+// member of it, or null for a Theme with no Cache, which loads every time - the
+// same fallback background() makes.
+QPixmap cachedTexture(QPixmap* slot, const QString& path)
+{
+    if(!slot)
+        return loadTexture(path);
+
+    if(slot->isNull())
+        *slot = loadTexture(path);
+
+    return *slot;
+}
+
+// Theme's layout with nothing added to the colours but the cache pointer, for
+// the assertion below.
+struct ColoursAndCache : ThemeColours
+{
+    std::shared_ptr<void> cache;
+};
+
+}
+
+// A MEMBER DECLARED IN Theme RATHER THAN IN ThemeColours FAILS HERE. The caches
+// compare ThemeColours and nothing else, so a colour added to Theme itself
+// would be one a recolour could change while every cached picture stayed put.
+static_assert(sizeof(Theme) == sizeof(ColoursAndCache),
+              "Theme holds nothing but its cache: put a colour in ThemeColours (Theme.h)");
+
+// Keyed on the COLOURS it was painted from as well as the size, because the
+// colour members are public and a caller is free to assign one. Without them in
+// the key, a recoloured Theme would keep serving the old pixmap and look like
+// the assignment had not taken.
 //
-// The whole palette rather than the colours the painter beneath it reads today:
-// see paletteKey(). A per-colour key was how the avatar cache came to miss
-// accent, which paintAvatar() reads and seatPlaque alone did not cover.
+// ALL OF ThemeColours, not the colours the painter beneath it reads today. Which
+// members a painter depends on is not visible from the cache lookup, and the
+// answer changes: a per-colour key was how the avatar cache came to miss
+// accent, which paintAvatar() reads and seatPlaque alone did not cover. So the
+// bid, score and table colours are compared too, though neither painter here
+// reads one - the next painter that does needs no edit to this file.
+//
+// A copy of the colours rather than a hash of them, so the comparison is the
+// struct's own operator== and can neither collide nor miss a member.
 struct Theme::Cache
 {
     QSize backgroundSize;
     int backgroundDpr = 0;
-    quint64 backgroundTint = 0;
+    ThemeColours backgroundColours;
     QPixmap background;
 
     // ONE BOX SIZE AT A TIME, rather than a growing map keyed on the size. Every
@@ -144,7 +208,7 @@ struct Theme::Cache
     // not, and discarding the old set is both simpler and more complete.
     QSize avatarBox;
     int avatarDpr = 0;
-    quint64 avatarTint = 0;
+    ThemeColours avatarColours;
     QHash<unsigned int, QPixmap> avatars;
 
     // Keyed on nothing. A texture is source art, not a colour and not a size,
@@ -152,63 +216,6 @@ struct Theme::Cache
     QPixmap wood;
     QPixmap felt;
 };
-
-// Cheap enough to call on every lookup - a few dozen rgba() reads and a hash -
-// which is what lets both caches ask "is this the palette I was painted from?"
-// without either of them knowing what its painter reads.
-//
-// EVERY MEMBER OF THE STRUCT, including the three no painter reads yet. B2 added
-// the bid colours here and left this at five, which is the same omission
-// paintAvatar() made with accent one phase earlier - so the rule is restated
-// rather than relied on: a colour added above is added here in the same edit,
-// whether or not anything paints it today.
-//
-// An array rather than one long qHashMulti() call, since the redesign's
-// palette more than tripled the count: one colour per line is a list a reader
-// can check against the struct, which an argument list of thirty-four is not.
-// ThemeTests checks it as well, for every `table` member, by count.
-quint64 Theme::paletteKey() const
-{
-    const QRgb colours[] = {
-        tableSurface.rgba(),
-        seatPlaque.rgba(),
-        accent.rgba(),
-        accentText.rgba(),
-        textPrimary.rgba(),
-        dimmedOverlay.rgba(),
-        bidOnTarget.rgba(),
-        bidOwing.rgba(),
-        bidOver.rgba(),
-        scorePositive.rgba(),
-        scoreNegative.rgba(),
-
-        table.roomCentre.rgba(),
-        table.roomMiddle.rgba(),
-        table.roomEdge.rgba(),
-        table.woodBase.rgba(),
-        table.feltBase.rgba(),
-        table.panelTop.rgba(),
-        table.panelBottom.rgba(),
-        table.panelBorder.rgba(),
-        table.panelInnerShadow.rgba(),
-        table.panelInnerLine.rgba(),
-        table.panelShadow.rgba(),
-        table.gold.rgba(),
-        table.goldBright.rgba(),
-        table.cream.rgba(),
-        table.muted.rgba(),
-        table.good.rgba(),
-        table.warn.rgba(),
-        table.bad.rgba(),
-        table.redSuit.rgba(),
-        table.blackSuit.rgba(),
-        table.buttonTop.rgba(),
-        table.buttonBottom.rgba(),
-        table.buttonBorder.rgba(),
-    };
-
-    return qHashRange(std::begin(colours), std::end(colours));
-}
 
 Theme Theme::light()
 {
@@ -327,15 +334,17 @@ QPixmap Theme::background(QSize view, qreal dpr) const
     if(!cache)
         return rasterize(paintBackground(physicalSize(view, dpr)), dpr);
 
+    const ThemeColours& colours = *this;
+
     if(cache->background.isNull()
         || cache->backgroundSize != view
         || cache->backgroundDpr != dprKey(dpr)
-        || cache->backgroundTint != paletteKey())
+        || cache->backgroundColours != colours)
     {
         cache->background = rasterize(paintBackground(physicalSize(view, dpr)), dpr);
         cache->backgroundSize = view;
         cache->backgroundDpr = dprKey(dpr);
-        cache->backgroundTint = paletteKey();
+        cache->backgroundColours = colours;
     }
 
     return cache->background;
@@ -352,14 +361,16 @@ QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
     // A changed ratio discards the set exactly as a changed box does, and for
     // the same reason: the window moved to another screen, so every avatar in
     // the old set is one nothing will ask for again.
+    const ThemeColours& colours = *this;
+
     if(cache->avatarBox != box
         || cache->avatarDpr != dprKey(dpr)
-        || cache->avatarTint != paletteKey())
+        || cache->avatarColours != colours)
     {
         cache->avatars.clear();
         cache->avatarBox = box;
         cache->avatarDpr = dprKey(dpr);
-        cache->avatarTint = paletteKey();
+        cache->avatarColours = colours;
     }
 
     auto found = cache->avatars.constFind(seat);
@@ -370,45 +381,14 @@ QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
                                   rasterize(paintAvatar(seat, physicalSize(box, dpr)), dpr));
 }
 
-// A failed load is NOT remembered, so a missing resource warns on every call
-// rather than once. Nothing about a missing resource gets better with time, so
-// the repetition costs nothing - and a cache that stored the null would make
-// the warning easy to scroll past and never see again.
-QPixmap Theme::loadTexture(const QString& path)
-{
-    QPixmap pixmap(path);
-
-    if(pixmap.isNull())
-        qWarning("Theme: could not load %s - is table.qrc compiled into this binary?",
-                 qUtf8Printable(path));
-
-    return pixmap;
-}
-
 QPixmap Theme::woodTexture() const
 {
-    const QString path = QStringLiteral(":/table/table_wood.png");
-
-    if(!cache)
-        return loadTexture(path);
-
-    if(cache->wood.isNull())
-        cache->wood = loadTexture(path);
-
-    return cache->wood;
+    return cachedTexture(cache ? &cache->wood : nullptr, QStringLiteral(":/table/table_wood.png"));
 }
 
 QPixmap Theme::feltTexture() const
 {
-    const QString path = QStringLiteral(":/table/table_felt.png");
-
-    if(!cache)
-        return loadTexture(path);
-
-    if(cache->felt.isNull())
-        cache->felt = loadTexture(path);
-
-    return cache->felt;
+    return cachedTexture(cache ? &cache->felt : nullptr, QStringLiteral(":/table/table_felt.png"));
 }
 
 // A single desaturated green, subtly darker at the edges (section 18). No

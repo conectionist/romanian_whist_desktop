@@ -1,7 +1,7 @@
 #ifndef FONTS_H
 #define FONTS_H
 
-#include <QStringList>
+#include <QFont>
 
 // The table redesign's three typefaces (docs/ui-redesign/ section 2.3), bundled
 // rather than hoped for: Cinzel Decorative for the logo, Marcellus for names,
@@ -28,13 +28,20 @@ namespace fonts
 // otherwise is text that looks slightly wrong and no clue why.
 void registerBundled();
 
-// The fallback chains, in QFont::setFamilies() order, so a missing face
-// degrades to the nearest thing rather than to the platform default. Each one
-// leads with its bundled family; the rest are section 2.3's, copied from the
-// mock-up's CSS.
-QStringList logo();
-QStringList heading();
-QStringList body();
+// The fallback chains, so a missing face degrades to the nearest thing rather
+// than to the platform default. Each one leads with its bundled family; the
+// rest are section 2.3's, copied from the mock-up's CSS.
+//
+// A QFont RATHER THAN A LIST OF NAMES, because CSS's last step - "serif",
+// "sans-serif" - is not a family name to Qt. Fontconfig happens to alias those
+// two on Linux; Windows and macOS have no family called either, so as the end
+// of a setFamilies() list they matched nothing. Qt's spelling of a generic
+// family is the style hint, which only a QFont can carry.
+//
+// No size and no weight: copy the font and set both on the copy.
+QFont logo();
+QFont heading();
+QFont body();
 
 } // namespace fonts
 

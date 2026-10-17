@@ -48,35 +48,59 @@ TEST_CASE("The bundled typefaces are registered", "[fonts]")
     }
 }
 
-// The chains are what every later phase will hand to QFont::setFamilies(), so a
-// typo in a bundled family's name there would be text in the first fallback on
-// every machine - and the registration test above would still pass. Resolving
-// each chain is the test of the chain itself.
+// The chains are what every later phase will draw its text in, so a typo in a
+// bundled family's name there would be text in the first fallback on every
+// machine - and the registration test above would still pass. Resolving each
+// chain is the test of the chain itself.
 TEST_CASE("Each fallback chain resolves to its bundled family", "[fonts]")
 {
-    for(const QStringList& chain : { fonts::logo(), fonts::heading(), fonts::body() })
+    for(const QFont& font : { fonts::logo(), fonts::heading(), fonts::body() })
     {
-        INFO(chain.join(QStringLiteral(", ")).toStdString());
+        const QStringList chain = font.families();
 
-        QFont font;
-        font.setFamilies(chain);
+        INFO(chain.join(QStringLiteral(", ")).toStdString());
 
         REQUIRE(QFontInfo(font).family() == chain.first());
     }
 }
 
-// BUNDLING A FACE MUST NOT CHANGE THE DEFAULT ONE. On a real desktop the platform
-// supplies the UI font, so it cannot happen there. In the offscreen test platform
+// THE GENERIC LAST STEP, which is a style hint and not a name (Fonts.h has why).
+// Nothing can make every named face go missing to watch the hint take over, so
+// this asserts the hint is there and that no chain still ends in a CSS keyword.
+TEST_CASE("Each fallback chain ends in a generic family Qt understands", "[fonts]")
+{
+    REQUIRE(fonts::logo().styleHint() == QFont::Serif);
+    REQUIRE(fonts::heading().styleHint() == QFont::Serif);
+    REQUIRE(fonts::body().styleHint() == QFont::SansSerif);
+
+    for(const QFont& font : { fonts::logo(), fonts::heading(), fonts::body() })
+    {
+        REQUIRE_FALSE(font.families().contains(QStringLiteral("serif")));
+        REQUIRE_FALSE(font.families().contains(QStringLiteral("sans-serif")));
+    }
+}
+
+// BUNDLING A FACE MUST NOT CHANGE THE DEFAULT ONE. In the offscreen test platform
 // on Windows it DID: a default family that is missing gets filled alphabetically,
-// and "Alegreya Sans" sorts in front of Arial (TestApp.cpp has the detail). The
-// first sign of it was text wrapping differently in a test about the bid strip.
-// Asserted here, so the next time it happens the failure names its cause.
-TEST_CASE("Registering the bundled typefaces leaves the default font alone", "[fonts]")
+// and "Alegreya Sans" sorts in front of every system face (TestApp.cpp has the
+// detail). The first sign of it was text wrapping differently in a test about
+// the bid strip. Asserted here, so the next time it happens the failure names
+// its cause.
+//
+// What that proves depends on where it runs. On Linux and macOS, that the
+// registration had no side effect. On Windows offscreen, that TestApp's pin
+// RESOLVES - this asks QFontInfo, so a pinned face missing from the machine
+// would fall to the tie-break and fail here. On Windows with the windows
+// platform plugin, that the system's own UI font is untouched.
+//
+// By PREFIX, because the Medium file also carries a legacy family name, "Alegreya
+// Sans Medium", and a default resolved to that is the same failure.
+TEST_CASE("The default font is none of the bundled typefaces", "[fonts]")
 {
     const QString family = QFontInfo(QGuiApplication::font()).family();
 
     INFO("default font: " << family.toStdString());
 
-    for(const QStringList& chain : { fonts::logo(), fonts::heading(), fonts::body() })
-        REQUIRE(family != chain.first());
+    for(const QFont& font : { fonts::logo(), fonts::heading(), fonts::body() })
+        REQUIRE_FALSE(family.startsWith(font.families().first()));
 }

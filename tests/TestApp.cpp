@@ -99,25 +99,35 @@ public:
         fonts::registerBundled();
 
 #ifdef Q_OS_WIN
-        // WINDOWS ONLY, and a consequence of the call above. The offscreen
-        // platform asks for "Helvetica" as its default font. On Linux and macOS,
-        // fontconfig and CoreText substitute a real face for it; on Windows this
-        // FreeType database has no substitution, so Qt takes the best-matching
-        // family and breaks the tie ALPHABETICALLY. Registering the bundled
-        // fonts put "Alegreya Sans" in front of every system face, and the whole
-        // suite silently started laying text out in it - found by TableViewTests'
-        // squeezed-strip case, where the narrower face stopped wrapping the bid
-        // explanation.
+        // WINDOWS OFFSCREEN ONLY, and a consequence of the call above. The
+        // offscreen platform asks for "Helvetica" as its default font. On Linux
+        // and macOS, fontconfig and CoreText substitute a real face for it; on
+        // Windows this FreeType database has no substitution, so Qt takes the
+        // best-matching family and breaks the tie ALPHABETICALLY. Registering
+        // the bundled fonts put "Alegreya Sans" in front of every system face,
+        // and the whole suite silently started laying text out in it - found by
+        // TableViewTests' squeezed-strip case, where the narrower face stopped
+        // wrapping the bid explanation.
         //
-        // So the default is pinned rather than left to the alphabet. Arial,
-        // because it sorts first among Windows' own sans faces and so should be
-        // what that tie-break picked before the bundled fonts arrived. The
-        // shipped program is unaffected: the windows platform plugin reads the
-        // system's own UI font. FontsTests asserts the default is no bundled
-        // face, so if this ever stops holding it fails by name.
-        QFont font = QApplication::font();
-        font.setFamilies({ QStringLiteral("Arial") });
-        QApplication::setFont(font);
+        // So the default is pinned rather than left to the alphabet, and pinned
+        // to Segoe UI: the face the shipped program gets, since the windows
+        // platform plugin reads the system's UI font and that is Segoe UI. The
+        // tests then measure text in the face players see it in.
+        //
+        // NOT under any other platform. A QT_QPA_PLATFORM=windows run, which the
+        // block at the top lets through, has no tie-break to work around - its
+        // plugin supplies the real font, and pinning over it would quietly make
+        // that run something other than the shipped configuration it is for.
+        //
+        // FontsTests asserts the default is no bundled face, so if this ever
+        // stops holding - Segoe UI missing from the fonts directory included -
+        // it fails by name.
+        if(QApplication::platformName() == QLatin1String("offscreen"))
+        {
+            QFont font = QApplication::font();
+            font.setFamilies({ QStringLiteral("Segoe UI") });
+            QApplication::setFont(font);
+        }
 #endif
     }
 

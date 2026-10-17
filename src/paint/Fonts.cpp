@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFontDatabase>
 #include <QString>
+#include <QStringList>
 #include <QtLogging>
 
 namespace fonts
@@ -33,22 +34,38 @@ void registerBundled()
     }
 }
 
-QStringList logo()
+namespace
 {
-    return { QStringLiteral("Cinzel Decorative"), QStringLiteral("Cinzel"),
-             QStringLiteral("Georgia"), QStringLiteral("serif") };
+
+QFont chain(const QStringList& families, QFont::StyleHint generic)
+{
+    QFont font;
+    font.setFamilies(families);
+    font.setStyleHint(generic);
+    return font;
 }
 
-QStringList heading()
-{
-    return { QStringLiteral("Marcellus"), QStringLiteral("Cinzel"),
-             QStringLiteral("Georgia"), QStringLiteral("serif") };
 }
 
-QStringList body()
+QFont logo()
 {
-    return { QStringLiteral("Alegreya Sans"), QStringLiteral("Gill Sans"),
-             QStringLiteral("Segoe UI"), QStringLiteral("sans-serif") };
+    return chain({ QStringLiteral("Cinzel Decorative"), QStringLiteral("Cinzel"),
+                   QStringLiteral("Georgia") },
+                 QFont::Serif);
+}
+
+QFont heading()
+{
+    return chain({ QStringLiteral("Marcellus"), QStringLiteral("Cinzel"),
+                   QStringLiteral("Georgia") },
+                 QFont::Serif);
+}
+
+QFont body()
+{
+    return chain({ QStringLiteral("Alegreya Sans"), QStringLiteral("Gill Sans"),
+                   QStringLiteral("Segoe UI") },
+                 QFont::SansSerif);
 }
 
 } // namespace fonts

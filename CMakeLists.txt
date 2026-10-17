@@ -194,11 +194,16 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
 # build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
 # for the textures and qrc_fonts.cpp for the typefaces.
-qt_add_resources(APP_RESOURCES
-    resources/cards.qrc
-    resources/table.qrc
-    resources/fonts.qrc
+#
+# The list is a variable because tests/CMakeLists.txt consumes the same one (see
+# below), and absolute because that directory would resolve a relative path
+# against itself. A .qrc added here reaches both binaries.
+set(WHIST_DESKTOP_RESOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/cards.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/table.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts.qrc
 )
+qt_add_resources(APP_RESOURCES ${WHIST_DESKTOP_RESOURCES})
 target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 
 # The TESTS need the same blob, and it is not inherited. CardRenderer lives in
@@ -208,8 +213,8 @@ target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 # there, and every card would come back null - the same symptom as all three
 # failures above, from a fourth cause.
 #
-# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc,
-# for its own target. That looks redundant and is not - see the comment there,
+# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc
+# files (WHIST_DESKTOP_RESOURCES above), for its own target. That looks redundant and is not - see the comment there,
 # which records the two ways of sharing this one that were tried and failed.
 #
 # NOT by moving this into desktop_core, which is the obvious-looking fix. A

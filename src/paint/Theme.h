@@ -41,17 +41,17 @@
 // dark() assign from the same function. The members above it keep following the
 // scheme for the main menu and the dialogs, and keep drawing today's table until
 // the redesign's later phases move each widget across to `table`.
-struct Theme
+//
+// EVERY COLOUR LIVES IN THIS BASE, NOT IN Theme BELOW IT, because Theme's caches
+// tell a stale picture from a fresh one by comparing the colours it was painted
+// from with the colours the theme holds now: all of them, through the defaulted
+// operator== at the foot of this struct. A member added here is in that
+// comparison with no other edit. The hand-written key this replaced had to be
+// told about each new colour, and twice it was not - accent, which paintAvatar()
+// reads, and then the three bid colours in B2. Theme.cpp asserts that Theme adds
+// nothing beside its cache, so a colour declared there instead does not compile.
+struct ThemeColours
 {
-    // Qt's own type rather than an enum of ours, because the caller that
-    // matters is QGuiApplication::styleHints()->colorScheme() and translating
-    // between two spellings of the same three values would be pure friction.
-    // Qt::ColorScheme::Unknown is a real value on platforms that do not report
-    // one; forScheme() reads it as Light.
-    static Theme forScheme(Qt::ColorScheme scheme);
-    static Theme light();
-    static Theme dark();
-
     QColor tableSurface;
     QColor seatPlaque;
     QColor accent;
@@ -101,10 +101,6 @@ struct Theme
     // copied from the mock-up's page.html. The same in both schemes, per the note
     // above this struct. Added in the redesign's phase 1, before anything reads
     // it, so the phases that build the new table have one place to take it from.
-    //
-    // NOTHING BUT QColor, AND THAT IS LOAD-BEARING. ThemeTests counts these
-    // members from sizeof() to prove every one of them reaches paletteKey(), so a
-    // member of any other type here breaks the count, and that test with it.
     struct TablePalette
     {
         // The room behind the table, a radial gradient from centre to edge.
@@ -153,6 +149,21 @@ struct Theme
     };
 
     TablePalette table;
+
+    bool operator==(const ThemeColours&) const = default;
+};
+
+// The colours above, and what is drawn from them.
+struct Theme : ThemeColours
+{
+    // Qt's own type rather than an enum of ours, because the caller that
+    // matters is QGuiApplication::styleHints()->colorScheme() and translating
+    // between two spellings of the same three values would be pure friction.
+    // Qt::ColorScheme::Unknown is a real value on platforms that do not report
+    // one; forScheme() reads it as Light.
+    static Theme forScheme(Qt::ColorScheme scheme);
+    static Theme light();
+    static Theme dark();
 
     // Solid, gradient or a photograph - no caller can tell which, which is what
     // makes changing it one edit. It is a gradient today only because there is
@@ -209,27 +220,6 @@ private:
     // and shared by both, so neither public method can rasterize large and then
     // forget to say so.
     static QPixmap rasterize(QPixmap pixmap, qreal dpr);
-
-    // The one place a texture is read, so the warning on a missing resource
-    // cannot be left off one of the two.
-    static QPixmap loadTexture(const QString& path);
-
-    // EVERY colour, not the ones today's painters happen to read. Which members
-    // a painter depends on is not visible from the cache lookup, and the answer
-    // changes: paintAvatar() reads seatPlaque AND accent, and nothing about that
-    // is visible from avatar()'s side of the call. A key that has to be updated
-    // alongside a painter is a key that will not be.
-    //
-    // The bid and score colours are in the key while NEITHER of this struct's
-    // two painters reads one - they are drawn by the seat plaque and the
-    // scoreboard, which have palettes of their own to consult. That is the rule
-    // working rather than an oversight, and it is why the rule is "every
-    // colour" and not "every colour a painter here reads": the bid colours were
-    // added to the struct in B2 and to the key only in B2a, and that gap is the
-    // whole argument.
-    //
-    // All of `table` too, which nothing paints from yet either.
-    quint64 paletteKey() const;
 
     // SHARED ACROSS COPIES, not per-copy. Theme is a copyable value that widgets
     // will hold by value, and a plain QPixmap member would mean each copy
