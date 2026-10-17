@@ -581,9 +581,9 @@ remain pass.
   dragging the window edge misses the pixmap cache for every card on every frame. `CardRenderer` keeps
   each card's parsed `QSvgRenderer`, which took a 20-card frame from 135 ms to 75 ms per resize
   step. The rest is the court cards' art: J, Q and K take 8–11 ms each to render at about 124 px,
-  against 0.1–0.6 ms for a pip card. A real frame still costs about 20–30 ms per step. The candidate
-  follow-up is to defer re-rasterizing until a resize settles. Quantizing the scale would undo the
-  `ratioKey()` fix.
+  against 0.1–0.6 ms for a pip card. A real frame still costs about 20–30 ms per step. **Phase 3 takes
+  this on (its task 4):** defer re-rasterizing until a resize settles. Quantizing the scale would undo
+  the `ratioKey()` fix.
 - **Pitfall: listing a file in `tests/CMakeLists.txt` before the file exists.** The automatic
   re-configure fails on the missing source and leaves a test target that still links, with no test
   sources in it, so `desktop_tests` reports **0 test cases**. A fresh `cmake --preset` fixes it.
@@ -603,8 +603,18 @@ Files: new `src/table/TableTopItem.h/.cpp` (wood, bead, felt, gold circle), new
 2. Z order, bottom to top: room (background) < table < logo < racks < played cards < lead rhombus <
    hand < human's panel < other panels < pinned HUD < bid strip < modal sheets.
 3. Compare with `screenshots/table-4-players.jpg` ignoring seats and cards.
+4. **Settle a resize before re-rasterizing**, carried over from phase 2's review (PR #27). Every
+   pixmap in the scene is rasterized at the device ratio × the view's scale, so each step of a window
+   drag misses every cache. Phase 2 measured 20–30 ms per step from the court cards alone, and the
+   composed table from task 1 adds to that. While a resize is in progress, draw each pixmap item (the
+   cards, the composed table) from what it already holds, scaled to its rect, and re-rasterize at the
+   exact ratio about 150 ms after the last resize event. Build it as one mechanism in `TableView`
+   (for example a settling flag the items read, plus a single-shot timer that repaints the scene), not
+   a copy per item. Do not quantize the ratio instead: that brings back the soft, misplaced cards
+   `devicepixels::ratioKey()` fixed.
 
-Done when: an empty table at 1920×1080 matches the mock-up's table, rim and logo.
+Done when: an empty table at 1920×1080 matches the mock-up's table, rim and logo, and dragging the
+window edge with a full table on it stays smooth, with each frame of the drag under about 8 ms.
 
 ### Phase 4: seats and name panels
 
