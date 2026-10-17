@@ -188,6 +188,9 @@ CardRenderer::CardRenderer()
     cache.setMaxCost(cacheBudgetKb);
 }
 
+// Out of line, where QSvgRenderer is a complete type for the map's unique_ptrs.
+CardRenderer::~CardRenderer() = default;
+
 QSize CardRenderer::sizeForHeight(qreal height) const
 {
     if(height <= 0.0)
@@ -259,13 +262,20 @@ QPixmap CardRenderer::finish(const QImage& image, quint64 key, qreal dpr) const
 
 QImage CardRenderer::rasterizeFace(Card card, QSize physical) const
 {
-    const QString path = filePath(card);
-    if(path.isEmpty())
-        return QImage();
+    std::unique_ptr<QSvgRenderer>& renderer = art[indexOf(card)];
 
-    QSvgRenderer renderer(path);
-    if(!renderer.isValid())
-        return QImage();
+    if(!renderer)
+    {
+        const QString path = filePath(card);
+        if(path.isEmpty())
+            return QImage();
+
+        auto parsed = std::make_unique<QSvgRenderer>(path);
+        if(!parsed->isValid())
+            return QImage();
+
+        renderer = std::move(parsed);
+    }
 
     QImage image(physical, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
@@ -276,7 +286,7 @@ QImage CardRenderer::rasterizeFace(Card card, QSize physical) const
     // Onto transparency, with no card-shaped background painted first: the art
     // draws its own white body with rounded corners and a hairline border, so
     // filling behind it would only square off the corners it just rounded.
-    renderer.render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(physical)));
+    renderer->render(&painter, QRectF(QPointF(0.0, 0.0), QSizeF(physical)));
 
     return image;
 }

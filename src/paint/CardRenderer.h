@@ -8,6 +8,11 @@
 #include <QPixmap>
 #include <QSize>
 
+#include <memory>
+#include <unordered_map>
+
+class QSvgRenderer;
+
 // The second of the two seams of plan section 18.1: THE ONLY PLACE THAT KNOWS
 // CARD ART IS A FILE.
 //
@@ -54,6 +59,7 @@ public:
     };
 
     CardRenderer();
+    ~CardRenderer();
 
     // `size` is in LOGICAL pixels and `dpr` is the target device pixel ratio.
     // The returned pixmap is rasterized at size * dpr physical pixels and
@@ -89,6 +95,18 @@ private:
 
     // Stamps the ratio, stores under the key, and hands back a copy.
     QPixmap finish(const QImage& image, quint64 key, qreal dpr) const;
+
+    // EACH CARD'S ART, PARSED ONCE. Since the table redesign's phase 2 a resize
+    // changes the ratio every card is asked for at, so a window being dragged
+    // misses the pixmap cache below on every frame for every card on the table -
+    // and building a QSvgRenderer reads and parses the file each time, which was
+    // most of the cost of a miss. Keyed by indexOf() rather than an array of 52,
+    // for the reason backBit gives in the .cpp.
+    //
+    // Unbounded, because it cannot grow past the deck: one entry per card art.
+    // A file that fails to parse is not stored, so it fails again on every call
+    // rather than once.
+    mutable std::unordered_map<unsigned int, std::unique_ptr<QSvgRenderer>> art;
 
     // MUTABLE AND BOUNDED. Mutable because caching is not observable through
     // this class's const interface, and bounded because the size in the key is
