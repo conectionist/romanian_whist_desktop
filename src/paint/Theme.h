@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QPixmap>
 #include <QSize>
+#include <QString>
 
 #include <memory>
 
@@ -32,6 +33,14 @@
 // sixth design colour but the accent's second FORM: a colour readable as a mark
 // and a colour readable as a word are different colours, and the section spells
 // out neither. See the note on it.
+//
+// THE TABLE PAGE IS DARK IN BOTH SCHEMES - the table redesign's open question Q1
+// (docs/ui-redesign/IMPLEMENTATION_PLAN.md), decided by the owner on 2026-10-17.
+// The redesign is a dark wood-panelled room and has no light variant to follow
+// the system with, so its colours are one set, `table` below, which light() and
+// dark() assign from the same function. The members above it keep following the
+// scheme for the main menu and the dialogs, and keep drawing today's table until
+// the redesign's later phases move each widget across to `table`.
 struct Theme
 {
     // Qt's own type rather than an enum of ours, because the caller that
@@ -88,6 +97,63 @@ struct Theme
     QColor scorePositive;
     QColor scoreNegative;
 
+    // The redesign's palette: section 2.2 of docs/ui-redesign/IMPLEMENTATION_PLAN.md,
+    // copied from the mock-up's page.html. The same in both schemes, per the note
+    // above this struct. Added in the redesign's phase 1, before anything reads
+    // it, so the phases that build the new table have one place to take it from.
+    //
+    // NOTHING BUT QColor, AND THAT IS LOAD-BEARING. ThemeTests counts these
+    // members from sizeof() to prove every one of them reaches paletteKey(), so a
+    // member of any other type here breaks the count, and that test with it.
+    struct TablePalette
+    {
+        // The room behind the table, a radial gradient from centre to edge.
+        QColor roomCentre;
+        QColor roomMiddle;
+        QColor roomEdge;
+
+        // What lies under the wood and felt textures, where they let it show.
+        QColor woodBase;
+        QColor feltBase;
+
+        // Every panel: a vertical gradient, a gold hairline border, an inset
+        // dark line and then a faint gold one inside it, and a drop shadow.
+        QColor panelTop;
+        QColor panelBottom;
+        QColor panelBorder;
+        QColor panelInnerShadow;
+        QColor panelInnerLine;
+        QColor panelShadow;
+
+        // Gold for marks and borders, gold-bright for whatever is active or
+        // winning; cream for text and muted for labels.
+        QColor gold;
+        QColor goldBright;
+        QColor cream;
+        QColor muted;
+
+        // The Taken/Bid pill: on target, still owing, over. Its text always
+        // carries the numbers, so the colour is never the only cue (section 18).
+        QColor good;
+        QColor warn;
+        QColor bad;
+
+        // Suit glyphs inside text. The black suits draw in cream, because black
+        // on a dark panel would vanish - a member all the same, so no caller has
+        // to know that.
+        QColor redSuit;
+        QColor blackSuit;
+
+        // The green buttons: the bids, and the sheets' actions.
+        QColor buttonTop;
+        QColor buttonBottom;
+        QColor buttonBorder;
+
+        bool operator==(const TablePalette&) const = default;
+    };
+
+    TablePalette table;
+
     // Solid, gradient or a photograph - no caller can tell which, which is what
     // makes changing it one edit. It is a gradient today only because there is
     // no art committed to point it at.
@@ -106,6 +172,19 @@ struct Theme
     //
     // Same logical-size-and-dpr contract as background() above.
     QPixmap avatar(unsigned int seat, QSize box, qreal dpr) const;
+
+    // The redesign's two table textures (tools/generate_table_textures.py), as
+    // the source art: the wooden rim 1020x1020 with alpha, the felt 880x880.
+    //
+    // NOT SCALED HERE, unlike the two above. The table is composed from these,
+    // the base colours and a stack of gradients, and it is that composition
+    // which gets cached at the view's size and ratio (the redesign's phase 3).
+    // These are its inputs, read once and shared by every copy of the theme.
+    //
+    // A null pixmap means the resource was never embedded, and that is said on
+    // stderr rather than left to look like a missing table.
+    QPixmap woodTexture() const;
+    QPixmap feltTexture() const;
 
     // One unit. Every other metric on the table derives from it, so new art with
     // a different aspect ratio does not mean re-tuning the layout.
@@ -131,6 +210,10 @@ private:
     // forget to say so.
     static QPixmap rasterize(QPixmap pixmap, qreal dpr);
 
+    // The one place a texture is read, so the warning on a missing resource
+    // cannot be left off one of the two.
+    static QPixmap loadTexture(const QString& path);
+
     // EVERY colour, not the ones today's painters happen to read. Which members
     // a painter depends on is not visible from the cache lookup, and the answer
     // changes: paintAvatar() reads seatPlaque AND accent, and nothing about that
@@ -144,6 +227,8 @@ private:
     // colour" and not "every colour a painter here reads": the bid colours were
     // added to the struct in B2 and to the key only in B2a, and that gap is the
     // whole argument.
+    //
+    // All of `table` too, which nothing paints from yet either.
     quint64 paletteKey() const;
 
     // SHARED ACROSS COPIES, not per-copy. Theme is a copyable value that widgets

@@ -1,0 +1,33 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <!-- Runtime paths are :/fonts/NAME - flat, as cards.qrc and table.qrc are,
+         so the per-family folders on disk are not part of any URL.
+
+         NEVER WRITE THE ENTRY TAG'S NAME IN ANGLE BRACKETS IN A COMMENT HERE. The
+         dependency scan qt_add_resources() generates is a regex over this file,
+         not an XML parser: it reads a bracketed tag name inside a comment as the
+         start of an entry, swallows everything up to the next real closing tag
+         as a "path", and writes that into the Makefile, which then fails with
+         "missing separator". That is how this comment's first draft broke the
+         build.
+
+         The redesign's three typefaces (docs/ui-redesign/ section 2.3), all from
+         Google Fonts under the SIL Open Font License. fonts::registerBundled()
+         loads every .ttf here; it is the only reader.
+
+         THE LICENCES ARE EMBEDDED TOO. The OFL lets a font ship inside a program
+         on condition that its copyright notice and licence go with it, and this
+         binary is the only thing that ships - so the three licence texts travel
+         in it beside the fonts they cover. Each family has its own copyright line,
+         which is why there are three and not one. -->
+    <qresource prefix="/fonts">
+        <file alias="CinzelDecorative-Bold.ttf">fonts/cinzel-decorative/CinzelDecorative-Bold.ttf</file>
+        <file alias="Marcellus-Regular.ttf">fonts/marcellus/Marcellus-Regular.ttf</file>
+        <file alias="AlegreyaSans-Regular.ttf">fonts/alegreya-sans/AlegreyaSans-Regular.ttf</file>
+        <file alias="AlegreyaSans-Medium.ttf">fonts/alegreya-sans/AlegreyaSans-Medium.ttf</file>
+        <file alias="AlegreyaSans-Bold.ttf">fonts/alegreya-sans/AlegreyaSans-Bold.ttf</file>
+
+        <file alias="OFL-CinzelDecorative.txt">fonts/cinzel-decorative/OFL.txt</file>
+        <file alias="OFL-Marcellus.txt">fonts/marcellus/OFL.txt</file>
+        <file alias="OFL-AlegreyaSans.txt">fonts/alegreya-sans/OFL.txt</file>
+    </qresource>
+</RCC>

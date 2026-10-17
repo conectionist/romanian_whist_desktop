@@ -4,9 +4,11 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
+#include <QtLogging>
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace
 {
@@ -62,6 +64,60 @@ int dprKey(qreal dpr)
     return qRound(dpr * 100.0);
 }
 
+// CSS's spelling, so each value below can be checked against the mock-up's
+// page.html by eye: rgba(40, 29, 19, 0.95) there is rgba(40, 29, 19, 0.95) here.
+QColor rgba(int red, int green, int blue, qreal alpha)
+{
+    QColor colour(red, green, blue);
+    colour.setAlphaF(alpha);
+    return colour;
+}
+
+// The redesign's palette, in ONE function that light() and dark() both call -
+// which is what makes "the table page is dark in both schemes" true by
+// construction rather than by two copies agreeing. Section 2.2 of
+// docs/ui-redesign/IMPLEMENTATION_PLAN.md, in its order.
+Theme::TablePalette tablePalette()
+{
+    Theme::TablePalette table;
+
+    // radial-gradient(ellipse at 50% 42%, #3b2414 0%, #1c110a 58%, #0b0704 100%)
+    table.roomCentre = QColor(0x3B, 0x24, 0x14);
+    table.roomMiddle = QColor(0x1C, 0x11, 0x0A);
+    table.roomEdge = QColor(0x0B, 0x07, 0x04);
+
+    table.woodBase = QColor(0x5A, 0x33, 0x1A);
+    table.feltBase = QColor(0x1D, 0x5A, 0x3A);
+
+    table.panelTop = rgba(40, 29, 19, 0.95);
+    table.panelBottom = rgba(19, 13, 8, 0.95);
+    table.panelBorder = QColor(0x80, 0x61, 0x37);
+    table.panelInnerShadow = rgba(18, 12, 7, 0.9);
+    table.panelInnerLine = rgba(201, 164, 92, 0.3);
+    table.panelShadow = rgba(0, 0, 0, 0.55);
+
+    table.gold = QColor(0xC9, 0xA4, 0x5C);
+    table.goldBright = QColor(0xF2, 0xD3, 0x8C);
+    table.cream = QColor(0xF1, 0xE6, 0xCC);
+    table.muted = QColor(0xBB, 0xA7, 0x83);
+
+    table.good = QColor(0x86, 0xC9, 0x8F);
+    table.warn = QColor(0xE6, 0xB9, 0x5C);
+    table.bad = QColor(0xE5, 0x80, 0x6D);
+
+    // Assigned rather than repeated, as dark()'s accentText is: the black suits
+    // ARE the text colour, and a second copy of it is a second thing to keep in
+    // step.
+    table.redSuit = QColor(0xE0, 0x52, 0x4A);
+    table.blackSuit = table.cream;
+
+    table.buttonTop = QColor(0x2A, 0x61, 0x42);
+    table.buttonBottom = QColor(0x17, 0x40, 0x2A);
+    table.buttonBorder = QColor(0xA3, 0x82, 0x4A);
+
+    return table;
+}
+
 }
 
 // Keyed on the PALETTE it was painted from as well as the size, because the
@@ -90,24 +146,68 @@ struct Theme::Cache
     int avatarDpr = 0;
     quint64 avatarTint = 0;
     QHash<unsigned int, QPixmap> avatars;
+
+    // Keyed on nothing. A texture is source art, not a colour and not a size,
+    // so the first load is the only one this cache ever needs to make.
+    QPixmap wood;
+    QPixmap felt;
 };
 
-// Cheap enough to call on every lookup - ten rgba() reads and a hash - which is
-// what lets both caches ask "is this the palette I was painted from?" without
-// either of them knowing what its painter reads.
+// Cheap enough to call on every lookup - a few dozen rgba() reads and a hash -
+// which is what lets both caches ask "is this the palette I was painted from?"
+// without either of them knowing what its painter reads.
 //
 // EVERY MEMBER OF THE STRUCT, including the three no painter reads yet. B2 added
 // the bid colours here and left this at five, which is the same omission
 // paintAvatar() made with accent one phase earlier - so the rule is restated
 // rather than relied on: a colour added above is added here in the same edit,
 // whether or not anything paints it today.
+//
+// An array rather than one long qHashMulti() call, since the redesign's
+// palette more than tripled the count: one colour per line is a list a reader
+// can check against the struct, which an argument list of thirty-four is not.
+// ThemeTests checks it as well, for every `table` member, by count.
 quint64 Theme::paletteKey() const
 {
-    return qHashMulti(0, tableSurface.rgba(), seatPlaque.rgba(), accent.rgba(),
-                      accentText.rgba(), textPrimary.rgba(),
-                      dimmedOverlay.rgba(), bidOnTarget.rgba(),
-                      bidOwing.rgba(), bidOver.rgba(), scorePositive.rgba(),
-                      scoreNegative.rgba());
+    const QRgb colours[] = {
+        tableSurface.rgba(),
+        seatPlaque.rgba(),
+        accent.rgba(),
+        accentText.rgba(),
+        textPrimary.rgba(),
+        dimmedOverlay.rgba(),
+        bidOnTarget.rgba(),
+        bidOwing.rgba(),
+        bidOver.rgba(),
+        scorePositive.rgba(),
+        scoreNegative.rgba(),
+
+        table.roomCentre.rgba(),
+        table.roomMiddle.rgba(),
+        table.roomEdge.rgba(),
+        table.woodBase.rgba(),
+        table.feltBase.rgba(),
+        table.panelTop.rgba(),
+        table.panelBottom.rgba(),
+        table.panelBorder.rgba(),
+        table.panelInnerShadow.rgba(),
+        table.panelInnerLine.rgba(),
+        table.panelShadow.rgba(),
+        table.gold.rgba(),
+        table.goldBright.rgba(),
+        table.cream.rgba(),
+        table.muted.rgba(),
+        table.good.rgba(),
+        table.warn.rgba(),
+        table.bad.rgba(),
+        table.redSuit.rgba(),
+        table.blackSuit.rgba(),
+        table.buttonTop.rgba(),
+        table.buttonBottom.rgba(),
+        table.buttonBorder.rgba(),
+    };
+
+    return qHashRange(std::begin(colours), std::end(colours));
 }
 
 Theme Theme::light()
@@ -137,6 +237,10 @@ Theme Theme::light()
     theme.bidOver = QColor(0xA8, 0x3F, 0x2C);
     theme.scorePositive = QColor(0x1E, 0x6B, 0x3F);
     theme.scoreNegative = QColor(0x9C, 0x2F, 0x22);
+
+    // The dark table in the light theme too - see Theme.h.
+    theme.table = tablePalette();
+
     theme.cache = std::make_shared<Cache>();
     return theme;
 }
@@ -174,6 +278,7 @@ Theme Theme::dark()
     theme.bidOver = QColor(0xE3, 0x79, 0x64);
     theme.scorePositive = QColor(0x5F, 0xC1, 0x88);
     theme.scoreNegative = QColor(0xE8, 0x76, 0x5F);
+    theme.table = tablePalette();
     theme.cache = std::make_shared<Cache>();
     return theme;
 }
@@ -263,6 +368,47 @@ QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
 
     return *cache->avatars.insert(seat,
                                   rasterize(paintAvatar(seat, physicalSize(box, dpr)), dpr));
+}
+
+// A failed load is NOT remembered, so a missing resource warns on every call
+// rather than once. Nothing about a missing resource gets better with time, so
+// the repetition costs nothing - and a cache that stored the null would make
+// the warning easy to scroll past and never see again.
+QPixmap Theme::loadTexture(const QString& path)
+{
+    QPixmap pixmap(path);
+
+    if(pixmap.isNull())
+        qWarning("Theme: could not load %s - is table.qrc compiled into this binary?",
+                 qUtf8Printable(path));
+
+    return pixmap;
+}
+
+QPixmap Theme::woodTexture() const
+{
+    const QString path = QStringLiteral(":/table/table_wood.png");
+
+    if(!cache)
+        return loadTexture(path);
+
+    if(cache->wood.isNull())
+        cache->wood = loadTexture(path);
+
+    return cache->wood;
+}
+
+QPixmap Theme::feltTexture() const
+{
+    const QString path = QStringLiteral(":/table/table_felt.png");
+
+    if(!cache)
+        return loadTexture(path);
+
+    if(cache->felt.isNull())
+        cache->felt = loadTexture(path);
+
+    return cache->felt;
 }
 
 // A single desaturated green, subtly darker at the edges (section 18). No

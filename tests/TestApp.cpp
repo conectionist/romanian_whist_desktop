@@ -3,6 +3,7 @@
 #include <catch2/reporters/catch_reporter_registrars.hpp>
 
 #include "engine/MetaTypes.h"
+#include "paint/Fonts.h"
 
 #include <QApplication>
 
@@ -91,6 +92,10 @@ public:
         app = std::make_unique<QApplication>(argc, argv);
 
         registerMetaTypes();
+
+        // The same call main() makes, for the same reason as the line above:
+        // without it every test lays text out in a face the program never uses.
+        fonts::registerBundled();
     }
 
     void testRunEnded(const Catch::TestRunStats&) override

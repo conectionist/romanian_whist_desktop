@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "engine/MetaTypes.h"
+#include "paint/Fonts.h"
 
 #include <QApplication>
 #include <QLocale>
@@ -15,6 +16,10 @@ int main(int argc, char *argv[])
     // call belongs at the top of main() rather than wherever the first
     // connection happens to be added later.
     registerMetaTypes();
+
+    // After the QApplication, which owns the font database, and before
+    // MainWindow, so no widget ever lays text out without these faces.
+    fonts::registerBundled();
 
     QTranslator translator;
     const QStringList uiLanguages = QLocale::system().uiLanguages();

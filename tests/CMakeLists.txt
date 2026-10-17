@@ -25,6 +25,7 @@ add_executable(desktop_tests
     HandItemTests.cpp
     PromptBarTests.cpp
     ThemeTests.cpp
+    FontsTests.cpp
     CardRendererTests.cpp
     SeatLayoutTests.cpp
     TrickItemTests.cpp
@@ -37,15 +38,17 @@ add_executable(desktop_tests
     TestApp.cpp
 )
 
-# The card art, compiled into the test binary. CardRendererTests.cpp loads
-# ":/cards/..." for real, and the parent CMakeLists.txt attaches its own
-# qt_add_resources output to the application target only - resources belong to a
-# binary, not to the desktop_core both binaries link.
+# The card art, the table textures and the fonts, compiled into the test binary.
+# CardRendererTests.cpp loads ":/cards/..." for real, ThemeTests.cpp loads
+# ":/table/...", and TestApp.cpp registers ":/fonts/..." exactly as main() does -
+# and the parent CMakeLists.txt attaches its own qt_add_resources output to the
+# application target only. Resources belong to a binary, not to the desktop_core
+# both binaries link.
 #
 # A SECOND qt_add_resources ON THE SAME .qrc, which looks like duplication and
 # is the only form that works. Two tidier-looking arrangements were tried:
 #
-#   1. Attaching the parent's ${CARD_RESOURCES} to this target - either from
+#   1. Attaching the parent's ${APP_RESOURCES} to this target - either from
 #      here or from the parent after add_subdirectory(). The path resolves and
 #      `cmake --build build` succeeds, which is what makes this one dangerous.
 #      `cmake --build <dir> --target desktop_tests` then fails outright with
@@ -61,8 +64,16 @@ add_executable(desktop_tests
 # in the scope of the target that uses it. The cost is compiling ~30 MB of
 # generated source a second time; the alternative is a suite that cannot be run
 # under a sanitizer.
-qt_add_resources(TEST_CARD_RESOURCES ${CMAKE_SOURCE_DIR}/resources/cards.qrc)
-target_sources(desktop_tests PRIVATE ${TEST_CARD_RESOURCES})
+#
+# The SAME LIST as the parent's call, file for file. A .qrc left off here is not
+# a build error: it is a test that loads nothing and fails as though the code
+# under it were broken.
+qt_add_resources(TEST_RESOURCES
+    ${CMAKE_SOURCE_DIR}/resources/cards.qrc
+    ${CMAKE_SOURCE_DIR}/resources/table.qrc
+    ${CMAKE_SOURCE_DIR}/resources/fonts.qrc
+)
+target_sources(desktop_tests PRIVATE ${TEST_RESOURCES})
 
 target_link_libraries(desktop_tests PRIVATE
     desktop_core

@@ -74,6 +74,8 @@ qt_add_library(desktop_core STATIC
 
     src/paint/Theme.h
     src/paint/Theme.cpp
+    src/paint/Fonts.h
+    src/paint/Fonts.cpp
     src/paint/CardRenderer.h
     src/paint/CardRenderer.cpp
 
@@ -166,6 +168,12 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # the runtime path is :/cards/ace_of_spades.png (and likewise ace_of_spades.svg
 # for the vector set) - moving the files on disk does not move the URLs.
 #
+# Two more .qrc files follow the same pattern, both added by the table redesign
+# (docs/ui-redesign/): resources/table.qrc puts the wood and felt textures under
+# /table, and resources/fonts.qrc puts the three bundled typefaces and their
+# licences under /fonts. Everything below applies to all three - they are one
+# call because they share every one of its pitfalls.
+#
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
 #
@@ -184,9 +192,14 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # This is the form that actually consumes a .qrc: an output variable, then the
 # .qrc files, with the generated .cpp put into the target by hand. It does not
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
-# build tree - no such file means nothing was embedded.
-qt_add_resources(CARD_RESOURCES resources/cards.qrc)
-target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
+# build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
+# for the textures and qrc_fonts.cpp for the typefaces.
+qt_add_resources(APP_RESOURCES
+    resources/cards.qrc
+    resources/table.qrc
+    resources/fonts.qrc
+)
+target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 
 # The TESTS need the same blob, and it is not inherited. CardRenderer lives in
 # desktop_core, but resources are not a library property: the generated

@@ -423,7 +423,7 @@ Done when: the baseline builds and passes, and you can produce a screenshot of t
   setting pinned, and checks which moment each picture shows, so pictures taken before and after
   a phase are comparable.
 
-### Phase 1: assets and theme
+### Phase 1: assets and theme ✅ COMPLETE
 
 Files: `CMakeLists.txt`, `tests/CMakeLists.txt`, new `resources/table.qrc`, new
 `resources/fonts.qrc` + `resources/fonts/`, `src/paint/Theme.h/.cpp`, `src/main.cpp`,
@@ -447,6 +447,35 @@ Files: `CMakeLists.txt`, `tests/CMakeLists.txt`, new `resources/table.qrc`, new
    `paletteKey()`; fonts are registered (`QFontDatabase::families()` contains them).
 
 Done when: the app still looks as it did, but the resources, fonts and tokens exist and are tested.
+
+**Outcome:**
+
+- **The count is 266 tests** (259 + 7), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. The screenshot tool's five pictures are
+  pixel-identical to phase 0's, so the client really does look as it did.
+- **Q1 and Q2 were decided by the owner** on 2026-10-17, both as the defaults (see section 7).
+- **What later phases take from here:**
+  - **Colours:** `Theme::table`, a `Theme::TablePalette` holding section 2.2's tokens under
+    camelCase names (`panelTop`, `goldBright`, `good`/`warn`/`bad`, `redSuit`, `buttonTop`, …).
+    `light()` and `dark()` fill it from one function, so the table cannot drift between schemes.
+    The old members stay until their last reader moves across. ThemeTests counts
+    `TablePalette`'s members from `sizeof`, so it must hold nothing but `QColor`s.
+  - **Textures:** `Theme::woodTexture()` and `Theme::feltTexture()` return the source art at its
+    native size. Phase 3 composes and caches the table at view size × dpr.
+  - **Fonts:** `src/paint/Fonts.h`. `fonts::registerBundled()` is called by `main.cpp` and by
+    `tests/TestApp.cpp`, as `registerMetaTypes()` is, and `fonts::logo()` / `heading()` /
+    `body()` give section 2.3's fallback chains for `QFont::setFamilies()`. Take family names from
+    there rather than writing them again.
+- **Alegreya Sans Medium has two family names**: the typographic "Alegreya Sans" and the legacy
+  "Alegreya Sans Medium". On Linux, Qt files it as weight 500 of "Alegreya Sans", which
+  `FontsTests.cpp` asserts. Windows is unverified until CI runs there again. If that assertion
+  fails there, look at this first.
+- **Pitfall:** Qt's `.qrc` dependency scan is a regex, not an XML parser. Writing the entry tag's
+  name in angle brackets inside a comment produces a Makefile that fails with "missing separator".
+  `resources/fonts.qrc` says so where it happened.
+- **Pitfall:** `QPixmap(fileName)` consults the process-wide `QPixmapCache`. So two loads of one
+  file share a `cacheKey` even with no cache of our own. A test of our caching must clear it
+  first, as the texture-sharing case does.
 
 ### Phase 2: table space and the view transform
 
@@ -661,8 +690,8 @@ Ask the owner if possible. If not, use the default and record it.
 
 | # | Question | Default |
 |---|---|---|
-| Q1 | Light/dark: the mock-up is dark only. Should the table follow the system scheme? | No: the table page is always the dark design; menus and dialogs may keep following the system |
-| Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes |
+| Q1 | Light/dark: the mock-up is dark only. Should the table follow the system scheme? | No: the table page is always the dark design; menus and dialogs may keep following the system. **Decided by the owner, 2026-10-17: as the default** (phase 1) |
+| Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes. **Decided by the owner, 2026-10-17: yes** (phase 1) |
 | Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too |
 | Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later |
 | Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off |
