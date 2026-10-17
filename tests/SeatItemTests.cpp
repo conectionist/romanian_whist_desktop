@@ -25,9 +25,9 @@ using namespace romanian_whist;
 // but your own shows the card it is holding, face up, so you can bid on what
 // everyone else has. The card takes the slot the cards-left stack occupies, and
 // the two things that must hold are that the PLAQUE DOES NOT CHANGE SIZE - it
-// feeds seatRingRect() and fitsOnTable(), so a plaque that grew for two rounds
-// would move the whole table twice a game - and that the TEXT IS MEASURED at the
-// width it is drawn into.
+// feeds the layout, so a plaque that grew for two rounds would move what is laid
+// out against it twice a game - and that the TEXT IS MEASURED at the width it is
+// drawn into.
 
 namespace
 {
@@ -104,9 +104,10 @@ struct Plaque
 TEST_CASE("The plaque is the same size whether or not a card is shown", "[seat]")
 {
     // THE GUARANTEE THE WHOLE PLACEMENT DECISION EXISTS TO KEEP. plaqueSize()
-    // feeds seatRingRect() and fitsOnTable(), so a plaque that grew for the two
-    // blind rounds would move every seat and every played card twice a game -
-    // which is the defect B2b recorded against the info strip, one layer out.
+    // feeds the layout - the bid strip's band today, and until the table
+    // redesign's phase 2 every seat and every played card - so a plaque that grew
+    // for the two blind rounds would move them twice a game, which is the defect
+    // B2b recorded against the info strip, one layer out.
     //
     // It is a static taking only the card height, so the only way it could depend
     // on the hand is if someone made it stop being one. This is the case that

@@ -30,6 +30,22 @@ constexpr qreal margin = 24.0;
 constexpr qreal gap = 18.0;
 constexpr qreal captionHeight = 20.0;
 
+// How wide the row below is, in card heights: the three sizes (half, three
+// quarters and a whole card), the back and the dimmed card at a whole card each -
+// so 4.25 cards at an aspect of about 0.69 - and the avatar's 0.6-square box.
+// Approximate on purpose, since the exact aspect is CardRenderer's business. All
+// it decides is how large the samples are allowed to get.
+constexpr qreal rowInCardHeights = 3.6;
+
+// The gaps between the six samples, and the one extra before the back.
+constexpr int gapsInRow = 6;
+
+// The table's old limits on a card's height, which this window kept when the
+// table stopped needing them: below 44 a rank pip stops being readable, and above
+// 220 the samples stop looking like cards.
+constexpr qreal minimumUnit = 44.0;
+constexpr qreal maximumUnit = 220.0;
+
 }
 
 CardArtCanvas::CardArtCanvas(QWidget* parent)
@@ -54,10 +70,16 @@ void CardArtCanvas::paintEvent(QPaintEvent*)
 
     painter.drawPixmap(rect(), theme.background(size(), dpr));
 
-    // THE UNIT, from Theme, and every position below derived from it. Nothing in
-    // this file picks a card size of its own - which is the same rule the table
-    // will follow in B2, exercised here first where it is easy to see.
-    const qreal unit = theme.cardHeightFor(size());
+    // THE UNIT, and every position below derived from it: the largest card the
+    // row fits across the canvas, and no taller than half of it so the captions
+    // have room beneath.
+    //
+    // THIS WINDOW'S OWN, where it used to be Theme's. Theme derived the TABLE'S
+    // card height from the window, and this borrowed it; the table redesign's
+    // phase 2 gave the table fixed card sizes in a space the view scales, so the
+    // derivation went with it and what is left is a question only this canvas asks.
+    const qreal across = (width() - 2.0 * margin - gapsInRow * gap) / rowInCardHeights;
+    const qreal unit = std::clamp(std::min(height() * 0.5, across), minimumUnit, maximumUnit);
 
     painter.setPen(theme.textPrimary);
 

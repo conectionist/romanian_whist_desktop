@@ -493,7 +493,7 @@ Done when: the app still looks as it did, but the resources, fonts and tokens ex
   instead, which keeps ~7 MB of textures out of that budget. Load any other large art the same
   way.
 
-### Phase 2: table space and the view transform
+### Phase 2: table space and the view transform ✅ COMPLETE
 
 Files: `src/table/TableView.*`, `src/table/TableScene.*`, `src/paint/Theme.*`, tests
 `TableViewTests.cpp`, `TableSceneTests.cpp`, `ThemeTests.cpp`.
@@ -513,6 +513,58 @@ Files: `src/table/TableView.*`, `src/table/TableScene.*`, `src/paint/Theme.*`, t
 
 Done when: resizing the window scales everything uniformly, with no layout jumps, and the tests that
 remain pass.
+
+**Outcome:**
+
+- **The count is 279 tests**, passing on the `default`, `release` and `clang` presets with Qt 6.11.2
+  and building without a warning. The phase started from 268, not phase 1's 267: phase 1's review
+  added a case after its outcome was written. Six cases were retired (the two `Theme::cardHeightFor()`
+  cases, and the four `TableSceneTests` cases that asserted `handRect()` / `tableRect()`) and 17 added.
+- **Two decisions by the owner, 2026-10-17:**
+  - **Interim seats:** today's plaques on one fixed ellipse,
+    `seatlayout::seatCentres(n, humanSeat, ringRect(centre, 662, 593))`, at a plaque unit of 150. That
+    is 275×119, close to section 2.5's 280×118. The three constants are in `TableScene.cpp`'s anonymous
+    namespace, and **phase 4 deletes them** when it brings in section 2.5's position table. The
+    diagonal plaques reach about 25 units onto the wooden rim until then, never the felt.
+  - **The room now:** `Theme::room()` paints section 2.2's gradient for the table page.
+    `Theme::background()` stays green for the main menu and the Card art window.
+- **What later phases take from here:**
+  - **Coordinates:** `src/table/TableSpace.h`, a namespace of the section-2 numbers (`centre`,
+    `fitBox`, `feltRadius`, `handTop`, the card heights, the view margins), plus `fitScale()` and
+    `playedCardHeight()`. No other file writes those numbers. The scene rect is `fitBox` and never
+    changes. `TableScene::relayout()` is private and runs on a snapshot or a theme change only; a
+    resize changes `TableView`'s transform and nothing else, which `TableViewTests` asserts item by
+    item.
+  - **Placement:** the hand is at section 2.8's height and card size, still today's flat fan
+    (phase 7). Played cards use section 2.7's sizes, on one ring 60 inside the felt along each
+    seat's nominal angle, with yours above your hand. Phase 6 turns them towards the racks.
+  - **Stacking:** hand at z 1, plaques at z 2, so your plaque covers the bottom of your hand.
+    Phase 3 sets out the rest of section 3's z ladder.
+  - **The bid band:** `overlayBand()` is in scene units and stops above your hand. `TableView` maps
+    it to the viewport.
+- **The B1 crispness contract moved into `CardItem::paint()`.** Under a scaled view, a pixmap
+  rasterized at its table-space size would be resampled on its way to the screen. `CardItem` multiplies
+  the device pixel ratio by `QStyleOptionGraphicsItem::levelOfDetailFromTransform()`, so the card is
+  rasterized at the size it lands. The ratio stamped on it is below 1 on a small window, which Qt
+  draws correctly. **Any pixmap a later phase blits in the scene must do the same:** phase 3's cached
+  table, phase 4's `Theme::avatar()` portraits, phase 5's rack cards. A test renders a card at half
+  scale and compares it pixel for pixel. Removing the factor makes it fail, which was checked.
+- **Pitfall: `QPaintDevice` has no `deviceIndependentSize()`.** Only `QImage` and `QPixmap` do, and
+  the two kinds of device disagree: a widget reports its width in logical pixels, while an image or
+  a pixmap reports physical pixels beside its ratio. `TableScene.cpp`'s `logicalSize()` divides the
+  ratio out of everything but a widget. Under `QWidget::grab()`, which the screenshot tool uses, the
+  device is still the viewport widget.
+- **Pitfall: `fitInView()` adds a 2-pixel margin of its own.** The scale is set by hand instead.
+  The mock-up's viewport margins (16 / 10 / 8) keep the scaled box strictly smaller than the
+  viewport, so `QGraphicsView` never has a scroll range, and `Qt::AlignCenter` alone centres the
+  table.
+- **Pitfall: listing a file in `tests/CMakeLists.txt` before the file exists.** The automatic
+  re-configure fails on the missing source and leaves a test target that still links, with no test
+  sources in it, so `desktop_tests` reports **0 test cases**. A fresh `cmake --preset` fixes it.
+  This is the count check of `docs/LOCAL_VERIFICATION.md` again.
+- **Removed as dead once their callers went:** `TrickItem::cardFootprint()` and
+  `HandItem::liftFraction()`. Both existed only so the old layout could reserve room before any card
+  existed.
 
 ### Phase 3: the table itself
 

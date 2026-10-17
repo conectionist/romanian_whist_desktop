@@ -4,226 +4,91 @@
 #include "table/HandItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
+#include "table/TableSpace.h"
 #include "table/TrickItem.h"
 
 #include <QPainter>
+#include <QPaintDevice>
+#include <QSizeF>
+#include <QTransform>
 
-#include <cmath>
-#include <numbers>
+#include <algorithm>
 
 namespace
 {
 
-// The gap between two neighbouring cards in the trick, as a fraction of what a
-// card occupies. Small, because the trick should read as one group - but not
-// zero, because two cards that merely touch look like a mistake.
-constexpr qreal trickGap = 0.14;
-
-}
-
-QRectF TableScene::handRect(qreal cardHeight) const
-{
-    // NOBODY SEATED, NO STRIP. Section 14 again: a spectated table uses the whole
-    // ellipse and draws no hand area, so this is the one branch that tells the
-    // two layouts apart - and it is a rect rather than a flag, so nothing
-    // downstream needs to know which kind of game it is drawing.
-    if(!snapshot || snapshot->humanSeat < 0 || cardHeight <= 0.0)
-        return QRectF();
-
-    // THE CARD, THE LIFT ABOVE IT, AND THE SAME AGAIN BELOW.
-    //
-    // The lift number comes from the item that does the lifting rather than from
-    // a copy here - a second constant is one that drifts, and the day it did the
-    // strip would stop being tall enough for the hover it was reserved for.
-    //
-    // The margin beneath is the same fraction rather than a constant of its own,
-    // which keeps this to one number: without it the fan sits flush against the
-    // bottom of the window, which reads as a hand falling off the table rather
-    // than one held at it.
-    const qreal height = cardHeight * (1.0 + 2.0 * HandItem::liftFraction());
-
-    const QRectF scene = sceneRect();
-
-    // Clamped, so a window too short for a card does not hand back a strip taller
-    // than the table it is being cut from. The seats then have nothing left and
-    // fitsOnTable() is what refuses that, one level up.
-    if(height >= scene.height())
-        return QRectF();
-
-    return QRectF(scene.left(), scene.bottom() - height, scene.width(), height);
-}
-
-QRectF TableScene::tableRect(qreal cardHeight) const
-{
-    const QRectF hand = handRect(cardHeight);
-
-    if(hand.isEmpty())
-        return sceneRect();
-
-    return sceneRect().adjusted(0.0, 0.0, 0.0, -hand.height());
-}
-
-// A CIRCLE SIZED SO THE CARDS DO NOT TOUCH, which is a question about the card
-// and the seat count and not about the window.
+// THE INTERIM SEAT RING, which the redesign's phase 4 deletes.
 //
-// n cards evenly spaced on a circle of radius r sit 2*r*sin(pi/n) apart, so
-// requiring that to clear what a card occupies inverts to the radius below. Six
-// seats need a wider ring than four for the same cards, which is the case the
-// first draft got wrong: it placed each card a fixed fraction of the way toward
-// its owner, and at six seats on a window wider than it is tall two cards landed
-// on top of each other, because the seat ellipse bunches adjacent directions
-// toward the horizontal.
+// Phase 2 took away the layout the plaques used to be fitted with - an ellipse
+// sized to the window - and phase 4 is what gives each seat its own spot (section
+// 2.5's table) and its new panel. In between, the existing plaques sit on one
+// fixed ellipse round the table, which seatlayout lays out exactly as it always
+// has. The radii put the side seats and the top one where section 2.5 does at four
+// players - (106, 512), (768, -81), (1430, 512) - and the human at (768, 1105),
+// which is section 2.5's centre for the human's panel.
 //
-// MEASURED OFF THE CARD RATHER THAN TUNED. The second draft used a constant
-// multiple of the card HEIGHT and still overlapped, because a card tilted by six
-// degrees is 1.067 card heights tall and the constant was 1.10 - a three-pixel
-// gap that reads as touching. Taking the footprint from the item that does the
-// rotating leaves nothing to keep in step by hand, and the tilt can change
-// without this being re-derived.
-//
-// Card-against-card is settled HERE and not in fitsOnTable(), because it has to
-// be: the ring and the cards scale together, so a ring whose neighbours overlap
-// overlaps at every card size and shrinking cannot fix it.
-QRectF TableScene::trickRingRect(std::size_t seatCount, qreal cardHeight) const
+// AND A FIXED PLAQUE, from the same item at a unit of 150, which comes out 275 x
+// 119: the size of section 2.5's panel give or take five units, so the interim
+// table reads at the proportions the finished one will have. At five and six seats
+// the diagonal plaques' inner corners reach about 25 units onto the wooden rim -
+// never the felt - and phase 4's position table is what clears them.
+constexpr qreal seatRadiusX = 662.0;
+constexpr qreal seatRadiusY = 593.0;
+constexpr qreal plaqueUnit = 150.0;
+
+// How far inside the felt's edge a played card's outer end sits, and how far above
+// the hand the human's card does (section 2.7: 60 in both places).
+constexpr qreal playedInset = 60.0;
+
+// THE HAND UNDER EVERY PLAQUE. Your own plaque overlaps the bottom of your fan
+// (section 2.8: "the human's panel covers the bottom of the hand; that is
+// intended"), and it is the plaque that has to win - it carries your name and
+// your pill. The first rung of section 3's stacking order, which phase 3 sets out
+// in full.
+constexpr qreal handZ = 1.0;
+constexpr qreal seatZ = 2.0;
+
+// NOBODY SEATED, NO HAND. Section 14: a spectated table "has no human... and the
+// bottom hand area is not drawn at all". The same range test seatlayout applies,
+// so the two cannot disagree about whether somebody is sitting there.
+bool seated(const GameSnapshot& snapshot)
 {
-    if(seatCount == 0 || cardHeight <= 0.0)
-        return QRectF();
-
-    const QSizeF footprint = TrickItem::cardFootprint(cards.sizeForHeight(cardHeight));
-
-    // The larger side, because two neighbours may be stacked or side by side
-    // depending on where round the ring they sit.
-    const qreal occupies = std::max(footprint.width(), footprint.height());
-
-    const qreal spacing = occupies * (1.0 + trickGap);
-    const qreal radius = spacing / (2.0 * std::sin(std::numbers::pi / static_cast<qreal>(seatCount)));
-
-    // THE TABLE'S CENTRE, not the scene's. With a hand strip reserved the two
-    // differ by half its height, and a trick centred on the scene drifts down
-    // into the fan while the seats sit above it.
-    return seatlayout::ringRect(tableRect(cardHeight).center(), radius);
+    return snapshot.humanSeat >= 0
+           && static_cast<std::size_t>(snapshot.humanSeat) < snapshot.seats.size();
 }
 
-std::vector<QPointF> TableScene::trickRing(std::size_t seatCount, qreal cardHeight) const
+// A PAINT DEVICE'S SIZE IN LOGICAL PIXELS, which Qt does not answer in one call.
+// A widget reports its width in logical pixels already; an image or a pixmap
+// reports its PHYSICAL width, with the ratio beside it - measured, not assumed:
+// a 640x400 image at a ratio of 2 says 640, the 320x200 widget a painter paints
+// on a HiDPI screen says 320. So the ratio is divided out of everything but a
+// widget. The viewport is the device in a real game, and is still the device
+// under QWidget::grab(), which is how the screenshot tool takes its pictures; an
+// image is what the tests paint into.
+QSize logicalSize(const QPaintDevice& device)
 {
-    // The SAME function the plaques use, over a different rect - so the two
-    // rings cannot drift out of step, and a card is always on the side of the
-    // table its owner sits on.
-    return seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
-                                   snapshot ? snapshot->humanSeat : -1,
-                                   trickRingRect(seatCount, cardHeight));
+    const QSize reported(device.width(), device.height());
+
+    if(device.devType() == QInternal::Widget)
+        return reported;
+
+    return (QSizeF(reported) / device.devicePixelRatioF()).toSize();
 }
 
-QRectF TableScene::seatRingRect(qreal cardHeight) const
-{
-    // INSET BY HALF A PLAQUE. seatlayout puts CENTRES inside the rect it is
-    // given, which is not the same as putting plaques inside it: at the two side
-    // seats the centre sits a radius from the middle and the plaque hangs half
-    // its width further, off the edge of the window.
-    const QSizeF plaque = SeatItem::plaqueSize(cardHeight);
-
-    // OFF THE TABLE RECT, so the bottom plaque lands above the hand rather than
-    // on it. This is the line that actually makes room: everything else about
-    // the seat ring is unchanged.
-    return tableRect(cardHeight).adjusted(plaque.width() / 2.0, plaque.height() / 2.0,
-                                          -plaque.width() / 2.0, -plaque.height() / 2.0);
-}
-
-// Whether a table of this many seats can be drawn at this card size without a
-// played card ending up underneath a plaque.
-//
-// ASKED OF THE GEOMETRY RATHER THAN OF A TUNED CONSTANT. Both rings are built
-// and the rectangles are compared, which is the same question in every
-// direction at once and for every seat count - where the arithmetic version
-// would be a separate inequality for the vertical and the horizontal, and would
-// be re-derived by hand every time a plaque or a tilt changed.
-bool TableScene::fitsOnTable(std::size_t seatCount, qreal cardHeight) const
-{
-    const QRectF within = seatRingRect(cardHeight);
-
-    if(within.isEmpty())
-        return false;
-
-    const std::vector<QPointF> plaques =
-        seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
-                                snapshot ? snapshot->humanSeat : -1, within);
-
-    const std::vector<QPointF> ring = trickRing(seatCount, cardHeight);
-
-    if(plaques.size() != seatCount || ring.size() != seatCount)
-        return false;
-
-    const QSizeF plaque = SeatItem::plaqueSize(cardHeight);
-    const QSizeF card = TrickItem::cardFootprint(cards.sizeForHeight(cardHeight));
-
-    for(const QPointF& position : ring)
-    {
-        const QRectF cardRect(position.x() - card.width() / 2.0,
-                              position.y() - card.height() / 2.0,
-                              card.width(), card.height());
-
-        for(const QPointF& seat : plaques)
-        {
-            const QRectF plaqueRect(seat.x() - plaque.width() / 2.0,
-                                    seat.y() - plaque.height() / 2.0,
-                                    plaque.width(), plaque.height());
-
-            if(cardRect.intersects(plaqueRect))
-                return false;
-        }
-    }
-
-    return true;
-}
-
-// Theme's card height is the size the table WANTS; this is the size it can have.
-//
-// Section 18.1's unit is derived in Theme from the hand fan - eight cards across
-// the bottom - and that is the right constraint for four seats and the wrong one
-// for six, where the same card has to fit between two plaques on each side as
-// well. Rather than re-tune the unit for the worst case and leave every
-// four-seat table smaller than it needs to be, the scene keeps Theme's answer
-// when it fits and shrinks toward one that does when it does not.
-//
-// Bisection rather than a formula because fitsOnTable() is a rectangle test and
-// not an inequality that can be inverted. Twenty-two halvings of a range under a
-// thousand pixels settles well inside a pixel, and it runs only when the
-// preferred height does not fit - which for a four-seat game is never.
-qreal TableScene::cardHeightFor(std::size_t seatCount) const
-{
-    const qreal preferred = theme.cardHeightFor(sceneRect().size().toSize());
-
-    if(seatCount == 0 || fitsOnTable(seatCount, preferred))
-        return preferred;
-
-    qreal tooSmall = 1.0;
-    qreal tooBig = preferred;
-
-    for(int step = 0 ; step < 22 ; step++)
-    {
-        const qreal middle = (tooSmall + tooBig) / 2.0;
-
-        if(fitsOnTable(seatCount, middle))
-            tooSmall = middle;
-        else
-            tooBig = middle;
-    }
-
-    return tooSmall;
 }
 
 TableScene::TableScene(QObject* parent)
     : QGraphicsScene(parent)
 {
+    // FIXED, and the whole of what a resize used to recompute. TableView fits
+    // this box to the window; nothing in the scene is told the window's size.
+    setSceneRect(tablespace::fitBox);
+
     trick = new TrickItem(&cards);
     addItem(trick);
 
-    // ABOVE THE TRICK, so a hovered card lifts over the table rather than under
-    // it. The two never overlap once the strip is reserved, but the fan's
-    // bounding rect includes the lift and a stacking order left to chance is one
-    // that changes when items are added.
     hand = new HandItem(&cards);
-    hand->setZValue(1.0);
+    hand->setZValue(handZ);
     addItem(hand);
 }
 
@@ -253,6 +118,7 @@ void TableScene::ensureSeats(std::size_t count)
     while(seats.size() < count)
     {
         SeatItem* seat = new SeatItem(&cards);
+        seat->setZValue(seatZ);
         addItem(seat);
         seats.push_back(seat);
     }
@@ -263,24 +129,59 @@ void TableScene::ensureSeats(std::size_t count)
         seats[i]->hide();
 }
 
+std::vector<QPointF> TableScene::seatPositions(std::size_t seatCount) const
+{
+    return seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
+                                   snapshot ? snapshot->humanSeat : -1,
+                                   seatlayout::ringRect(tablespace::centre,
+                                                        seatRadiusX, seatRadiusY));
+}
+
+// SECTION 2.7'S PLACES, as near as phase 2 can have them. Each card sits on the
+// line from the middle of the table toward its owner, with its outer end 60 inside
+// the felt's edge; the human's sits above their hand instead, which is where a
+// card you are about to play would go.
+//
+// THE OWNER'S DIRECTION IS THE SEAT'S NOMINAL ANGLE here, the same one the plaque
+// ring uses, because the rack each card will line up with does not exist until
+// phase 5 - and the same function as the plaques, so a card is always on the side
+// of the table its owner sits on. One ring at one radius suffices where the old
+// layout needed one sized per seat count: the cards are the mock-up's size, not a
+// fit, and at six seats on a radius of 289 their centres stay 254 apart against a
+// card 181 tall.
+std::vector<QPointF> TableScene::trickPositions(std::size_t seatCount) const
+{
+    const qreal cardHeight = tablespace::playedCardHeight(seatCount);
+    const qreal radius = tablespace::feltRadius - playedInset - cardHeight / 2.0;
+
+    const int humanSeat = snapshot ? snapshot->humanSeat : -1;
+
+    std::vector<QPointF> positions =
+        seatlayout::seatCentres(static_cast<unsigned int>(seatCount), humanSeat,
+                                seatlayout::ringRect(tablespace::centre, radius));
+
+    if(humanSeat >= 0 && static_cast<std::size_t>(humanSeat) < positions.size())
+    {
+        positions[static_cast<std::size_t>(humanSeat)] =
+            QPointF(tablespace::centre.x(),
+                    tablespace::handTop - playedInset - cardHeight / 2.0);
+    }
+
+    return positions;
+}
+
 QRectF TableScene::overlayBand() const
 {
-    if(!snapshot || snapshot->seats.empty() || sceneRect().isEmpty())
+    if(!snapshot || snapshot->seats.empty())
         return QRectF();
 
     const std::size_t seatCount = snapshot->seats.size();
-
-    // THE SAME ONE UNIT the rest of the layout uses, not a second answer. The
-    // plaque below is derived from it, so the band moves with the table rather
-    // than drifting away from it at some window sizes.
-    const qreal cardHeight = cardHeightFor(seatCount);
-
-    const std::vector<QPointF> centres =
-        seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
-                                snapshot->humanSeat, seatRingRect(cardHeight));
+    const std::vector<QPointF> centres = seatPositions(seatCount);
 
     if(centres.size() != seatCount)
         return QRectF();
+
+    const qreal plaqueHeight = SeatItem::plaqueSize(plaqueUnit).height();
 
     // The plaque nearest the bottom, which is the human's whenever there is one
     // - seatlayout puts the seat it is told about at bottom-centre. Found by
@@ -291,45 +192,45 @@ QRectF TableScene::overlayBand() const
     for(const QPointF& centre : centres)
         lowestCentre = std::max(lowestCentre, centre.y());
 
-    const qreal plaqueHeight = SeatItem::plaqueSize(cardHeight).height();
+    qreal bottom = lowestCentre - plaqueHeight / 2.0;
 
-    // A GAP, so the strip does not sit flush against the plaque's rounded edge
-    // and read as one object with it. A fraction of the plaque rather than a
-    // constant, so it scales with the table like everything else here.
-    const qreal gap = plaqueHeight / 8.0;
+    // AND ABOVE THE HAND, which in table space sits higher than the plaque it is
+    // drawn under: the strip must not cover the cards you are bidding on.
+    if(seated(*snapshot))
+        bottom = std::min(bottom, tablespace::handTop);
 
-    const qreal bandBottom = lowestCentre - plaqueHeight / 2.0 - gap;
+    // A GAP, so the strip does not sit flush against what it clears and read as
+    // one object with it. A fraction of the plaque rather than a constant of its
+    // own, as it always was.
+    bottom -= plaqueHeight / 8.0;
 
-    if(bandBottom <= sceneRect().top())
+    const QRectF box = sceneRect();
+
+    if(bottom <= box.top())
         return QRectF();
 
-    return QRectF(sceneRect().left(), sceneRect().top(),
-                  sceneRect().width(), bandBottom - sceneRect().top());
+    return QRectF(box.left(), box.top(), box.width(), bottom - box.top());
 }
 
 void TableScene::relayout()
 {
-    if(!snapshot || sceneRect().isEmpty())
+    if(!snapshot)
         return;
 
-    ensureSeats(snapshot->seats.size());
+    const std::size_t seatCount = snapshot->seats.size();
 
-    // THE ONE UNIT - Theme's, reduced only where this table cannot hold it. See
-    // cardHeightFor(). Nothing else in this file picks a card size (18.1).
-    const qreal cardHeight = cardHeightFor(snapshot->seats.size());
+    ensureSeats(seatCount);
 
-    const std::vector<QPointF> centres =
-        seatlayout::seatCentres(static_cast<unsigned int>(snapshot->seats.size()),
-                                snapshot->humanSeat, seatRingRect(cardHeight));
+    const std::vector<QPointF> centres = seatPositions(seatCount);
 
-    if(centres.size() != snapshot->seats.size())
+    if(centres.size() != seatCount)
         return;
 
-    for(std::size_t i = 0 ; i < snapshot->seats.size() ; i++)
+    for(std::size_t i = 0 ; i < seatCount ; i++)
     {
         SeatItem* item = seats[i];
 
-        item->setCardHeight(cardHeight);
+        item->setCardHeight(plaqueUnit);
         item->setPos(centres[i]);
 
         // activeSeat is -1 between turns, which is a real state and not a
@@ -342,8 +243,8 @@ void TableScene::relayout()
         item->show();
     }
 
-    trick->setTrick(*snapshot, trickRing(snapshot->seats.size(), cardHeight),
-                    tableRect(cardHeight).center(), cardHeight, theme);
+    trick->setTrick(*snapshot, trickPositions(seatCount), tablespace::centre,
+                    tablespace::playedCardHeight(seatCount), theme);
 
     // THE FAN FOLLOWS THE SNAPSHOT HERE AND NOWHERE ELSE. Between turns that is
     // the whole of it - drawn, never playable, since a snapshot carries no
@@ -352,69 +253,67 @@ void TableScene::relayout()
     // only one that can be clicked.
     //
     // AND THE CALL IS REFUSED while a prompt is live: HandItem::setHand() holds
-    // that line, not this file. relayout() runs on every resize and every theme
-    // change, and either can land while the engine is parked waiting for a card -
-    // in a blind round the snapshot hand it would take is empty, which would
-    // leave nothing to click and no way to answer.
-    //
-    // Sized and placed even when it is empty, so the strip it sits in is the one
-    // TableScene reserved rather than wherever the last hand happened to leave
-    // it.
-    const QRectF strip = handRect(cardHeight);
-
-    hand->setCardHeight(cardHeight);
+    // that line, not this file. This runs on every theme change as well as every
+    // snapshot, and the colour scheme can flip while the engine is parked waiting
+    // for a card - in a blind round the snapshot hand it would take is empty,
+    // which would leave nothing to click and no way to answer.
+    hand->setCardHeight(tablespace::handCardHeight);
     hand->setHand(snapshot->hand);
-    // BOTTOM-ALIGNED IN THE STRIP, one margin up - not centred in it. The lift
-    // only goes UP, so centring splits the room it needs between above and below
-    // and leaves half of it under the card doing nothing: measured at 1000x700,
-    // that put a hovered card seven pixels into the plaque above it. Sitting the
-    // card a margin off the bottom puts the whole of the lift where the lift will
-    // use it, and leaves the margin where it is visible.
-    const qreal margin = cardHeight * HandItem::liftFraction();
 
-    hand->setPos(strip.isEmpty()
-                     ? sceneRect().center()
-                     : QPointF(strip.center().x(),
-                               strip.bottom() - margin - cardHeight / 2.0));
-    hand->setVisible(!strip.isEmpty());
+    // Section 2.8: the fan's top edge at y = 850, centred on the table. The
+    // fan's origin is the middle of its cards, hence the half card.
+    hand->setPos(tablespace::centre.x(), tablespace::handTop + tablespace::handCardHeight / 2.0);
+    hand->setVisible(seated(*snapshot));
 }
 
 void TableScene::drawBackground(QPainter* painter, const QRectF& rect)
 {
-    const QRectF scene = sceneRect();
+    QPaintDevice* device = painter->device();
 
-    if(scene.isEmpty())
+    if(!device)
         return;
 
-    // Off the paint device, so a window on a HiDPI screen gets a background
-    // rasterized for it rather than one scaled up - the half of B1's dpr
+    // IN THE VIEWPORT'S OWN PIXELS, not in table space. The fit box keeps the
+    // table's aspect, so a window of any other shape shows bands beside or above
+    // it, and the room has to fill those too - the mock-up's room is the
+    // viewport's background, not the stage's. So the exposed rect is taken out of
+    // table space through the transform the view painted it with, and the room is
+    // drawn without one.
+    //
+    // The logical size, so a viewport on a HiDPI screen is asked for at the size
+    // it is laid out at and the ratio below makes it sharp - the half of B1's dpr
     // contract that applies to the table rather than to the cards.
-    const qreal dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+    const QSize view = logicalSize(*device);
+    const qreal dpr = device->devicePixelRatioF();
 
-    const QPixmap background = theme.background(scene.size().toSize(), dpr);
+    const QPixmap room = theme.room(view, dpr);
 
-    if(background.isNull())
+    if(room.isNull())
         return;
 
     // Only the exposed part, which is what `rect` is for: a card moving in the
-    // middle of the table must not repaint the whole surface behind it.
-    //
+    // middle of the table must not repaint the whole room behind it. Clipped to
+    // the room itself, so the source rect below never reaches outside the pixmap.
+    const QRectF exposed =
+        painter->worldTransform().mapRect(rect).intersected(QRectF(QPointF(0.0, 0.0), view));
+
+    if(exposed.isEmpty())
+        return;
+
     // THE TARGET RECT IS LOGICAL AND THE SOURCE RECT IS NOT. Qt reads a
-    // drawPixmap source rect in the PIXMAP's own pixels, and background() above
+    // drawPixmap source rect in the PIXMAP's own pixels, and room() above
     // rasterized this one at view * dpr - so passing the same logical rect as
-    // both samples the top-left 1/dpr of the surface and stretches it over the
+    // both samples the top-left 1/dpr of the room and stretches it over the
     // whole viewport, with each partial repaint reading from a different wrong
     // place besides.
     //
-    // Only this overload needs the conversion, which is why the cards were right
-    // while the table behind them was not: CardItem::paint() draws its pixmap at
-    // a POINT, and that form divides by the ratio itself.
-    //
-    // QRectF throughout - rounding here would put a seam in the surface at the
+    // QRectF throughout - rounding here would put a seam in the room at the
     // fractional ratios (1.25, 1.5) that most Linux and Windows screens use.
-    const qreal ratio = background.devicePixelRatio();
-    const QRectF source = rect.translated(-scene.topLeft());
+    const qreal ratio = room.devicePixelRatio();
 
-    painter->drawPixmap(rect, background,
-                        QRectF(source.topLeft() * ratio, source.size() * ratio));
+    painter->save();
+    painter->setWorldTransform(QTransform());
+    painter->drawPixmap(exposed, room,
+                        QRectF(exposed.topLeft() * ratio, exposed.size() * ratio));
+    painter->restore();
 }

@@ -79,6 +79,8 @@ qt_add_library(desktop_core STATIC
     src/paint/CardRenderer.h
     src/paint/CardRenderer.cpp
 
+    src/table/TableSpace.h
+    src/table/TableSpace.cpp
     src/table/SeatLayout.h
     src/table/SeatLayout.cpp
     src/table/CardItem.h

@@ -109,7 +109,19 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // dragged to a screen with a different ratio rasterizes again at the new one
     // rather than scaling what it had. `widget` is null when a scene is rendered
     // somewhere other than a view, and 1.0 is the honest answer there.
-    const qreal dpr = widget ? widget->devicePixelRatioF() : 1.0;
+    //
+    // TIMES THE SCALE THE CARD IS DRAWN AT, which is the table redesign's phase 2.
+    // The view scales a fixed table space to the window now, so a card 225 table
+    // units tall can land 175 pixels tall - and a pixmap rasterized at 225 would
+    // be resampled down to that on its way to the screen, which is the softness
+    // CardRenderer exists to prevent. Asking for the size it will really occupy
+    // makes the blit 1:1 again; the ratio stamped on the pixmap is then below 1 on
+    // a small window, which Qt draws the same way as any other.
+    //
+    // levelOfDetailFromTransform() is the transform's scale, rotation or not, so a
+    // tilted trick card asks for the same pixels as a straight one.
+    const qreal dpr = (widget ? widget->devicePixelRatioF() : 1.0)
+                    * QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform());
 
     const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 

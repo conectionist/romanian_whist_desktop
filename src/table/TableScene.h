@@ -18,6 +18,11 @@ class TrickItem;
 
 // The table: seats on an ellipse, the trick in the middle.
 //
+// IN TABLE SPACE, A FIXED SET OF COORDINATES (TableSpace.h) that TableView scales
+// to the window. The scene rect is the fit box and never changes, so nothing here
+// knows how big the window is and a resize moves nothing - it is the view's
+// transform that changes, and the whole table scales as one picture.
+//
 // IT READS ONE SNAPSHOT AND NOTHING ELSE. Section 3's cardinal rule is that
 // widgets never touch the engine, and the reason is not tidiness: the engine has
 // no locking anywhere, so a GUI-thread read racing the game thread is a torn
@@ -56,82 +61,52 @@ public:
 
     void setTheme(const Theme& theme);
 
-    // Called by TableView when the viewport changes size. Everything below is a
-    // fraction of the scene rect, so this is the only thing a resize has to do.
-    void relayout();
-
-    // THE TABLE PROPER: the scene minus the strip reserved for the human's hand.
+    // WHAT AN OVERLAY MAY COVER: the fit box's width, from its top down to just
+    // above your hand - or, at a table with no hand, above the lowest plaque.
+    // Section 15.1's bid strip is bottom-aligned in it until the redesign's phase
+    // 10 moves the strip onto the felt. In SCENE units: TableView maps it to the
+    // viewport before placing anything in it.
     //
-    // Section 14's rule expressed as a shorter rect rather than as a second
-    // layout - "a spectated game has no human, so all seats are distributed
-    // around the full ellipse and the bottom hand area is not drawn at all". So
-    // this IS the scene rect whenever nobody is seated, and SeatLayout.h has been
-    // waiting for it since B2: "no bottom strip is reserved for a hand, and that
-    // is the caller's business: it passes a shorter rect."
+    // IT HAS TO COME FROM HERE because the bottom of the table is not where the
+    // strip goes. Your hand and your own plaque are both down there, and a strip
+    // pinned to the viewport's bottom edge draws straight through them - which is
+    // what C2's first run did, through the plaque.
     //
-    // Everything the table lays out goes through here - the seat ellipse, the
-    // trick's ring and its centre - so the hand cannot be drawn over.
-    QRectF tableRect(qreal cardHeight) const;
-
-    // The strip itself, across the bottom. Empty in a spectator game, which is
-    // the same fact as tableRect() being the whole scene.
-    QRectF handRect(qreal cardHeight) const;
-
-    // WHAT AN OVERLAY MAY COVER: everything above the lowest seat's plaque.
-    // Section 15.1's bid strip is bottom-aligned in it, and phase C3's hand will
-    // be.
-    //
-    // IT HAS TO COME FROM HERE because the lowest plaque is the HUMAN'S - the
-    // seated player is drawn at bottom-centre - so "the bottom of the table" and
-    // "where the strip goes" are different places. A strip pinned to the
-    // viewport's bottom edge draws straight through the player's own name, which
-    // is what C2's first run did.
-    //
-    // AND IT REACHES UP OVER THE TRICK, which is not a compromise. Measured on a
-    // 1000x700 table before C3: the trick ring's cards ended 565 pixels down and
-    // the bottom plaque started at 578, so there was no free band to find. What
-    // makes covering the middle harmless is WHEN this is used: bidding finishes
-    // before the first card of the round is played, so the trick area is empty
-    // for the whole time the strip is up.
-    //
-    // C3 ASKED THE SAME QUESTION FOR THE HAND AND ANSWERED IT DIFFERENTLY, which
-    // is why the hand is not an overlay: cards ARE on the table while you choose
-    // one, so the fan cannot borrow the middle. It got a reserved strip instead -
-    // tableRect() above - and the plaques moved up with it, so this band grew
-    // without a line here changing.
+    // AND IT REACHES UP OVER THE TRICK, which is not a compromise. What makes
+    // covering the middle harmless is WHEN this is used: bidding finishes before
+    // the first card of the round is played, so the trick area is empty for the
+    // whole time the strip is up. The hand is a different matter - you bid on the
+    // cards you are holding - so the band stops above it.
     //
     // Empty before the first snapshot; the caller falls back rather than being
     // handed a negative rect.
     QRectF overlayBand() const;
 
 protected:
-    // The table surface, through Theme - which is what keeps it replaceable
-    // (section 18.1). NOT a QGraphicsRectItem with a brush, which would put a
-    // colour decision in the scene.
+    // The room behind the table, through Theme - which is what keeps it
+    // replaceable (section 18.1). NOT a QGraphicsRectItem with a brush, which
+    // would put a colour decision in the scene.
+    //
+    // OVER THE WHOLE VIEWPORT, not the scene rect. The fit box is scaled to fit,
+    // so a window of any other shape shows bands beside or above it, and those are
+    // still the room. See the definition.
     void drawBackground(QPainter* painter, const QRectF& rect) override;
 
 private:
+    // Puts every item where the snapshot says, in table space. Run on a new
+    // snapshot and a new theme and on nothing else: a resize is the view's
+    // business, and changes no position here.
+    void relayout();
+
     // Grown when a game has more seats than the last one did. Six at most, and
     // reused across games rather than rebuilt, for the reason in the class
     // comment.
     void ensureSeats(std::size_t count);
 
-    // The trick's own ring, and the reason it is not derived from the seats'.
-    // See the definitions - the short version is that "a fraction of the way
-    // toward the owner" puts two cards in one place at six seats.
-    QRectF trickRingRect(std::size_t seatCount, qreal cardHeight) const;
-    std::vector<QPointF> trickRing(std::size_t seatCount, qreal cardHeight) const;
-
-    // The rect a plaque's CENTRE may occupy: the TABLE rect - not the scene -
-    // inset by half a plaque, so the plaque lands inside the window and above the
-    // hand rather than on it.
-    QRectF seatRingRect(qreal cardHeight) const;
-
-    // Theme's card height is what the table wants; this is what it can have.
-    // They differ only where a plaque and a played card would otherwise
-    // overlap - five and six seats, and only in a small window.
-    bool fitsOnTable(std::size_t seatCount, qreal cardHeight) const;
-    qreal cardHeightFor(std::size_t seatCount) const;
+    // Seat centres and played-card positions, both indexed by seat. See the
+    // definitions for where each comes from.
+    std::vector<QPointF> seatPositions(std::size_t seatCount) const;
+    std::vector<QPointF> trickPositions(std::size_t seatCount) const;
 
     Theme theme = Theme::light();
 
@@ -145,9 +120,8 @@ private:
     std::vector<SeatItem*> seats;
     TrickItem* trick = nullptr;
 
-    // The human's fan. Built for every game and simply empty in a spectator one,
-    // which is what handRect() being empty already says - so there is no "is
-    // there a hand" branch anywhere but there.
+    // The human's fan. Built for every game, and hidden in a spectator one -
+    // section 14: "the bottom hand area is not drawn at all".
     HandItem* hand = nullptr;
 };
 

@@ -1,5 +1,6 @@
 #include "Theme.h"
 
+#include <QBrush>
 #include <QHash>
 #include <QImage>
 #include <QImageReader>
@@ -7,6 +8,7 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QString>
+#include <QTransform>
 #include <QtLogging>
 
 #include <algorithm>
@@ -16,34 +18,6 @@
 
 namespace
 {
-
-// THE TABLE'S METRICS, all of them, and the derivation of the one that is not
-// obvious.
-//
-// The hand row's share of the window height is a straight choice. The width
-// limit is not: section 14 fans at most eight cards overlapping by 40% of a
-// card's width, so the fan spans cardWidth * (1 + 7 * 0.6) = 5.2 card widths,
-// and a playing card is roughly 0.69 as wide as it is tall - so a fan spans
-// about 3.58 card HEIGHTS. Allowing it 55% of the window width gives the
-// coefficient below.
-//
-// That 0.69 is deliberately NOT a constant here and is not read from the art.
-// Section 18.1's rule is that every table metric derives from the card height,
-// so that new art with a different aspect does not mean re-tuning the layout;
-// the exact aspect belongs to CardRenderer::sizeForHeight(), which is the only
-// thing that has to be right about it. What this file needs is a reserve, and a
-// reserve computed once from a nominal card shape is the correct amount of
-// precision for one.
-constexpr qreal handHeightFraction = 0.22;
-constexpr qreal fanWidthFraction = 0.55;
-constexpr qreal fanSpanInCardHeights = 3.58;
-
-// Below the floor a rank pip stops being readable; above the ceiling a card
-// stops looking like a card and starts looking like a poster. Both are LOGICAL
-// pixels: a metric is what the layout reserves, and the ratio it is rasterized
-// at never changes what the table looks like, only how sharp it is.
-constexpr qreal minimumCardHeight = 44.0;
-constexpr qreal maximumCardHeight = 220.0;
 
 // A per-seat hue rotation off the accent, so six seats are distinguishable
 // without six literals. 47 degrees is a step that does not repeat or collide
@@ -200,6 +174,13 @@ struct Theme::Cache
     ThemeColours backgroundColours;
     QPixmap background;
 
+    // The redesign's room, held exactly as the background above is: one size at
+    // a time, because there is one table page and it has one viewport.
+    QSize roomSize;
+    int roomDpr = 0;
+    ThemeColours roomColours;
+    QPixmap room;
+
     // ONE BOX SIZE AT A TIME, rather than a growing map keyed on the size. Every
     // seat's plaque reserves the same box at any given moment, so a second size
     // means the window was resized and the first is never asked for again -
@@ -303,17 +284,6 @@ Theme Theme::forScheme(Qt::ColorScheme scheme)
     return light();
 }
 
-qreal Theme::cardHeightFor(QSize view) const
-{
-    if(view.isEmpty())
-        return minimumCardHeight;
-
-    const qreal fromHeight = view.height() * handHeightFraction;
-    const qreal fromWidth = view.width() * fanWidthFraction / fanSpanInCardHeights;
-
-    return std::clamp(std::min(fromHeight, fromWidth), minimumCardHeight, maximumCardHeight);
-}
-
 // BOTH HALVES OF THE HiDPI STORY ON ONE PATH, which is the discipline
 // CardRenderer::finish() spells out: rasterizing at size * dpr without setting
 // the ratio produces a pixmap drawn at dpr times the size it should be, and
@@ -349,6 +319,33 @@ QPixmap Theme::background(QSize view, qreal dpr) const
     }
 
     return cache->background;
+}
+
+// background()'s cache logic over the room's own slot. Not shared with it through
+// a helper: the two are four lines each, and a helper taking pointers to four
+// members of the Cache would be harder to read than the copy.
+QPixmap Theme::room(QSize view, qreal dpr) const
+{
+    if(view.isEmpty() || dpr <= 0.0)
+        return QPixmap();
+
+    if(!cache)
+        return rasterize(paintRoom(physicalSize(view, dpr)), dpr);
+
+    const ThemeColours& colours = *this;
+
+    if(cache->room.isNull()
+        || cache->roomSize != view
+        || cache->roomDpr != dprKey(dpr)
+        || cache->roomColours != colours)
+    {
+        cache->room = rasterize(paintRoom(physicalSize(view, dpr)), dpr);
+        cache->roomSize = view;
+        cache->roomDpr = dprKey(dpr);
+        cache->roomColours = colours;
+    }
+
+    return cache->room;
 }
 
 QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
@@ -419,6 +416,47 @@ QPixmap Theme::paintBackground(QSize physical) const
     gradient.setColorAt(1.0, tableSurface.darker(128));
 
     painter.fillRect(pixmap.rect(), gradient);
+
+    return pixmap;
+}
+
+// page.html's #viewport: radial-gradient(ellipse at 50% 42%, #3b2414 0%,
+// #1c110a 58%, #0b0704 100%).
+//
+// THE ELLIPSE IS CSS'S DEFAULT SIZE, farthest-corner, which the declaration does
+// not spell out. CSS sizes it with the aspect of farthest-side - half the width
+// across, and the 58% of the height below a centre at 42% - and grows that until
+// it passes through the farthest corner. The two fractions then sum their
+// squares to 2, so both radii are farthest-side's times the square root of two.
+// A circle, or radii of half the box, would put the darkest band well inside the
+// window rather than at its corners.
+//
+// QRadialGradient is a circle, so the ellipse is a unit circle in a brush
+// transform scaled to the two radii.
+//
+// PHYSICAL PIXELS, as paintBackground() above and for the same reason.
+QPixmap Theme::paintRoom(QSize physical) const
+{
+    QPixmap pixmap(physical);
+    pixmap.fill(table.roomEdge);
+
+    QPainter painter(&pixmap);
+
+    const qreal width = physical.width();
+    const qreal height = physical.height();
+
+    QRadialGradient gradient(QPointF(0.0, 0.0), 1.0);
+    gradient.setColorAt(0.0, table.roomCentre);
+    gradient.setColorAt(0.58, table.roomMiddle);
+    gradient.setColorAt(1.0, table.roomEdge);
+
+    QTransform ellipse = QTransform::fromTranslate(width * 0.5, height * 0.42);
+    ellipse.scale(std::sqrt(2.0) * width * 0.5, std::sqrt(2.0) * height * 0.58);
+
+    QBrush brush(gradient);
+    brush.setTransform(ellipse);
+
+    painter.fillRect(pixmap.rect(), brush);
 
     return pixmap;
 }

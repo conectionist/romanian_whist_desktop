@@ -51,6 +51,14 @@ std::vector<QPointF> seatCentres(unsigned int seatCount, int humanSeat, QRectF t
 // adjacent directions toward the horizontal and puts two cards in one place.
 QRectF ringRect(QPointF centre, qreal radius);
 
+// The same with two radii, so the ring is an ELLIPSE of exactly those radii about
+// `centre`. The one-radius form above is this with both equal.
+//
+// For a layout that knows the shape it wants in a fixed space rather than the
+// room a window happens to have - the table redesign's phase 2 lays the seats on
+// one such ellipse round the table until phase 4 gives every seat its own spot.
+QRectF ringRect(QPointF centre, qreal radiusX, qreal radiusY);
+
 } // namespace seatlayout
 
 #endif

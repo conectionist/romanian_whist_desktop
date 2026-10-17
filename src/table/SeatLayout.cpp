@@ -79,10 +79,15 @@ std::vector<QPointF> seatlayout::seatCentres(unsigned int seatCount, int humanSe
 // The inverse of the radius fractions above: hand the result to seatCentres()
 // and it lays a ring of exactly `radius` about `centre`. Dividing by each
 // fraction separately is what makes it a circle rather than an ellipse of the
-// window's shape.
+// window's shape - or, with two radii, an ellipse of the shape asked for.
 QRectF seatlayout::ringRect(QPointF centre, qreal radius)
 {
-    if(radius <= 0.0)
+    return ringRect(centre, radius, radius);
+}
+
+QRectF seatlayout::ringRect(QPointF centre, qreal radiusX, qreal radiusY)
+{
+    if(radiusX <= 0.0 || radiusY <= 0.0)
         return QRectF();
 
     // seatCentres() takes a FRACTION of the rect's full width as the radius, so
@@ -90,8 +95,8 @@ QRectF seatlayout::ringRect(QPointF centre, qreal radius)
     // this wrong produces a ring of exactly double the radius asked for, which
     // looks like a plausible table and is silently wrong; the test that
     // measures the radius back out is what caught it.
-    const qreal width = radius / radiusFractionX;
-    const qreal height = radius / radiusFractionY;
+    const qreal width = radiusX / radiusFractionX;
+    const qreal height = radiusY / radiusFractionY;
 
     return QRectF(centre.x() - width / 2.0, centre.y() - height / 2.0, width, height);
 }

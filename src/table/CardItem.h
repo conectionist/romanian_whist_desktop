@@ -42,7 +42,8 @@ public:
     // CardRenderer::back() existing at all.
     void setBack();
 
-    // In LOGICAL pixels, and it is the only size this takes: the width follows
+    // In SCENE units - table units, which the view scales to the window - and it
+    // is the only size this takes: the width follows
     // from the art's aspect through CardRenderer::sizeForHeight(), so a card
     // cannot be set to a shape the art does not have.
     void setCardHeight(qreal height);

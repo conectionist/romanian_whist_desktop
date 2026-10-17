@@ -3,49 +3,24 @@
 
 #include "paint/Theme.h"
 
+#include <QColor>
 #include <QImage>
 #include <QPixmap>
 #include <QSize>
 
 #include <cmath>
+#include <cstdlib>
 
 // Theme is mostly a palette, and a palette has no test worth writing - a colour
-// is right or wrong by eye. What IS testable is the part with a rule: the one
-// metric every other metric on the table derives from, and the two properties
-// that make swapping the art later cheap rather than a rewrite.
+// is right or wrong by eye. What IS testable is the part with a rule: the
+// properties that make swapping the art later cheap rather than a rewrite, and
+// the caches that keep a repaint from costing a paint.
+//
+// The card height every table metric used to derive from was tested here too,
+// until the table redesign's phase 2 replaced it with fixed table space
+// (TableSpaceTests.cpp).
 
-TEST_CASE("The card height follows the window and stays inside its clamps", "[theme]")
-{
-    const Theme theme = Theme::light();
 
-    // Bigger window, bigger card - the property the whole "one unit" rule rests
-    // on. A metric that ignored the view would pass every other test here.
-    REQUIRE(theme.cardHeightFor(QSize(1280, 800)) > theme.cardHeightFor(QSize(640, 400)));
-
-    // The floor holds where the arithmetic would go under it. Without the clamp
-    // this window produces a 22-pixel card, which is a rectangle with no
-    // readable rank on it.
-    REQUIRE(theme.cardHeightFor(QSize(160, 100)) >= 44.0);
-
-    // And the ceiling holds where it would run away. A 4K window would otherwise
-    // deal cards the size of a hand of paper.
-    REQUIRE(theme.cardHeightFor(QSize(3840, 2160)) <= 220.0);
-
-    // A degenerate view is the floor, not zero and not a division by it.
-    REQUIRE(theme.cardHeightFor(QSize()) == 44.0);
-}
-
-// The width limit is the half that is easy to leave out, because it only shows
-// on a window that is wide and short - where a card sized from the height alone
-// leaves no room for section 14's eight-card fan.
-TEST_CASE("The card height is limited by the window's width as well as its height", "[theme]")
-{
-    const Theme theme = Theme::light();
-
-    // Same height, very different widths. Sizing from the height alone would
-    // return the same card for both.
-    REQUIRE(theme.cardHeightFor(QSize(400, 900)) < theme.cardHeightFor(QSize(1400, 900)));
-}
 
 TEST_CASE("Light and dark are different palettes", "[theme]")
 {
@@ -457,14 +432,16 @@ TEST_CASE("The table page is the same dark palette in every scheme", "[theme]")
 // all twenty-three here - a case per member would test the compiler.
 //
 // The LAST member, because a hand-written comparison that stopped short would
-// miss it first; and both caches, because each keeps its own copy.
-TEST_CASE("Recolouring a table colour invalidates both caches", "[theme]")
+// miss it first; and every cache, because each keeps its own copy - the room's
+// since the table redesign's phase 2.
+TEST_CASE("Recolouring a table colour invalidates every cache", "[theme]")
 {
     Theme theme = Theme::light();
     const QSize view(320, 200);
     const QSize box(48, 48);
 
     const QPixmap background = theme.background(view, 1.0);
+    const QPixmap room = theme.room(view, 1.0);
     const QPixmap avatar = theme.avatar(0, box, 1.0);
 
     // A colour the palette does not hold, so the assignment is a change.
@@ -473,7 +450,69 @@ TEST_CASE("Recolouring a table colour invalidates both caches", "[theme]")
     theme.table.buttonBorder = recolour;
 
     REQUIRE(theme.background(view, 1.0).cacheKey() != background.cacheKey());
+    REQUIRE(theme.room(view, 1.0).cacheKey() != room.cacheKey());
     REQUIRE(theme.avatar(0, box, 1.0).cacheKey() != avatar.cacheKey());
+}
+
+// ---- the room behind the table, added in the table redesign's phase 2 ----
+
+// background()'s contract, held for the room: the box asked for, rasterized at
+// the ratio and laid out at the box, one paint shared by every copy, and a new
+// size or ratio painted again rather than served stale.
+TEST_CASE("The room is rasterized at the ratio and cached like the background", "[theme]")
+{
+    const Theme theme = Theme::light();
+    const QSize view(320, 200);
+
+    const QPixmap room = theme.room(view, 2.0);
+
+    REQUIRE(room.size() == QSize(640, 400));
+    REQUIRE(room.devicePixelRatio() == Catch::Approx(2.0));
+    REQUIRE(room.deviceIndependentSize().toSize() == view);
+
+    const Theme copy = theme;
+    REQUIRE(copy.room(view, 2.0).cacheKey() == room.cacheKey());
+
+    REQUIRE(theme.room(view, 1.0).cacheKey() != room.cacheKey());
+    REQUIRE(theme.room(QSize(640, 400), 2.0).cacheKey() != room.cacheKey());
+
+    REQUIRE(theme.room(QSize(), 1.0).isNull());
+    REQUIRE(theme.room(view, 0.0).isNull());
+}
+
+namespace
+{
+// Within a step or two of eight-bit rounding: a gradient is interpolated, and the
+// pixel at a stop is the stop's colour only to within that.
+bool roughly(const QColor& got, const QColor& want)
+{
+    constexpr int slack = 3;
+
+    return std::abs(got.red() - want.red()) <= slack
+        && std::abs(got.green() - want.green()) <= slack
+        && std::abs(got.blue() - want.blue()) <= slack;
+}
+}
+
+// page.html's `radial-gradient(ellipse at 50% 42%, ...)`, whose size is CSS's
+// default, farthest-corner. That puts the centre colour at (50%, 42%) and the
+// edge colour exactly at the two BOTTOM corners, the farthest from a centre above
+// the middle - and NOT at the top two, which are nearer and so still lighter.
+// A circle, or an ellipse sized to the box's half-width and half-height, puts the
+// edge colour somewhere else, which is what the last two assertions would see.
+TEST_CASE("The room is section 2.2's gradient", "[theme]")
+{
+    const Theme theme = Theme::dark();
+    const QSize view(400, 300);
+
+    const QImage room = theme.room(view, 1.0).toImage();
+
+    REQUIRE(roughly(room.pixelColor(200, 126), theme.table.roomCentre));
+    REQUIRE(roughly(room.pixelColor(0, 299), theme.table.roomEdge));
+    REQUIRE(roughly(room.pixelColor(399, 299), theme.table.roomEdge));
+
+    REQUIRE_FALSE(roughly(room.pixelColor(0, 0), theme.table.roomEdge));
+    REQUIRE(room.pixelColor(0, 0).lightness() > theme.table.roomEdge.lightness());
 }
 
 // What a translucent colour looks like once it is painted over an opaque one:

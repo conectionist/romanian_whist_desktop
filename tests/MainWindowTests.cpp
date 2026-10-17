@@ -2,7 +2,6 @@
 
 #include "MainWindow.h"
 #include "WindowDriving.h"
-#include "paint/Theme.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "ui/BidStrip.h"
@@ -471,8 +470,8 @@ TEST_CASE("A watched game arrives at the scene as one", "[main-window]")
     // SPECTATOR MODE IS RE-ENABLED BY D1 AND NOTHING HAS RUN IT SINCE B2 - C2's
     // overlay band, C3's hand strip and C4's plaque cards all landed in between.
     //
-    // NOT A SECOND COPY OF TableSceneTests' "A spectator game reserves no strip",
-    // which asserts the same two rects against a hand-built snapshot. What that
+    // NOT A SECOND COPY OF TableSceneTests' "A spectated table draws no hand",
+    // which asserts the same fact against a hand-built snapshot. What that
     // one cannot see is the CHAIN: the dialog's radio to humanSeatOf() to
     // prepare(std::nullopt) to GameBridge stamping -1 onto every snapshot. Any
     // link seating somebody anyway leaves the scene correct and the game wrong -
@@ -493,11 +492,12 @@ TEST_CASE("A watched game arrives at the scene as one", "[main-window]")
     TableScene* scene = window.findChild<TableScene*>();
     REQUIRE(scene != nullptr);
 
-    const qreal cardHeight = Theme::light().cardHeightFor(scene->sceneRect().size().toSize());
-    REQUIRE(cardHeight > 0.0);
-
-    REQUIRE(scene->handRect(cardHeight).isEmpty());
-    REQUIRE(scene->tableRect(cardHeight) == scene->sceneRect());
+    // Nobody seated on the frame the scene drew, and so no hand drawn - section
+    // 14's "the bottom hand area is not drawn at all", from the dialog's radio
+    // all the way down.
+    REQUIRE(scene->lastSnapshot() != nullptr);
+    REQUIRE(scene->lastSnapshot()->humanSeat == -1);
+    REQUIRE_FALSE(scene->handItem()->isVisible());
 }
 
 TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window]")

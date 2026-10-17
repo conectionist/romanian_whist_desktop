@@ -7,15 +7,19 @@ class TableScene;
 
 // The window onto the table.
 //
-// SCENE UNITS ARE VIEW PIXELS, ONE TO ONE. No fitInView, no scale(), no
-// transform of any kind - the scene rect is set to the viewport and the layout
-// inside it is recomputed instead.
+// A SCALED VIEW OF A FIXED TABLE. The scene is laid out once in table space
+// (TableSpace.h) and this fits it to the window with a uniform scale, centred -
+// the table redesign's section 2.1, and its mock-up's fit(). A resize changes the
+// scale and nothing else, so the table can neither jump nor reflow.
 //
-// That is not a preference. CardRenderer rasterizes each card at exactly the
-// size it will be drawn at, times the device pixel ratio, which is the whole of
-// what B1 built; a view transform would then resample that pixmap on its way to
-// the screen and undo it at the last step. A scaled QGraphicsView is the
-// idiomatic way to make a scene fit, and it is the one thing this must not do.
+// IT WAS THE OPPOSITE UNTIL THE REDESIGN'S PHASE 2: scene units were view pixels,
+// one to one, and the layout was recomputed per window size instead. The reason
+// was B1's: CardRenderer rasterizes each card at exactly the size it is drawn at,
+// times the device pixel ratio, and a view transform would resample that pixmap
+// on its way to the screen and undo it at the last step. That contract still
+// holds - it moved into CardItem::paint(), which now asks for the size the card
+// lands on the screen rather than its size in the scene. So the scale costs the
+// cards nothing, and everything drawn as vectors was never at risk.
 class TableView : public QGraphicsView
 {
     Q_OBJECT
@@ -34,9 +38,9 @@ public:
     // reserving a permanent row for a bank of buttons spends that height on the
     // table for the whole game. An overlay changes no geometry at all.
     //
-    // HERE RATHER THAN IN MainWindow BECAUSE THIS IS WHAT KNOWS THE VIEWPORT,
-    // which differs from the widget by the frame - resizeEvent already
-    // re-derives the scene rect from it for exactly that reason.
+    // HERE RATHER THAN IN MainWindow BECAUSE THIS IS WHAT KNOWS THE VIEWPORT AND
+    // THE TRANSFORM. The band the strip sits in is in table space, and only the
+    // view can say where that lands on the screen.
     //
     // NOT OWNED. Qt's parent/child owns the widget; this only places it, and
     // passing nullptr forgets it.
@@ -50,6 +54,9 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // Scales the fit box to the viewport. See the definition.
+    void fitTable();
+
     // Puts the overlay where setBottomOverlay() promises. Called on resize and
     // whenever the overlay changes, because a strip set on an already-sized view
     // would otherwise sit at the origin until the next resize - which on a

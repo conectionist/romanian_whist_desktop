@@ -81,11 +81,9 @@ public:
     // What a plaque occupies at a given card height, ring included.
     //
     // Static and public because the LAYOUT needs it before any seat exists:
-    // seatlayout::seatCentres() places centres inside the rect it is given, and
-    // a centre inside the rect is not the same as a plaque inside it - the two
-    // side seats hang half a plaque past the edge otherwise. TableScene insets
-    // by this before laying out, which is the same "the caller passes a shorter
-    // rect" the hand strip will use in B2b.
+    // TableScene stops the bid strip's band above the lowest plaque with it.
+    // Until the table redesign's phase 2 it also inset the rect the seat ring
+    // was laid in, so that a plaque, and not just its centre, fitted the window.
     static QSizeF plaqueSize(qreal cardHeight);
 
     // Everything this draws, from one snapshot's SeatView plus the two facts

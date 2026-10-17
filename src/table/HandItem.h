@@ -43,9 +43,10 @@ public:
     // is for looking at - see the class comment.
     //
     // IGNORED WHILE A PROMPT IS LIVE, and that is not a convenience: TableScene
-    // re-sources the fan from the snapshot on every resize and every theme
-    // change, and either can land in the middle of your turn. See the definition
-    // for what taking it there would cost.
+    // re-sources the fan from its last snapshot on every theme change, and the
+    // system's colour scheme can flip in the middle of your turn - as every
+    // resize could until the table redesign's phase 2. See the definition for
+    // what taking it there would cost.
     void setHand(const std::vector<HandEntry>& hand);
 
     // YOUR TURN. Legality that means something, or - in a blind round, where
@@ -57,14 +58,6 @@ public:
 
     // Nothing to show: between games, and after the fan has been answered.
     void clear();
-
-    // HOW FAR A HOVERED CARD RISES, as a fraction of the card's height.
-    //
-    // PUBLIC AND STATIC because TableScene has to reserve room for it before any
-    // card exists, and a second copy of the number there is a second copy that
-    // drifts: the strip would stop being tall enough for the lift the day either
-    // moved. Same argument TrickItem::cardFootprint() makes for the tilt.
-    static qreal liftFraction();
 
     // The unit the rest of the table is laid out in. The fan's own metrics -
     // overlap, lift, the box it occupies - all derive from it.
@@ -153,8 +146,8 @@ private:
     // WHICH OF THE TWO SOURCES is currently on screen. The class comment above is
     // about there being two; this is the one bit that says which, and it is here
     // because the two arrive from different places and can arrive out of turn - a
-    // resize re-sources the snapshot at any moment, including while a prompt is
-    // waiting to be answered. The prompt takes the fan and keeps it until the
+    // theme change re-sources the snapshot at any moment, including while a prompt
+    // is waiting to be answered. The prompt takes the fan and keeps it until the
     // hand stops being playable.
     enum class Source
     {
