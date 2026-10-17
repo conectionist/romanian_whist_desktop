@@ -35,6 +35,9 @@ build/
 # Where CI stages the deployed tree before archiving it, and the natural place to
 # reproduce that step by hand (see .github/workflows/ci.yml).
 staging/
+
+# tests/ScreenshotTool.cpp's default output when WHIST_SHOTS_DIR is unset.
+shots/
 *.prl
 *.qmlls.ini
 

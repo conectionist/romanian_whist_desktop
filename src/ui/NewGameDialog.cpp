@@ -708,7 +708,9 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     stack->addWidget(shapeRule);
 
     structure181 = new QRadioButton(tr("1-8-1 - counts up from one card and back down"), this);
+    structure181->setObjectName("structure181");
     structure818 = new QRadioButton(tr("8-1-8 - the other way round"), this);
+    structure818->setObjectName("structure818");
 
     // The second group - see whoGroup above for what sharing one costs.
     structureGroup = new QButtonGroup(this);
@@ -719,7 +721,9 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     stack->addWidget(structure818);
 
     foreheadAndHidden = new QCheckBox(tr("End with a forehead round and a hidden round"), this);
+    foreheadAndHidden->setObjectName("foreheadAndHidden");
     allOnesForehead = new QCheckBox(tr("Play every one-card round forehead"), this);
+    allOnesForehead->setObjectName("allOnesForehead");
     stack->addWidget(foreheadAndHidden);
     stack->addWidget(allOnesForehead);
 

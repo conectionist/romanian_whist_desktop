@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "MainWindow.h"
+#include "WindowDriving.h"
 #include "paint/Theme.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
@@ -15,7 +16,6 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QDockWidget>
-#include <QElapsedTimer>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -26,8 +26,6 @@
 #include <QStatusBar>
 #include <QString>
 #include <QTimer>
-
-#include <functional>
 
 // D1's flow, driven through the real window: menu, deal, pause, resume, abandon,
 // and a second game. Constructible because TestApp is a QApplication on the
@@ -47,18 +45,11 @@
 // thing that notices the log stopped moving.
 namespace
 {
-// Runs the event loop for a while. Not a sleep: the queued snapshots this is
-// waiting for are delivered by the loop, so a blocking wait would hold the very
-// thread that has to deliver them - the asymmetry HumanSeatTests records as
-// "anything answering a prompt has to pump, not wait".
-void pump(int ms)
-{
-    QElapsedTimer clock;
-    clock.start();
-
-    while(clock.elapsed() < ms)
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-}
+// The event-loop helpers and the bid lookup live in WindowDriving.h, shared with
+// tests/ScreenshotTool.cpp.
+using driving::bidButton;
+using driving::pump;
+using driving::pumpUntil;
 
 // Answers the setup dialog FROM INSIDE ITS NESTED EVENT LOOP. QDialog::exec()
 // does not return until something answers it, so a test that clicked New Game
@@ -178,39 +169,6 @@ void answerModalWaitingWatchedGame(int afterMs)
 
         dialog->done(QDialog::Accepted);
     });
-}
-
-// Pumps until `ready` answers true, or until the deadline. Returns what it last
-// saw, so the caller asserts on a bool rather than on a hang - a game that never
-// ends must fail this file rather than stop it.
-bool pumpUntil(int limitMs, const std::function<bool()>& ready)
-{
-    QElapsedTimer clock;
-    clock.start();
-
-    while(clock.elapsed() < limitMs)
-    {
-        if(ready())
-            return true;
-
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-    }
-
-    return ready();
-}
-
-// A bid button, found by the bid it offers. Same lookup BidStripTests uses and
-// for the same reason: QObject::findChildren() promises no order, so position
-// in the list is not something a test can assert through.
-QPushButton* bidButton(const BidStrip& strip, unsigned int bet)
-{
-    for(QPushButton* button : strip.findChildren<QPushButton*>())
-    {
-        if(button->text() == QString::number(bet))
-            return button;
-    }
-
-    return nullptr;
 }
 
 }
