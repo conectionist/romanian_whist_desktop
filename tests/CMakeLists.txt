@@ -33,6 +33,7 @@ add_executable(desktop_tests
     TableViewTests.cpp
     InfoStripTests.cpp
     ScoreboardTests.cpp
+    ScreenshotTool.cpp
     TestApp.cpp
 )
 

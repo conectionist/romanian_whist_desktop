@@ -48,6 +48,12 @@ public:
     // from the prompt through here.
     HandItem* handItem() const { return hand; }
 
+    // The frame the table is drawn from, or null before the first one. READ-ONLY
+    // and for tests: tests/ScreenshotTool.cpp asserts which moment of the game
+    // each picture shows, and this is the one place that knows it without
+    // parsing a label the redesign is free to remove.
+    std::shared_ptr<const GameSnapshot> lastSnapshot() const { return snapshot; }
+
     void setTheme(const Theme& theme);
 
     // Called by TableView when the viewport changes size. Everything below is a

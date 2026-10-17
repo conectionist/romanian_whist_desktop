@@ -9,4 +9,5 @@ opponents' cards standing in racks on the rim, and panels pinned to the window c
   and open it in a browser; it is playable and works offline.
 - **Screenshots** of the mock-up at 1920×1080: [`screenshots/`](screenshots/).
 
-Status: designed and approved as a mock-up; not yet implemented in the client.
+Status: designed and approved as a mock-up. In the client, phase 0 (the baseline) is complete;
+phases 1 to 12 have not started.
