@@ -772,6 +772,21 @@ Done when: 3, 4, 5 and 6 players match `screenshots/table-N-players.jpg` for pan
 - **Section 4's "r 522" was too strict.** The five-player bottom panels' square corners are 521.5
   from the centre; only their rounded corners clear 522. `SeatLayoutTests` asserts instead what
   the mock-up's numbers give: every panel at least 10 outside the wooden rim (520).
+- **PR #29's review fixes** take the count to 344 tests.
+  - **The minimum scale is 0.36**, up from phase 2's 0.30: the owner's decision, 2026-10-18. The
+    panels' Marcellus 25 drew names at 7.5 px at 0.30, and draws them at 9 px at 0.36.
+    `minimumViewport()` is 709×495, and the window stops at 945×659. A `TableSpaceTests` case holds
+    `seatitem::nameSize` and `minimumScale` together.
+  - **The chrome is shared:** `panel::Cache`, owned by `TableScene` beside the card renderer and
+    holding one ratio and palette at a time. Measured back to back, the first drag step fell from
+    about 94 to 79 ms and the settle frame from about 106 to 88. Phases 8 and 10 should draw their
+    panels through it too.
+  - **`seatitem::Shown`** is what a panel's picture shows. The item paints from it and recomposes
+    only when it changes, so anything later added to the panel must go through it.
+  - **The portrait's frame** goes through the same sepia and contrast filter as its picture, as CSS
+    filters the whole element. The portrait's rounded rect is the snapped picture's own, which
+    removed a hairline of the picture's far edge along its top and bottom.
+  - **`fonts::baselineIn()`** is CSS's half-leading baseline, shared by the logo and the panels.
 - **Pitfall: the logo's lettering is not quite deterministic.** In about one run in four, a band of
   the logo (y 511–523 in `table-empty.png`) differs from the others by up to 4 levels. The base
   branch does the same, so it predates this phase. Compare screenshots with a tolerance there, or

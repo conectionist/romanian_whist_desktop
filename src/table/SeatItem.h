@@ -72,6 +72,11 @@ Layout layoutFor(QSizeF panel, QSizeF faceSize);
 // The height a face-up card is drawn at: the portrait's.
 qreal faceHeight();
 
+// The portrait's picture, inside its gold border: 86 x 98 table units. What
+// Theme::avatar() is asked for at, so the Card art window can show it at the size
+// the table does.
+QSizeF portraitPicture();
+
 // Section 2.5's pill, which is three states once the bidding is over and a
 // neutral one before. `Neutral` covers "No bid yet", "Bidding…" and a bid made
 // while others are still bidding, which the mock-up does not colour: nobody has

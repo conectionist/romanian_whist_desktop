@@ -1,5 +1,8 @@
 #include "CardArtWindow.h"
 
+#include "table/SeatItem.h"
+#include "table/TableSpace.h"
+
 #include <romanian_whist/Card.h>
 
 #include <QComboBox>
@@ -32,10 +35,11 @@ constexpr qreal captionHeight = 20.0;
 
 // How wide the row below is, in card heights: the three sizes (half, three
 // quarters and a whole card), the back and the dimmed card at a whole card each -
-// so 4.25 cards at an aspect of about 0.69 - and the avatar's 0.6-square box.
-// Approximate on purpose, since the exact aspect is CardRenderer's business. All
-// it decides is how large the samples are allowed to get.
-constexpr qreal rowInCardHeights = 3.6;
+// so 4.25 cards at an aspect of about 0.69 - and the portrait, 86 wide against a
+// hand card 225 tall. Approximate on purpose, since the exact aspect is
+// CardRenderer's business. All it decides is how large the samples are allowed
+// to get.
+constexpr qreal rowInCardHeights = 3.4;
 
 // The gaps between the six samples, and the one extra before the back.
 constexpr int gapsInRow = 6;
@@ -122,8 +126,10 @@ void CardArtCanvas::paintEvent(QPaintEvent*)
     x += full.width() + gap;
 
     // Beside the cards rather than on its own, because what matters about the
-    // avatar is whether it reads at the size a seat plaque will actually give it.
-    const QSize box(qRound(unit * 0.6), qRound(unit * 0.6));
+    // portrait is whether it reads at the size a seat's panel gives it: the
+    // panel's 86 x 98, at the scale that makes a whole card here the table's hand
+    // card.
+    const QSize box = (seatitem::portraitPicture() * (unit / tablespace::handCardHeight)).toSize();
 
     painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(0, box, dpr));
     painter.drawText(QRectF(x, baseline + 4.0, box.width() * 2.0, captionHeight),

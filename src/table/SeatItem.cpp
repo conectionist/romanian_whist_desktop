@@ -82,6 +82,11 @@ QRectF seatitem::panelRect(QSizeF panel)
     return QRectF(-panel.width() / 2.0, -panel.height() / 2.0, panel.width(), panel.height());
 }
 
+QSizeF seatitem::portraitPicture()
+{
+    return portraitSize - QSizeF(2.0 * portraitBorder, 2.0 * portraitBorder);
+}
+
 seatitem::Layout seatitem::layoutFor(QSizeF panel, QSizeF faceSize)
 {
     Layout layout;
@@ -374,7 +379,7 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
 
 void SeatItem::paintPortrait(QPainter& painter, const QRectF& box) const
 {
-    const QRectF laidOut = box.adjusted(portraitBorder, portraitBorder, -portraitBorder, -portraitBorder);
+    const QRectF laidOut(box.topLeft() + QPointF(portraitBorder, portraitBorder), seatitem::portraitPicture());
     const qreal innerRadius = portraitRadius - portraitBorder;
 
     const qreal ratio = devicepixels::effectiveRatio(painter);
