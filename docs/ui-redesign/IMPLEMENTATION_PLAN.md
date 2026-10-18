@@ -222,7 +222,10 @@ seat's name panel. The rack's origin is on the rim at radius **452**: `(768 + 45
 452·sin a)`. If that point falls inside the seat's own panel rectangle grown by 10 on every side (only
 the top seat, whose panel overlaps the rim), step `a` clockwise by 1° until it no longer does, then
 add a further 9° so the row's width clears the panel corner. Remember the final `a` per seat
-(`rackAngle[s]`); the played card and the lead rhombus use it.
+(`rackAngle[s]`); the played card and the lead rhombus use it. *(Phase 5: with the table of
+section 2.5 the slide never fires. Every rim point is already clear of its panel grown by 10; the
+top seat's panel ends at y −22 and its rim point is at y 60. The client implements the rule
+anyway, and `seatlayout::rackAngle()` is where to read the result.)*
 
 **Frame.** Rotate the rack's local frame by `φ = atan2(−cos a, sin a)` so local +y points
 **outwards**, towards the owner, and local −y points at the table centre.
@@ -234,20 +237,36 @@ its top edge** (CSS `rotateX(50deg)`, `transform-origin: 50% 0`), so its far end
 viewer and leans back over the owner's side, and seen through a perspective camera at distance 300
 centred on local (0, 40). Net effect: each back is a trapezoid, narrow at the rack and wider at the
 far end. Shading: the back gets a gradient that is light `rgba(255,240,210,0.16)` at the far end and
-darkens to `rgba(0,0,0,0.3)` at the rack, plus a drop shadow (0, 5, blur 5, `rgba(0,0,0,0.55)`).
+darkens to `rgba(0,0,0,0.3)` at the rack, transparent from 45% of the way between, plus an inset
+1 px `rgba(0,0,0,0.25)` line and a radius of 4. The whole row (cards and rail) casts one drop shadow
+(0, 5, blur 5, `rgba(0,0,0,0.55)`) in the rack's frame, so it falls towards the owner.
 
 **Qt implementation of the tilt.** `QTransform` supports projective transforms, so each card is a
-plain pixmap drawn through a quad-to-quad mapping. In the card's local frame (before the in-plane
-rotation), the four corners are `(x, 4, 0)` and `(x, 4 + 90·cos 50°, 90·sin 50°)` for `x = ±31`. Project
-each with `k = 300 / (300 − z)`: `X = x·k`, `Y = 40 + (Y₃ − 40)·k`. Build
-`QTransform::quadToQuad(cardRect, projectedQuad, t)`, then append the in-plane rotation, the
-side-by-side offset, the frame rotation `φ` and the translation to the origin. No OpenGL needed.
+plain pixmap drawn through a quad-to-quad mapping. **Project last, as CSS does** (corrected in
+phase 5; this paragraph used to project first). Each `.back` is `translateX(t) rotate(θ)
+rotateX(50°)` about its top-centre (0, 4), and the `.fan`'s perspective projects the result. So for
+each corner `(u, v)` of the flat card (`u = ±31`, `v` 0 or 90, measured from that top-centre):
+1. Tilt it: `y = v·cos 50°`, `z = v·sin 50°`.
+2. Turn it in the plane by θ.
+3. Add `t` to x and 4 to y.
+4. Only then project it, with `k = 300 / (300 − z)`: `X = x·k`, `Y = 40 + (Y − 40)·k`.
+
+Projecting first gives the outer cards' far ends too little spread.
+`QTransform::quadToQuad(cardRect, projectedQuad, t)` then maps the flat card onto its quad, and the
+item's rotation `φ` turns the whole rack into place. No OpenGL needed.
 
 **Rack rail.** A wooden bar lying flat on the rim on the table side of the cards: width `(n−1)·26 + 78`,
-height 16, local y from −9 to +7, radius 3, filled with the wood texture plus a gradient (light
+height 16, local y from −9 to +7, radius 3. It's filled with `#6b3d1f` plus a gradient (light
 `rgba(255,220,170,0.35)` at the top edge fading out by 30%, `rgba(0,0,0,0.45)` at the bottom), a
-1 px dark outline `rgba(30,14,4,0.6)` and a small drop shadow. **Draw it above the cards** so it
-covers their bottom edges. An empty hand draws neither cards nor rail.
+1 px dark outline `rgba(30,14,4,0.6)` and its own drop shadow (0, 2, blur 3, `rgba(0,0,0,0.6)`).
+- **No wood texture, whatever `page.html` says.** It centres `table_wood.png` on the rail at
+  900×900, and that texture is the rim, a ring that's transparent in the middle, so only the base
+  colour shows (found in phase 5).
+- **It's raised `translateZ(8px)`,** so the perspective magnifies it by 300/292 about (0, 40):
+  y −9..7 becomes about −10.3..6.1, and it gets slightly wider.
+
+**Draw it above the cards** so it covers their bottom edges. An empty hand draws neither cards
+nor rail.
 
 **Forehead rounds.** Section 17: in a Forehead round the human sees every other seat's single card.
 Today `SeatItem` shows that card face-up on the plaque. In the new layout show it **face-up in the
@@ -542,8 +561,8 @@ remain pass.
 - **What later phases take from here:**
   - **Coordinates:** `src/table/TableSpace.h`, a namespace of the section-2 numbers (`centre`,
     `fitBox`, `feltRadius`, `handTop`, the hand's card height, the view margins, `minimumScale`), plus
-    `fitScale()`, `minimumViewport()` and `playedCardHeight()`. Phase 5 adds the rack card's height
-    with the racks. No other file writes those numbers. The scene rect is `fitBox` and never
+    `fitScale()`, `minimumViewport()` and `playedCardHeight()`. Phase 5 added the racks'
+    `rackRadius` and `rackCardHeight`. No other file writes those numbers. The scene rect is `fitBox` and never
     changes. `TableScene::relayout()` is private and runs on a snapshot or a theme change only; a
     resize changes `TableView`'s transform and nothing else, which `TableViewTests` asserts item by
     item.
@@ -792,7 +811,7 @@ Done when: 3, 4, 5 and 6 players match `screenshots/table-N-players.jpg` for pan
   branch does the same, so it predates this phase. Compare screenshots with a tolerance there, or
   run twice.
 
-### Phase 5: racks
+### Phase 5: racks ✅ COMPLETE
 
 Files: new `src/table/RackItem.h/.cpp`, `src/paint/CardRenderer.cpp` (`back()`), `TableScene.cpp`,
 new `tests/RackItemTests.cpp`.
@@ -807,6 +826,59 @@ new `tests/RackItemTests.cpp`.
    the seat's hand is visible.
 
 Done when: `screenshots/detail-racks-and-played-cards.jpg` is matched for the racks.
+
+**Outcome:**
+
+- **The count is 362 tests** (344 + 18), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. The card back added one case (345). The racks
+  retired six `SeatItemTests` cases that placed the Forehead card on the panel. They moved "Your
+  own seat shows no face in a Forehead round" to `TableSceneTests`, and added 23 cases: 19
+  `RackItemTests`, one `SeatItemTests` case, two scene cases and one resize case.
+- **Section 2.6 was corrected in five places**, now written into it above:
+  - the projection order;
+  - the rail's colour, which is flat because the texture is transparent there;
+  - the rail's `translateZ(8px)`;
+  - the cards' 45% gradient stop and their inset line;
+  - the slide rule, which never fires with section 2.5's panels.
+- **The card back** is `backSvg()`'s, painted by `CardRenderer::paintBack()` in the mock-up's
+  100×145 units. The lattice is a texture brush, not a clip. The Hidden-round hand and the Card art
+  window show it too.
+- **What later phases take from here:**
+  - **The rack angle:** `seatlayout::rackAngle(seatCount, humanSeat, seat)`, in radians with y
+    down. It's 90° for the bottom seat, which is what a spectated seat 0 uses.
+    `seatlayout::rackOrigin(angle)` is the point on the rim at `tablespace::rackRadius` (452).
+    **Phase 6 turns the played cards and places the rhombus by this angle**:
+    `TableScene::trickPositions()` still uses the nominal seat angles.
+  - **The rack's geometry:** `rackitem::cardQuad()`, `cardTransform()`, `railRect()`,
+    `extent()` and `frameRotation()`, all in the rack's own frame (+y towards the owner).
+  - **What a rack shows:** `rackitem::shownFor()`. A non-empty `SeatView::hand` shows those cards
+    face up; otherwise it shows `cardsLeft` backs. The Forehead rule stays exactly as section 17
+    has it, and the panel draws no card at all now.
+  - **Its colours:** `TablePalette`'s `rackShadow`, `rackCard*` and `rail*` tokens.
+- **Each rack is one picture, shared.** `rackitem::Cache`, owned by `TableScene` like
+  `panel::Cache`, holds one picture per thing shown, at one ratio and palette at a time.
+  - The pictures are drawn in the rack's frame and turned by the item, so five racks of five
+    cards are one picture.
+  - Composed per rack, the first step of a drag and its settle frame each cost about 8 ms more.
+- **Resizing**, release build, `[.timing]`, measured back to back on one machine against phase 4:
+
+  | | Phase 4 | Phase 5 |
+  |---|---|---|
+  | Drag frame, median | 6.7–7.1 ms | 7.3–7.6 ms |
+  | Drag frame, worst | 7.2–7.9 ms | 8.3–8.6 ms |
+  | First step | 67–69 ms | 70–73 ms |
+  | Settle frame | 73–76 ms | 76–79 ms |
+
+  The racks cost about 0.5 ms a drag frame, which is the blending of their pictures turned to
+  their angles.
+- **Pitfall: a picture turned in advance is not cheaper to draw.** Keeping each rack's picture
+  pre-rotated, so the blit had no rotation, was tried and measured slower. A diagonal rack's turned
+  picture has larger transparent corners, and blending that area is the cost, not the filtering.
+  What helped was trimming the picture's margins to where the shadow actually falls: it's offset
+  5 towards the owner, so the table side needs only 3.5.
+- **Pitfall: the outer cards' near corners poke past the rail.** They're turned up to 7°, so in an
+  8-card rack they stand about 1.7 past its edge, as in the mock-up. A test that the rail covers a
+  card's near edge checks the edge's midpoint.
 
 ### Phase 6: played cards and the lead rhombus
 
