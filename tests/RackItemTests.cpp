@@ -140,6 +140,22 @@ TEST_CASE("A rack's frame points out toward its owner", "[rack]")
     }
 }
 
+TEST_CASE("Quarter-turn racks are turned exactly", "[rack]")
+{
+    // Exactly, so QTransform::rotate() takes its exact path and the racks of four
+    // lie square on the pixel grid.
+    REQUIRE(rackitem::frameRotation(0.0) == -90.0);
+    REQUIRE(rackitem::frameRotation(std::numbers::pi / 2.0) == 0.0);
+    REQUIRE(rackitem::frameRotation(std::numbers::pi) == 90.0);
+    REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0) == 180.0);
+
+    // And as rackAngle() hands them over.
+    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, 0, 1)) == 90.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, 0, 2)) == 180.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, 0, 3)) == -90.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, -1, 0)) == 0.0);
+}
+
 // ---- the cards in it ----
 
 TEST_CASE("A rack's card is the mock-up's size and the art's shape", "[rack]")
@@ -328,18 +344,53 @@ TEST_CASE("A rack is composed at the ratio it is drawn at", "[rack]")
         image.fill(Qt::transparent);
 
         const QRectF bounds = rack->boundingRect();
+        const std::size_t before = rack->compositions();
 
         QPainter painter(&image);
         scene.render(&painter, QRectF(0.0, 0.0, bounds.width() * scale, bounds.height() * scale), bounds);
         painter.end();
 
-        REQUIRE(rack->picture(scale * deviceRatio).devicePixelRatio() == Approx(scale * deviceRatio));
+        // Each pass is a ratio the rack has not been drawn at, so it composed once.
+        REQUIRE(rack->compositions() == before + 1);
 
-        // Drawn at that ratio, not at another: asking again composes nothing.
-        const std::size_t composed = rack->compositions();
-        rack->picture(scale * deviceRatio);
-        REQUIRE(rack->compositions() == composed);
+        // AT THAT RATIO AND NO OTHER: the picture at it is the one already held. Had
+        // paint() asked for another ratio, this would compose afresh.
+        const std::size_t drawn = rack->compositions();
+
+        REQUIRE(rack->picture(scale * deviceRatio).devicePixelRatio() == Approx(scale * deviceRatio));
+        REQUIRE(rack->compositions() == drawn);
     }
+}
+
+TEST_CASE("A turned rack is drawn on whole pixels", "[rack]")
+{
+    // The left rack of four, turned a quarter turn, at a rim point that is not on
+    // a whole pixel: it is drawn exactly as the same rack at the nearest whole
+    // pixel, rather than filtered between pixels.
+    const CardRenderer renderer;
+
+    const auto drawnAt = [&](QPointF at)
+    {
+        QGraphicsScene scene;
+        auto* rack = new RackItem(&renderer, nullptr);
+        rack->setRack(holding(5), Theme::dark());
+        rack->setRotation(rackitem::frameRotation(std::numbers::pi));
+        rack->setPos(at);
+        scene.addItem(rack);
+
+        const QRectF all(0.0, 0.0, 400.0, 300.0);
+
+        QImage image(all.size().toSize(), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+
+        QPainter painter(&image);
+        scene.render(&painter, all, all);
+        painter.end();
+
+        return image;
+    };
+
+    REQUIRE(drawnAt(QPointF(200.3, 150.6)) == drawnAt(QPointF(200.0, 151.0)));
 }
 
 TEST_CASE("A snapshot that changes nothing in a rack composes nothing", "[rack]")

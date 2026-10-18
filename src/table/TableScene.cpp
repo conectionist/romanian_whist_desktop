@@ -231,7 +231,7 @@ void TableScene::relayout()
             continue;
         }
 
-        const qreal angle = seatlayout::rackAngle(count, snapshot->humanSeat, seat);
+        const qreal angle = seatlayout::rackAngle(panel);
 
         rack->setPos(seatlayout::rackOrigin(angle));
         rack->setRotation(rackitem::frameRotation(angle));

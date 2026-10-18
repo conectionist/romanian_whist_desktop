@@ -60,8 +60,9 @@ void setFreeze(QWidget& widget, std::optional<qreal> factor);
 // through the painter's transform and the device's ratio. A picture laid at a
 // fraction of a pixel is sampled between its pixels or rounded by the blit,
 // either of which slides it off what it was made to line up with - a texture's
-// grain blurred, a shadow's cut-out beside its shape. For a painter that only
-// scales and translates, which is every painter on the table.
+// grain blurred, a shadow's cut-out beside its shape. Exact for a painter that
+// scales and translates, and for one turned a quarter turn as well (a rack). Any
+// other turn puts the point on a pixel but the picture is resampled anyway.
 QPointF snapped(const QPainter& painter, QPointF point);
 
 // A ratio as a cache key, quantized to TEN-THOUSANDTHS.

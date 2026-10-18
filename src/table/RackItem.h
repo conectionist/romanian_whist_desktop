@@ -76,6 +76,7 @@ QRectF extent(std::size_t count);
 // The item's rotation, in DEGREES as QGraphicsItem::setRotation() takes it, for a
 // rack at `angle` (radians, y down, as seatlayout::rackAngle() gives it): the
 // frame turned so its +y points from the table's centre out through the rack.
+// In (-180, 180], and a quarter turn exactly when it is one.
 qreal frameRotation(qreal angle);
 
 // WHAT A RACK SHOWS, worked out once per snapshot. The picture is composed from
@@ -199,6 +200,10 @@ private:
 
     rackitem::Shown showing;
     Theme::TablePalette palette;
+
+    // boundingRect(), KEPT rather than worked out: the scene asks for it on every
+    // paint and every hit test, and it is eight projected cards to work out.
+    QRectF bounds;
 
     // The rack's picture. The ratio is compared on its own, because it changes
     // without any setter.

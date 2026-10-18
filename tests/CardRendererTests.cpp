@@ -306,4 +306,10 @@ TEST_CASE("The back is the mock-up's burgundy and gold", "[card-renderer]")
         colours.insert(back.pixel(x, 40));
 
     CHECK(colours.size() > 3);
+
+    // And a dark hairline round it, as the faces draw round themselves.
+    const QRgb edge = back.pixel(0, 145);
+
+    CHECK(qAlpha(edge) == 255);
+    CHECK(qRed(edge) < 0xF2 - 20);
 }

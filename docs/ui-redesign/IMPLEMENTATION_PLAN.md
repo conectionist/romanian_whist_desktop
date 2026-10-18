@@ -842,7 +842,10 @@ Done when: `screenshots/detail-racks-and-played-cards.jpg` is matched for the ra
   - the slide rule, which never fires with section 2.5's panels.
 - **The card back** is `backSvg()`'s, painted by `CardRenderer::paintBack()` in the mock-up's
   100×145 units. The lattice is a texture brush, not a clip. The Hidden-round hand and the Card art
-  window show it too.
+  window show it too. It adds one thing `backSvg()` doesn't have: a faint dark hairline round the
+  edge, like the one the face art draws, so the cream border doesn't fade into a light background.
+- **A rack is drawn on a whole device pixel**: `RackItem::paint()` snaps the picture's corner, and
+  `rackitem::frameRotation()` gives quarter turns exactly. So four players' racks are pixel-exact.
 - **What later phases take from here:**
   - **The rack angle:** `seatlayout::rackAngle(seatCount, humanSeat, seat)`, in radians with y
     down. It's 90° for the bottom seat, which is what a spectated seat 0 uses.

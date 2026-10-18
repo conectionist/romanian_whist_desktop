@@ -11,6 +11,7 @@
 #include <QMarginsF>
 #include <QPainter>
 #include <QPainterPath>
+#include <QtMath>
 
 #include <algorithm>
 #include <cmath>
@@ -72,6 +73,12 @@ QPointF project(qreal x, qreal y, qreal z)
     const qreal k = perspective / (perspective - z);
 
     return QPointF(x * k, perspectiveOriginY + (y - perspectiveOriginY) * k);
+}
+
+// A RackItem's rect for a hand of `count`: a full rack's at least, see mostCards.
+QRectF rackBounds(std::size_t count)
+{
+    return rackitem::extent(std::max(count, rackitem::mostCards)).marginsAdded(shadowMargins);
 }
 
 }
@@ -161,7 +168,20 @@ QRectF rackitem::extent(std::size_t count)
 
 qreal rackitem::frameRotation(qreal angle)
 {
-    return std::atan2(-std::cos(angle), std::sin(angle)) * 180.0 / std::numbers::pi;
+    // The frame's +y is at a quarter turn past its +x, so the frame is turned a
+    // quarter turn short of the rack's angle.
+    qreal turn = std::remainder(qRadiansToDegrees(angle) - 90.0, 360.0);
+
+    // (-180, 180]: QTransform::rotate() turns 180 exactly and -180 not.
+    if(turn <= -180.0)
+        turn += 360.0;
+
+    // AND A QUARTER TURN EXACTLY, not the 89.99999999999999 a right angle can come
+    // back from radians as, so the four-player racks take QTransform's exact path -
+    // and so sit square on the pixel grid paint() snaps them to.
+    const qreal quarters = std::round(turn / 90.0) * 90.0;
+
+    return std::abs(turn - quarters) < 1e-9 ? quarters : turn;
 }
 
 rackitem::Shown rackitem::shownFor(const SeatView& seat)
@@ -213,12 +233,39 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     const QRectF rail = railRect(count);
     const QPainterPath railBody = paths::rounded(rail, railRadius * railScale);
 
+    // EACH CARD'S ART, FIRST, so the shadow is cast by the cards that are drawn.
+    //
+    // Made at the pixels its FAR end covers, which the perspective magnifies, so
+    // the art is sampled down along the card rather than up at its far edge.
+    //
+    // A face that will not load stands in the rack as a back: the card is there,
+    // and a gap would say it was not. With no art at all the card is left out of
+    // the shadow as well, rather than cut out of it as a hole.
+    const QSize artSize = size.toSize();
+    const qreal artRatio = ratio * farMagnification();
+
+    std::vector<QPixmap> arts;
+    arts.reserve(count);
+
+    for(std::size_t i = 0 ; i < count ; i++)
+    {
+        QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, artRatio) : QPixmap();
+
+        if(art.isNull())
+            art = renderer.back(artSize, artRatio);
+
+        arts.push_back(art);
+    }
+
     // THE ROW'S SHADOW, under everything: the .fan's drop-shadow is of the whole row,
     // the cards and the rail as one silhouette.
     QPainterPath silhouette;
 
     for(std::size_t i = 0 ; i < count ; i++)
-        silhouette.addPath(cardTransform(count, i).map(body));
+    {
+        if(!arts[i].isNull())
+            silhouette.addPath(cardTransform(count, i).map(body));
+    }
 
     silhouette.addPath(railBody);
     silhouette.setFillRule(Qt::WindingFill);
@@ -226,11 +273,6 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     shadows::drawShapeShadow(painter, silhouette, rowShadowOffset, rowShadowBlur, palette.rackShadow);
 
     // EACH CARD, later ones over earlier, as the mock-up's DOM order stacks them.
-    //
-    // Made at the pixels its FAR end covers, which the perspective magnifies, so
-    // the art is sampled down along the card rather than up at its far edge.
-    const QSize artSize = size.toSize();
-    const qreal artRatio = ratio * farMagnification();
 
     // .back's gradient: light at the far end, which is the flat card's bottom,
     // clear by 45% of the way, and dark at the rail.
@@ -245,8 +287,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, artRatio)
-                                             : renderer.back(artSize, artRatio);
+        QPixmap& art = arts[i];
 
         if(art.isNull())
             continue;
@@ -326,7 +367,8 @@ rackitem::Picture rackitem::Cache::picture(const Shown& shown, const Theme::Tabl
 }
 
 RackItem::RackItem(const CardRenderer* _renderer, rackitem::Cache* _racks, QGraphicsItem* parent)
-    : QGraphicsObject(parent), renderer(_renderer), racks(_racks ? _racks : &ownRacks)
+    : QGraphicsObject(parent), renderer(_renderer), racks(_racks ? _racks : &ownRacks),
+      bounds(rackBounds(0))
 {
     // NOTHING HERE TAKES THE MOUSE. A rack stands on the rim, where nothing beneath
     // it can be clicked either.
@@ -342,7 +384,10 @@ void RackItem::setRack(const SeatView& seat, const Theme& theme)
 
     // Only a hand larger than a full rack - which no round deals - changes the rect.
     if(std::max(now.count, rackitem::mostCards) != std::max(showing.count, rackitem::mostCards))
+    {
         prepareGeometryChange();
+        bounds = rackBounds(now.count);
+    }
 
     showing = now;
     palette = theme.table;
@@ -352,7 +397,7 @@ void RackItem::setRack(const SeatView& seat, const Theme& theme)
 
 QRectF RackItem::boundingRect() const
 {
-    return rackitem::extent(std::max(showing.count, rackitem::mostCards)).marginsAdded(shadowMargins);
+    return bounds;
 }
 
 void RackItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -364,10 +409,13 @@ void RackItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     if(rack.isNull())
         return;
 
-    // TURNED BY THE ITEM'S ROTATION, so filtered rather than blitted pixel for
-    // pixel - as every played card is.
+    // ON A WHOLE DEVICE PIXEL. The picture's corner is whole only in the rack's own
+    // frame, and the rack's origin on the rim is not, so it is snapped where it
+    // lands: a quarter-turned rack - four players' every one - then lies pixel on
+    // pixel, and the filter samples each at its centre. Turned any other way it is
+    // filtered after all, as every played card is.
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
-    painter->drawPixmap(composed.offset, rack);
+    painter->drawPixmap(devicepixels::snapped(*painter, composed.offset), rack);
 }
 
 QPixmap RackItem::picture(qreal ratio) const

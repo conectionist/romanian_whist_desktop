@@ -379,5 +379,20 @@ QImage CardRenderer::paintBack(QSize physical) const
     painter.drawPolygon(QPolygonF({ centre + QPointF(0.0, -10.0), centre + QPointF(6.0, 0.0),
                                     centre + QPointF(0.0, 10.0), centre + QPointF(-6.0, 0.0) }));
 
+    // A DARK HAIRLINE ROUND THE EDGE, which backSvg() has not: the face art draws
+    // its own, and without one the cream border fades into a light background (the
+    // card art window in the light theme). In the racks, the mock-up's only backs,
+    // rackCardEdge is drawn over it, as it is over a Forehead face's. In pixels,
+    // as the faces' line is, and inside the image.
+    const qreal pixelsPerUnit = physical.width() / 100.0;
+    const qreal hairline = std::max(1.0, physical.width() * 0.006);
+
+    painter.resetTransform();
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(0, 0, 0, 90), hairline));
+    painter.drawRoundedRect(QRectF(QPointF(0.0, 0.0), QSizeF(physical))
+                                .adjusted(hairline / 2.0, hairline / 2.0, -hairline / 2.0, -hairline / 2.0),
+                            7.0 * pixelsPerUnit - hairline / 2.0, 7.0 * pixelsPerUnit - hairline / 2.0);
+
     return image;
 }

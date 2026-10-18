@@ -114,8 +114,10 @@ inline constexpr qreal handTop = 850.0;
 inline constexpr QSizeF panelSize(280.0, 118.0);
 
 // THE RACKS (section 2.6): each opponent's hand, standing in a wooden rack on the
-// rim. A rack's origin is on this circle - over the wood, between the bead at 453
-// and the rim's edge at 510 - and its cards are 90 tall before they are tilted.
+// rim. A rack's origin is on this circle, table.js's RIM_R - on the bead, between
+// its middle ring at 451 and its outer one at 453, so the rack stands out over the
+// wood toward the rim's edge at 510 - and its cards are 90 tall before they are
+// tilted.
 // Where on the circle is seatlayout::rackAngle().
 inline constexpr qreal rackRadius = 452.0;
 inline constexpr qreal rackCardHeight = 90.0;
