@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <vector>
 
 // Theme is mostly a palette, and a palette has no test worth writing - a colour
 // is right or wrong by eye. What IS testable is the part with a rule: the
@@ -119,27 +120,52 @@ TEST_CASE("Recolouring a theme invalidates its cached background", "[theme]")
 }
 
 // The same rule for the avatar, and it is the one that was actually wrong: the
-// avatar cache was keyed on seatPlaque, but paintAvatar() derives its per-seat
-// tint from ACCENT as well, so this assignment used to hand back the identical
-// pixmap. WHICH COLOURS A PAINTER READS IS NOT VISIBLE FROM THE LOOKUP, which is
-// why the key is the whole palette rather than the members named at the top of
-// the painter beneath it.
-TEST_CASE("Recolouring the accent invalidates the cached avatars", "[theme]")
+// avatar cache was keyed on seatPlaque, but paintAvatar() derived its per-seat
+// tint from the accent as well, so recolouring the accent handed back the
+// identical pixmap. WHICH COLOURS A PAINTER READS IS NOT VISIBLE FROM THE LOOKUP,
+// which is why the key is the whole palette rather than the members named at the
+// top of the painter beneath it.
+//
+// Since the redesign's phase 4 the portraits read their own colours, a look per
+// seat inside an array, which is the same blind spot one level deeper.
+TEST_CASE("Recolouring a portrait invalidates the cached avatars", "[theme]")
 {
     Theme theme = Theme::light();
     const QSize box(48, 48);
 
     const QPixmap before = theme.avatar(0, box, 1.0);
 
-    theme.accent = Theme::dark().accent;
+    theme.table.portraits[0].skin = QColor(1, 2, 3);
 
     const QPixmap after = theme.avatar(0, box, 1.0);
 
     REQUIRE(after.cacheKey() != before.cacheKey());
 
     // Repainted AND different: a cache miss that produced the same picture would
-    // pass the line above and still mean the accent had not been read.
+    // pass the line above and still mean the colour had not been read.
     REQUIRE(after.toImage() != before.toImage());
+}
+
+// SIX DIFFERENT PEOPLE: each seat's look is its own picture, and the looks repeat
+// only past the six seats the engine allows.
+TEST_CASE("The six portraits are six different pictures", "[theme]")
+{
+    const Theme theme = Theme::dark();
+    const QSize box(86, 98);
+
+    std::vector<QImage> seen;
+
+    for(unsigned int seat = 0 ; seat < 6 ; seat++)
+    {
+        const QImage image = theme.avatar(seat, box, 1.0).toImage();
+
+        for(const QImage& other : seen)
+            REQUIRE(image != other);
+
+        seen.push_back(image);
+    }
+
+    REQUIRE(theme.avatar(6, box, 1.0).toImage() == seen.front());
 }
 
 // THE KEY LEADS ITS PAINTERS, which is the half of the rule above that only a
