@@ -106,6 +106,15 @@ inline constexpr qreal handCardHeight = 225.0;
 // above it.
 inline constexpr qreal handTop = 850.0;
 
+// THE NAME PANELS (section 2.5). Every opponent's is this size; where each one
+// goes is seatlayout::panelRect(), from a table hand-tuned per player count.
+inline constexpr QSizeF panelSize(280.0, 118.0);
+
+// The bottom seat's panel: yours, or seat 0's in a spectated game. Wider than the
+// others, centred on the table at (768, 1105), and it covers the bottom of your
+// hand - which section 2.8 intends.
+inline constexpr QRectF bottomPanel(618.0, 1046.0, 300.0, 118.0);
+
 // The scale that fits the box, margins and all, into a viewport of this size -
 // table.js fit()'s `scale`. Zero when the viewport has no room left inside its
 // margins, which a caller reads as "leave the transform alone".

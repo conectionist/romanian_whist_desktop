@@ -39,6 +39,26 @@ namespace seatlayout
 // outside the table is read as -1 rather than trusted into a modulo.
 std::vector<QPointF> seatCentres(unsigned int seatCount, int humanSeat, QRectF table);
 
+// How many seats clockwise `seat` is from the one at the bottom - yours, or seat
+// 0's in a spectator game. 0 for the bottom seat itself. seatCentres() and
+// panelRect() both place a seat by this, so they cannot disagree about its order.
+//
+// `humanSeat` outside the table is read as -1, as seatCentres() reads it.
+unsigned int stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int seat);
+
+// A SEAT'S NAME PANEL, in table space: the redesign's section 2.5, which places
+// each panel by hand per player count so that it sits just outside the wooden rim
+// and clears the corner panels. The bottom seat gets tablespace::bottomPanel and
+// every other one a tablespace::panelSize at its spot.
+//
+// NOT ON A RING, unlike seatCentres(): no ellipse puts a 280-wide panel just
+// outside a circle at every angle, which is why the mock-up gave up on one. The
+// order is still the ring's, clockwise from the bottom, through stepsFromBottom().
+//
+// Empty for a player count the table has no row for (outside 2 to 6) or a seat
+// that is not at the table.
+QRectF panelRect(unsigned int seatCount, int humanSeat, unsigned int seat);
+
 // The rect to hand seatCentres() when what you know is the radius you want
 // rather than the space you have. The ring it produces is a CIRCLE of that
 // radius about `centre`.
