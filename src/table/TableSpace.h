@@ -48,12 +48,15 @@ inline constexpr qreal marginX = 16.0;
 inline constexpr qreal marginTop = 10.0;
 inline constexpr qreal marginBottom = 8.0;
 
-// THE SMALLEST SCALE THE TABLE IS DRAWN AT. Below it the plaque names fall under
-// nine pixels and the cards under seventy, which is past reading - and nothing
-// else would stop it: the table is a fixed space the view scales, so a small
-// window used to draw it as small as it liked. Decided by the owner on 2026-10-17,
-// at the size that still leaves a 1000 x 700 window room for the scoreboard.
-inline constexpr qreal minimumScale = 0.30;
+// THE SMALLEST SCALE THE TABLE IS DRAWN AT. Below it the panels' names fall under
+// nine pixels (Marcellus 25, seatitem::nameSize) and the Taken/Bid pill under
+// seven, which is past reading - and nothing else would stop it: the table is a
+// fixed space the view scales, so a small window used to draw it as small as it
+// liked. Decided by the owner on 2026-10-17 at 0.30, for the old plaque's larger
+// names; raised to 0.36 on 2026-10-18 when phase 4's panels made them 25. The
+// smallest window is then 945 x 659, which still leaves a 1000 x 700 one room
+// for the scoreboard. TableSpaceTests pins the nine pixels.
+inline constexpr qreal minimumScale = 0.36;
 
 // THE TABLE (section 2.4), every circle centred on `centre`.
 //
@@ -105,6 +108,15 @@ inline constexpr qreal handCardHeight = 225.0;
 // Where the top of the human's hand is (section 2.8). Their played card sits 60
 // above it.
 inline constexpr qreal handTop = 850.0;
+
+// THE NAME PANELS (section 2.5). Every opponent's is this size; where each one
+// goes is seatlayout::panelRect(), from a table hand-tuned per player count.
+inline constexpr QSizeF panelSize(280.0, 118.0);
+
+// The bottom seat's panel: yours, or seat 0's in a spectated game. Wider than the
+// others, centred on the table at (768, 1105), and it covers the bottom of your
+// hand - which section 2.8 intends.
+inline constexpr QRectF bottomPanel(618.0, 1046.0, 300.0, 118.0);
 
 // The scale that fits the box, margins and all, into a viewport of this size -
 // table.js fit()'s `scale`. Zero when the viewport has no room left inside its

@@ -134,8 +134,8 @@ newgame::Config shotConfig(int players)
     newgame::Config config;
     config.spectator = false;
 
-    // NOT THE MOCK-UP'S "You": the client already marks the human's plaque
-    // "(you)", and "You (you)" is a picture of the name rather than the table.
+    // NOT THE MOCK-UP'S "You", which is a name to replace rather than a label -
+    // NewGameDialog's default for the same reason.
     config.humanName = QStringLiteral("Player");
 
     for(int i = 0 ; i < players - 1 ; i++)

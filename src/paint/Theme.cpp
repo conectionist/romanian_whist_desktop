@@ -9,7 +9,9 @@
 #include <QImageReader>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPen>
 #include <QRadialGradient>
+#include <QSizeF>
 #include <QString>
 #include <QtLogging>
 
@@ -21,10 +23,56 @@
 namespace
 {
 
-// A per-seat hue rotation off the accent, so six seats are distinguishable
-// without six literals. 47 degrees is a step that does not repeat or collide
-// within the six seats the engine allows.
-constexpr int seatHueStep = 47;
+// table.js portrait()'s viewBox, which every coordinate in paintAvatar() is in.
+constexpr QSizeF portraitView(100.0, 114.0);
+
+// page.html's .portrait filter: sepia(0.18) contrast(1.05), in that order, as the
+// Filter Effects spec defines both - sepia a colour matrix interpolated from the
+// identity by its amount, contrast a slope about mid-grey. On straight colour, in
+// sRGB, as browsers apply the shorthand filters.
+constexpr qreal portraitSepia = 0.18;
+constexpr qreal portraitContrast = 1.05;
+
+// One opaque colour through the filter. The picture's pixels go through it, and so
+// does the frame's colour, because CSS filters the whole element, border and all.
+QRgb portraitFiltered(QRgb colour)
+{
+    constexpr qreal k = 1.0 - portraitSepia;
+
+    constexpr qreal m[3][3] = {
+        { 0.393 + 0.607 * k, 0.769 - 0.769 * k, 0.189 - 0.189 * k },
+        { 0.349 - 0.349 * k, 0.686 + 0.314 * k, 0.168 - 0.168 * k },
+        { 0.272 - 0.272 * k, 0.534 - 0.534 * k, 0.131 + 0.869 * k }
+    };
+
+    const auto channel = [](qreal value)
+    {
+        const qreal contrasted = (value - 0.5) * portraitContrast + 0.5;
+        return qBound(0, qRound(contrasted * 255.0), 255);
+    };
+
+    const qreal r = qRed(colour) / 255.0;
+    const qreal g = qGreen(colour) / 255.0;
+    const qreal b = qBlue(colour) / 255.0;
+
+    return qRgba(channel(std::min(1.0, m[0][0] * r + m[0][1] * g + m[0][2] * b)),
+                 channel(std::min(1.0, m[1][0] * r + m[1][1] * g + m[1][2] * b)),
+                 channel(std::min(1.0, m[2][0] * r + m[2][1] * g + m[2][2] * b)),
+                 qAlpha(colour));
+}
+
+void applyPortraitFilter(QImage& image)
+{
+    for(int y = 0 ; y < image.height() ; y++)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+
+        // The picture is opaque - its background fills the box - so the
+        // premultiplied pixel IS the straight one.
+        for(int x = 0 ; x < image.width() ; x++)
+            line[x] = portraitFiltered(line[x]);
+    }
+}
 
 // A duplicate of CardRenderer's, floor included, and deliberately not shared
 // with it: Theme must not acquire a dependency on the card art to be able to
@@ -127,6 +175,55 @@ Theme::TablePalette tablePalette()
     table.logoTextBottom = QColor(0xA7, 0x7A, 0x35);
     table.logoTextShadow = rgba(0, 0, 0, 0.55);
     table.logoOrnament = QColor(0xD9, 0xB4, 0x6A);
+
+    // Section 2.5, from page.html's .plaque and .pill and table.js portrait().
+    //
+    // .plaque.active: 0 0 26px rgba(242, 211, 140, 0.5); .pill: border 1px solid
+    // rgba(201, 164, 92, 0.4) - the gold of every other line, fainter.
+    table.activeGlow = rgba(242, 211, 140, 0.5);
+    table.pillBorder = rgba(201, 164, 92, 0.4);
+
+    // .portrait: border 1px solid #a3824a, the buttons' gold, assigned for the
+    // reason blackSuit is - and through the portrait's filter, which CSS applies to
+    // the whole element, border included.
+    table.portraitBorder = QColor::fromRgba(portraitFiltered(table.buttonBorder.rgba()));
+
+    // The background's outer stop, the eyebrows' stroke and the plain mouth.
+    table.portraitEdge = QColor(0x17, 0x10, 0x0A);
+    table.portraitBrow = QColor(0x2A, 0x1A, 0x10);
+    table.portraitMouth = QColor(0x8A, 0x4F, 0x3C);
+
+    // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
+    // optional hat, mustache and beard, and long hair.
+    using Look = Theme::TablePalette::PortraitLook;
+    const QColor none;
+
+    table.portraits = { {
+        // You: dark hair, a light beard.
+        Look{ QColor(0x6B, 0x52, 0x33), QColor(0xD9, 0xAB, 0x86), QColor(0xB9, 0x8A, 0x68),
+              QColor(0x2A, 0x1C, 0x14), QColor(0x3A, 0x35, 0x30), QColor(0xD8, 0xCF, 0xBF),
+              none, none, QColor(0x3A, 0x2A, 0x1E), false },
+        // A hat and a mustache.
+        Look{ QColor(0x5A, 0x4A, 0x35), QColor(0xCF, 0x9F, 0x7C), QColor(0xA8, 0x7C, 0x5E),
+              QColor(0x3B, 0x2A, 0x1C), QColor(0x4A, 0x35, 0x24), QColor(0xBF, 0xB3, 0x9E),
+              QColor(0x3D, 0x3A, 0x36), QColor(0x3B, 0x2A, 0x1C), none, false },
+        // Long brown hair.
+        Look{ QColor(0x6E, 0x5A, 0x3E), QColor(0xE2, 0xB9, 0x97), QColor(0xC0, 0x95, 0x76),
+              QColor(0x4A, 0x2F, 0x1D), QColor(0x4B, 0x33, 0x24), QColor(0xE8, 0xE0, 0xCF),
+              none, none, none, true },
+        // White hair, a hat and a white mustache.
+        Look{ QColor(0x5F, 0x54, 0x40), QColor(0xD5, 0xA8, 0x88), QColor(0xAE, 0x84, 0x66),
+              QColor(0xD8, 0xD2, 0xC6), QColor(0x3C, 0x3A, 0x32), QColor(0xCF, 0xC6, 0xB2),
+              QColor(0x6A, 0x51, 0x34), QColor(0xEC, 0xE6, 0xDA), none, false },
+        // Long red hair.
+        Look{ QColor(0x5C, 0x46, 0x36), QColor(0xE8, 0xC2, 0xA2), QColor(0xC7, 0x9E, 0x80),
+              QColor(0x8A, 0x3F, 0x22), QColor(0x2F, 0x3B, 0x34), QColor(0xE4, 0xDC, 0xCB),
+              none, none, none, true },
+        // Black hair and a beard.
+        Look{ QColor(0x4F, 0x4A, 0x3C), QColor(0xC9, 0x98, 0x77), QColor(0xA3, 0x76, 0x5A),
+              QColor(0x1F, 0x17, 0x12), QColor(0x5A, 0x4A, 0x32), QColor(0xD2, 0xC8, 0xB4),
+              none, none, QColor(0x1F, 0x17, 0x12), false }
+    } };
 
     return table;
 }
@@ -478,48 +575,150 @@ QBrush Theme::roomBrush(const QRectF& view) const
     return gradients::cssRadial(view, QPointF(0.5, 0.42), gradients::Shape::Ellipse, stops);
 }
 
-// A flat silhouette in a disc, filling the box it was given. Deliberately plain:
-// section 18 is a calm table rather than a skeuomorphic casino, and this is the
-// element most likely to be the first thing replaced by real art.
+// table.js portrait(): a head-and-shoulders bust on a dark vignette, drawn in the
+// SVG's own 100 x 114 viewBox and fitted into the box as SVG fits one - scaled
+// to the nearer side and centred (xMidYMid meet) - then given page.html's
+// sepia(0.18) contrast(1.05). Every path below is the SVG's, command for command,
+// so the mock-up is the document for each number.
 //
 // PHYSICAL PIXELS, as paintBackground() above and for the same reason.
 QPixmap Theme::paintAvatar(unsigned int seat, QSize physical) const
 {
-    QPixmap pixmap(physical);
-    pixmap.fill(Qt::transparent);
+    const TablePalette::PortraitLook& look = table.portraits[seat % table.portraits.size()];
 
-    QPainter painter(&pixmap);
+    // An image rather than a pixmap, for the filter's pixel pass at the end.
+    QImage image(physical, QImage::Format_ARGB32_Premultiplied);
+    image.fill(table.portraitEdge);
+
+    QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
 
-    const qreal width = physical.width();
-    const qreal height = physical.height();
+    const qreal scale = std::min(physical.width() / portraitView.width(),
+                                 physical.height() / portraitView.height());
 
-    painter.setBrush(seatPlaque);
-    painter.drawEllipse(QRectF(0.0, 0.0, width, height));
+    painter.translate((physical.width() - portraitView.width() * scale) / 2.0,
+                      (physical.height() - portraitView.height() * scale) / 2.0);
+    painter.scale(scale, scale);
 
-    // Hue-rotated off the accent so the seats differ from each other without
-    // six colour literals. An achromatic accent reports hue -1, which would
-    // rotate to nothing, so it gets a starting hue instead.
-    QColor tint = accent;
-    const int baseHue = tint.hue() < 0 ? 40 : tint.hue();
-    tint.setHsv((baseHue + static_cast<int>(seat) * seatHueStep) % 360,
-                std::max(120, tint.saturation()),
-                std::min(210, tint.value()));
+    const QRectF view(QPointF(0.0, 0.0), portraitView);
 
-    painter.setBrush(tint);
+    // radialGradient cx 50% cy 36% r 72%, in the rect's bounding box - so it is an
+    // ellipse as tall as the box is.
+    QRadialGradient background(QPointF(0.5, 0.36), 0.72);
+    background.setCoordinateMode(QGradient::ObjectBoundingMode);
+    background.setColorAt(0.0, look.background);
+    background.setColorAt(1.0, table.portraitEdge);
+    painter.fillRect(view, background);
 
-    // Head and shoulders, clipped to the disc so the shoulders read as a
-    // silhouette inside it rather than a bar across it.
-    QPainterPath disc;
-    disc.addEllipse(QRectF(0.0, 0.0, width, height));
-    painter.setClipPath(disc);
+    if(look.longHair)
+    {
+        QPainterPath hair(QPointF(29, 46));
+        hair.quadTo(24, 84, 32, 100);
+        hair.lineTo(68, 100);
+        hair.quadTo(76, 84, 71, 46);
+        hair.closeSubpath();
+        painter.fillPath(hair, look.hair);
+    }
 
-    painter.drawEllipse(QPointF(width * 0.5, height * 0.38), width * 0.17, width * 0.17);
+    QPainterPath coat(QPointF(6, 114));
+    coat.quadTo(10, 82, 34, 77);
+    coat.lineTo(66, 77);
+    coat.quadTo(90, 82, 94, 114);
+    coat.closeSubpath();
+    painter.fillPath(coat, look.coat);
 
-    QPainterPath shoulders;
-    shoulders.addEllipse(QPointF(width * 0.5, height * 0.96), width * 0.32, height * 0.30);
-    painter.drawPath(shoulders);
+    QPainterPath shirt(QPointF(39, 77));
+    shirt.lineTo(50, 94);
+    shirt.lineTo(61, 77);
+    shirt.closeSubpath();
+    painter.fillPath(shirt, look.shirt);
 
-    return pixmap;
+    painter.setBrush(look.shade);
+    painter.drawRoundedRect(QRectF(43, 62, 14, 17), 5, 5);
+
+    painter.setBrush(look.skin);
+    painter.drawEllipse(QPointF(50, 48), 16, 19.5);
+
+    painter.setBrush(look.shade);
+    painter.drawEllipse(QPointF(33.5, 50), 2.6, 4.4);
+    painter.drawEllipse(QPointF(66.5, 50), 2.6, 4.4);
+
+    QPainterPath hair(QPointF(34, 44));
+    hair.quadTo(33, 26, 50, 25);
+    hair.quadTo(67, 26, 66, 44);
+    hair.quadTo(62, 34, 50, 33.5);
+    hair.quadTo(38, 34, 34, 44);
+    hair.closeSubpath();
+    painter.fillPath(hair, look.hair);
+
+    if(look.hat.isValid())
+    {
+        QPainterPath crown(QPointF(32, 38));
+        crown.quadTo(33, 22, 50, 21);
+        crown.quadTo(68, 22, 69, 37);
+        crown.quadTo(50, 32, 32, 38);
+        crown.closeSubpath();
+        painter.fillPath(crown, look.hat);
+
+        // The brim, at the SVG's opacity .8.
+        QPainterPath brim(QPointF(30, 39));
+        brim.quadTo(50, 31, 74, 37);
+        brim.lineTo(72, 42);
+        brim.quadTo(50, 36, 31, 42);
+        brim.closeSubpath();
+
+        painter.setOpacity(0.8);
+        painter.fillPath(brim, look.hat);
+        painter.setOpacity(1.0);
+    }
+
+    painter.setBrush(Qt::NoBrush);
+
+    QPainterPath brows(QPointF(41, 46.5));
+    brows.quadTo(44, 44.8, 47, 46.5);
+    brows.moveTo(53, 46.5);
+    brows.quadTo(56, 44.8, 59, 46.5);
+    painter.strokePath(brows, QPen(table.portraitBrow, 1.6, Qt::SolidLine, Qt::RoundCap));
+
+    QPainterPath nose(QPointF(48, 52));
+    nose.quadTo(50, 56, 52, 52);
+    painter.strokePath(nose, QPen(look.shade, 1.4, Qt::SolidLine, Qt::FlatCap));
+
+    if(look.mustache.isValid())
+    {
+        QPainterPath mustache(QPointF(41, 58));
+        mustache.quadTo(50, 53, 59, 58);
+        mustache.quadTo(55, 61, 50, 59);
+        mustache.quadTo(45, 61, 41, 58);
+        mustache.closeSubpath();
+        painter.fillPath(mustache, look.mustache);
+    }
+    else
+    {
+        QPainterPath mouth(QPointF(45, 60));
+        mouth.quadTo(50, 62.5, 55, 60);
+        painter.strokePath(mouth, QPen(table.portraitMouth, 1.5, Qt::SolidLine, Qt::RoundCap));
+    }
+
+    if(look.beard.isValid())
+    {
+        // At the SVG's opacity .35: a shadow of stubble rather than a beard.
+        QPainterPath beard(QPointF(36, 54));
+        beard.quadTo(38, 70, 50, 70);
+        beard.quadTo(62, 70, 64, 54);
+        beard.quadTo(60, 64, 50, 64);
+        beard.quadTo(40, 64, 36, 54);
+        beard.closeSubpath();
+
+        painter.setOpacity(0.35);
+        painter.fillPath(beard, look.beard);
+        painter.setOpacity(1.0);
+    }
+
+    painter.end();
+
+    applyPortraitFilter(image);
+
+    return QPixmap::fromImage(std::move(image));
 }

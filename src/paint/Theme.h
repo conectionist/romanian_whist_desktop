@@ -7,6 +7,7 @@
 #include <QRectF>
 #include <QSize>
 
+#include <array>
 #include <memory>
 
 // The first of the two seams of plan section 18.1: THE ONLY PLACE A COLOUR
@@ -190,6 +191,47 @@ struct ThemeColours
         QColor logoTextShadow;
         QColor logoOrnament;
 
+        // THE NAME PANELS (section 2.5), added in the redesign's phase 4.
+        //
+        // The active seat's glow, round its gold-bright ring; the Taken/Bid pill's
+        // border while it is neutral, which a coloured state replaces with its own.
+        QColor activeGlow;
+        QColor pillBorder;
+
+        // The portrait's frame, a gold hairline. page.html also gives it a dark
+        // inset line, which never shows: an inset shadow is painted under the
+        // content, and the portrait's picture fills its whole content box.
+        QColor portraitBorder;
+
+        // WHAT EVERY PORTRAIT SHARES: the dark its background fades to, the
+        // eyebrows' stroke, and the mouth of a face with no mustache.
+        QColor portraitEdge;
+        QColor portraitBrow;
+        QColor portraitMouth;
+
+        // ONE HEAD-AND-SHOULDERS BUST PER SEAT, table.js PLAYERS[].look: six hand-
+        // drawn variants rather than a hue rotation, indexed as Theme::avatar() is.
+        //
+        // hat, mustache and beard are INVALID where the look has none, which is how
+        // the mock-up's optional fields read; a valid colour draws the feature.
+        struct PortraitLook
+        {
+            QColor background;
+            QColor skin;
+            QColor shade;
+            QColor hair;
+            QColor coat;
+            QColor shirt;
+            QColor hat;
+            QColor mustache;
+            QColor beard;
+            bool longHair = false;
+
+            bool operator==(const PortraitLook&) const = default;
+        };
+
+        std::array<PortraitLook, 6> portraits;
+
         bool operator==(const TablePalette&) const = default;
     };
 
@@ -237,10 +279,13 @@ struct Theme : ThemeColours
     // frame and a cached picture of the old size would only be thrown away.
     QBrush roomBrush(const QRectF& view) const;
 
-    // Stick figures today, portraits tomorrow. THE BOX IS WHAT THE SEAT PLAQUE
-    // RESERVES, which is the whole reason this takes a QSize rather than a
-    // scale: replacing the art then never reflows the layout, because the
-    // layout never asked how big the art wanted to be.
+    // A drawn bust today (table.PortraitLook), real art tomorrow. THE BOX IS
+    // WHAT THE SEAT PANEL RESERVES, which is the whole reason this takes a QSize
+    // rather than a scale: replacing the art then never reflows the layout,
+    // because the layout never asked how big the art wanted to be.
+    //
+    // `seat` picks the look, modulo the six there are. The table passes a seat's
+    // place clockwise from the bottom, so you are always the first.
     //
     // Same logical-size-and-dpr contract as background() above.
     QPixmap avatar(unsigned int seat, QSize box, qreal dpr) const;

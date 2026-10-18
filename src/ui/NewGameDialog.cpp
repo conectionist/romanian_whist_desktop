@@ -263,10 +263,10 @@ newgame::Config newgame::defaults()
 {
     Config config;
 
-    // NOT "You". SeatItem appends " (you)" to the seated player's plaque, so
-    // that default drew "You (you)" - found by rendering a dealt table. Section
-    // 13's mockup fills the field with a person's name for the same reason: it
-    // is a name to replace, not a label.
+    // NOT "You". Section 13's mockup fills the field with a person's name: it
+    // is a name to replace, not a label. (SeatItem used to append " (you)" to
+    // the seated player's plaque, which drew "You (you)"; the table redesign's
+    // name panel marks yours by its place at the bottom instead.)
     config.humanName = QCoreApplication::translate("newgame", "Player");
 
     // THREE, as in the terminal's quick game - see defaultLevel() for who they

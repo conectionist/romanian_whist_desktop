@@ -1,5 +1,8 @@
 #include "SeatLayout.h"
 
+#include "table/TableSpace.h"
+
+#include <array>
 #include <cmath>
 #include <numbers>
 
@@ -9,15 +12,64 @@ namespace
 // How much of the rect the ellipse of seats spans. Just inside it rather than
 // filling it, so a seat never sits exactly on the boundary.
 //
-// It is NOT reduced to leave room for the plaque around each centre. This
-// function is handed the rect a seat's CENTRE may occupy, and choosing that rect
-// is the caller's business - TableScene's, which hands it a fixed ring through
-// ringRect() below, at the radii that put each plaque where section 2.5 does.
-// Doing it here would mean this function knowing what is drawn at the points it
-// returns.
+// It is NOT reduced to leave room for whatever is drawn at each point. This
+// function is handed the rect a point may occupy, and choosing that rect is the
+// caller's business - TableScene::trickPositions(), which hands it the ring the
+// played cards sit on through ringRect() below. The name panels are not placed
+// by it at all since phase 4: panelRect() copies section 2.5's corners. Doing it
+// here would mean this function knowing what is drawn at the points it returns.
 constexpr qreal radiusFractionX = 0.46;
 constexpr qreal radiusFractionY = 0.44;
 
+// SECTION 2.5'S TABLE (table.js LAYOUTS): the top-left corner of each panel, by
+// player count, from the first seat clockwise of the bottom one. Hand-tuned in the
+// mock-up, so copied rather than derived - SeatLayoutTests checks the properties
+// that tuning was for, so an edit here that loses one fails by name.
+//
+// TWO PLAYERS IS NOT IN THE MOCK-UP. The opponent takes the top spot, which is the
+// four- and six-player rows' top seat (open question Q7).
+using Corners = std::array<QPointF, 5>;
+
+constexpr std::array<Corners, 5> panelCorners = { {
+    { { { 628.0, -140.0 } } },                                                  // 2
+    { { { 96.0, 49.0 }, { 1160.0, 49.0 } } },                                   // 3
+    { { { -34.0, 453.0 }, { 628.0, -140.0 }, { 1290.0, 453.0 } } },             // 4
+    { { { -24.0, 611.0 }, { 96.0, 49.0 }, { 1160.0, 49.0 }, { 1280.0, 611.0 } } }, // 5
+    { { { 1.0, 700.0 }, { 96.0, 49.0 }, { 628.0, -140.0 }, { 1160.0, 49.0 }, { 1255.0, 700.0 } } } // 6
+} };
+
+constexpr unsigned int fewestSeats = 2;
+constexpr unsigned int mostSeats = fewestSeats + panelCorners.size() - 1;
+
+}
+
+unsigned int seatlayout::stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int seat)
+{
+    if(seatCount == 0)
+        return 0;
+
+    // Out of range is read as "nobody", not clamped and not wrapped: a seat
+    // index that does not exist is a caller bug, and rotating the table by a
+    // modulo of it would hide that behind a layout that merely looks odd.
+    const bool seated = humanSeat >= 0 && static_cast<unsigned int>(humanSeat) < seatCount;
+    const unsigned int bottomSeat = seated ? static_cast<unsigned int>(humanSeat) : 0u;
+
+    // Unsigned arithmetic wraps, so the modulo is what keeps `seat` behind
+    // `bottomSeat` at a positive offset rather than an enormous one.
+    return (seat + seatCount - bottomSeat) % seatCount;
+}
+
+QRectF seatlayout::panelRect(unsigned int seatCount, int humanSeat, unsigned int seat)
+{
+    if(seatCount < fewestSeats || seatCount > mostSeats || seat >= seatCount)
+        return QRectF();
+
+    const unsigned int steps = stepsFromBottom(seatCount, humanSeat, seat);
+
+    if(steps == 0)
+        return tablespace::bottomPanel;
+
+    return QRectF(panelCorners[seatCount - fewestSeats][steps - 1], tablespace::panelSize);
 }
 
 // SECTION 14'S ENTIRE ANGLE TABLE IS THIS ONE FORMULA, which is worth saying
@@ -47,12 +99,6 @@ std::vector<QPointF> seatlayout::seatCentres(unsigned int seatCount, int humanSe
     if(seatCount == 0 || table.isEmpty())
         return {};
 
-    // Out of range is read as "nobody", not clamped and not wrapped: a seat
-    // index that does not exist is a caller bug, and rotating the table by a
-    // modulo of it would hide that behind a layout that merely looks odd.
-    const bool seated = humanSeat >= 0 && static_cast<unsigned int>(humanSeat) < seatCount;
-    const unsigned int bottomSeat = seated ? static_cast<unsigned int>(humanSeat) : 0u;
-
     const QPointF centre = table.center();
     const qreal radiusX = table.width() * radiusFractionX;
     const qreal radiusY = table.height() * radiusFractionY;
@@ -64,11 +110,8 @@ std::vector<QPointF> seatlayout::seatCentres(unsigned int seatCount, int humanSe
     for(unsigned int seat = 0 ; seat < seatCount ; seat++)
     {
         // Steps CLOCKWISE FROM THE HUMAN in seat order, so the seat after this
-        // one on screen is the seat that plays after it. Unsigned arithmetic
-        // wraps, so the modulo is what keeps `seat` behind `bottomSeat` at a
-        // positive offset rather than an enormous one.
-        const unsigned int stepsFromBottom = (seat + seatCount - bottomSeat) % seatCount;
-        const qreal theta = stepsFromBottom * step;
+        // one on screen is the seat that plays after it.
+        const qreal theta = stepsFromBottom(seatCount, humanSeat, seat) * step;
 
         centres[seat] = QPointF(centre.x() - radiusX * std::sin(theta),
                                 centre.y() + radiusY * std::cos(theta));

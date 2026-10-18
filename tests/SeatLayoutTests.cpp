@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 
 #include "table/SeatLayout.h"
+#include "table/TableSpace.h"
 
 #include <QPointF>
 #include <QRectF>
@@ -9,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -342,4 +344,138 @@ TEST_CASE("A two-radius ring rect lays an ellipse of exactly those radii", "[sea
     REQUIRE(seatlayout::ringRect(centre, 120.0, 120.0) == seatlayout::ringRect(centre, 120.0));
 
     REQUIRE(seatlayout::ringRect(centre, 120.0, 0.0).isEmpty());
+}
+
+// ---- the name panels, added in the table redesign's phase 4 ----
+//
+// Section 2.5 places every panel by hand, per player count. The table is copied
+// verbatim, and the first case below checks the copy; the rest check what the
+// hand-tuning was FOR - the same order as the ring, clear of the table, clear of
+// each other - so that a later edit to one number that breaks one of those fails
+// by name rather than by looking slightly off in a screenshot.
+
+namespace
+{
+
+// The stage, whose centre is the table's: what a panel's side is read against.
+const QRectF stage(QPointF(0.0, 0.0), tablespace::stage);
+
+std::vector<QRectF> panelsFor(unsigned int seatCount, int humanSeat)
+{
+    std::vector<QRectF> panels;
+
+    for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+        panels.push_back(seatlayout::panelRect(seatCount, humanSeat, seat));
+
+    return panels;
+}
+
+// How far the nearest point of `rect` is from the table's centre.
+qreal clearance(const QRectF& rect)
+{
+    const QPointF centre = tablespace::centre;
+    const qreal x = std::clamp(centre.x(), rect.left(), rect.right());
+    const qreal y = std::clamp(centre.y(), rect.top(), rect.bottom());
+
+    return std::hypot(x - centre.x(), y - centre.y());
+}
+
+}
+
+TEST_CASE("The panels are section 2.5's table", "[seat-layout]")
+{
+    // Top-left corners from the first seat clockwise of the bottom one; the
+    // bottom seat itself is the wider panel centred under the table.
+    const std::vector<std::vector<QPointF>> corners = {
+        { { 628, -140 } },
+        { { 96, 49 }, { 1160, 49 } },
+        { { -34, 453 }, { 628, -140 }, { 1290, 453 } },
+        { { -24, 611 }, { 96, 49 }, { 1160, 49 }, { 1280, 611 } },
+        { { 1, 700 }, { 96, 49 }, { 628, -140 }, { 1160, 49 }, { 1255, 700 } }
+    };
+
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        INFO("seatCount " << seatCount);
+
+        const std::vector<QRectF> panels = panelsFor(seatCount, 0);
+
+        REQUIRE(panels.front() == QRectF(618, 1046, 300, 118));
+        REQUIRE(panels.front().center() == QPointF(768, 1105));
+
+        for(unsigned int seat = 1 ; seat < seatCount ; seat++)
+        {
+            INFO("seat " << seat);
+            REQUIRE(panels[seat] == QRectF(corners[seatCount - 2][seat - 1], QSizeF(280, 118)));
+        }
+    }
+}
+
+TEST_CASE("The panels go round the table in the ring's order", "[seat-layout]")
+{
+    // SECTION 14'S ROWS AGAIN, read off the panels: each panel sits on the side of
+    // the table its seat's ring position does - whichever seat the human has, and
+    // in a spectator game. The ring's own cases above check those rows against the
+    // plan's words, so this ties the hand-tuned table to the same words.
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        for(int humanSeat = -1 ; humanSeat < static_cast<int>(seatCount) ; humanSeat++)
+        {
+            INFO("seatCount " << seatCount << ", humanSeat " << humanSeat);
+
+            std::vector<Side> sides;
+
+            for(const QRectF& panel : panelsFor(seatCount, humanSeat))
+                sides.push_back(sideOf(panel.center(), stage));
+
+            REQUIRE(sides == sidesFor(seatCount, humanSeat));
+        }
+    }
+}
+
+TEST_CASE("Every panel sits outside the wooden rim", "[seat-layout]")
+{
+    // THE RIM IS 510, and every panel's nearest point is at least 10 past it,
+    // which leaves the opponents' racks (phase 5) their strip of rim. The plan's
+    // section 4 says 522; the five-player bottom panels' square corners come to
+    // 521.5, and only their rounded ones clear 522 - so this asserts what the
+    // mock-up's numbers actually give.
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        for(const QRectF& panel : panelsFor(seatCount, 0))
+        {
+            INFO("seatCount " << seatCount << ", panel at " << panel.x() << ", " << panel.y());
+            REQUIRE(clearance(panel) >= tablespace::woodRadius + 10.0);
+        }
+    }
+}
+
+TEST_CASE("No two panels overlap and all fit the box", "[seat-layout]")
+{
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        const std::vector<QRectF> panels = panelsFor(seatCount, 0);
+
+        for(std::size_t left = 0 ; left < panels.size() ; left++)
+        {
+            INFO("seatCount " << seatCount << ", seat " << left);
+            REQUIRE(tablespace::fitBox.contains(panels[left]));
+
+            for(std::size_t right = left + 1 ; right < panels.size() ; right++)
+            {
+                INFO("and seat " << right);
+                REQUIRE_FALSE(panels[left].intersects(panels[right]));
+            }
+        }
+    }
+}
+
+TEST_CASE("A table the panels have no row for gets no panels", "[seat-layout]")
+{
+    // Section 2.5 runs from two to six. Anything else is not a table to invent a
+    // layout for, and a seat that is not at the table has no place at it.
+    REQUIRE(seatlayout::panelRect(0, 0, 0).isEmpty());
+    REQUIRE(seatlayout::panelRect(1, 0, 0).isEmpty());
+    REQUIRE(seatlayout::panelRect(7, 0, 0).isEmpty());
+    REQUIRE(seatlayout::panelRect(4, 0, 4).isEmpty());
 }

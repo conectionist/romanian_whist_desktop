@@ -13,25 +13,6 @@
 namespace
 {
 
-// THE INTERIM SEAT RING, which the redesign's phase 4 deletes.
-//
-// Phase 2 took away the layout the plaques used to be fitted with - an ellipse
-// sized to the window - and phase 4 is what gives each seat its own spot (section
-// 2.5's table) and its new panel. In between, the existing plaques sit on one
-// fixed ellipse round the table, which seatlayout lays out exactly as it always
-// has. The radii put the side seats and the top one where section 2.5 does at four
-// players - (106, 512), (768, -81), (1430, 512) - and the human at (768, 1105),
-// which is section 2.5's centre for the human's panel.
-//
-// AND A FIXED PLAQUE, from the same item at a unit of 150, which comes out 275 x
-// 119: the size of section 2.5's panel give or take five units, so the interim
-// table reads at the proportions the finished one will have. At five and six seats
-// the diagonal plaques' inner corners reach about 25 units onto the wooden rim -
-// never the felt - and phase 4's position table is what clears them.
-constexpr qreal seatRadiusX = 662.0;
-constexpr qreal seatRadiusY = 593.0;
-constexpr qreal plaqueUnit = 150.0;
-
 // How far inside the felt's edge a played card's outer end sits, and how far above
 // the hand the human's card does (section 2.7: 60 in both places).
 constexpr qreal playedInset = 60.0;
@@ -96,7 +77,7 @@ void TableScene::ensureSeats(std::size_t count)
 {
     while(seats.size() < count)
     {
-        SeatItem* seat = new SeatItem(&cards);
+        SeatItem* seat = new SeatItem(&cards, &panels);
         addItem(seat);
         seats.push_back(seat);
     }
@@ -107,23 +88,15 @@ void TableScene::ensureSeats(std::size_t count)
         seats[i]->hide();
 }
 
-std::vector<QPointF> TableScene::seatPositions(std::size_t seatCount) const
-{
-    return seatlayout::seatCentres(static_cast<unsigned int>(seatCount),
-                                   snapshot ? snapshot->humanSeat : -1,
-                                   seatlayout::ringRect(tablespace::centre,
-                                                        seatRadiusX, seatRadiusY));
-}
-
 // SECTION 2.7'S PLACES, as near as phase 2 can have them. Each card sits on the
 // line from the middle of the table toward its owner, with its outer end 60 inside
 // the felt's edge; the human's sits above their hand instead, which is where a
 // card you are about to play would go.
 //
-// THE OWNER'S DIRECTION IS THE SEAT'S NOMINAL ANGLE here, the same one the plaque
-// ring uses, because the rack each card will line up with does not exist until
-// phase 5 - and the same function as the plaques, so a card is always on the side
-// of the table its owner sits on. One ring at one radius suffices where the old
+// THE OWNER'S DIRECTION IS THE SEAT'S NOMINAL ANGLE here, because the rack each
+// card will line up with does not exist until phase 5 - and in the same clockwise
+// order as the panels (seatlayout::stepsFromBottom()), so a card is always on the
+// side of the table its owner sits on. One ring at one radius suffices where the old
 // layout needed one sized per seat count: the cards are the mock-up's size, not a
 // fit, and at six seats on a radius of 289 their centres stay 254 apart against a
 // card 181 tall.
@@ -154,34 +127,36 @@ std::optional<qreal> TableScene::overlayBottom() const
     if(!snapshot || snapshot->seats.empty())
         return std::nullopt;
 
-    const std::size_t seatCount = snapshot->seats.size();
-    const std::vector<QPointF> centres = seatPositions(seatCount);
+    const unsigned int seatCount = static_cast<unsigned int>(snapshot->seats.size());
 
-    if(centres.size() != seatCount)
-        return std::nullopt;
-
-    const qreal plaqueHeight = SeatItem::plaqueSize(plaqueUnit).height();
-
-    // The plaque nearest the bottom, which is the human's whenever there is one
+    // The panel nearest the bottom, which is the human's whenever there is one
     // - seatlayout puts the seat it is told about at bottom-centre. Found by
     // MEASURING rather than by indexing humanSeat, so a spectator game, where
     // seat 0 goes there instead, needs no branch.
-    qreal lowestCentre = centres.front().y();
+    std::optional<qreal> lowestTop;
 
-    for(const QPointF& centre : centres)
-        lowestCentre = std::max(lowestCentre, centre.y());
+    for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+    {
+        const QRectF panel = seatlayout::panelRect(seatCount, snapshot->humanSeat, seat);
 
-    qreal bottom = lowestCentre - plaqueHeight / 2.0;
+        if(!panel.isEmpty())
+            lowestTop = std::max(lowestTop.value_or(panel.top()), panel.top());
+    }
 
-    // AND ABOVE THE HAND, which in table space sits higher than the plaque it is
+    if(!lowestTop)
+        return std::nullopt;
+
+    qreal bottom = *lowestTop;
+
+    // AND ABOVE THE HAND, which in table space sits higher than the panel it is
     // drawn under: the strip must not cover the cards you are bidding on.
     if(seated(*snapshot))
         bottom = std::min(bottom, tablespace::handTop);
 
     // A GAP, so the strip does not sit flush against what it clears and read as
-    // one object with it. A fraction of the plaque rather than a constant of its
+    // one object with it. A fraction of the panel rather than a constant of its
     // own, as it always was.
-    return bottom - plaqueHeight / 8.0;
+    return bottom - tablespace::panelSize.height() / 8.0;
 }
 
 void TableScene::relayout()
@@ -193,20 +168,35 @@ void TableScene::relayout()
 
     ensureSeats(seatCount);
 
-    const std::vector<QPointF> centres = seatPositions(seatCount);
-
-    if(centres.size() != seatCount)
-        return;
+    // Whether anyone has still to bid, which is all the pills need to know about
+    // the phase: until then a bid is shown, not judged.
+    const bool biddingOpen = snapshot->betsPlaced < seatCount;
 
     for(std::size_t i = 0 ; i < seatCount ; i++)
     {
         SeatItem* item = seats[i];
 
-        item->setCardHeight(plaqueUnit);
-        item->setPos(centres[i]);
+        const unsigned int seat = static_cast<unsigned int>(i);
+        const unsigned int count = static_cast<unsigned int>(seatCount);
+        const QRectF panel = seatlayout::panelRect(count, snapshot->humanSeat, seat);
+
+        // A player count section 2.5 has no row for: the seat is not drawn rather
+        // than drawn somewhere invented.
+        if(panel.isEmpty())
+        {
+            item->hide();
+            continue;
+        }
+
+        item->setPanelSize(panel.size());
+        item->setPos(panel.center());
+
+        // THE LOOK FOLLOWS THE PLACE, not the seat index: the bottom seat wears the
+        // first, as the mock-up's "You" does, and the rest go clockwise from it.
+        item->setPortrait(seatlayout::stepsFromBottom(count, snapshot->humanSeat, seat));
 
         // YOURS UNDER THE OTHERS, AND OVER YOUR HAND (tablespace::z). Set here
-        // rather than when the plaque is made, because which plaque is yours is a
+        // rather than when the panel is made, because which panel is yours is a
         // fact about this game: the items are reused from the last one.
         item->setZValue(static_cast<int>(i) == snapshot->humanSeat ? tablespace::z::humanPanel
                                                                    : tablespace::z::panels);
@@ -217,7 +207,7 @@ void TableScene::relayout()
         const bool active = snapshot->activeSeat >= 0
                             && static_cast<std::size_t>(snapshot->activeSeat) == i;
 
-        item->setSeat(snapshot->seats[i], active, theme);
+        item->setSeat(snapshot->seats[i], active, biddingOpen, theme);
         item->show();
     }
 

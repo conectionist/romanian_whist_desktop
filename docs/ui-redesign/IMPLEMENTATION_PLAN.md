@@ -706,7 +706,7 @@ window edge with a full table on it stays smooth, with each frame of the drag un
   and exits 2. Leave commas out of new test names; for an old one, use a wildcard,
   `"While a resize settles*"`.
 
-### Phase 4: seats and name panels
+### Phase 4: seats and name panels ✅ COMPLETE
 
 Files: `src/table/SeatLayout.*`, `src/table/SeatItem.*`, `src/paint/Theme.cpp` (avatar painter),
 tests `SeatLayoutTests.cpp`, `SeatItemTests.cpp`.
@@ -725,6 +725,72 @@ tests `SeatLayoutTests.cpp`, `SeatItemTests.cpp`.
    owing / over; the long-name elision test still holds at the new width.
 
 Done when: 3, 4, 5 and 6 players match `screenshots/table-N-players.jpg` for panel placement and look.
+
+**Outcome:**
+
+- **The count is 340 tests** (322 + 18), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning.
+  - Nine `SeatItemTests` cases were retired or rewritten. They asserted the old plaque's layout:
+    a text column narrowed by the Forehead card, and the cards-left stack.
+  - The avatar's accent case now recolours a portrait colour instead, since the portraits no
+    longer read `accent`.
+- **Two decisions by the owner, 2026-10-18:**
+  - **No " (you)".** Your panel reads "Player (23)", as the mock-up's reads "You (17)". The
+    bottom-centre place and the wider panel already mark it as yours.
+  - **The cards-left stack is gone.** Phase 5's racks show the count.
+- **What later phases take from here:**
+  - **Where the panels go:** `seatlayout::panelRect(seatCount, humanSeat, seat)`, section 2.5's
+    table in `SeatLayout.cpp`. Panel sizes are in `TableSpace.h` (`panelSize`, `bottomPanel`).
+    `seatlayout::stepsFromBottom()` is the clockwise order, shared with `seatCentres()`.
+    Phase 5's rack angle starts from each panel's centre.
+  - **The panel style:** `src/paint/Panel.h`.
+    - `panel::paint()` draws section 2.2's panel and the active ring and glow, in CSS's paint
+      order. `panel::reach()` is how far it paints past its rect.
+    - `panel::render()` caches it as a picture whose panel edges fall on whole pixels.
+    - Phases 8 and 10 should build their panels on it.
+  - **Rounded shapes:** `paths::rounded()` and `paths::roundedBand()` moved to `Paths.h` from
+    `TableTopItem.cpp`. The logo draws exactly as before; `table-empty.png` is pixel-identical.
+  - **Portraits:** `Theme::avatar()` draws table.js `portrait()` from six
+    `TablePalette::PortraitLook`s, with page.html's sepia and contrast filter applied as a pixel
+    pass. `TableScene` gives each seat the look of its place clockwise from the bottom, so the
+    bottom seat wears the mock-up's first face.
+  - **The pill:** `seatitem::pillFor()`. It is neutral until every seat has bid
+    (`betsPlaced < seats.size()`), as the mock-up is. It reads "Bidding…" for the seat being
+    asked, and is coloured good, warn or bad once play starts.
+  - **The Forehead card** stands in the portrait's place until phase 5 moves it to the rack. The
+    text column no longer changes for it.
+- **Each panel is one cached picture.** `SeatItem::picture()` composes the chrome, the portrait and
+  the text, and composes them again only when what the panel shows or the ratio changes.
+  - Painted directly, the text, the portrait and the chrome each cost about half a millisecond a
+    frame over six panels. That took a drag frame from 7.4 to 8.9 ms at the median.
+  - Composed, a drag frame is back at phase 3's numbers: 7.4–7.6 ms median and 8.3–8.9 ms worst,
+    over three runs.
+  - The first step of a drag and the frame it settles now cost about 76 and 83 ms (phase 3: 65–68
+    and 75), because six panels are composed again there.
+  - `SeatItem::compositions()` counts compositions, for tests. Neither a settling drag nor a
+    snapshot that changes nothing on a panel composes it again.
+- **Section 4's "r 522" was too strict.** The five-player bottom panels' square corners are 521.5
+  from the centre; only their rounded corners clear 522. `SeatLayoutTests` asserts instead what
+  the mock-up's numbers give: every panel at least 10 outside the wooden rim (520).
+- **PR #29's review fixes** take the count to 344 tests.
+  - **The minimum scale is 0.36**, up from phase 2's 0.30: the owner's decision, 2026-10-18. The
+    panels' Marcellus 25 drew names at 7.5 px at 0.30, and draws them at 9 px at 0.36.
+    `minimumViewport()` is 709×495, and the window stops at 945×659. A `TableSpaceTests` case holds
+    `seatitem::nameSize` and `minimumScale` together.
+  - **The chrome is shared:** `panel::Cache`, owned by `TableScene` beside the card renderer and
+    holding one ratio and palette at a time. Measured back to back, the first drag step fell from
+    about 94 to 79 ms and the settle frame from about 106 to 88. Phases 8 and 10 should draw their
+    panels through it too.
+  - **`seatitem::Shown`** is what a panel's picture shows. The item paints from it and recomposes
+    only when it changes, so anything later added to the panel must go through it.
+  - **The portrait's frame** goes through the same sepia and contrast filter as its picture, as CSS
+    filters the whole element. The portrait's rounded rect is the snapped picture's own, which
+    removed a hairline of the picture's far edge along its top and bottom.
+  - **`fonts::baselineIn()`** is CSS's half-leading baseline, shared by the logo and the panels.
+- **Pitfall: the logo's lettering is not quite deterministic.** In about one run in four, a band of
+  the logo (y 511–523 in `table-empty.png`) differs from the others by up to 4 levels. The base
+  branch does the same, so it predates this phase. Compare screenshots with a tolerance there, or
+  run twice.
 
 ### Phase 5: racks
 
