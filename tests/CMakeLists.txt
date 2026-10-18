@@ -35,6 +35,7 @@ add_executable(desktop_tests
     GradientsTests.cpp
     SeatLayoutTests.cpp
     TrickItemTests.cpp
+    RackItemTests.cpp
     SeatItemTests.cpp
     TableSceneTests.cpp
     TableViewTests.cpp

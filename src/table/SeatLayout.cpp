@@ -41,6 +41,13 @@ constexpr std::array<Corners, 5> panelCorners = { {
 constexpr unsigned int fewestSeats = 2;
 constexpr unsigned int mostSeats = fewestSeats + panelCorners.size() - 1;
 
+// table.js buildSeats()'s slide: how far a rack keeps clear of its own panel, the
+// step it slides by, how far it may slide, and the extra it takes once clear.
+constexpr qreal rackClearance = 10.0;
+constexpr qreal rackSlideStep = std::numbers::pi / 180.0;
+constexpr int rackMostSteps = 90;
+constexpr qreal rackSlideExtra = 9.0 * std::numbers::pi / 180.0;
+
 }
 
 unsigned int seatlayout::stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int seat)
@@ -70,6 +77,48 @@ QRectF seatlayout::panelRect(unsigned int seatCount, int humanSeat, unsigned int
         return tablespace::bottomPanel;
 
     return QRectF(panelCorners[seatCount - fewestSeats][steps - 1], tablespace::panelSize);
+}
+
+qreal seatlayout::rackAngle(QRectF panel)
+{
+    if(panel.isEmpty())
+        return 0.0;
+
+    const QPointF centre = panel.center();
+    const QRectF clear = panel.adjusted(-rackClearance, -rackClearance, rackClearance, rackClearance);
+
+    // STRICTLY INSIDE, as table.js's covered() compares: a rim point on the grown
+    // panel's very edge is clear.
+    const auto covered = [&](qreal angle)
+    {
+        const QPointF at = rackOrigin(angle);
+
+        return at.x() > clear.left() && at.x() < clear.right()
+               && at.y() > clear.top() && at.y() < clear.bottom();
+    };
+
+    qreal angle = std::atan2(centre.y() - tablespace::centre.y(), centre.x() - tablespace::centre.x());
+
+    if(covered(angle))
+    {
+        // An increasing angle is clockwise on screen, because y is down.
+        for(int step = 0 ; step < rackMostSteps && covered(angle) ; step++)
+            angle += rackSlideStep;
+
+        angle += rackSlideExtra;
+    }
+
+    return angle;
+}
+
+qreal seatlayout::rackAngle(unsigned int seatCount, int humanSeat, unsigned int seat)
+{
+    return rackAngle(panelRect(seatCount, humanSeat, seat));
+}
+
+QPointF seatlayout::rackOrigin(qreal angle)
+{
+    return tablespace::centre + tablespace::rackRadius * QPointF(std::cos(angle), std::sin(angle));
 }
 
 // SECTION 14'S ENTIRE ANGLE TABLE IS THIS ONE FORMULA, which is worth saying

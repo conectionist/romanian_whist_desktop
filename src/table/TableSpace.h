@@ -102,7 +102,7 @@ inline constexpr qreal tableReach = woodRadius + shadows::reach(tableShadowBlur)
 // THE HAND'S CARD HEIGHT, from section 2.8. Only the height: the width follows from
 // the art through CardRenderer::sizeForHeight(), which is the one place the aspect
 // is known (225 tall comes back 155 wide, the mock-up's 154.9). Played cards are
-// playedCardHeight() below; the racks' cards arrive with the racks, in phase 5.
+// playedCardHeight() below, and the racks' cards rackCardHeight.
 inline constexpr qreal handCardHeight = 225.0;
 
 // Where the top of the human's hand is (section 2.8). Their played card sits 60
@@ -112,6 +112,13 @@ inline constexpr qreal handTop = 850.0;
 // THE NAME PANELS (section 2.5). Every opponent's is this size; where each one
 // goes is seatlayout::panelRect(), from a table hand-tuned per player count.
 inline constexpr QSizeF panelSize(280.0, 118.0);
+
+// THE RACKS (section 2.6): each opponent's hand, standing in a wooden rack on the
+// rim. A rack's origin is on this circle - over the wood, between the bead at 453
+// and the rim's edge at 510 - and its cards are 90 tall before they are tilted.
+// Where on the circle is seatlayout::rackAngle().
+inline constexpr qreal rackRadius = 452.0;
+inline constexpr qreal rackCardHeight = 90.0;
 
 // The bottom seat's panel: yours, or seat 0's in a spectated game. Wider than the
 // others, centred on the table at (768, 1105), and it covers the bottom of your
@@ -137,8 +144,7 @@ qreal playedCardHeight(std::size_t seatCount);
 // no two files can disagree about what is drawn over what.
 //
 // GAPS OF TEN, so a later phase adds its rung without renumbering the others. The
-// racks arrive in phase 5 and the lead rhombus in phase 6; the pinned panels in
-// phase 8. The bid strip and the modal sheets are widgets over the viewport until
+// lead rhombus arrives in phase 6 and the pinned panels in phase 8. The bid strip and the modal sheets are widgets over the viewport until
 // phases 8 and 10, and so above all of these by construction.
 //
 // The room is not here: it is the view's background, beneath every item.
@@ -148,6 +154,8 @@ namespace z
 // The table and its logo, which are one picture: nothing goes between them.
 inline constexpr qreal table = 0.0;
 
+// Under the played cards and under every panel: table.js builds the racks first,
+// "so each plaque sits over the base of its own fan".
 inline constexpr qreal racks = 10.0;
 inline constexpr qreal playedCards = 20.0;
 inline constexpr qreal leadMark = 30.0;

@@ -4,7 +4,9 @@
 #include "table/TableScene.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
+#include "table/RackItem.h"
 #include "table/SeatItem.h"
+#include "table/SeatLayout.h"
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
 #include "table/TrickItem.h"
@@ -19,17 +21,21 @@
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QImage>
+#include <QLineF>
 #include <QPainter>
 #include <QPixmap>
 #include <QPointF>
 #include <QRectF>
 #include <QSize>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <vector>
 
+using Catch::Approx;
 using romanian_whist::Card;
 using romanian_whist::Rank;
 using romanian_whist::Suit;
@@ -172,6 +178,125 @@ TEST_CASE("A spectated table draws no hand", "[table]")
     REQUIRE(plaqueAtBottom(scene) != nullptr);
 }
 
+// ---- the racks, added in the redesign's phase 5 ----
+
+namespace
+{
+std::vector<RackItem*> visibleRacks(const QGraphicsScene& scene)
+{
+    std::vector<RackItem*> racks;
+
+    for(RackItem* rack : itemsOf<RackItem>(scene))
+    {
+        if(rack->isVisible())
+            racks.push_back(rack);
+    }
+
+    return racks;
+}
+}
+
+TEST_CASE("Every opponent has a rack on the rim and you have none", "[table]")
+{
+    // Section 2.6: your hand is the fan at the bottom, so a rack of your own would
+    // show your cards twice - as backs.
+    for(unsigned int count = 2 ; count <= 6 ; count++)
+    {
+        TableScene scene;
+
+        GameSnapshot snapshot = holdingThree(count, 1);
+        for(SeatView& seat : snapshot.seats)
+            seat.cardsLeft = 3;
+
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+        const std::vector<RackItem*> racks = visibleRacks(scene);
+
+        INFO(count << " seats");
+        REQUIRE(racks.size() == count - 1);
+
+        for(RackItem* rack : racks)
+        {
+            REQUIRE(QLineF(tablespace::centre, rack->pos()).length() == Approx(tablespace::rackRadius));
+            REQUIRE(rack->shown().count == 3);
+
+            // None at the bottom, where your hand is.
+            REQUIRE(rack->pos().y() < tablespace::handTop);
+        }
+    }
+}
+
+TEST_CASE("A spectated table stands seat 0's rack at the bottom", "[table]")
+{
+    // Section 2.5: with nobody seated, seat 0 takes the bottom spot and is drawn as an
+    // opponent - a rack on the rim at 90 degrees, and no hand.
+    TableScene scene;
+
+    GameSnapshot snapshot = seatedTable(4, -1);
+    for(SeatView& seat : snapshot.seats)
+        seat.cardsLeft = 2;
+
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    REQUIRE(visibleRacks(scene).size() == 4);
+
+    const QPointF bottom = seatlayout::rackOrigin(std::numbers::pi / 2.0);
+    bool found = false;
+
+    for(RackItem* rack : visibleRacks(scene))
+        found = found || QLineF(rack->pos(), bottom).length() < 1e-9;
+
+    REQUIRE(found);
+}
+
+TEST_CASE("Your own seat shows no face in a Forehead round", "[table]")
+{
+    // THE CASE THAT WOULD LEAK YOUR OWN CARD TO YOU, re-homed from SeatItemTests when
+    // the redesign's phase 5 moved the Forehead card into the racks. A Forehead round
+    // as the engine publishes it: every other seat's single card on its SeatView,
+    // yours on none - canSeeHand(human, human) is false - and no hand of your own.
+    // Every other rack shows its owner's card face up; yours does not exist, and no
+    // panel draws a card at all.
+    GameSnapshot snapshot = seatedTable(4, 1);
+    snapshot.roundType = romanian_whist::RoundType::Forehead;
+
+    const Card cards[] = { Card(Rank::Ace, Suit::Hearts), Card(Rank::Two, Suit::Clubs),
+                           Card(Rank::King, Suit::Spades), Card(Rank::Ten, Suit::Diamonds) };
+
+    for(unsigned int i = 0 ; i < 4 ; i++)
+    {
+        snapshot.seats[i].cardsLeft = 1;
+
+        if(static_cast<int>(i) != snapshot.humanSeat)
+            snapshot.seats[i].hand.push_back(HandEntry{ cards[i] });
+    }
+
+    TableScene scene;
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    const std::vector<RackItem*> racks = visibleRacks(scene);
+    REQUIRE(racks.size() == 3);
+
+    std::vector<Card> faces;
+
+    for(RackItem* rack : racks)
+    {
+        REQUIRE(rack->shown().faces.size() == 1);
+        faces.push_back(rack->shown().faces.front());
+    }
+
+    for(unsigned int i = 0 ; i < 4 ; i++)
+    {
+        const bool shown = std::find(faces.begin(), faces.end(), cards[i]) != faces.end();
+
+        INFO("seat " << i);
+        REQUIRE(shown == (static_cast<int>(i) != snapshot.humanSeat));
+    }
+
+    for(SeatItem* seat : itemsOf<SeatItem>(scene))
+        REQUIRE(seat->childItems().isEmpty());
+}
+
 TEST_CASE("Your own plaque is drawn over your hand", "[table]")
 {
     // SECTION 2.8: "the human's panel covers the bottom of the hand; that is
@@ -199,7 +324,7 @@ TEST_CASE("Your own plaque is drawn over your hand", "[table]")
 // against the next, so a rung put in the wrong place fails here by name rather
 // than as a card drawn under the felt.
 
-TEST_CASE("The scene stacks the table then the cards then your hand then the plaques", "[table]")
+TEST_CASE("The scene stacks the table then the racks then the cards then your hand then the plaques", "[table]")
 {
     GameSnapshot snapshot = holdingThree(4, 1);
     snapshot.table = { PlayedCardView{ 2, Card(Rank::King, Suit::Hearts) } };
@@ -217,6 +342,17 @@ TEST_CASE("The scene stacks the table then the cards then your hand then the pla
 
     SeatItem* mine = plaqueAtBottom(scene);
     REQUIRE(mine != nullptr);
+
+    const std::vector<RackItem*> racks = itemsOf<RackItem>(scene);
+    REQUIRE_FALSE(racks.empty());
+
+    // THE RACKS ON THE RIM, under every card and every panel: table.js builds them
+    // first "so each plaque sits over the base of its own fan".
+    for(RackItem* rack : racks)
+    {
+        REQUIRE(tables.front()->zValue() < rack->zValue());
+        REQUIRE(rack->zValue() < tricks.front()->zValue());
+    }
 
     REQUIRE(tables.front()->zValue() < tricks.front()->zValue());
     REQUIRE(tricks.front()->zValue() < scene.handItem()->zValue());

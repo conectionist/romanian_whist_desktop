@@ -96,6 +96,8 @@ qt_add_library(desktop_core STATIC
     src/table/SeatLayout.cpp
     src/table/CardItem.h
     src/table/CardItem.cpp
+    src/table/RackItem.h
+    src/table/RackItem.cpp
     src/table/SeatItem.h
     src/table/SeatItem.cpp
     src/table/TrickItem.h

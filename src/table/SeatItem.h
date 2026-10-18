@@ -24,9 +24,6 @@
 // engages it from just before a provider is asked until just after its answer is
 // recorded, so it stays on the seat that just bid or just played and goes empty
 // between turns without any callback having to remember to say so.
-class CardItem;
-class CardRenderer;
-
 // WHAT GOES WHERE ON A PANEL, and what its two lines say, which is the part of
 // this item with a right answer - so they are free functions, the split
 // SnapshotLog.h argues for and seatlayout, infostrip and bidstrip all follow.
@@ -52,25 +49,15 @@ struct Layout
     // The column the name and the pill share: from 12 past the portrait to the
     // panel's right padding. The name is elided against this width.
     QRectF text;
-
-    // The face-up card, EMPTY when this seat is not showing one - which is every
-    // round but a Forehead one, and every seat but another player's. It stands
-    // in the portrait's place until the redesign's phase 5 moves it to the rack,
-    // so the text column is the same with or without it.
-    QRectF card;
 };
 
 // The panel's border box for a panel of `size`, centred on the item's origin.
 QRectF panelRect(QSizeF size);
 
-// `faceSize` is the card's drawn size, or an empty size when there is no card to
-// show. Taken as a parameter rather than derived here because the aspect belongs
-// to CardRenderer, which section 18.1 makes the only thing that knows what a card
-// looks like.
-Layout layoutFor(QSizeF panel, QSizeF faceSize);
-
-// The height a face-up card is drawn at: the portrait's.
-qreal faceHeight();
+// NO CARD ON THE PANEL. A Forehead round's visible card stood in the portrait's
+// place until the redesign's phase 5, which put it face up in the seat's rack
+// (RackItem) - so the panel is the same in every round.
+Layout layoutFor(QSizeF panel);
 
 // The portrait's picture, inside its gold border: 86 x 98 table units. What
 // Theme::avatar() is asked for at, so the Card art window can show it at the size
@@ -134,9 +121,6 @@ struct Shown
     NameLine name;
     PillView pill;
 
-    // A card in the portrait's place, so no portrait.
-    bool face = false;
-
     bool operator==(const Shown&) const = default;
 };
 
@@ -147,16 +131,12 @@ class SeatItem : public QGraphicsObject
     Q_OBJECT
 
 public:
-    // The renderer outlives every item, as CardItem documents: TableScene owns it
-    // by value and the items are its children.
+    // `panels` is the chrome cache every seat shares, owned by TableScene. Null gives
+    // the item one of its own.
     //
-    // TAKEN SINCE C4, which is when a plaque first had a card to draw. Section 17
-    // puts another seat's Forehead card face-up where they sit, and that card
-    // comes through the same seam every other card on the table does.
-    //
-    // `panels` is the chrome cache every seat shares, owned with the renderer. Null
-    // gives the item one of its own.
-    SeatItem(const CardRenderer* renderer, panel::Cache* panels, QGraphicsItem* parent = nullptr);
+    // NO CARD RENDERER since the redesign's phase 5: a Forehead round's card is
+    // drawn in the seat's rack, and the panel draws no card at all.
+    explicit SeatItem(panel::Cache* panels, QGraphicsItem* parent = nullptr);
 
     // Everything this draws, from one snapshot's SeatView plus the facts that are
     // not on it. Taken as a whole rather than as a dozen setters because it is
@@ -183,11 +163,8 @@ public:
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
-    // WHAT THIS PANEL DECIDED, exposed because it is a pure query and because a
-    // test cannot otherwise tell a card shown from a portrait drawn.
+    // WHAT THIS PANEL DECIDED, exposed because it is a pure query.
     seatitem::Layout layoutFor() const;
-
-    bool showsFace() const;
 
     // How many times this panel has been composed: READ-ONLY and for tests, which
     // show with it that a resize settling, or a snapshot that changes nothing
@@ -198,9 +175,6 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
-    // Places the face-up card, or hides it.
-    void refreshFace();
-
     // What the picture would show now, from the seat, the turn and the size.
     seatitem::Shown shownNow() const;
 
@@ -215,23 +189,11 @@ private:
     // `layout` is layoutFor()'s, which paint() has already asked for.
     const panel::Picture& picture(const seatitem::Layout& layout, qreal ratio) const;
 
-    const CardRenderer* renderer;
-
     // The panel's chrome, shared with every other seat: its two shadows are blurs,
     // too dear to paint on every frame of a resize. `ownPanels` only when no
     // shared cache was given.
     mutable panel::Cache ownPanels;
     panel::Cache* panels;
-
-    // ONE CARD, and a child rather than something this paints. CardItem already
-    // resolves the pixels it covers off the device being painted into, so a
-    // window dragged to another screen re-rasterizes rather than scaling what it
-    // had - reusing it inherits that instead of solving it a second time here.
-    //
-    // Hidden rather than deleted between rounds, because a seat shows a card for
-    // two rounds of twenty-six and rebuilding one per snapshot is the churn
-    // TableScene's class comment rules out.
-    CardItem* face = nullptr;
 
     SeatView seat;
     bool active = false;

@@ -1,10 +1,8 @@
 #include "SeatItem.h"
 
-#include "paint/CardRenderer.h"
 #include "paint/DevicePixels.h"
 #include "paint/Fonts.h"
 #include "paint/Paths.h"
-#include "table/CardItem.h"
 
 #include <QBrush>
 #include <QCoreApplication>
@@ -69,11 +67,6 @@ qreal lineHeight(const QFontMetricsF& metrics)
 
 }
 
-qreal seatitem::faceHeight()
-{
-    return portraitSize.height();
-}
-
 QRectF seatitem::panelRect(QSizeF panel)
 {
     if(panel.isEmpty())
@@ -87,7 +80,7 @@ QSizeF seatitem::portraitPicture()
     return portraitSize - QSizeF(2.0 * portraitBorder, 2.0 * portraitBorder);
 }
 
-seatitem::Layout seatitem::layoutFor(QSizeF panel, QSizeF faceSize)
+seatitem::Layout seatitem::layoutFor(QSizeF panel)
 {
     Layout layout;
 
@@ -108,15 +101,6 @@ seatitem::Layout seatitem::layoutFor(QSizeF panel, QSizeF faceSize)
     layout.text = QRectF(layout.portrait.right() + gap, content.top(),
                          std::max(0.0, content.right() - layout.portrait.right() - gap),
                          content.height());
-
-    // IN THE PORTRAIT'S PLACE, centred on it. The text column does not move for it,
-    // so a Forehead round reflows nothing.
-    if(!faceSize.isEmpty())
-    {
-        layout.card = QRectF(layout.portrait.center().x() - faceSize.width() / 2.0,
-                             layout.portrait.center().y() - faceSize.height() / 2.0,
-                             faceSize.width(), faceSize.height());
-    }
 
     return layout;
 }
@@ -167,12 +151,9 @@ seatitem::NameLine seatitem::nameLineFor(const SeatView& seat, bool active, qrea
     return line;
 }
 
-SeatItem::SeatItem(const CardRenderer* _renderer, panel::Cache* _panels, QGraphicsItem* parent)
-    : QGraphicsObject(parent), renderer(_renderer), panels(_panels ? _panels : &ownPanels)
+SeatItem::SeatItem(panel::Cache* _panels, QGraphicsItem* parent)
+    : QGraphicsObject(parent), panels(_panels ? _panels : &ownPanels)
 {
-    face = new CardItem(renderer, this);
-    face->hide();
-
     // YOUR PANEL COVERS THE BOTTOM OF YOUR HAND (section 2.8), and Qt sends hover
     // only to the topmost item that asks for it. Without this the hand is that
     // item, and lifts a card the panel is hiding. See mousePressEvent() for the
@@ -182,12 +163,9 @@ SeatItem::SeatItem(const CardRenderer* _renderer, panel::Cache* _panels, QGraphi
 
 seatitem::Shown SeatItem::shownNow() const
 {
-    // The text column is the same with or without a card, so the width is asked
-    // without one - and without the renderer.
-    const qreal width = seatitem::layoutFor(size, QSizeF()).text.width();
+    const qreal width = seatitem::layoutFor(size).text.width();
 
-    return { seatitem::nameLineFor(seat, active, width), seatitem::pillFor(seat, active, biddingOpen),
-             showsFace() };
+    return { seatitem::nameLineFor(seat, active, width), seatitem::pillFor(seat, active, biddingOpen) };
 }
 
 // COMPARED BY WHAT IT DRAWS, not by the snapshot's fields: the cards left, the
@@ -210,8 +188,6 @@ void SeatItem::setSeat(const SeatView& view, bool isActive, bool isBiddingOpen, 
 
     theme = palette;
     update();
-
-    refreshFace();
 }
 
 void SeatItem::setPanelSize(QSizeF panelSize)
@@ -224,8 +200,6 @@ void SeatItem::setPanelSize(QSizeF panelSize)
     shown = shownNow();
     stale = true;
     update();
-
-    refreshFace();
 }
 
 void SeatItem::setPortrait(unsigned int portrait)
@@ -239,7 +213,7 @@ void SeatItem::setPortrait(unsigned int portrait)
 }
 
 // FROM THE SIZE ALONE, not layoutFor(): the scene asks for both on every paint and
-// every hit test, and neither depends on the portrait, the text or the card.
+// every hit test, and neither depends on the portrait or the text.
 QRectF SeatItem::boundingRect() const
 {
     if(size.isEmpty())
@@ -265,47 +239,9 @@ void SeatItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
     event->accept();
 }
 
-bool SeatItem::showsFace() const
-{
-    // NOT "is this a Forehead round". The snapshot does not need to be asked:
-    // refreshFromEngine() fills this hand only where canSeeHand(viewer, holder)
-    // allows, so a non-empty hand IS the permission - and a spectator game fills
-    // none at all, which is why a spectated Forehead round shows no faces.
-    return !seat.hand.empty();
-}
-
 seatitem::Layout SeatItem::layoutFor() const
 {
-    if(!showsFace() || !renderer)
-        return seatitem::layoutFor(size, QSizeF());
-
-    return seatitem::layoutFor(size, renderer->sizeForHeight(seatitem::faceHeight()));
-}
-
-void SeatItem::refreshFace()
-{
-    const seatitem::Layout layout = layoutFor();
-
-    // BOTH, and the hand is asked FIRST. The layout's card rect is derived from
-    // showsFace(), so today the two cannot disagree - and the day they did, the
-    // front() below would be a read off an empty vector rather than a panel
-    // drawn slightly wrong. Guarding on the thing actually dereferenced is what
-    // makes that a hidden card instead of undefined behaviour.
-    if(seat.hand.empty() || layout.card.isEmpty())
-    {
-        face->hide();
-        return;
-    }
-
-    // THE FIRST CARD AND ONLY THE FIRST. A Forehead round is a one-trick round,
-    // so a visible hand is one card. Drawing a hand of several here would be
-    // inventing a layout for a state the engine's own schedule cannot produce.
-    face->setFace(seat.hand.front().card);
-    face->setCardHeight(seatitem::faceHeight());
-
-    // CardItem's origin is its centre, which is what these two lines are about.
-    face->setPos(layout.card.center());
-    face->show();
+    return seatitem::layoutFor(size);
 }
 
 void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -315,8 +251,6 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     painter->setRenderHint(QPainter::Antialiasing);
 
-    // ONE ANSWER ABOUT WHERE THINGS GO, shared with refreshFace() so the card the
-    // child is placed at and the portrait it replaces cannot disagree.
     const seatitem::Layout layout = layoutFor();
 
     // At the pixels it lands on - or, while a resize settles, at the scale it
@@ -362,11 +296,7 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
     // offset says it is in the picture.
     painter.translate(-frame.offset - layout.panel.topLeft());
 
-    // THE CARD OR THE PORTRAIT, never both: the card is a child item drawn over
-    // this one, in the portrait's place.
-    if(layout.card.isEmpty())
-        paintPortrait(painter, layout.portrait);
-
+    paintPortrait(painter, layout.portrait);
     paintText(painter, layout.text);
     painter.end();
 

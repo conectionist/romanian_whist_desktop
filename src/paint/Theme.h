@@ -232,6 +232,27 @@ struct ThemeColours
 
         std::array<PortraitLook, 6> portraits;
 
+        // THE RACKS (section 2.6), added in the redesign's phase 5. The card backs'
+        // own colours are CardRenderer's, as every card's are; these are the
+        // rack's light on them and the rail they stand in.
+        //
+        // The row's drop shadow, under the cards and the rail together.
+        QColor rackShadow;
+
+        // Over each card in the rack: light at the far end, which rises toward
+        // the viewer, and dark at the rail; and a dark hairline round its edge.
+        QColor rackCardLight;
+        QColor rackCardDark;
+        QColor rackCardEdge;
+
+        // The rail: its brown, lit along the edge toward the table and darker
+        // along the owner's, a dark outline, and the shadow it casts.
+        QColor railBase;
+        QColor railLight;
+        QColor railDark;
+        QColor railEdge;
+        QColor railShadow;
+
         bool operator==(const TablePalette&) const = default;
     };
 

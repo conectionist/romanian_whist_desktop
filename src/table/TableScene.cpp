@@ -2,6 +2,7 @@
 
 #include "table/CardItem.h"
 #include "table/HandItem.h"
+#include "table/RackItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
@@ -77,15 +78,23 @@ void TableScene::ensureSeats(std::size_t count)
 {
     while(seats.size() < count)
     {
-        SeatItem* seat = new SeatItem(&cards, &panels);
+        SeatItem* seat = new SeatItem(&panels);
         addItem(seat);
         seats.push_back(seat);
+
+        RackItem* rack = new RackItem(&cards, &rackPictures);
+        rack->setZValue(tablespace::z::racks);
+        addItem(rack);
+        racks.push_back(rack);
     }
 
     // Hidden rather than deleted: a second game may seat more players again,
     // and phase D starts one in the same process.
     for(std::size_t i = count ; i < seats.size() ; i++)
+    {
         seats[i]->hide();
+        racks[i]->hide();
+    }
 }
 
 // SECTION 2.7'S PLACES, as near as phase 2 can have them. Each card sits on the
@@ -93,10 +102,10 @@ void TableScene::ensureSeats(std::size_t count)
 // the felt's edge; the human's sits above their hand instead, which is where a
 // card you are about to play would go.
 //
-// THE OWNER'S DIRECTION IS THE SEAT'S NOMINAL ANGLE here, because the rack each
-// card will line up with does not exist until phase 5 - and in the same clockwise
-// order as the panels (seatlayout::stepsFromBottom()), so a card is always on the
-// side of the table its owner sits on. One ring at one radius suffices where the old
+// THE OWNER'S DIRECTION IS THE SEAT'S NOMINAL ANGLE here, not its rack's
+// (seatlayout::rackAngle()), until phase 6 turns each card to its rack - and in the
+// same clockwise order as the panels (seatlayout::stepsFromBottom()), so a card is
+// always on the side of the table its owner sits on. One ring at one radius suffices where the old
 // layout needed one sized per seat count: the cards are the mock-up's size, not a
 // fit, and at six seats on a radius of 289 their centres stay 254 apart against a
 // card 181 tall.
@@ -180,11 +189,14 @@ void TableScene::relayout()
         const unsigned int count = static_cast<unsigned int>(seatCount);
         const QRectF panel = seatlayout::panelRect(count, snapshot->humanSeat, seat);
 
+        RackItem* rack = racks[i];
+
         // A player count section 2.5 has no row for: the seat is not drawn rather
         // than drawn somewhere invented.
         if(panel.isEmpty())
         {
             item->hide();
+            rack->hide();
             continue;
         }
 
@@ -209,6 +221,22 @@ void TableScene::relayout()
 
         item->setSeat(snapshot->seats[i], active, biddingOpen, theme);
         item->show();
+
+        // EVERY RACK BUT YOURS (section 2.6): your hand is the fan at the bottom. A
+        // spectated game has nobody there, so seat 0's rack stands on the rim at the
+        // bottom, in line with its panel.
+        if(static_cast<int>(i) == snapshot->humanSeat)
+        {
+            rack->hide();
+            continue;
+        }
+
+        const qreal angle = seatlayout::rackAngle(count, snapshot->humanSeat, seat);
+
+        rack->setPos(seatlayout::rackOrigin(angle));
+        rack->setRotation(rackitem::frameRotation(angle));
+        rack->setRack(snapshot->seats[i], theme);
+        rack->show();
     }
 
     trick->setTrick(*snapshot, trickPositions(seatCount), tablespace::centre,

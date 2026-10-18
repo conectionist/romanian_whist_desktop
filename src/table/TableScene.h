@@ -5,6 +5,7 @@
 #include "paint/CardRenderer.h"
 #include "paint/Panel.h"
 #include "paint/Theme.h"
+#include "table/RackItem.h"
 
 #include <QGraphicsScene>
 #include <QPointF>
@@ -100,9 +101,9 @@ private:
     // business, and changes no position here.
     void relayout();
 
-    // Grown when a game has more seats than the last one did. Six at most, and
-    // reused across games rather than rebuilt, for the reason in the class
-    // comment.
+    // Grown when a game has more seats than the last one did, panels and racks
+    // together. Six at most, and reused across games rather than rebuilt, for the
+    // reason in the class comment.
     void ensureSeats(std::size_t count);
 
     // Played-card positions, indexed by seat. See the definition for where they
@@ -120,12 +121,21 @@ private:
     // and held the same way.
     panel::Cache panels;
 
+    // The racks' pictures, shared by every rack showing the same cards, and held
+    // the same way.
+    rackitem::Cache rackPictures;
+
     std::shared_ptr<const GameSnapshot> snapshot;
 
     // The table and its logo, under everything else (tablespace::z).
     TableTopItem* top = nullptr;
 
     std::vector<SeatItem*> seats;
+
+    // Every seat's rack, indexed as `seats` is. Yours is built with the rest and
+    // never shown: your hand is the fan at the bottom (section 2.6).
+    std::vector<RackItem*> racks;
+
     TrickItem* trick = nullptr;
 
     // The human's fan. Built for every game, and hidden in a spectator one -
