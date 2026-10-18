@@ -162,8 +162,8 @@ seatitem::NameLine seatitem::nameLineFor(const SeatView& seat, bool active, qrea
     return line;
 }
 
-SeatItem::SeatItem(const CardRenderer* _renderer, QGraphicsItem* parent)
-    : QGraphicsObject(parent), renderer(_renderer)
+SeatItem::SeatItem(const CardRenderer* _renderer, panel::Cache* _panels, QGraphicsItem* parent)
+    : QGraphicsObject(parent), renderer(_renderer), panels(_panels ? _panels : &ownPanels)
 {
     face = new CardItem(renderer, this);
     face->hide();
@@ -175,36 +175,34 @@ SeatItem::SeatItem(const CardRenderer* _renderer, QGraphicsItem* parent)
     setAcceptHoverEvents(true);
 }
 
-namespace
+seatitem::Shown SeatItem::shownNow() const
 {
+    // The text column is the same with or without a card, so the width is asked
+    // without one - and without the renderer.
+    const qreal width = seatitem::layoutFor(size, QSizeF()).text.width();
 
-// WHAT A PANEL SHOWS of a seat, which is most of what changes from one snapshot
-// to the next and none of what usually does: the cards left, the round score and
-// the streaks are on the snapshot and not on the panel. Compared so that a
-// snapshot that changes none of it costs no composing.
-bool drawsTheSame(const SeatView& before, const SeatView& after)
-{
-    return before.name == after.name
-           && before.totalScore == after.totalScore
-           && before.hasBet == after.hasBet
-           && before.bet == after.bet
-           && before.tricksWon == after.tricksWon
-           && before.hand.empty() == after.hand.empty();
+    return { seatitem::nameLineFor(seat, active, width), seatitem::pillFor(seat, active, biddingOpen),
+             showsFace() };
 }
 
-}
-
+// COMPARED BY WHAT IT DRAWS, not by the snapshot's fields: the cards left, the
+// round score and the streaks change on most snapshots and are not on the panel,
+// so a snapshot that changes none of what is costs no composing.
 void SeatItem::setSeat(const SeatView& view, bool isActive, bool isBiddingOpen, const Theme& palette)
 {
-    if(!drawsTheSame(seat, view) || active != isActive || biddingOpen != isBiddingOpen
-       || theme.table != palette.table)
-    {
-        stale = true;
-    }
-
     seat = view;
     active = isActive;
     biddingOpen = isBiddingOpen;
+
+    const seatitem::Shown now = shownNow();
+
+    // The active seat's chrome differs too, and `active` is in the marker.
+    if(now != shown || theme.table != palette.table)
+    {
+        shown = now;
+        stale = true;
+    }
+
     theme = palette;
     update();
 
@@ -218,6 +216,7 @@ void SeatItem::setPanelSize(QSizeF panelSize)
 
     prepareGeometryChange();
     size = panelSize;
+    shown = shownNow();
     stale = true;
     update();
 
@@ -304,23 +303,6 @@ void SeatItem::refreshFace()
     face->show();
 }
 
-const panel::Picture& SeatItem::chrome(bool isActive, qreal ratio) const
-{
-    Chrome& slot = chromes[isActive ? 1 : 0];
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(slot.picture.pixmap.isNull() || slot.size != size || slot.ratio != key
-       || slot.palette != theme.table)
-    {
-        slot.picture = panel::render(size, theme.table, isActive, ratio);
-        slot.size = size;
-        slot.ratio = key;
-        slot.palette = theme.table;
-    }
-
-    return slot.picture;
-}
-
 void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
 {
     if(size.isEmpty())
@@ -351,13 +333,16 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
     if(!stale && composedRatio == key && !composed.pixmap.isNull())
         return composed;
 
-    const panel::Picture& frame = chrome(active, ratio);
+    const panel::Picture frame = panels->picture(size, theme.table, active, ratio);
 
     // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate transform.
-    // Returned as it is, and the panel left stale, so the next real paint composes
-    // rather than finding a null picture marked as current.
+    // The panel is left stale, so the next real paint composes rather than finding
+    // a null picture marked as current.
     if(frame.pixmap.isNull())
-        return frame;
+    {
+        static const panel::Picture none;
+        return none;
+    }
 
     composed.pixmap = QPixmap(frame.pixmap.size());
     composed.pixmap.setDevicePixelRatio(ratio);
@@ -446,7 +431,7 @@ void SeatItem::paintText(QPainter& painter, const QRectF& column) const
     // THE NAME LINE: "▸ " in gold-bright when this seat is to move, the name in
     // cream, its score in muted - a shape cue beside the ring, never colour alone
     // (section 18).
-    const seatitem::NameLine line = seatitem::nameLineFor(seat, active, column.width());
+    const seatitem::NameLine& line = shown.name;
     const qreal nameBaseline = fonts::baselineIn(nameMetrics, top, nameHeight);
 
     qreal x = column.left();
@@ -468,7 +453,7 @@ void SeatItem::paintText(QPainter& painter, const QRectF& column) const
     painter.drawText(QPointF(x, nameBaseline), line.score);
 
     // THE PILL, as wide as its text and no wider than the column.
-    const seatitem::PillView view = seatitem::pillFor(seat, active, biddingOpen);
+    const seatitem::PillView& view = shown.pill;
 
     QColor colour = palette.cream;
     QColor border = palette.pillBorder;

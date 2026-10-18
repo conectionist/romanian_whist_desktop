@@ -1,5 +1,6 @@
 #include "Panel.h"
 
+#include "paint/DevicePixels.h"
 #include "paint/Paths.h"
 #include "paint/Shadows.h"
 
@@ -117,4 +118,38 @@ panel::Picture panel::render(QSizeF size, const Theme::TablePalette& palette, bo
     painter.end();
 
     return { pixmap, QPointF(-snapped.left(), -snapped.top()) };
+}
+
+panel::Picture panel::Cache::picture(QSizeF size, const Theme::TablePalette& wanted, bool active,
+                                     qreal ratio)
+{
+    if(size.isEmpty() || ratio <= 0.0)
+        return {};
+
+    const int key = devicepixels::ratioKey(ratio);
+
+    if(key != ratioKey || wanted != palette)
+    {
+        entries.clear();
+        ratioKey = key;
+        palette = wanted;
+    }
+
+    for(const Entry& entry : entries)
+    {
+        if(entry.size == size && entry.active == active)
+            return entry.picture;
+    }
+
+    // A handful of sizes is every panel there is. More means sizes are being asked
+    // for that never come back, so the set starts again rather than growing.
+    constexpr std::size_t most = 8;
+
+    if(entries.size() >= most)
+        entries.clear();
+
+    entries.push_back({ size, active, render(size, wanted, active, ratio) });
+    rendered++;
+
+    return entries.back().picture;
 }

@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "paint/CardRenderer.h"
+#include "paint/Panel.h"
 #include "paint/Theme.h"
 
 #include <QGraphicsScene>
@@ -114,6 +115,10 @@ private:
     // nothing after the first. Declared before the items, which hold a pointer
     // to it: members die in reverse declaration order, so this outlives them.
     CardRenderer cards;
+
+    // The seats' panel chrome, shared by all of them, for the renderer's reasons
+    // and held the same way.
+    panel::Cache panels;
 
     std::shared_ptr<const GameSnapshot> snapshot;
 

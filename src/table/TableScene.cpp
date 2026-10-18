@@ -77,7 +77,7 @@ void TableScene::ensureSeats(std::size_t count)
 {
     while(seats.size() < count)
     {
-        SeatItem* seat = new SeatItem(&cards);
+        SeatItem* seat = new SeatItem(&cards, &panels);
         addItem(seat);
         seats.push_back(seat);
     }

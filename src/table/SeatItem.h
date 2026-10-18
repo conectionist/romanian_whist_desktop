@@ -88,6 +88,8 @@ struct PillView
 {
     QString text;
     Pill state = Pill::Neutral;
+
+    bool operator==(const PillView&) const = default;
 };
 
 // table.js pillFor(). `active` is whether this seat is the one being asked to
@@ -111,9 +113,27 @@ struct NameLine
     QString marker;
     QString name;
     QString score;
+
+    bool operator==(const NameLine&) const = default;
 };
 
 NameLine nameLineFor(const SeatView& seat, bool active, qreal width);
+
+// EVERYTHING THE PANEL'S PICTURE SHOWS of a seat, worked out once per snapshot.
+// The picture is painted from this and composed again only when it changes, so
+// a thing drawn on the panel cannot be left out of that comparison: to be drawn
+// it has to be in here. The chrome's palette, size and ratio and the portrait's
+// look are not about the seat, and SeatItem compares them itself.
+struct Shown
+{
+    NameLine name;
+    PillView pill;
+
+    // A card in the portrait's place, so no portrait.
+    bool face = false;
+
+    bool operator==(const Shown&) const = default;
+};
 
 } // namespace seatitem
 
@@ -128,7 +148,10 @@ public:
     // TAKEN SINCE C4, which is when a plaque first had a card to draw. Section 17
     // puts another seat's Forehead card face-up where they sit, and that card
     // comes through the same seam every other card on the table does.
-    explicit SeatItem(const CardRenderer* renderer, QGraphicsItem* parent = nullptr);
+    //
+    // `panels` is the chrome cache every seat shares, owned with the renderer. Null
+    // gives the item one of its own.
+    SeatItem(const CardRenderer* renderer, panel::Cache* panels, QGraphicsItem* parent = nullptr);
 
     // Everything this draws, from one snapshot's SeatView plus the facts that are
     // not on it. Taken as a whole rather than as a dozen setters because it is
@@ -173,13 +196,11 @@ private:
     // Places the face-up card, or hides it.
     void refreshFace();
 
+    // What the picture would show now, from the seat, the turn and the size.
+    seatitem::Shown shownNow() const;
+
     void paintPortrait(QPainter& painter, const QRectF& box) const;
     void paintText(QPainter& painter, const QRectF& column) const;
-
-    // The panel's chrome, cached per state (idle, active): its two shadows are
-    // blurs, too dear to paint on every frame of a resize. Rendered again on a
-    // change of size, ratio or palette.
-    const panel::Picture& chrome(bool isActive, qreal ratio) const;
 
     // THE WHOLE PANEL AS ONE PICTURE - the chrome, the portrait and the two lines
     // over it - composed again only when what it shows or the ratio changes. The
@@ -190,6 +211,12 @@ private:
     const panel::Picture& picture(const seatitem::Layout& layout, qreal ratio) const;
 
     const CardRenderer* renderer;
+
+    // The panel's chrome, shared with every other seat: its two shadows are blurs,
+    // too dear to paint on every frame of a resize. `ownPanels` only when no
+    // shared cache was given.
+    mutable panel::Cache ownPanels;
+    panel::Cache* panels;
 
     // ONE CARD, and a child rather than something this paints. CardItem already
     // resolves the pixels it covers off the device being painted into, so a
@@ -208,15 +235,8 @@ private:
     Theme theme = Theme::dark();
     QSizeF size;
 
-    struct Chrome
-    {
-        panel::Picture picture;
-        QSizeF size;
-        int ratio = 0;
-        Theme::TablePalette palette;
-    };
-
-    mutable Chrome chromes[2];
+    // What the composed picture shows, and is painted from.
+    seatitem::Shown shown;
 
     // The composed panel, and whether anything it shows has changed since. The
     // ratio is compared on its own, because it changes without any setter.

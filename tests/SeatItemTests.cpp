@@ -92,7 +92,8 @@ struct Plaque
 {
     QGraphicsScene scene;
     CardRenderer renderer;
-    SeatItem item{ &renderer };
+    panel::Cache panels;
+    SeatItem item{ &renderer, &panels };
 
     explicit Plaque(const SeatView& view)
     {
@@ -437,6 +438,52 @@ TEST_CASE("A snapshot that changes nothing on a panel composes nothing", "[seat]
     render();
 
     REQUIRE(plaque.item.compositions() == first + 2);
+}
+
+// ONE CHROME FOR EVERY PANEL ALIKE. Five of six seats are the same size at the
+// same ratio, and each rendering its own blurred the same two shadows five times
+// over on every settle of a resize.
+TEST_CASE("Panels of one size and state share one chrome", "[seat]")
+{
+    QGraphicsScene scene;
+    CardRenderer renderer;
+    panel::Cache panels;
+    SeatItem left(&renderer, &panels);
+    SeatItem right(&renderer, &panels);
+
+    for(SeatItem* item : { &left, &right })
+    {
+        item->setPanelSize(tablespace::panelSize);
+        item->setSeat(unseen(QStringLiteral("Ana")), false, false, Theme::dark());
+        scene.addItem(item);
+    }
+
+    right.setPos(400.0, 0.0);
+
+    QImage image(1000, 400, QImage::Format_ARGB32_Premultiplied);
+    const auto render = [&]
+    {
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        scene.render(&painter, QRectF(), scene.itemsBoundingRect());
+    };
+
+    render();
+
+    REQUIRE(left.compositions() == 1);
+    REQUIRE(right.compositions() == 1);
+    REQUIRE(panels.renders() == 1);
+
+    // The active seat's chrome is the other one, rendered once and then shared.
+    right.setSeat(unseen(QStringLiteral("Ana")), true, false, Theme::dark());
+    render();
+
+    REQUIRE(panels.renders() == 2);
+
+    left.setSeat(unseen(QStringLiteral("Ana")), true, false, Theme::dark());
+    render();
+
+    REQUIRE(panels.renders() == 2);
 }
 
 // THE PORTRAIT'S ROWS ARE ITS OWN. A QBrush tiles its pixmap, so a rounded rect

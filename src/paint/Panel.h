@@ -9,6 +9,9 @@
 #include <QRectF>
 #include <QSizeF>
 
+#include <cstddef>
+#include <vector>
+
 class QPainter;
 
 // THE REDESIGN'S PANEL, page.html's .panel, painted in one place: the seats' name
@@ -56,6 +59,40 @@ struct Picture
 };
 
 Picture render(QSizeF size, const Theme::TablePalette& palette, bool active, qreal ratio);
+
+// render()'S PICTURES, SHARED by every panel drawn at the same size, state, ratio and
+// palette. Five of six seats are the same 280 x 118 at the same ratio, so a cache
+// per item blurred the same two shadows over and over on every settle.
+//
+// ONE RATIO AND ONE PALETTE AT A TIME, as Theme's avatars are one box at a time:
+// a new ratio means the window was resized or moved to another screen, and the
+// old pictures are never asked for again. Within one, a picture per size and
+// state - four on the table, the bottom panel's two and everyone else's.
+//
+// Owned by whatever owns the items (TableScene), which outlives them.
+class Cache
+{
+public:
+    // BY VALUE, which costs a reference count: a reference into the cache would
+    // dangle the moment another panel's request cleared it.
+    Picture picture(QSizeF size, const Theme::TablePalette& palette, bool active, qreal ratio);
+
+    // How many pictures this has rendered: READ-ONLY and for tests.
+    std::size_t renders() const { return rendered; }
+
+private:
+    struct Entry
+    {
+        QSizeF size;
+        bool active = false;
+        Picture picture;
+    };
+
+    int ratioKey = 0;
+    Theme::TablePalette palette;
+    std::vector<Entry> entries;
+    std::size_t rendered = 0;
+};
 
 } // namespace panel
 
