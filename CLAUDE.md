@@ -1,5 +1,22 @@
 # CLAUDE.md
 
+## Never freeze the owner's computer
+
+The owner uses this machine while you work. A command that takes every core makes it unusable,
+and that is worse than any wait. **Slower is always acceptable; a frozen desktop never is.**
+
+- **Builds:** never a bare `-j` (it means unlimited). Always `nice -n 19 cmake --build <dir> -j 2`.
+  This overrides the `-j` in `docs/LOCAL_VERIFICATION.md`.
+- **Tests:** `nice -n 19 ./build/tests/desktop_tests` or `nice -n 19 ctest --preset <p> -j 1`.
+  Run a subset by tag (`"[rack]"`, `"[table]"`) while iterating, and the whole suite once at the end.
+- **One heavy command at a time.** Never build or test several presets in one command or back to
+  back without being asked. Build and test the other presets (`release`, `clang`) only when the
+  owner asks, or once before a PR, one preset per command.
+- **Timing runs (`[.timing]`) and sanitizer builds** only when the owner asks, one run per command.
+  Don't loop them.
+- **Long jobs go in the background** (`run_in_background`), still under `nice` and `-j 2`, so the
+  owner can keep working and can stop them.
+
 ## Branch workflow
 
 Branches are stacked: `master` -> `claude/<name>` -> `redesign/phase-N-*`.
