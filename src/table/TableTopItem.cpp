@@ -271,14 +271,6 @@ void paintOrnament(QPainter& painter, QPointF topLeft, bool wavy, const QColor& 
     painter.restore();
 }
 
-// Where a line of text in `font` puts its baseline, in a line box of `height` at
-// `top`: CSS's half-leading, which centres the font's ascent-plus-descent in the
-// line box.
-qreal baselineIn(const QFontMetricsF& metrics, qreal top, qreal height)
-{
-    return top + (height - (metrics.ascent() + metrics.descent())) / 2.0 + metrics.ascent();
-}
-
 // THE LOGO PLAQUE (.panel.logo), in its own 270 x 142 frame, drawn at 0.9 of that
 // about the table's centre.
 void paintLogo(QPainter& painter, const Theme& theme)
@@ -376,7 +368,7 @@ void paintLogo(QPainter& painter, const Theme& theme)
         const qreal width = metrics.horizontalAdvance(line);
 
         letters.addText(QPointF(padding.center().x() - width / 2.0,
-                                baselineIn(metrics, lineTop, letterSize)),
+                                fonts::baselineIn(metrics, lineTop, letterSize)),
                         font, line);
 
         lineTop += letterSize;

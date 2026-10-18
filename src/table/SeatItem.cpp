@@ -69,23 +69,19 @@ qreal lineHeight(const QFontMetricsF& metrics)
     return metrics.lineSpacing();
 }
 
-// Where a line of text puts its baseline in a line box of `height` at `top`: CSS's
-// half-leading, which centres the font's ascent-plus-descent in the box.
-qreal baselineIn(const QFontMetricsF& metrics, qreal top, qreal height)
-{
-    return top + (height - (metrics.ascent() + metrics.descent())) / 2.0 + metrics.ascent();
-}
-
-QString translate(const char* text)
-{
-    return QCoreApplication::translate("SeatItem", text);
-}
-
 }
 
 qreal seatitem::faceHeight()
 {
     return portraitSize.height();
+}
+
+QRectF seatitem::panelRect(QSizeF panel)
+{
+    if(panel.isEmpty())
+        return QRectF();
+
+    return QRectF(-panel.width() / 2.0, -panel.height() / 2.0, panel.width(), panel.height());
 }
 
 seatitem::Layout seatitem::layoutFor(QSizeF panel, QSizeF faceSize)
@@ -95,7 +91,7 @@ seatitem::Layout seatitem::layoutFor(QSizeF panel, QSizeF faceSize)
     if(panel.isEmpty())
         return layout;
 
-    layout.panel = QRectF(-panel.width() / 2.0, -panel.height() / 2.0, panel.width(), panel.height());
+    layout.panel = panelRect(panel);
 
     const QRectF content = layout.panel.adjusted(borderWidth + paddingLeft, borderWidth + paddingY,
                                                  -borderWidth - paddingRight, -borderWidth - paddingY);
@@ -124,12 +120,18 @@ seatitem::Layout seatitem::layoutFor(QSizeF panel, QSizeF faceSize)
 
 seatitem::PillView seatitem::pillFor(const SeatView& seat, bool active, bool biddingOpen)
 {
+    // An explicit context and a literal at every call site, for BidStrip.h's reason:
+    // a wrapper of our own would hide these from lupdate.
     if(!seat.hasBet)
-        return { active && biddingOpen ? translate("Bidding…") : translate("No bid yet"),
+        return { active && biddingOpen ? QCoreApplication::translate("SeatItem", "Bidding…")
+                                       : QCoreApplication::translate("SeatItem", "No bid yet"),
                  Pill::Neutral };
 
     // TRICKS TAKEN FIRST, then the bid, as the label says.
-    PillView view{ translate("Taken/Bid: %1/%2").arg(seat.tricksWon).arg(seat.bet), Pill::Neutral };
+    PillView view{ QCoreApplication::translate("SeatItem", "Taken/Bid: %1/%2")
+                       .arg(seat.tricksWon)
+                       .arg(seat.bet),
+                   Pill::Neutral };
 
     if(biddingOpen)
         return view;
@@ -234,12 +236,14 @@ void SeatItem::setPortrait(unsigned int portrait)
     update();
 }
 
+// FROM THE SIZE ALONE, not layoutFor(): the scene asks for both on every paint and
+// every hit test, and neither depends on the portrait, the text or the card.
 QRectF SeatItem::boundingRect() const
 {
     if(size.isEmpty())
         return QRectF();
 
-    return layoutFor().panel.marginsAdded(panel::reach());
+    return seatitem::panelRect(size).marginsAdded(panel::reach());
 }
 
 QPainterPath SeatItem::shape() const
@@ -247,7 +251,7 @@ QPainterPath SeatItem::shape() const
     if(size.isEmpty())
         return QPainterPath();
 
-    return panel::shape(layoutFor().panel);
+    return panel::shape(seatitem::panelRect(size));
 }
 
 // TAKEN, AND NOTHING DONE WITH IT. QGraphicsItem's own handler ignores a press on
@@ -332,22 +336,30 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     // At the pixels it lands on - or, while a resize settles, at the scale it
     // began from, so the cached panel is drawn scaled rather than composed again.
-    const panel::Picture& panel = picture(devicepixels::effectiveRatio(*painter));
+    const panel::Picture& panel = picture(layout, devicepixels::effectiveRatio(*painter));
+
+    if(panel.pixmap.isNull())
+        return;
 
     // On a whole device pixel, as the picture's own pixels were laid out to be.
     painter->drawPixmap(devicepixels::snapped(*painter, layout.panel.topLeft() + panel.offset),
                         panel.pixmap);
 }
 
-const panel::Picture& SeatItem::picture(qreal ratio) const
+const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ratio) const
 {
     const int key = devicepixels::ratioKey(ratio);
 
     if(!stale && composedRatio == key && !composed.pixmap.isNull())
         return composed;
 
-    const seatitem::Layout layout = layoutFor();
     const panel::Picture& frame = chrome(active, ratio);
+
+    // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate transform.
+    // Returned as it is, and the panel left stale, so the next real paint composes
+    // rather than finding a null picture marked as current.
+    if(frame.pixmap.isNull())
+        return frame;
 
     composed.pixmap = QPixmap(frame.pixmap.size());
     composed.pixmap.setDevicePixelRatio(ratio);
@@ -428,7 +440,7 @@ void SeatItem::paintText(QPainter& painter, const QRectF& column) const
     // cream, its score in muted - a shape cue beside the ring, never colour alone
     // (section 18).
     const seatitem::NameLine line = seatitem::nameLineFor(seat, active, column.width());
-    const qreal nameBaseline = baselineIn(nameMetrics, top, nameHeight);
+    const qreal nameBaseline = fonts::baselineIn(nameMetrics, top, nameHeight);
 
     qreal x = column.left();
 
@@ -480,7 +492,7 @@ void SeatItem::paintText(QPainter& painter, const QRectF& column) const
     painter.setFont(pill);
     painter.setPen(colour);
     painter.drawText(QPointF(box.left() + pillBorder + pillPadX,
-                             baselineIn(pillMetrics, box.top() + pillBorder + pillPadY,
+                             fonts::baselineIn(pillMetrics, box.top() + pillBorder + pillPadY,
                                         lineHeight(pillMetrics))),
                      text);
 }

@@ -12,12 +12,12 @@ namespace
 // How much of the rect the ellipse of seats spans. Just inside it rather than
 // filling it, so a seat never sits exactly on the boundary.
 //
-// It is NOT reduced to leave room for the plaque around each centre. This
-// function is handed the rect a seat's CENTRE may occupy, and choosing that rect
-// is the caller's business - TableScene's, which hands it a fixed ring through
-// ringRect() below, at the radii that put each plaque where section 2.5 does.
-// Doing it here would mean this function knowing what is drawn at the points it
-// returns.
+// It is NOT reduced to leave room for whatever is drawn at each point. This
+// function is handed the rect a point may occupy, and choosing that rect is the
+// caller's business - TableScene::trickPositions(), which hands it the ring the
+// played cards sit on through ringRect() below. The name panels are not placed
+// by it at all since phase 4: panelRect() copies section 2.5's corners. Doing it
+// here would mean this function knowing what is drawn at the points it returns.
 constexpr qreal radiusFractionX = 0.46;
 constexpr qreal radiusFractionY = 0.44;
 

@@ -2,6 +2,7 @@
 #define FONTS_H
 
 #include <QFont>
+#include <QFontMetricsF>
 
 // The table redesign's three typefaces (docs/ui-redesign/ section 2.3), bundled
 // rather than hoped for: Cinzel Decorative for the logo, Marcellus for names,
@@ -42,6 +43,15 @@ void registerBundled();
 QFont logo();
 QFont heading();
 QFont body();
+
+// Where a line of text puts its baseline in a line box of `height` at `top`: CSS's
+// half-leading, which centres the font's ascent-plus-descent in the line box. In
+// one place because every panel that sets text the way the mock-up does - the
+// logo, the seats, later the HUD - needs the same answer.
+inline qreal baselineIn(const QFontMetricsF& metrics, qreal top, qreal height)
+{
+    return top + (height - (metrics.ascent() + metrics.descent())) / 2.0 + metrics.ascent();
+}
 
 } // namespace fonts
 

@@ -54,6 +54,9 @@ struct Layout
     QRectF card;
 };
 
+// The panel's border box for a panel of `size`, centred on the item's origin.
+QRectF panelRect(QSizeF size);
+
 // `faceSize` is the card's drawn size, or an empty size when there is no card to
 // show. Taken as a parameter rather than derived here because the aspect belongs
 // to CardRenderer, which section 18.1 makes the only thing that knows what a card
@@ -177,7 +180,8 @@ private:
     // text and the portrait cost about half a millisecond each a frame over six
     // panels, which a drag, painting every panel every step, cannot spare; a
     // snapshot changes one or two panels' text, and only those are composed again.
-    const panel::Picture& picture(qreal ratio) const;
+    // `layout` is layoutFor()'s, which paint() has already asked for.
+    const panel::Picture& picture(const seatitem::Layout& layout, qreal ratio) const;
 
     const CardRenderer* renderer;
 
