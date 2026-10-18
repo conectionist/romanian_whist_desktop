@@ -68,12 +68,12 @@ public:
     const Theme& currentTheme() const { return theme; }
 
     // WHERE AN OVERLAY MUST STOP: the table-space y just above your hand - or, at
-    // a table with no hand, above the lowest plaque. Section 15.1's bid strip is
+    // a table with no hand, above the lowest name panel. Section 15.1's bid strip is
     // bottom-aligned above it until the redesign's phase 10 moves the strip onto
     // the felt. In SCENE units: TableView maps it to the viewport.
     //
     // IT HAS TO COME FROM HERE because the bottom of the table is not where the
-    // strip goes. Your hand and your own plaque are both down there, and a strip
+    // strip goes. Your hand and your own panel are both down there, and a strip
     // pinned to the viewport's bottom edge draws straight through them - which is
     // what C2's first run did, through the plaque.
     //
@@ -104,9 +104,8 @@ private:
     // comment.
     void ensureSeats(std::size_t count);
 
-    // Seat centres and played-card positions, both indexed by seat. See the
-    // definitions for where each comes from.
-    std::vector<QPointF> seatPositions(std::size_t seatCount) const;
+    // Played-card positions, indexed by seat. See the definition for where they
+    // come from; the seats' own panels are seatlayout::panelRect()'s.
     std::vector<QPointF> trickPositions(std::size_t seatCount) const;
 
     Theme theme = Theme::light();

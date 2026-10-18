@@ -633,6 +633,50 @@ TEST_CASE("While a drag settles no card is rasterized again and the table is not
     }
 }
 
+// THE NAME PANELS ARE CACHED THE SAME WAY (the redesign's phase 4): each is one
+// picture, its shadows blurred and its text laid out once, and a drag only scales
+// what is there.
+TEST_CASE("While a drag settles no panel is composed again", "[table]")
+{
+    ShownTable table;
+
+    const auto composed = [&]
+    {
+        std::size_t total = 0;
+
+        for(QGraphicsItem* item : table.scene.items())
+        {
+            if(const auto* seat = dynamic_cast<const SeatItem*>(item))
+                total += seat->compositions();
+        }
+
+        return total;
+    };
+
+    table.step(1);
+
+    const std::size_t panels = composed();
+
+    // The premise: the panels were painted, so the count below counts something.
+    REQUIRE(panels > 0);
+
+    for(int step = 2 ; step <= 6 ; step++)
+    {
+        INFO("step " << step);
+
+        table.step(step);
+
+        REQUIRE(table.view.isSettling());
+        REQUIRE(composed() == panels);
+    }
+
+    // And once it settles, every panel is composed again at the new scale.
+    table.view.finishResize();
+    table.paint();
+
+    REQUIRE(composed() > panels);
+}
+
 TEST_CASE("Once a drag settles everything is rasterized at the new scale", "[table]")
 {
     ShownTable table;
