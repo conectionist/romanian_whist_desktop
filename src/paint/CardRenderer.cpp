@@ -2,11 +2,15 @@
 
 #include "paint/DevicePixels.h"
 
+#include <QBrush>
 #include <QPainter>
+#include <QPolygonF>
+#include <QTransform>
 #include <QString>
 #include <QSvgRenderer>
 
 #include <algorithm>
+#include <cmath>
 
 using romanian_whist::Card;
 using romanian_whist::Rank;
@@ -295,8 +299,14 @@ QImage CardRenderer::rasterizeFace(Card card, QSize physical) const
     return image;
 }
 
-// Flat and calm, to match section 18, and proportioned like the faces so the two
-// sit together: the art rounds its corners at about 4.1% of the card's width.
+// THE TABLE REDESIGN'S BACK, table.js backSvg(): a cream border, a burgundy field
+// with a gold lattice turned 45 degrees and a small dot at every crossing, a gold
+// frame round the lattice, and a burgundy oval with a gold diamond in the middle.
+//
+// PAINTED IN THE MOCK-UP'S OWN UNITS, its viewBox of 100 x 145, scaled to the
+// image - so every number below is copied from backSvg() as it is written. The
+// faces' aspect is 0.689 and the viewBox's 0.690; the difference is under a tenth
+// of a pixel on any card the table draws, so the scale is simply taken per axis.
 QImage CardRenderer::paintBack(QSize physical) const
 {
     QImage image(physical, QImage::Format_ARGB32_Premultiplied);
@@ -304,36 +314,70 @@ QImage CardRenderer::paintBack(QSize physical) const
 
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.scale(physical.width() / 100.0, physical.height() / 145.0);
 
-    const qreal width = physical.width();
-    const qreal height = physical.height();
-    const qreal radius = width * 0.041;
-
-    // THE ONE COLOUR LITERAL OUTSIDE Theme, and section 18.1 allows exactly
-    // this: the rule is that colours live in Theme OR CardRenderer. It belongs
-    // here rather than there because section 18 is explicit that cards do not
-    // change colour in dark mode - a card is white in the dark too - so a back
-    // that took a Theme would be offering a choice that must not be made.
-    const QColor field(0x2B, 0x4A, 0x7A);
-
-    const QRectF body(0.5, 0.5, width - 1.0, height - 1.0);
-
-    painter.setPen(QPen(QColor(0, 0, 0, 90), std::max(1.0, width * 0.006)));
-    painter.setBrush(Qt::white);
-    painter.drawRoundedRect(body, radius, radius);
-
-    const qreal inset = width * 0.06;
-    const QRectF panel = body.adjusted(inset, inset, -inset, -inset);
+    // THE COLOUR LITERALS OUTSIDE Theme, and section 18.1 allows exactly these:
+    // the rule is that colours live in Theme OR CardRenderer. They belong here
+    // rather than there because section 18 is explicit that cards do not change
+    // colour with the scheme - a card is white in the dark too - so a back that
+    // took a Theme would be offering a choice that must not be made.
+    const QColor cream(0xF2, 0xE8, 0xD2);
+    const QColor burgundy(0x7A, 0x1C, 0x1C);
+    const QColor lattice(0xD2, 0xAC, 0x63, 140);   // opacity .55
+    const QColor dot(0xA8, 0x39, 0x2B);
+    const QColor gold(0xD8, 0xB5, 0x6A);
 
     painter.setPen(Qt::NoPen);
-    painter.setBrush(field);
-    painter.drawRoundedRect(panel, radius * 0.6, radius * 0.6);
+    painter.setBrush(cream);
+    painter.drawRoundedRect(QRectF(0.0, 0.0, 100.0, 145.0), 7.0, 7.0);
 
-    const qreal hairline = width * 0.022;
-    painter.setPen(QPen(QColor(255, 255, 255, 60), std::max(1.0, width * 0.008)));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRoundedRect(panel.adjusted(hairline, hairline, -hairline, -hairline),
-                            radius * 0.4, radius * 0.4);
+    painter.setBrush(burgundy);
+    painter.drawRoundedRect(QRectF(4.5, 4.5, 91.0, 136.0), 4.5, 4.5);
+
+    // THE LATTICE IS A TEXTURE BRUSH, NOT A CLIP. backSvg()'s <pattern> is a 9-unit
+    // tile turned 45 degrees about the viewBox's origin; a fill with a brush keeps
+    // the rounded rect's edge anti-aliased, where Qt's raster engine would draw a
+    // clip path's edge aliased (the redesign's phase 3 found it on the table).
+    //
+    // The tile is drawn at twice the pixels it covers, so the brush samples it down
+    // rather than up and the hairlines stay soft rather than stepped.
+    const qreal unitsPerPixel = 100.0 / std::max(1, physical.width());
+    const int tilePixels = std::max(9, static_cast<int>(std::ceil(2.0 * 9.0 / unitsPerPixel)));
+
+    QImage tile(tilePixels, tilePixels, QImage::Format_ARGB32_Premultiplied);
+    tile.fill(burgundy);
+    {
+        QPainter tilePainter(&tile);
+        tilePainter.setRenderHint(QPainter::Antialiasing);
+        tilePainter.scale(tilePixels / 9.0, tilePixels / 9.0);
+
+        tilePainter.setPen(QPen(lattice, 0.5));
+        tilePainter.drawLine(QPointF(0.0, 4.5), QPointF(9.0, 4.5));
+        tilePainter.drawLine(QPointF(4.5, 0.0), QPointF(4.5, 9.0));
+
+        tilePainter.setPen(Qt::NoPen);
+        tilePainter.setBrush(dot);
+        tilePainter.drawEllipse(QPointF(4.5, 4.5), 1.4, 1.4);
+    }
+
+    QBrush pattern(tile);
+    pattern.setTransform(QTransform().rotate(45.0).scale(9.0 / tilePixels, 9.0 / tilePixels));
+
+    painter.setBrush(pattern);
+    painter.setPen(QPen(gold, 1.0));
+    painter.drawRoundedRect(QRectF(8.0, 8.0, 84.0, 129.0), 3.0, 3.0);
+
+    const QPointF centre(50.0, 72.5);
+
+    painter.setBrush(burgundy);
+    painter.setPen(QPen(gold, 1.2));
+    painter.drawEllipse(centre, 15.0, 21.0);
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(gold);
+    painter.drawPolygon(QPolygonF({ centre + QPointF(0.0, -10.0), centre + QPointF(6.0, 0.0),
+                                    centre + QPointF(0.0, 10.0), centre + QPointF(-6.0, 0.0) }));
 
     return image;
 }
