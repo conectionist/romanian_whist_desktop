@@ -17,6 +17,7 @@
 #include <QPainter>
 #include <QSizeF>
 #include <QString>
+#include <QtMath>
 
 #include <vector>
 
@@ -436,4 +437,64 @@ TEST_CASE("A snapshot that changes nothing on a panel composes nothing", "[seat]
     render();
 
     REQUIRE(plaque.item.compositions() == first + 2);
+}
+
+// THE PORTRAIT'S ROWS ARE ITS OWN. A QBrush tiles its pixmap, so a rounded rect
+// that starts a fraction of a pixel before the picture samples the row before its
+// first - the picture's last, its coat - and drew a hairline of it along the top
+// and bottom of every portrait. Painted at a fit ratio that puts the portrait off
+// the pixel grid, with two different faces: the rows outside the picture must not
+// change with the face, and the rows inside must be the picture's, one for one.
+TEST_CASE("A portrait's edge shows no row from its other edge", "[seat]")
+{
+    const qreal ratio = 0.767;
+
+    Plaque plaque(unseen(QStringLiteral("Ana")));
+    const seatitem::Layout layout = plaque.item.layoutFor();
+    const QRectF inner = layout.portrait.adjusted(1.0, 1.0, -1.0, -1.0);
+
+    // The panel's corner on a whole pixel, as the table's view puts it.
+    const QPointF origin(20.0, 20.0);
+    const auto device = [&](QPointF point) { return origin + (point - layout.panel.topLeft()) * ratio; };
+
+    const auto paintWith = [&](unsigned int look)
+    {
+        plaque.item.setPortrait(look);
+
+        QImage image(qCeil(layout.panel.width() * ratio) + 40, qCeil(layout.panel.height() * ratio) + 40,
+                     QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::black);
+
+        QPainter painter(&image);
+        painter.translate(origin);
+        painter.scale(ratio, ratio);
+        painter.translate(-layout.panel.topLeft());
+        plaque.item.paint(&painter, nullptr, nullptr);
+
+        return image;
+    };
+
+    const QImage first = paintWith(0);
+    const QImage second = paintWith(1);
+
+    const int top = qRound(device(inner.topLeft()).y());
+    const QImage avatar = Theme::dark().avatar(0, inner.size().toSize(), ratio).toImage();
+
+    const int left = qRound(device(inner.topLeft()).x());
+    const int from = left + avatar.width() / 4;
+    const int to = left + avatar.width() * 3 / 4;
+
+    for(int x = from ; x < to ; x++)
+    {
+        INFO("column " << x);
+
+        REQUIRE(first.pixel(x, top - 1) == second.pixel(x, top - 1));
+        REQUIRE(first.pixel(x, top + avatar.height()) == second.pixel(x, top + avatar.height()));
+
+        for(int row = 0 ; row < avatar.height() ; row++)
+        {
+            INFO("row " << row);
+            REQUIRE(first.pixel(x, top + row) == avatar.pixel(x - left, row));
+        }
+    }
 }

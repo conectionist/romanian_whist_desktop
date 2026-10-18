@@ -389,14 +389,11 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
 
 void SeatItem::paintPortrait(QPainter& painter, const QRectF& box) const
 {
-    const QRectF inner = box.adjusted(portraitBorder, portraitBorder, -portraitBorder, -portraitBorder);
+    const QRectF laidOut = box.adjusted(portraitBorder, portraitBorder, -portraitBorder, -portraitBorder);
     const qreal innerRadius = portraitRadius - portraitBorder;
 
-    painter.fillPath(paths::roundedBand(box, portraitRadius, inner, innerRadius),
-                     theme.table.portraitBorder);
-
     const qreal ratio = devicepixels::effectiveRatio(painter);
-    QPixmap picture = theme.avatar(look, inner.size().toSize(), ratio);
+    QPixmap picture = theme.avatar(look, laidOut.size().toSize(), ratio);
 
     if(picture.isNull())
         return;
@@ -407,13 +404,25 @@ void SeatItem::paintPortrait(QPainter& painter, const QRectF& box) const
     // textures are - so the picture is not resampled on its way to the screen.
     picture.setDevicePixelRatio(1.0);
 
-    const QPointF corner = devicepixels::snapped(painter, inner.topLeft());
+    const QPointF corner = devicepixels::snapped(painter, laidOut.topLeft());
 
     QTransform placed = QTransform::fromTranslate(corner.x(), corner.y());
     placed.scale(1.0 / ratio, 1.0 / ratio);
 
     QBrush brush(picture);
     brush.setTransform(placed);
+
+    // AND THE RECT IS THE PICTURE'S, not the layout's. The layout's starts and ends
+    // a fraction of a pixel off the grid the picture was snapped to, and a brush
+    // tiles: that fraction sampled the row past the picture's other edge, and drew
+    // a hairline of its coat along the top and its background along the bottom.
+    // The frame goes round the same rect, so the two cannot leave a gap - and the
+    // portrait moves by under half a device pixel for it.
+    const QRectF inner(corner, QSizeF(picture.size()) / ratio);
+    const QRectF outer = inner.adjusted(-portraitBorder, -portraitBorder, portraitBorder, portraitBorder);
+
+    painter.fillPath(paths::roundedBand(outer, portraitRadius, inner, innerRadius),
+                     theme.table.portraitBorder);
 
     painter.fillPath(paths::rounded(inner, innerRadius), brush);
 }

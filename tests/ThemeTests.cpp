@@ -588,3 +588,19 @@ TEST_CASE("Every table-page text colour holds AA against the panel", "[theme]")
         REQUIRE(contrastRatio(table.redSuit, panel) >= 3.0);
     }
 }
+
+// page.html's .portrait filter is on the WHOLE ELEMENT, its gold border included,
+// so the frame is #a3824a through sepia(0.18) contrast(1.05): about rgb(168, 136,
+// 81), worked through by hand. Painted raw, every frame was cooler and darker than
+// the mock-up's.
+TEST_CASE("A portrait's frame is filtered as its picture is", "[theme]")
+{
+    for(const Theme& theme : { Theme::light(), Theme::dark() })
+    {
+        const QColor frame = theme.table.portraitBorder;
+
+        REQUIRE(std::abs(frame.red() - 168) <= 1);
+        REQUIRE(std::abs(frame.green() - 136) <= 1);
+        REQUIRE(std::abs(frame.blue() - 81) <= 1);
+    }
+}

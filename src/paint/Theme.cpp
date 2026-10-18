@@ -33,11 +33,13 @@ constexpr QSizeF portraitView(100.0, 114.0);
 constexpr qreal portraitSepia = 0.18;
 constexpr qreal portraitContrast = 1.05;
 
-void applyPortraitFilter(QImage& image)
+// One opaque colour through the filter. The picture's pixels go through it, and so
+// does the frame's colour, because CSS filters the whole element, border and all.
+QRgb portraitFiltered(QRgb colour)
 {
-    const qreal k = 1.0 - portraitSepia;
+    constexpr qreal k = 1.0 - portraitSepia;
 
-    const qreal m[3][3] = {
+    constexpr qreal m[3][3] = {
         { 0.393 + 0.607 * k, 0.769 - 0.769 * k, 0.189 - 0.189 * k },
         { 0.349 - 0.349 * k, 0.686 + 0.314 * k, 0.168 - 0.168 * k },
         { 0.272 - 0.272 * k, 0.534 - 0.534 * k, 0.131 + 0.869 * k }
@@ -49,23 +51,26 @@ void applyPortraitFilter(QImage& image)
         return qBound(0, qRound(contrasted * 255.0), 255);
     };
 
+    const qreal r = qRed(colour) / 255.0;
+    const qreal g = qGreen(colour) / 255.0;
+    const qreal b = qBlue(colour) / 255.0;
+
+    return qRgba(channel(std::min(1.0, m[0][0] * r + m[0][1] * g + m[0][2] * b)),
+                 channel(std::min(1.0, m[1][0] * r + m[1][1] * g + m[1][2] * b)),
+                 channel(std::min(1.0, m[2][0] * r + m[2][1] * g + m[2][2] * b)),
+                 qAlpha(colour));
+}
+
+void applyPortraitFilter(QImage& image)
+{
     for(int y = 0 ; y < image.height() ; y++)
     {
         QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
 
+        // The picture is opaque - its background fills the box - so the
+        // premultiplied pixel IS the straight one.
         for(int x = 0 ; x < image.width() ; x++)
-        {
-            // The picture is opaque - its background fills the box - so the
-            // premultiplied pixel IS the straight one.
-            const qreal r = qRed(line[x]) / 255.0;
-            const qreal g = qGreen(line[x]) / 255.0;
-            const qreal b = qBlue(line[x]) / 255.0;
-
-            line[x] = qRgba(channel(std::min(1.0, m[0][0] * r + m[0][1] * g + m[0][2] * b)),
-                            channel(std::min(1.0, m[1][0] * r + m[1][1] * g + m[1][2] * b)),
-                            channel(std::min(1.0, m[2][0] * r + m[2][1] * g + m[2][2] * b)),
-                            qAlpha(line[x]));
-        }
+            line[x] = portraitFiltered(line[x]);
     }
 }
 
@@ -179,8 +184,9 @@ Theme::TablePalette tablePalette()
     table.pillBorder = rgba(201, 164, 92, 0.4);
 
     // .portrait: border 1px solid #a3824a, the buttons' gold, assigned for the
-    // reason blackSuit is.
-    table.portraitBorder = table.buttonBorder;
+    // reason blackSuit is - and through the portrait's filter, which CSS applies to
+    // the whole element, border included.
+    table.portraitBorder = QColor::fromRgba(portraitFiltered(table.buttonBorder.rgba()));
 
     // The background's outer stop, the eyebrows' stroke and the plain mouth.
     table.portraitEdge = QColor(0x17, 0x10, 0x0A);
