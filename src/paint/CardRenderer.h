@@ -70,7 +70,7 @@ public:
                  State state = State::Normal) const;
 
     // A back is not a special case in three widgets. It is drawn in a Forehead
-    // round, in a Hidden round and on every opponent's stack, and a back that is
+    // round, in a Hidden round and in every opponent's rack, and a back that is
     // drawn in three places is a back that gets changed in two.
     QPixmap back(QSize size, qreal dpr) const;
 

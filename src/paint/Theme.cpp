@@ -193,6 +193,30 @@ Theme::TablePalette tablePalette()
     table.portraitBrow = QColor(0x2A, 0x1A, 0x10);
     table.portraitMouth = QColor(0x8A, 0x4F, 0x3C);
 
+    // Section 2.6, from page.html's .fan, .fan .back and .fan .ledge.
+    //
+    // .fan: filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.55)).
+    table.rackShadow = rgba(0, 0, 0, 0.55);
+
+    // .back: linear-gradient(0deg, rgba(255, 240, 210, 0.16), transparent 45%,
+    // rgba(0, 0, 0, 0.3)), and box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25).
+    table.rackCardLight = rgba(255, 240, 210, 0.16);
+    table.rackCardDark = rgba(0, 0, 0, 0.3);
+    table.rackCardEdge = rgba(0, 0, 0, 0.25);
+
+    // .ledge: linear-gradient(180deg, rgba(255, 220, 170, 0.35), transparent 30%,
+    // rgba(0, 0, 0, 0.45)) over the wood texture over #6b3d1f; box-shadow: 0 2px 3px
+    // rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(30, 14, 4, 0.6).
+    //
+    // NO TEXTURE. The mock-up centres the wood texture on the rail at 900 x 900, and
+    // the texture is the rim - a ring, transparent in the middle - so what shows
+    // there is the base colour alone. This is what the mock-up draws.
+    table.railBase = QColor(0x6B, 0x3D, 0x1F);
+    table.railLight = rgba(255, 220, 170, 0.35);
+    table.railDark = rgba(0, 0, 0, 0.45);
+    table.railEdge = rgba(30, 14, 4, 0.6);
+    table.railShadow = rgba(0, 0, 0, 0.6);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

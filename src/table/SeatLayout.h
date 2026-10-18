@@ -59,6 +59,28 @@ unsigned int stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int
 // that is not at the table.
 QRectF panelRect(unsigned int seatCount, int humanSeat, unsigned int seat);
 
+// WHERE A SEAT'S RACK STANDS ON THE RIM (section 2.6, table.js buildSeats()): the
+// angle from the table's centre, in RADIANS with y down, so 0 is to the right and
+// pi/2 straight down - the bottom seat's.
+//
+// In line with the panel's centre, unless the rim there is under the panel itself:
+// then the rack slides CLOCKWISE along the rim, a degree at a time, until it is
+// clear of the panel grown by 10, and a further 9 degrees so the width of its row
+// clears the panel's corner too. With section 2.5's panels it never has to - every
+// rim point is already clear - but a panel moved closer would need it, and the
+// mock-up states the rule rather than the answer.
+//
+// The angle is what the played card and the lead rhombus line up with from phase 6.
+qreal rackAngle(QRectF panel);
+
+// The same for a seat, from panelRect(): the angle every later phase reads. Zero
+// for a seat with no panel, which TableScene does not draw a rack for.
+qreal rackAngle(unsigned int seatCount, int humanSeat, unsigned int seat);
+
+// The point on the rim a rack stands at: tablespace::rackRadius from the centre,
+// at `angle`.
+QPointF rackOrigin(qreal angle);
+
 // The rect to hand seatCentres() when what you know is the radius you want
 // rather than the space you have. The ring it produces is a CIRCLE of that
 // radius about `centre`.

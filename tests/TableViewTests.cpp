@@ -3,6 +3,7 @@
 #include "TableFixtures.h"
 
 #include "table/TableView.h"
+#include "table/RackItem.h"
 #include "table/SeatItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
@@ -675,6 +676,49 @@ TEST_CASE("While a drag settles no panel is composed again", "[table]")
     table.paint();
 
     REQUIRE(composed() > panels);
+}
+
+// AND THE RACKS (the redesign's phase 5), each one picture of tilted cards and a
+// blurred shadow: a drag scales what they hold, and composes them once it settles.
+TEST_CASE("While a drag settles no rack is composed again", "[table]")
+{
+    ShownTable table;
+
+    const auto composed = [&]
+    {
+        std::size_t total = 0;
+
+        for(QGraphicsItem* item : table.scene.items())
+        {
+            if(const auto* rack = dynamic_cast<const RackItem*>(item))
+                total += rack->compositions();
+        }
+
+        return total;
+    };
+
+    table.step(1);
+
+    const std::size_t racks = composed();
+
+    // The premise: fullTable() gives every opponent eight cards, so five racks were
+    // painted and the count below counts something.
+    REQUIRE(racks >= 5);
+
+    for(int step = 2 ; step <= 6 ; step++)
+    {
+        INFO("step " << step);
+
+        table.step(step);
+
+        REQUIRE(table.view.isSettling());
+        REQUIRE(composed() == racks);
+    }
+
+    table.view.finishResize();
+    table.paint();
+
+    REQUIRE(composed() > racks);
 }
 
 TEST_CASE("Once a drag settles everything is rasterized at the new scale", "[table]")

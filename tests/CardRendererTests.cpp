@@ -13,6 +13,8 @@
 #include <QSet>
 #include <QSvgRenderer>
 
+#include <cstdlib>
+#include <ios>
 #include <vector>
 
 using romanian_whist::Card;
@@ -271,4 +273,43 @@ TEST_CASE("A card's size comes from the art's aspect ratio", "[card-renderer]")
 
     // A degenerate request is a null size rather than a crash or a 1x1 card.
     REQUIRE(renderer.sizeForHeight(0.0).isEmpty());
+}
+
+// THE REDESIGN'S BACK (table.js backSvg()), checked where its colours are flat: the
+// cream border, the burgundy band between the border and the lattice, the gold
+// diamond in the middle, and the burgundy oval round it. At twice the mock-up's
+// 100 x 145 viewBox, so every point below is backSvg()'s coordinate doubled.
+TEST_CASE("The back is the mock-up's burgundy and gold", "[card-renderer]")
+{
+    const CardRenderer renderer;
+    const QImage back = renderer.back(QSize(200, 290), 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+
+    const auto near = [&](QPoint at, QRgb wanted)
+    {
+        const QRgb got = back.pixel(at);
+
+        INFO("at " << at.x() << ", " << at.y() << ": got " << std::hex << got << " wanted " << wanted);
+
+        return qAlpha(got) == 255 && std::abs(qRed(got) - qRed(wanted)) <= 3
+               && std::abs(qGreen(got) - qGreen(wanted)) <= 3
+               && std::abs(qBlue(got) - qBlue(wanted)) <= 3;
+    };
+
+    CHECK(near(QPoint(2, 145), qRgb(0xF2, 0xE8, 0xD2)));      // the border, x 1
+    CHECK(near(QPoint(12, 145), qRgb(0x7A, 0x1C, 0x1C)));     // the field, x 6
+    CHECK(near(QPoint(100, 145), qRgb(0xD8, 0xB5, 0x6A)));    // the diamond, at the centre
+    CHECK(near(QPoint(100, 175), qRgb(0x7A, 0x1C, 0x1C)));    // the oval, below the diamond
+
+    // And the lattice is there at all: its region holds more than one colour.
+    QSet<QRgb> colours;
+    for(int x = 20 ; x < 60 ; x++)
+        colours.insert(back.pixel(x, 40));
+
+    CHECK(colours.size() > 3);
+
+    // And a dark hairline round it, as the faces draw round themselves.
+    const QRgb edge = back.pixel(0, 145);
+
+    CHECK(qAlpha(edge) == 255);
+    CHECK(qRed(edge) < 0xF2 - 20);
 }
