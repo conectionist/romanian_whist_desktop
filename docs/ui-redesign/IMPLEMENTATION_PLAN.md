@@ -834,6 +834,8 @@ Done when: `screenshots/detail-racks-and-played-cards.jpg` is matched for the ra
   retired six `SeatItemTests` cases that placed the Forehead card on the panel. They moved "Your
   own seat shows no face in a Forehead round" to `TableSceneTests`, and added 23 cases: 19
   `RackItemTests`, one `SeatItemTests` case, two scene cases and one resize case.
+  **The review of PR #30 brought it to 364**: two more `RackItemTests`, for the exact quarter
+  turns and the pixel snap.
 - **Section 2.6 was corrected in five places**, now written into it above:
   - the projection order;
   - the rail's colour, which is flat because the texture is transparent there;
