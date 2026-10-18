@@ -88,21 +88,8 @@ QPainterPath ring(qreal inner, qreal outer)
     return paths::ring(tablespace::centre, inner, outer);
 }
 
-QPainterPath rounded(const QRectF& rect, qreal radius)
-{
-    QPainterPath path;
-    path.addRoundedRect(rect, radius, radius);
-    return path;
-}
-
-// The band between two rounded rects, filled odd-even as ring() is.
-QPainterPath roundedBand(const QRectF& outer, qreal outerRadius, const QRectF& inner,
-                         qreal innerRadius)
-{
-    QPainterPath path = rounded(outer, outerRadius);
-    path.addRoundedRect(inner, innerRadius, innerRadius);
-    return path;
-}
+using paths::rounded;
+using paths::roundedBand;
 
 // A TEXTURE OVER A DISC, at the pixels it lands on.
 //
