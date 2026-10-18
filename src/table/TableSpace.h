@@ -48,12 +48,15 @@ inline constexpr qreal marginX = 16.0;
 inline constexpr qreal marginTop = 10.0;
 inline constexpr qreal marginBottom = 8.0;
 
-// THE SMALLEST SCALE THE TABLE IS DRAWN AT. Below it the plaque names fall under
-// nine pixels and the cards under seventy, which is past reading - and nothing
-// else would stop it: the table is a fixed space the view scales, so a small
-// window used to draw it as small as it liked. Decided by the owner on 2026-10-17,
-// at the size that still leaves a 1000 x 700 window room for the scoreboard.
-inline constexpr qreal minimumScale = 0.30;
+// THE SMALLEST SCALE THE TABLE IS DRAWN AT. Below it the panels' names fall under
+// nine pixels (Marcellus 25, seatitem::nameSize) and the Taken/Bid pill under
+// seven, which is past reading - and nothing else would stop it: the table is a
+// fixed space the view scales, so a small window used to draw it as small as it
+// liked. Decided by the owner on 2026-10-17 at 0.30, for the old plaque's larger
+// names; raised to 0.36 on 2026-10-18 when phase 4's panels made them 25. The
+// smallest window is then 945 x 659, which still leaves a 1000 x 700 one room
+// for the scoreboard. TableSpaceTests pins the nine pixels.
+inline constexpr qreal minimumScale = 0.36;
 
 // THE TABLE (section 2.4), every circle centred on `centre`.
 //

@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include "table/SeatItem.h"
 #include "table/TableSpace.h"
 
 #include <QPointF>
@@ -71,11 +72,19 @@ TEST_CASE("The minimum viewport fits the table at the minimum scale", "[table-sp
 {
     const QSize minimum = tablespace::minimumViewport();
 
-    REQUIRE(minimum == QSize(596, 416));
+    REQUIRE(minimum == QSize(709, 495));
 
     REQUIRE(tablespace::fitScale(minimum) >= tablespace::minimumScale - 1e-9);
     REQUIRE(tablespace::fitScale(minimum - QSize(1, 0)) < tablespace::minimumScale);
     REQUIRE(tablespace::fitScale(minimum - QSize(0, 1)) < tablespace::minimumScale);
+}
+
+// WHAT THE FLOOR IS FOR: a panel's name stays at nine pixels or more at the
+// smallest scale. A smaller name font, or a lower floor, fails here by name
+// rather than going unnoticed at the smallest window.
+TEST_CASE("The minimum scale keeps a panel's name at nine pixels", "[table-space]")
+{
+    REQUIRE(seatitem::nameSize * tablespace::minimumScale >= 9.0 - 1e-9);
 }
 
 // Section 2.7: the larger card up to four seats, the smaller from five.

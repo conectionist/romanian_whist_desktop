@@ -34,6 +34,12 @@ class CardRenderer;
 namespace seatitem
 {
 
+// The two lines' type sizes in table units: .name is Marcellus 25 and .pill
+// Alegreya Sans 19. Here rather than private because tablespace::minimumScale is
+// chosen to keep the name readable, and a test holds the two together.
+inline constexpr int nameSize = 25;
+inline constexpr int pillSize = 19;
+
 // page.html's .plaque, in table units, centred on the item's origin.
 struct Layout
 {

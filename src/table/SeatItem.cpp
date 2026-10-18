@@ -37,14 +37,12 @@ constexpr QSizeF portraitSize(88.0, 100.0);
 constexpr qreal portraitRadius = 7.0;
 constexpr qreal portraitBorder = 1.0;
 
-// .name: Marcellus 25. The active seat's "▸" sits 6 before the name.
-constexpr int nameSize = 25;
+// The active seat's "▸" sits 6 before the name.
 constexpr qreal markerGap = 6.0;
 
-// .stats: 5 under the name. .pill: Alegreya Sans 19, padding 2 and 12, a 1-unit
-// border, fully rounded.
+// .stats: 5 under the name. .pill: padding 2 and 12, a 1-unit border, fully
+// rounded.
 constexpr qreal statsGap = 5.0;
-constexpr int pillSize = 19;
 constexpr qreal pillPadX = 12.0;
 constexpr qreal pillPadY = 2.0;
 constexpr qreal pillBorder = 1.0;
@@ -52,14 +50,14 @@ constexpr qreal pillBorder = 1.0;
 QFont nameFont()
 {
     QFont font = fonts::heading();
-    font.setPixelSize(nameSize);
+    font.setPixelSize(seatitem::nameSize);
     return font;
 }
 
 QFont pillFont()
 {
     QFont font = fonts::body();
-    font.setPixelSize(pillSize);
+    font.setPixelSize(seatitem::pillSize);
     return font;
 }
 
