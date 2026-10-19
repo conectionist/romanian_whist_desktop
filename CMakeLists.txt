@@ -85,6 +85,7 @@ qt_add_library(desktop_core STATIC
     src/paint/Panel.h
     src/paint/Panel.cpp
     src/paint/Paths.h
+    src/paint/PictureCache.h
     src/paint/Shadows.h
     src/paint/Shadows.cpp
     src/paint/CardShadow.h

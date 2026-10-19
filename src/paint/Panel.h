@@ -1,6 +1,7 @@
 #ifndef PANEL_H
 #define PANEL_H
 
+#include "paint/PictureCache.h"
 #include "paint/Theme.h"
 
 #include <QMarginsF>
@@ -52,11 +53,7 @@ void paint(QPainter& painter, const QRectF& rect, const Theme::TablePalette& pal
 // `offset` is where the picture's top-left goes relative to the panel's: minus the
 // reach, grown to a whole number of pixels at `ratio`, so that the panel's edges
 // fall on the picture's pixel grid and its hairlines stay crisp.
-struct Picture
-{
-    QPixmap pixmap;
-    QPointF offset;
-};
+using Picture = devicepixels::Canvas;
 
 Picture render(QSizeF size, const Theme::TablePalette& palette, bool active, qreal ratio);
 
@@ -78,20 +75,19 @@ public:
     Picture picture(QSizeF size, const Theme::TablePalette& palette, bool active, qreal ratio);
 
     // How many pictures this has rendered: READ-ONLY and for tests.
-    std::size_t renders() const { return rendered; }
+    std::size_t renders() const { return pictures.renders(); }
 
 private:
-    struct Entry
+    struct Key
     {
         QSizeF size;
         bool active = false;
-        Picture picture;
+
+        bool operator==(const Key&) const = default;
     };
 
-    int ratioKey = 0;
-    Theme::TablePalette palette;
-    std::vector<Entry> entries;
-    std::size_t rendered = 0;
+    // A handful of sizes is every panel there is.
+    PictureCache<Key, Theme::TablePalette, 8> pictures;
 };
 
 } // namespace panel

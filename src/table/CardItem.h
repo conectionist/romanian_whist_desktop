@@ -1,6 +1,7 @@
 #ifndef CARD_ITEM_H
 #define CARD_ITEM_H
 
+#include "paint/CardShadow.h"
 #include "paint/Theme.h"
 
 #include <romanian_whist/Card.h>
@@ -10,11 +11,6 @@
 #include <optional>
 
 class CardRenderer;
-
-namespace cardshadow
-{
-class Cache;
-}
 
 // One card on the table, face up or face down.
 //
@@ -95,12 +91,21 @@ private:
     qreal cardHeight = 0.0;
     bool dimmed = false;
 
-    // On the felt, and the trick's winner. The palette is the shadow's and the
-    // ring's, and the cache is where their picture comes from.
+    // The shadow's picture, asked of the cache only when it is stale or the ratio
+    // has moved - RackItem::picture()'s pattern - rather than on every paint.
+    const cardshadow::Picture& shadow(QSizeF size, qreal ratio) const;
+
+    // On the felt, and the trick's winner. The colours are the shadow's and the
+    // ring's - four of the table's, not all of them - and the cache is where
+    // their picture comes from.
     bool played = false;
     bool winning = false;
-    Theme::TablePalette palette;
+    cardshadow::Colours colours;
     cardshadow::Cache* shadows = nullptr;
+
+    mutable cardshadow::Picture shadowPicture;
+    mutable int shadowRatio = 0;
+    mutable bool shadowStale = true;
 };
 
 #endif

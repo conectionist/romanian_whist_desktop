@@ -66,8 +66,12 @@ QMarginsF cardshadow::reach(bool winning)
            + edge;
 }
 
-cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::TablePalette& palette,
-                                       qreal ratio)
+cardshadow::Colours cardshadow::colours(const Theme::TablePalette& palette)
+{
+    return { palette.playedShadow, palette.winningShadow, palette.winningGlow, palette.goldBright };
+}
+
+cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Colours& colours, qreal ratio)
 {
     if(size.isEmpty() || ratio <= 0.0)
         return {};
@@ -95,13 +99,13 @@ cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::T
 
     if(!winning)
     {
-        shadows::drawShapeShadow(painter, body, plainOffset, plainBlur, palette.playedShadow);
+        shadows::drawShapeShadow(painter, body, plainOffset, plainBlur, colours.shadow);
     }
     else
     {
         // Bottom to top: the deeper shadow, the glow, then the ring.
-        shadows::drawShapeShadow(painter, body, winningOffset, winningBlur, palette.winningShadow);
-        shadows::drawShapeShadow(painter, body, QPointF(), glowBlur, palette.winningGlow);
+        shadows::drawShapeShadow(painter, body, winningOffset, winningBlur, colours.winningShadow);
+        shadows::drawShapeShadow(painter, body, QPointF(), glowBlur, colours.winningGlow);
 
         // THE RING FILLED THROUGH, UNDER THE CARD - shadows::Side::Beneath's idea,
         // for the same reason. Cut to a band, its inner edge and the art's edge would
@@ -111,7 +115,7 @@ cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::T
         // them rather than the felt.
         painter.fillPath(paths::rounded(card.adjusted(-ringWidth, -ringWidth, ringWidth, ringWidth),
                                         cornerRadius + ringWidth),
-                         palette.goldBright);
+                         colours.ring);
     }
 
     painter.end();
@@ -119,36 +123,11 @@ cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::T
     return { canvas.pixmap, canvas.offset };
 }
 
-cardshadow::Picture cardshadow::Cache::picture(QSizeF size, bool winning, const Theme::TablePalette& wanted,
-                                               qreal ratio)
+cardshadow::Picture cardshadow::Cache::picture(QSizeF size, bool winning, const Colours& wanted, qreal ratio)
 {
     if(size.isEmpty() || ratio <= 0.0)
         return {};
 
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(key != ratioKey || wanted != palette)
-    {
-        entries.clear();
-        ratioKey = key;
-        palette = wanted;
-    }
-
-    for(const Entry& entry : entries)
-    {
-        if(entry.size == size && entry.winning == winning)
-            return entry.picture;
-    }
-
-    // Two card sizes and two states are four pictures. More means sizes are being
-    // kept that will not come back, so the set starts again rather than growing.
-    constexpr std::size_t most = 8;
-
-    if(entries.size() >= most)
-        entries.clear();
-
-    entries.push_back({ size, winning, render(size, winning, wanted, ratio) });
-    rendered++;
-
-    return entries.back().picture;
+    return pictures.picture({ size, winning }, wanted, ratio,
+                            [&] { return render(size, winning, wanted, ratio); });
 }

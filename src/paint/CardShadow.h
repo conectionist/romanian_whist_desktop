@@ -1,8 +1,10 @@
 #ifndef CARD_SHADOW_H
 #define CARD_SHADOW_H
 
+#include "paint/PictureCache.h"
 #include "paint/Theme.h"
 
+#include <QColor>
 #include <QMarginsF>
 #include <QPixmap>
 #include <QPointF>
@@ -37,18 +39,29 @@ inline constexpr qreal winningLift = 8.0;
 // the winning one - so CardItem's rect covers it.
 QMarginsF reach(bool winning);
 
-struct Picture
-{
-    QPixmap pixmap;
+// `offset` is where its top-left goes in the card's frame: a whole number of
+// pixels at its ratio from the card's own top-left, so the two can be laid on one
+// pixel.
+using Picture = devicepixels::Canvas;
 
-    // Where its top-left goes in the card's frame: a whole number of pixels at its
-    // ratio from the card's own top-left, so the two can be laid on one pixel.
-    QPointF offset;
+// THE FOUR COLOURS A PLAYED CARD CASTS, out of the table's hundred. What a card
+// keeps and what the cache compares on every request, so neither carries nor
+// compares the rest of the palette.
+struct Colours
+{
+    QColor shadow;
+    QColor winningShadow;
+    QColor winningGlow;
+    QColor ring;
+
+    bool operator==(const Colours&) const = default;
 };
+
+Colours colours(const Theme::TablePalette& palette);
 
 // The picture for a card of `size`, in table units, at `ratio`. Null for an empty
 // card or ratio.
-Picture render(QSizeF size, bool winning, const Theme::TablePalette& palette, qreal ratio);
+Picture render(QSizeF size, bool winning, const Colours& colours, qreal ratio);
 
 // render()'S PICTURES, SHARED by every card on the table. One ratio and one palette
 // at a time, as panel::Cache and rackitem::Cache hold theirs: a new ratio means the
@@ -58,23 +71,22 @@ Picture render(QSizeF size, bool winning, const Theme::TablePalette& palette, qr
 class Cache
 {
 public:
-    Picture picture(QSizeF size, bool winning, const Theme::TablePalette& palette, qreal ratio);
+    Picture picture(QSizeF size, bool winning, const Colours& colours, qreal ratio);
 
     // How many pictures this has rendered: READ-ONLY and for tests.
-    std::size_t renders() const { return rendered; }
+    std::size_t renders() const { return pictures.renders(); }
 
 private:
-    struct Entry
+    struct Key
     {
         QSizeF size;
         bool winning = false;
-        Picture picture;
+
+        bool operator==(const Key&) const = default;
     };
 
-    int ratioKey = 0;
-    Theme::TablePalette palette;
-    std::vector<Entry> entries;
-    std::size_t rendered = 0;
+    // Two card sizes and two states are four pictures.
+    PictureCache<Key, Colours, 8> pictures;
 };
 
 } // namespace cardshadow

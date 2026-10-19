@@ -40,12 +40,15 @@ void CardItem::setCardHeight(qreal height)
     // is never repainted and the new one may never be visited.
     prepareGeometryChange();
     cardHeight = height;
+    shadowStale = true;
     update();
 }
 
-void CardItem::setPlayed(bool isWinning, const Theme::TablePalette& colours, cardshadow::Cache* cache)
+void CardItem::setPlayed(bool isWinning, const Theme::TablePalette& palette, cardshadow::Cache* cache)
 {
-    if(played && winning == isWinning && palette == colours && shadows == cache)
+    const cardshadow::Colours cast = cardshadow::colours(palette);
+
+    if(played && winning == isWinning && colours == cast && shadows == cache)
         return;
 
     // The shadow lives outside the card, and the winner rises, so either changes
@@ -53,8 +56,9 @@ void CardItem::setPlayed(bool isWinning, const Theme::TablePalette& colours, car
     prepareGeometryChange();
     played = true;
     winning = isWinning;
-    palette = colours;
+    colours = cast;
     shadows = cache;
+    shadowStale = true;
     update();
 }
 
@@ -139,10 +143,10 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // rotation, so the shadow falls toward the card's own bottom.
     if(played && shadows)
     {
-        const cardshadow::Picture shadow = shadows->picture(size, winning, palette, dpr);
+        const cardshadow::Picture& cast = shadow(size, dpr);
 
-        if(!shadow.pixmap.isNull())
-            painter->drawPixmap(at + (shadow.offset - card.topLeft()), shadow.pixmap);
+        if(!cast.pixmap.isNull())
+            painter->drawPixmap(at + (cast.offset - card.topLeft()), cast.pixmap);
     }
 
     const QSize pixels(qRound(size.width()), qRound(size.height()));
@@ -154,4 +158,18 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
                                       : renderer->back(pixels, dpr);
 
     painter->drawPixmap(at, pixmap);
+}
+
+const cardshadow::Picture& CardItem::shadow(QSizeF size, qreal ratio) const
+{
+    const int key = devicepixels::ratioKey(ratio);
+
+    if(shadowStale || key != shadowRatio)
+    {
+        shadowPicture = shadows->picture(size, winning, colours, ratio);
+        shadowRatio = key;
+        shadowStale = false;
+    }
+
+    return shadowPicture;
 }
