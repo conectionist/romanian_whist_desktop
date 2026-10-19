@@ -126,6 +126,15 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     if(played && winning)
         painter->translate(0.0, -cardshadow::winningLift);
 
+    // ONE SNAPPED CORNER FOR THE ART AND ITS SHADOW. Each is a picture of its own,
+    // and a blit rounds its own origin; laid separately at a fraction of a pixel
+    // the two could round apart, and the ring and the shadow's cut-out land a pixel
+    // off the art. The shadow is a whole number of pixels from the card's corner
+    // (cardshadow::render()), so both go down from the one point. A card turned by
+    // other than a quarter turn is resampled anyway, and this moves it under half
+    // a pixel.
+    const QPointF at = devicepixels::snapped(*painter, card.topLeft());
+
     // Under the card: one cached picture, turned with the card by the item's
     // rotation, so the shadow falls toward the card's own bottom.
     if(played && shadows)
@@ -133,7 +142,7 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
         const cardshadow::Picture shadow = shadows->picture(size, winning, palette, dpr);
 
         if(!shadow.pixmap.isNull())
-            painter->drawPixmap(shadow.offset, shadow.pixmap);
+            painter->drawPixmap(at + (shadow.offset - card.topLeft()), shadow.pixmap);
     }
 
     const QSize pixels(qRound(size.width()), qRound(size.height()));
@@ -144,5 +153,5 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     const QPixmap pixmap = this->card ? renderer->face(*this->card, pixels, dpr, state)
                                       : renderer->back(pixels, dpr);
 
-    painter->drawPixmap(card.topLeft(), pixmap);
+    painter->drawPixmap(at, pixmap);
 }

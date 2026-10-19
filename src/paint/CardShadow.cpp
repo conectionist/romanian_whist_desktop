@@ -74,18 +74,19 @@ cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::T
 
     const QRectF card = cardRect(size);
 
-    // The picture's corner on a whole pixel at this ratio, as a rack's is.
-    const QRectF area = card.marginsAdded(reach(winning));
-    const QPointF corner(std::floor(area.left() * ratio) / ratio, std::floor(area.top() * ratio) / ratio);
+    // THE CORNER A WHOLE NUMBER OF PIXELS FROM THE CARD'S, not from the origin. The
+    // card's art is a picture of its own, laid at the card's corner; CardItem snaps
+    // that corner to a device pixel and lays this picture the same whole pixels
+    // from it, so the shadow's cut-out and the ring land on the art's own edge
+    // rather than a pixel either side of it.
+    devicepixels::Canvas canvas = devicepixels::canvas(card.marginsAdded(reach(winning)), ratio, card.topLeft());
 
-    QPixmap pixmap(QSize(static_cast<int>(std::ceil((area.right() - corner.x()) * ratio)),
-                         static_cast<int>(std::ceil((area.bottom() - corner.y()) * ratio))));
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
+    if(canvas.pixmap.isNull())
+        return {};
 
-    QPainter painter(&pixmap);
+    QPainter painter(&canvas.pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.translate(-corner);
+    painter.translate(-canvas.offset);
 
     // OUTSIDE THE CARD ONLY, which drawShapeShadow() does on its own: CSS clips an
     // outer box-shadow to outside the element, so where the art's own corners are
@@ -98,20 +99,24 @@ cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::T
     }
     else
     {
-        // Bottom to top: the deeper shadow, the glow, then the ring hard against the
-        // card's edge, rounded to match it.
+        // Bottom to top: the deeper shadow, the glow, then the ring.
         shadows::drawShapeShadow(painter, body, winningOffset, winningBlur, palette.winningShadow);
         shadows::drawShapeShadow(painter, body, QPointF(), glowBlur, palette.winningGlow);
 
-        painter.fillPath(paths::roundedBand(card.adjusted(-ringWidth, -ringWidth, ringWidth, ringWidth),
-                                            cornerRadius + ringWidth,
-                                            card, cornerRadius),
+        // THE RING FILLED THROUGH, UNDER THE CARD - shadows::Side::Beneath's idea,
+        // for the same reason. Cut to a band, its inner edge and the art's edge would
+        // each half-cover the pixels they share, and the felt would show between
+        // the gold and the card as a dark hairline. Filled whole, the art meets one
+        // edge, and where its corners are rounder than this one the gold shows in
+        // them rather than the felt.
+        painter.fillPath(paths::rounded(card.adjusted(-ringWidth, -ringWidth, ringWidth, ringWidth),
+                                        cornerRadius + ringWidth),
                          palette.goldBright);
     }
 
     painter.end();
 
-    return { pixmap, corner };
+    return { canvas.pixmap, canvas.offset };
 }
 
 cardshadow::Picture cardshadow::Cache::picture(QSizeF size, bool winning, const Theme::TablePalette& wanted,

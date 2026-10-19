@@ -212,15 +212,13 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     // The picture's corner on a whole pixel at this ratio, so the cards and the rail
     // are laid on its grid as they were drawn.
-    const QRectF area = extent(count).marginsAdded(shadowMargins);
-    const QPointF corner(std::floor(area.left() * ratio) / ratio, std::floor(area.top() * ratio) / ratio);
+    devicepixels::Canvas canvas = devicepixels::canvas(extent(count).marginsAdded(shadowMargins), ratio);
+    const QPointF corner = canvas.offset;
 
-    QPixmap pixmap(QSize(static_cast<int>(std::ceil((area.right() - corner.x()) * ratio)),
-                         static_cast<int>(std::ceil((area.bottom() - corner.y()) * ratio))));
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
+    if(canvas.pixmap.isNull())
+        return {};
 
-    QPainter painter(&pixmap);
+    QPainter painter(&canvas.pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     painter.translate(-corner);
@@ -328,7 +326,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     painter.end();
 
-    return { pixmap, corner };
+    return { canvas.pixmap, corner };
 }
 
 rackitem::Picture rackitem::Cache::picture(const Shown& shown, const Theme::TablePalette& wanted,

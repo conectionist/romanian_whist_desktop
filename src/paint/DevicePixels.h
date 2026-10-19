@@ -1,7 +1,9 @@
 #ifndef DEVICE_PIXELS_H
 #define DEVICE_PIXELS_H
 
+#include <QPixmap>
 #include <QPointF>
+#include <QRectF>
 #include <QtGlobal>
 
 #include <optional>
@@ -64,6 +66,24 @@ void setFreeze(QWidget& widget, std::optional<qreal> factor);
 // scales and translates, and for one turned a quarter turn as well (a rack). Any
 // other turn puts the point on a pixel but the picture is resampled anyway.
 QPointF snapped(const QPainter& painter, QPointF point);
+
+// A PICTURE TO PAINT INTO, covering `area` at `ratio`: transparent, stamped with
+// the ratio, and `offset` where its top-left goes in the painter's units - so a
+// painter on it translates by -offset and draws in the units of `area`.
+//
+// THE CORNER IS A WHOLE NUMBER OF PIXELS FROM `anchor`, at or outside `area`'s,
+// and the size runs to the pixel past its far edge. Anchored on the origin a
+// picture is on the grid of whatever frame it is drawn in. Anchored on a shape
+// drawn separately - a card, whose art is a picture of its own - the two can be
+// laid on one snapped point and land on the same pixels. Null for an empty area
+// or ratio.
+struct Canvas
+{
+    QPixmap pixmap;
+    QPointF offset;
+};
+
+Canvas canvas(const QRectF& area, qreal ratio, QPointF anchor = QPointF());
 
 // A ratio as a cache key, quantized to TEN-THOUSANDTHS.
 //

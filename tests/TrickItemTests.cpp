@@ -603,10 +603,73 @@ TEST_CASE("The shadow picture reaches past the card, furthest below it", "[trick
         REQUIRE(covered.contains(card));
         REQUIRE(covered.bottom() - card.bottom() > card.top() - covered.top());
 
-        // NOTHING UNDER THE CARD ITSELF: CSS clips an outer shadow to outside the
-        // element, so the middle of the picture is clear.
+        // NOTHING UNDER A PLAIN CARD: CSS clips an outer shadow to outside the
+        // element, so the middle of the picture is clear. UNDER THE WINNER, THE RING
+        // FILLED THROUGH, so its edge against the art is the art's alone.
         const QImage image = picture.pixmap.toImage();
         const QPoint middle = (-picture.offset).toPoint();
-        REQUIRE(qAlpha(image.pixel(middle)) == 0);
+
+        if(!winning)
+            REQUIRE(qAlpha(image.pixel(middle)) == 0);
+        else
+            REQUIRE(image.pixelColor(middle) == theme.table.goldBright);
+    }
+}
+
+TEST_CASE("The winner's ring has no inner edge for the felt to show through", "[trick]")
+{
+    // Across the card's edge, from the ring into the card: opaque gold all the way,
+    // and on a cut-out band the pixels the art's edge shares would be part clear.
+    const Theme theme = Theme::dark();
+    const QSizeF size(141.0, 205.0);
+    const qreal ratio = 0.78;
+
+    const cardshadow::Picture picture = cardshadow::render(size, true, theme.table, ratio);
+    const QImage image = picture.pixmap.toImage();
+
+    const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+
+    // Each side's middle, from just outside the card - well inside the 2-unit ring,
+    // whose outer edge is anti-aliased over the glow - to a few units inside it.
+    const auto opaqueAcross = [&](QPointF from, QPointF to)
+    {
+        for(int step = 0 ; step <= 10 ; step++)
+        {
+            const QPointF at = from + (to - from) * (step / 10.0);
+            const QPoint pixel(qFloor((at.x() - picture.offset.x()) * ratio),
+                               qFloor((at.y() - picture.offset.y()) * ratio));
+
+            if(qAlpha(image.pixel(pixel)) != 255)
+                return false;
+        }
+
+        return true;
+    };
+
+    REQUIRE(opaqueAcross(QPointF(card.left() - 0.3, 0.0), QPointF(card.left() + 6.0, 0.0)));
+    REQUIRE(opaqueAcross(QPointF(card.right() + 0.3, 0.0), QPointF(card.right() - 6.0, 0.0)));
+    REQUIRE(opaqueAcross(QPointF(0.0, card.top() - 0.3), QPointF(0.0, card.top() + 6.0)));
+    REQUIRE(opaqueAcross(QPointF(0.0, card.bottom() + 0.3), QPointF(0.0, card.bottom() - 6.0)));
+}
+
+TEST_CASE("A played card's shadow lies whole pixels from the card's corner", "[trick]")
+{
+    // At a view scale of 0.78 the card's corner is off the grid (-55.2 units is
+    // -43.06 pixels), so a picture cornered on the origin's grid would sit a
+    // fraction of a pixel from the art CardItem lays at that corner.
+    const Theme theme = Theme::dark();
+    const QSizeF size(110.4, 160.0);
+    const qreal ratio = 0.78;
+    const QPointF cardCorner(-size.width() / 2.0, -size.height() / 2.0);
+
+    for(const bool winning : { false, true })
+    {
+        INFO("winning " << winning);
+
+        const cardshadow::Picture picture = cardshadow::render(size, winning, theme.table, ratio);
+        const QPointF steps = (picture.offset - cardCorner) * ratio;
+
+        REQUIRE(steps.x() == Catch::Approx(std::round(steps.x())).margin(1e-9));
+        REQUIRE(steps.y() == Catch::Approx(std::round(steps.y())).margin(1e-9));
     }
 }

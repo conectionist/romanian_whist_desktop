@@ -93,17 +93,12 @@ void LeadMarkItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWi
 
     if(key != pictureRatio || picture.isNull())
     {
-        const QPointF corner(std::floor(-pictureReach * pictureAt) / pictureAt,
-                             std::floor(-pictureReach * pictureAt) / pictureAt);
-        const int pixels = static_cast<int>(std::ceil((pictureReach - corner.x()) * pictureAt));
+        devicepixels::Canvas made = devicepixels::canvas(
+            QRectF(-pictureReach, -pictureReach, 2.0 * pictureReach, 2.0 * pictureReach), pictureAt);
 
-        QPixmap made(pixels, pixels);
-        made.setDevicePixelRatio(pictureAt);
-        made.fill(Qt::transparent);
-
-        QPainter draw(&made);
+        QPainter draw(&made.pixmap);
         draw.setRenderHint(QPainter::Antialiasing);
-        draw.translate(-corner);
+        draw.translate(-made.offset);
 
         // CSS's box-shadows, the first listed on top - the outline over the glow -
         // both outside the square only, and the square over them.
@@ -118,8 +113,8 @@ void LeadMarkItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWi
         draw.fillPath(square, palette.goldBright);
         draw.end();
 
-        picture = made;
-        offset = corner;
+        picture = made.pixmap;
+        offset = made.offset;
         pictureRatio = key;
     }
 

@@ -41,7 +41,8 @@ struct Picture
 {
     QPixmap pixmap;
 
-    // Where its top-left goes in the card's frame, on a whole pixel at its ratio.
+    // Where its top-left goes in the card's frame: a whole number of pixels at its
+    // ratio from the card's own top-left, so the two can be laid on one pixel.
     QPointF offset;
 };
 

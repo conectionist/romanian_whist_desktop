@@ -51,6 +51,22 @@ QPointF devicepixels::snapped(const QPainter& painter, QPointF point)
     return toDevice.inverted().map(QPointF(std::round(onDevice.x()), std::round(onDevice.y())));
 }
 
+devicepixels::Canvas devicepixels::canvas(const QRectF& area, qreal ratio, QPointF anchor)
+{
+    if(area.isEmpty() || ratio <= 0.0)
+        return {};
+
+    const QPointF corner(anchor.x() + std::floor((area.left() - anchor.x()) * ratio) / ratio,
+                         anchor.y() + std::floor((area.top() - anchor.y()) * ratio) / ratio);
+
+    QPixmap pixmap(QSize(static_cast<int>(std::ceil((area.right() - corner.x()) * ratio)),
+                         static_cast<int>(std::ceil((area.bottom() - corner.y()) * ratio))));
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+
+    return { pixmap, corner };
+}
+
 int devicepixels::ratioKey(qreal ratio)
 {
     return qRound(ratio * 10000.0);
