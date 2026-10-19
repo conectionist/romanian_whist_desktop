@@ -253,6 +253,17 @@ struct ThemeColours
         QColor railEdge;
         QColor railShadow;
 
+        // THE PLAYED CARDS (section 2.7), added in the redesign's phase 6. Every
+        // card on the felt casts a soft shadow; the winning one casts a deeper
+        // one and glows, inside a gold-bright ring.
+        QColor playedShadow;
+        QColor winningShadow;
+        QColor winningGlow;
+
+        // The lead rhombus: gold-bright, with a dark hairline round it and a glow.
+        QColor leadMarkOutline;
+        QColor leadMarkGlow;
+
         bool operator==(const TablePalette&) const = default;
     };
 

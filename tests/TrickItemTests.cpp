@@ -1,55 +1,54 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "table/TrickItem.h"
 #include "table/CardItem.h"
+#include "table/LeadMarkItem.h"
+#include "table/RackItem.h"
+#include "table/SeatLayout.h"
+#include "table/TableSpace.h"
 #include "core/GameSnapshot.h"
+#include "paint/CardShadow.h"
 #include "paint/Theme.h"
 
+#include <QImage>
 #include <QList>
+#include <QMarginsF>
 #include <QPointF>
+#include <QPolygonF>
+#include <QTransform>
+#include <QtMath>
 
+#include <cmath>
+#include <optional>
 #include <vector>
 
-// The defensive branch, asserted rather than assumed.
-//
-// setTrick() skips a table entry whose seatIndex the ring does not have, which
-// is the right call - a seat this scene cannot place is a card it cannot draw,
-// and indexing past the end of the vector is the alternative. What the skip has
-// to ALSO do is hide the item at that index, because the hide pass that cleans
-// up after a shrinking trick starts past the end of the table and never reaches
-// an index inside it.
-//
-// The engine never produces such a snapshot today, which is exactly why this
-// file exists: an unreachable branch is one nothing corrects when it stops being
-// unreachable, and its failure mode here is silent - last frame's card left on
-// the table under a seat that no longer has one.
+// The trick and the lead rhombus: the table redesign's section 2.7, from table.js
+// trickPos() and renderTrick().
 namespace
 {
 
-// A four-seat ring, spaced far enough apart that nothing here depends on the
-// geometry. The cards are placed at these points; only which of them are
-// VISIBLE is ever asserted.
-const std::vector<QPointF> ring{ QPointF(100.0, 200.0),
-                                 QPointF(0.0, 100.0),
-                                 QPointF(100.0, 0.0),
-                                 QPointF(200.0, 100.0) };
-
-const QPointF centre(100.0, 100.0);
-
-constexpr qreal cardHeight = 60.0;
-
-GameSnapshot trickOf(std::vector<PlayedCardView> table)
+// A table of `seatCount` with every seat's bid in, so play has begun.
+GameSnapshot tableOf(unsigned int seatCount, int humanSeat, std::vector<PlayedCardView> table = {})
 {
     GameSnapshot snapshot;
+    snapshot.seats.resize(seatCount);
+
+    for(unsigned int i = 0 ; i < seatCount ; i++)
+        snapshot.seats[i].seatIndex = i;
+
+    snapshot.humanSeat = humanSeat;
+    snapshot.betsPlaced = seatCount;
     snapshot.table = std::move(table);
     return snapshot;
 }
 
-PlayedCardView played(unsigned int seat, romanian_whist::Rank rank)
+PlayedCardView played(unsigned int seat, romanian_whist::Rank rank, bool winning = false)
 {
     PlayedCardView entry;
     entry.seatIndex = seat;
     entry.card = romanian_whist::Card(rank, romanian_whist::Suit::Hearts);
+    entry.isWinning = winning;
     return entry;
 }
 
@@ -68,20 +67,196 @@ std::vector<CardItem*> cardsOf(const TrickItem& trick)
     return cards;
 }
 
+qreal distanceFromCentre(QPointF point)
+{
+    const QPointF offset = point - tablespace::centre;
+    return std::hypot(offset.x(), offset.y());
 }
 
-TEST_CASE("A trick entry the ring cannot place hides its card rather than stranding it", "[trick]")
+// The angle from the table's centre to `point`, radians, y down.
+qreal angleOf(QPointF point)
+{
+    const QPointF offset = point - tablespace::centre;
+    return std::atan2(offset.y(), offset.x());
+}
+
+// Two angles in degrees the same up to whole turns.
+bool sameTurn(qreal a, qreal b)
+{
+    return std::abs(std::remainder(a - b, 360.0)) < 1e-6;
+}
+
+// The played card's outline in table space: the mock-up's size, turned and placed.
+QPolygonF outlineOf(unsigned int seatCount, const trickitem::Placement& place)
+{
+    const qreal height = tablespace::playedCardHeight(seatCount);
+    const qreal width = seatCount <= 4 ? 141.6 : 124.8;
+
+    QTransform turn;
+    turn.translate(place.centre.x(), place.centre.y());
+    turn.rotate(place.rotation);
+
+    return turn.map(QPolygonF(QRectF(-width / 2.0, -height / 2.0, width, height)));
+}
+
+}
+
+// ---- where each card goes ----
+
+TEST_CASE("An opponent's card lies in front of their rack, turned to it", "[trick]")
+{
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        const qreal radius = tablespace::feltRadius - tablespace::playedInset
+                             - tablespace::playedCardHeight(seatCount) / 2.0;
+
+        for(int humanSeat = -1 ; humanSeat < static_cast<int>(seatCount) ; humanSeat++)
+        {
+            for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+            {
+                if(static_cast<int>(seat) == humanSeat)
+                    continue;
+
+                INFO("seatCount " << seatCount << ", humanSeat " << humanSeat << ", seat " << seat);
+
+                const std::optional<trickitem::Placement> place =
+                    trickitem::cardPlacement(seatCount, humanSeat, seat);
+                REQUIRE(place);
+
+                const qreal rack = seatlayout::rackAngle(seatCount, humanSeat, seat);
+
+                // On the line to the rack, its outer end 60 inside the felt's edge...
+                REQUIRE(distanceFromCentre(place->centre) == Catch::Approx(radius));
+                REQUIRE(std::cos(angleOf(place->centre) - rack) == Catch::Approx(1.0));
+
+                // ...and turned as the rack is: table.js's a - 90 degrees.
+                REQUIRE(sameTurn(place->rotation, qRadiansToDegrees(rack) - 90.0));
+                REQUIRE(place->rotation == rackitem::frameRotation(rack));
+            }
+        }
+    }
+}
+
+TEST_CASE("Four players' cards are turned by exact quarter turns", "[trick]")
+{
+    // Left, top and right: lying sideways, upside down, and sideways the other way,
+    // each reading the right way up to its owner. EXACT, so QTransform takes its
+    // quarter-turn path and the art lies square on the pixel grid.
+    REQUIRE(trickitem::cardPlacement(4, 0, 1)->rotation == 90.0);
+    REQUIRE(trickitem::cardPlacement(4, 0, 2)->rotation == 180.0);
+    REQUIRE(trickitem::cardPlacement(4, 0, 3)->rotation == -90.0);
+
+    // And the card lies on the axis, not a hair off it.
+    REQUIRE(trickitem::cardPlacement(4, 0, 2)->centre.x() == Catch::Approx(tablespace::centre.x()));
+    REQUIRE(trickitem::cardPlacement(4, 0, 1)->centre.y() == Catch::Approx(tablespace::centre.y()));
+}
+
+TEST_CASE("Your card lies above your hand, unturned", "[trick]")
+{
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        const qreal height = tablespace::playedCardHeight(seatCount);
+
+        for(unsigned int human = 0 ; human < seatCount ; human++)
+        {
+            INFO("seatCount " << seatCount << ", human " << human);
+
+            const std::optional<trickitem::Placement> place =
+                trickitem::cardPlacement(seatCount, static_cast<int>(human), human);
+            REQUIRE(place);
+
+            // Its bottom edge 60 above the top of your hand.
+            REQUIRE(place->centre.x() == tablespace::centre.x());
+            REQUIRE(place->centre.y() + height / 2.0
+                    == Catch::Approx(tablespace::handTop - tablespace::playedInset));
+            REQUIRE(place->rotation == 0.0);
+        }
+    }
+}
+
+TEST_CASE("A spectated seat 0's card lies in front of its rack at the bottom", "[trick]")
+{
+    // Nobody's hand is at the bottom, so seat 0 is drawn as an opponent: its rack
+    // stands on the rim straight below the centre, and its card in front of it.
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        INFO("seatCount " << seatCount);
+
+        const std::optional<trickitem::Placement> place = trickitem::cardPlacement(seatCount, -1, 0);
+        REQUIRE(place);
+
+        const qreal radius = tablespace::feltRadius - tablespace::playedInset
+                             - tablespace::playedCardHeight(seatCount) / 2.0;
+
+        REQUIRE(place->centre.x() == Catch::Approx(tablespace::centre.x()));
+        REQUIRE(place->centre.y() == Catch::Approx(tablespace::centre.y() + radius));
+        REQUIRE(place->rotation == 0.0);
+    }
+}
+
+TEST_CASE("No two played cards touch, and every one stays on the felt", "[trick]")
+{
+    // A FULL TRICK AT EVERY TABLE: the felt is shared by up to six cards, and five
+    // and six take the smaller size for exactly this.
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        for(int humanSeat = -1 ; humanSeat < static_cast<int>(seatCount) ; humanSeat++)
+        {
+            std::vector<QPolygonF> cards;
+
+            for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+                cards.push_back(outlineOf(seatCount, *trickitem::cardPlacement(seatCount, humanSeat, seat)));
+
+            for(std::size_t left = 0 ; left < cards.size() ; left++)
+            {
+                INFO("seatCount " << seatCount << ", humanSeat " << humanSeat << ", seat " << left);
+
+                for(const QPointF& corner : cards[left])
+                    REQUIRE(distanceFromCentre(corner) < tablespace::feltRadius);
+
+                for(std::size_t right = left + 1 ; right < cards.size() ; right++)
+                {
+                    INFO("and seat " << right);
+                    REQUIRE_FALSE(cards[left].intersects(cards[right]));
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("A seat with no panel has no card place and no rhombus", "[trick]")
+{
+    REQUIRE_FALSE(trickitem::cardPlacement(4, 0, 4));
+    REQUIRE_FALSE(trickitem::cardPlacement(7, 0, 1));
+    REQUIRE_FALSE(trickitem::leadMarkPlacement(4, 0, 99));
+}
+
+// ---- the item ----
+
+// The defensive branch, asserted rather than assumed.
+//
+// setTrick() skips a table entry whose seat this table cannot place, which is the
+// right call - a seat this scene cannot place is a card it cannot draw. What the
+// skip has to ALSO do is hide the item at that index, because the hide pass that
+// cleans up after a shrinking trick starts past the end of the table and never
+// reaches an index inside it.
+//
+// The engine never produces such a snapshot today, which is exactly why this case
+// exists: an unreachable branch is one nothing corrects when it stops being
+// unreachable, and its failure mode here is silent - last frame's card left on
+// the table under a seat that no longer has one.
+TEST_CASE("A trick entry the table cannot place hides its card rather than stranding it", "[trick]")
 {
     // Null renderer: nothing here paints, and CardItem's paint() and
     // sizeForHeight() both guard against one. Building a real CardRenderer would
     // only add the card art to a test about visibility.
     TrickItem trick(nullptr);
-    const Theme theme = Theme::light();
+    const Theme theme = Theme::dark();
 
     // Frame one: two cards, both placeable, both on the table.
-    trick.setTrick(trickOf({ played(0, romanian_whist::Rank::Ace),
-                             played(1, romanian_whist::Rank::King) }),
-                   ring, centre, cardHeight, theme);
+    trick.setTrick(tableOf(4, 0, { played(0, romanian_whist::Rank::Ace),
+                                   played(1, romanian_whist::Rank::King) }),
+                   theme);
 
     std::vector<CardItem*> cards = cardsOf(trick);
 
@@ -89,41 +264,299 @@ TEST_CASE("A trick entry the ring cannot place hides its card rather than strand
     REQUIRE(cards[0]->isVisible());
     REQUIRE(cards[1]->isVisible());
 
-    // Frame two: the same two entries, but the first names a seat this ring does
+    // Frame two: the same two entries, but the first names a seat this table does
     // not have. THE TABLE HAS NOT SHRUNK - it is still two entries long - so the
     // hide pass below the loop starts at index 2 and never touches index 0.
-    trick.setTrick(trickOf({ played(99, romanian_whist::Rank::Queen),
-                             played(1, romanian_whist::Rank::King) }),
-                   ring, centre, cardHeight, theme);
+    trick.setTrick(tableOf(4, 0, { played(99, romanian_whist::Rank::Queen),
+                                   played(1, romanian_whist::Rank::King) }),
+                   theme);
 
     cards = cardsOf(trick);
 
     REQUIRE(cards.size() == 2);
 
     // The whole finding: without the hide, this is still showing frame one's ace
-    // at seat 0, with its tilt and its winning highlight.
+    // at seat 0, with its turn and its winning highlight.
     REQUIRE_FALSE(cards[0]->isVisible());
 
     // And the entry that IS placeable is untouched by its neighbour's skip.
     REQUIRE(cards[1]->isVisible());
 }
 
-// The pip marks the lead, and the lead is snapshot.table.front() - the same
-// entry the case above puts out of range. Its guard is separate from the card
-// loop's, so a fix to one that forgets the other leaves a pip floating over a
-// seat that was never drawn.
-TEST_CASE("An unplaceable lead draws no pip", "[trick]")
+TEST_CASE("Each card is placed and turned where cardPlacement() says", "[trick]")
 {
     TrickItem trick(nullptr);
-    const Theme theme = Theme::light();
 
-    trick.setTrick(trickOf({ played(0, romanian_whist::Rank::Ace) }),
-                   ring, centre, cardHeight, theme);
+    trick.setTrick(tableOf(6, 2, { played(3, romanian_whist::Rank::Two),
+                                   played(4, romanian_whist::Rank::Three),
+                                   played(5, romanian_whist::Rank::Four),
+                                   played(0, romanian_whist::Rank::Five),
+                                   played(1, romanian_whist::Rank::Six),
+                                   played(2, romanian_whist::Rank::Seven) }),
+                   Theme::dark());
 
-    REQUIRE_FALSE(trick.boundingRect().isEmpty());
+    const std::vector<CardItem*> cards = cardsOf(trick);
+    REQUIRE(cards.size() == 6);
 
-    trick.setTrick(trickOf({ played(99, romanian_whist::Rank::Ace) }),
-                   ring, centre, cardHeight, theme);
+    const unsigned int seats[] = { 3, 4, 5, 0, 1, 2 };
 
-    REQUIRE(trick.boundingRect().isEmpty());
+    for(std::size_t i = 0 ; i < cards.size() ; i++)
+    {
+        INFO("entry " << i);
+
+        const trickitem::Placement place = *trickitem::cardPlacement(6, 2, seats[i]);
+
+        REQUIRE(cards[i]->pos() == place.centre);
+        REQUIRE(cards[i]->rotation() == place.rotation);
+        REQUIRE(cards[i]->isPlayed());
+
+        // Later cards over earlier ones, as they were played.
+        if(i > 0)
+            REQUIRE(cards[i]->zValue() > cards[i - 1]->zValue());
+    }
+}
+
+TEST_CASE("The winner is highlighted from the second card, and only as the engine says", "[trick]")
+{
+    TrickItem trick(nullptr);
+
+    // ONE CARD: the engine ranks it winning, and it is; but there is nothing yet
+    // for it to beat, and table.js draws no highlight.
+    trick.setTrick(tableOf(4, 0, { played(1, romanian_whist::Rank::Ten, true) }), Theme::dark());
+
+    std::vector<CardItem*> cards = cardsOf(trick);
+    REQUIRE(cards.size() == 1);
+    REQUIRE_FALSE(cards[0]->isWinning());
+
+    // TWO, AND THE LOWER ONE WINNING - a trump, say. The highlight is isWinning and
+    // is never worked out here, so it goes where the engine put it.
+    trick.setTrick(tableOf(4, 0, { played(1, romanian_whist::Rank::Ten),
+                                   played(2, romanian_whist::Rank::Two, true) }),
+                   Theme::dark());
+
+    cards = cardsOf(trick);
+    REQUIRE(cards.size() == 2);
+    REQUIRE_FALSE(cards[0]->isWinning());
+    REQUIRE(cards[1]->isWinning());
+}
+
+TEST_CASE("The winning card rises toward the table's centre", "[trick]")
+{
+    // .tcard.winning's translateY(-8px), after the card's rotate: up its own frame,
+    // which on every seat's card points at the table's centre - so the rise is
+    // straight in from the owner, whoever that is.
+    for(unsigned int seatCount = 3 ; seatCount <= 6 ; seatCount++)
+    {
+        for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+        {
+            INFO("seatCount " << seatCount << ", seat " << seat);
+
+            const trickitem::Placement place = *trickitem::cardPlacement(seatCount, 0, seat);
+
+            QTransform turn;
+            turn.translate(place.centre.x(), place.centre.y());
+            turn.rotate(place.rotation);
+
+            const QPointF risen = turn.map(QPointF(0.0, -cardshadow::winningLift));
+            const QPointF toward = risen - place.centre;
+            const QPointF inward = tablespace::centre - place.centre;
+
+            REQUIRE(std::hypot(toward.x(), toward.y()) == Catch::Approx(cardshadow::winningLift));
+
+            // In line with the centre and on its side - your card's too, which sits
+            // straight below it.
+            const qreal along = (toward.x() * inward.x() + toward.y() * inward.y())
+                                / std::hypot(inward.x(), inward.y());
+            REQUIRE(along == Catch::Approx(cardshadow::winningLift));
+        }
+    }
+}
+
+// ---- the lead rhombus ----
+
+TEST_CASE("The rhombus marks nobody while the bids are coming in", "[trick]")
+{
+    GameSnapshot snapshot = tableOf(4, 0);
+    snapshot.betsPlaced = 2;
+    snapshot.activeSeat = 2;
+
+    // The seat being asked is the bidder, not a leader.
+    REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+
+    // And no table at all is not a game in play.
+    REQUIRE_FALSE(trickitem::leadSeat(GameSnapshot()));
+}
+
+TEST_CASE("The rhombus marks whoever leads the trick", "[trick]")
+{
+    SECTION("before the first card, the seat being asked to play")
+    {
+        GameSnapshot snapshot = tableOf(4, 0);
+        snapshot.activeSeat = 3;
+        snapshot.leadSeat = 3;
+
+        REQUIRE(trickitem::leadSeat(snapshot) == 3u);
+    }
+
+    SECTION("once a card is down, its owner - whoever is asked next")
+    {
+        GameSnapshot snapshot = tableOf(4, 0, { played(2, romanian_whist::Rank::Ace) });
+        snapshot.activeSeat = 3;
+
+        REQUIRE(trickitem::leadSeat(snapshot) == 2u);
+    }
+
+    SECTION("while a full trick waits to be cleared, still the first card's owner")
+    {
+        // By now the engine's own trick leader has moved on to the winner, which is
+        // why the trick's first entry is what is read.
+        GameSnapshot snapshot = tableOf(4, 0, { played(2, romanian_whist::Rank::Two),
+                                                played(3, romanian_whist::Rank::Ace, true),
+                                                played(0, romanian_whist::Rank::Three),
+                                                played(1, romanian_whist::Rank::Four) });
+        snapshot.leadSeat = 3;
+
+        REQUIRE(trickitem::leadSeat(snapshot) == 2u);
+    }
+
+    SECTION("nobody between tricks, with the table cleared and nobody asked")
+    {
+        // leadSeat names the next trick's leader here, and after a round's last
+        // trick there is no next trick - so it is not what the rhombus reads.
+        GameSnapshot snapshot = tableOf(4, 0);
+        snapshot.leadSeat = 1;
+
+        REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+    }
+}
+
+TEST_CASE("The rhombus sits on the gold circle, or between your card and your hand", "[trick]")
+{
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        for(unsigned int seat = 1 ; seat < seatCount ; seat++)
+        {
+            INFO("seatCount " << seatCount << ", seat " << seat);
+
+            const std::optional<trickitem::Placement> mark = trickitem::leadMarkPlacement(seatCount, 0, seat);
+            REQUIRE(mark);
+
+            const qreal rack = seatlayout::rackAngle(seatCount, 0, seat);
+
+            REQUIRE(distanceFromCentre(mark->centre) == Catch::Approx(tablespace::goldLineRadius));
+            REQUIRE(std::cos(angleOf(mark->centre) - rack) == Catch::Approx(1.0));
+            REQUIRE(mark->rotation == rackitem::frameRotation(rack));
+
+            // Between the rack and the card, clear of both.
+            const qreal card = distanceFromCentre(trickitem::cardPlacement(seatCount, 0, seat)->centre)
+                               + tablespace::playedCardHeight(seatCount) / 2.0;
+            REQUIRE(card < tablespace::goldLineRadius);
+            REQUIRE(tablespace::goldLineRadius < tablespace::rackRadius);
+        }
+
+        // Yours, half way between your card and your hand.
+        const std::optional<trickitem::Placement> yours = trickitem::leadMarkPlacement(seatCount, 0, 0);
+        REQUIRE(yours);
+        REQUIRE(yours->centre == QPointF(768.0, 820.0));
+        REQUIRE(yours->rotation == 0.0);
+    }
+}
+
+TEST_CASE("The rhombus is long along the radius", "[trick]")
+{
+    // An 11 x 11 square turned 45 degrees and stretched 1.45 along the item's y,
+    // which its rotation turns out along the radius toward the leader.
+    const QRectF bounds = leadmark::shape().boundingRect();
+
+    REQUIRE(bounds.width() == Catch::Approx(11.0 * std::sqrt(2.0)));
+    REQUIRE(bounds.height() == Catch::Approx(11.0 * std::sqrt(2.0) * 1.45));
+    REQUIRE(bounds.center().x() == Catch::Approx(0.0).margin(1e-9));
+    REQUIRE(bounds.center().y() == Catch::Approx(0.0).margin(1e-9));
+}
+
+TEST_CASE("A rhombus with nowhere to go is hidden", "[trick]")
+{
+    LeadMarkItem mark;
+    const Theme theme = Theme::dark();
+
+    mark.setMark(trickitem::leadMarkPlacement(4, 0, 2), theme.table);
+
+    REQUIRE(mark.isVisible());
+    REQUIRE(mark.pos() == trickitem::leadMarkPlacement(4, 0, 2)->centre);
+    REQUIRE(mark.rotation() == 180.0);
+
+    // The lead is a seat this table cannot place: nothing is marked rather than a
+    // rhombus left over the last seat it was on.
+    mark.setMark(trickitem::leadMarkPlacement(4, 0, 99), theme.table);
+
+    REQUIRE_FALSE(mark.isVisible());
+}
+
+// ---- the shadows ----
+
+TEST_CASE("A played card's shadow reaches further when it wins", "[trick]")
+{
+    const QMarginsF plain = cardshadow::reach(false);
+    const QMarginsF winning = cardshadow::reach(true);
+
+    // Both fall toward the card's own bottom, so they reach furthest there.
+    REQUIRE(plain.bottom() > plain.top());
+    REQUIRE(winning.bottom() > winning.top());
+
+    // The glow and the deeper shadow reach past the plain one on every side.
+    REQUIRE(winning.left() > plain.left());
+    REQUIRE(winning.top() > plain.top());
+    REQUIRE(winning.bottom() > plain.bottom());
+}
+
+TEST_CASE("Played cards share their shadow pictures", "[trick]")
+{
+    const Theme theme = Theme::dark();
+    cardshadow::Cache shadows;
+
+    const QSizeF size(141.0, 205.0);
+
+    const cardshadow::Picture first = shadows.picture(size, false, theme.table, 1.0);
+
+    REQUIRE_FALSE(first.pixmap.isNull());
+    REQUIRE(shadows.renders() == 1);
+
+    // Asked again, by another card: the same picture.
+    shadows.picture(size, false, theme.table, 1.0);
+    REQUIRE(shadows.renders() == 1);
+
+    // The winner's is its own, and a second size is too.
+    shadows.picture(size, true, theme.table, 1.0);
+    shadows.picture(QSizeF(125.0, 181.0), false, theme.table, 1.0);
+    REQUIRE(shadows.renders() == 3);
+
+    // A new ratio starts again.
+    shadows.picture(size, false, theme.table, 2.0);
+    REQUIRE(shadows.renders() == 4);
+}
+
+TEST_CASE("The shadow picture reaches past the card, furthest below it", "[trick]")
+{
+    const Theme theme = Theme::dark();
+    const QSizeF size(141.0, 205.0);
+
+    for(const bool winning : { false, true })
+    {
+        INFO("winning " << winning);
+
+        const cardshadow::Picture picture = cardshadow::render(size, winning, theme.table, 1.0);
+        REQUIRE_FALSE(picture.pixmap.isNull());
+
+        const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+        const QRectF covered(picture.offset, QSizeF(picture.pixmap.size()));
+
+        REQUIRE(covered.contains(card));
+        REQUIRE(covered.bottom() - card.bottom() > card.top() - covered.top());
+
+        // NOTHING UNDER THE CARD ITSELF: CSS clips an outer shadow to outside the
+        // element, so the middle of the picture is clear.
+        const QImage image = picture.pixmap.toImage();
+        const QPoint middle = (-picture.offset).toPoint();
+        REQUIRE(qAlpha(image.pixel(middle)) == 0);
+    }
 }

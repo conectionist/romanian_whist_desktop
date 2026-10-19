@@ -4,8 +4,6 @@
 #include <QPointF>
 #include <QRectF>
 
-#include <vector>
-
 // Where the seats go, and the only arithmetic in phase B.
 //
 // A free function rather than a TableScene member, on the same grounds
@@ -15,35 +13,27 @@
 //
 // SEAT POSITIONS ARE COMPUTED, NEVER READ OFF THE ARTWORK (section 14). If the
 // table surface ever becomes an illustration with players drawn into it, the
-// seats must still come from here, in fractions of the rect they are laid in -
+// seats must still come from here -
 // otherwise the coordinates silently become properties of one image's
 // perspective and the background stops being replaceable. Section 18.1 is the
 // general form of that rule and Theme is its other half.
 namespace seatlayout
 {
 
-// Seat centres, in seat order, inside `table`.
+// How many seats clockwise `seat` is from the one at the bottom - yours, or seat
+// 0's in a spectator game. 0 for the bottom seat itself. panelRect() places a seat
+// by this, and so everything placed from a panel - its rack, its played card -
+// follows the same order.
 //
 // `humanSeat` is the snapshot's: an index, or -1 for a spectator game. The human
-// is placed at bottom-centre and the rest run CLOCKWISE from there in seat
-// order, so the play order on screen matches the play order in the game.
+// is at the bottom and the rest run CLOCKWISE from there in seat order, so the
+// play order on screen matches the play order in the game.
 //
-// A SPECTATOR GAME IS NOT A SEPARATE LAYOUT. Section 14 says a spectated table
-// distributes every seat around the full ellipse, which is what this already
-// does with seat 0 at the bottom - so -1 is handled by placing seat 0 where the
+// A SPECTATOR GAME IS NOT A SEPARATE LAYOUT (section 14): seat 0 goes where the
 // human would have gone, and nothing else changes. The real difference is that
-// there is no hand, and that is the caller's business: TableScene passes the
-// same rect and simply does not draw one.
+// there is no hand, and that is the caller's business.
 //
-// Returns an empty vector for `seatCount == 0` or an empty rect. `humanSeat`
-// outside the table is read as -1 rather than trusted into a modulo.
-std::vector<QPointF> seatCentres(unsigned int seatCount, int humanSeat, QRectF table);
-
-// How many seats clockwise `seat` is from the one at the bottom - yours, or seat
-// 0's in a spectator game. 0 for the bottom seat itself. seatCentres() and
-// panelRect() both place a seat by this, so they cannot disagree about its order.
-//
-// `humanSeat` outside the table is read as -1, as seatCentres() reads it.
+// `humanSeat` outside the table is read as -1 rather than trusted into a modulo.
 unsigned int stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int seat);
 
 // A SEAT'S NAME PANEL, in table space: the redesign's section 2.5, which places
@@ -51,9 +41,9 @@ unsigned int stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int
 // and clears the corner panels. The bottom seat gets tablespace::bottomPanel and
 // every other one a tablespace::panelSize at its spot.
 //
-// NOT ON A RING, unlike seatCentres(): no ellipse puts a 280-wide panel just
+// NOT ON A RING: no ellipse puts a 280-wide panel just
 // outside a circle at every angle, which is why the mock-up gave up on one. The
-// order is still the ring's, clockwise from the bottom, through stepsFromBottom().
+// order is clockwise from the bottom, through stepsFromBottom().
 //
 // Empty for a player count the table has no row for (outside 2 to 6) or a seat
 // that is not at the table.
@@ -80,26 +70,6 @@ qreal rackAngle(unsigned int seatCount, int humanSeat, unsigned int seat);
 // The point on the rim a rack stands at: tablespace::rackRadius from the centre,
 // at `angle`.
 QPointF rackOrigin(qreal angle);
-
-// The rect to hand seatCentres() when what you know is the radius you want
-// rather than the space you have. The ring it produces is a CIRCLE of that
-// radius about `centre`.
-//
-// The trick is laid out this way and the seats are not, which is the whole
-// reason this exists. Seats sit on an ellipse round the table, the form below.
-// The trick wants its cards not to touch each other, which is a question about
-// the card size and the number of seats - and an ellipse is exactly wrong for
-// it, because a wide one bunches adjacent directions toward the horizontal and
-// puts two cards in one place.
-QRectF ringRect(QPointF centre, qreal radius);
-
-// The same with two radii, so the ring is an ELLIPSE of exactly those radii about
-// `centre`. The one-radius form above is this with both equal.
-//
-// For a layout that knows the shape it wants in a fixed space rather than the
-// room a window happens to have - the table redesign's phase 2 lays the seats on
-// one such ellipse round the table until phase 4 gives every seat its own spot.
-QRectF ringRect(QPointF centre, qreal radiusX, qreal radiusY);
 
 } // namespace seatlayout
 

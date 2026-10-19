@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "paint/CardRenderer.h"
+#include "paint/CardShadow.h"
 #include "paint/Panel.h"
 #include "paint/Theme.h"
 #include "table/RackItem.h"
@@ -16,11 +17,12 @@
 #include <vector>
 
 class HandItem;
+class LeadMarkItem;
 class SeatItem;
 class TableTopItem;
 class TrickItem;
 
-// The table: seats on an ellipse, the trick in the middle.
+// The table: name panels round it, racks on its rim, the trick on its felt.
 //
 // IN TABLE SPACE, A FIXED SET OF COORDINATES (TableSpace.h) that TableView scales
 // to the window. The scene rect is the fit box and never changes, so nothing here
@@ -95,6 +97,9 @@ public:
     const TableTopItem* tableTop() const { return top; }
     const CardRenderer& cardRenderer() const { return cards; }
 
+    // The played cards' shadow pictures, READ-ONLY and for tests in the same way.
+    const cardshadow::Cache& playedShadows() const { return shadowPictures; }
+
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
@@ -105,10 +110,6 @@ private:
     // together. Six at most, and reused across games rather than rebuilt, for the
     // reason in the class comment.
     void ensureSeats(std::size_t count);
-
-    // Played-card positions, indexed by seat. See the definition for where they
-    // come from; the seats' own panels are seatlayout::panelRect()'s.
-    std::vector<QPointF> trickPositions(std::size_t seatCount) const;
 
     Theme theme = Theme::light();
 
@@ -125,6 +126,9 @@ private:
     // the same way.
     rackitem::Cache rackPictures;
 
+    // The played cards' shadows, shared by all of them, and held the same way.
+    cardshadow::Cache shadowPictures;
+
     std::shared_ptr<const GameSnapshot> snapshot;
 
     // The table and its logo, under everything else (tablespace::z).
@@ -137,6 +141,9 @@ private:
     std::vector<RackItem*> racks;
 
     TrickItem* trick = nullptr;
+
+    // The rhombus on the felt marking who leads the trick (section 2.7).
+    LeadMarkItem* leadMark = nullptr;
 
     // The human's fan. Built for every game, and hidden in a spectator one -
     // section 14: "the bottom hand area is not drawn at all".

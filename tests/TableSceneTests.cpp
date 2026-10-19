@@ -4,6 +4,7 @@
 #include "table/TableScene.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
+#include "table/LeadMarkItem.h"
 #include "table/RackItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
@@ -324,9 +325,10 @@ TEST_CASE("Your own plaque is drawn over your hand", "[table]")
 // against the next, so a rung put in the wrong place fails here by name rather
 // than as a card drawn under the felt.
 
-TEST_CASE("The scene stacks the table then the racks then the cards then your hand then the plaques", "[table]")
+TEST_CASE("The scene stacks the table then the racks then the cards then the rhombus then your hand then the plaques", "[table]")
 {
     GameSnapshot snapshot = holdingThree(4, 1);
+    snapshot.betsPlaced = 4;
     snapshot.table = { PlayedCardView{ 2, Card(Rank::King, Suit::Hearts) } };
 
     TableScene scene;
@@ -355,7 +357,16 @@ TEST_CASE("The scene stacks the table then the racks then the cards then your ha
     }
 
     REQUIRE(tables.front()->zValue() < tricks.front()->zValue());
-    REQUIRE(tricks.front()->zValue() < scene.handItem()->zValue());
+
+    // THE RHOMBUS OVER THE CARDS, as table.js adds it after them - though where it
+    // sits, on the gold circle, no card reaches.
+    const std::vector<LeadMarkItem*> marks = itemsOf<LeadMarkItem>(scene);
+
+    REQUIRE(marks.size() == 1);
+    REQUIRE(marks.front()->isVisible());
+    REQUIRE(tricks.front()->zValue() < marks.front()->zValue());
+    REQUIRE(marks.front()->zValue() < scene.handItem()->zValue());
+
     REQUIRE(scene.handItem()->zValue() < mine->zValue());
 
     for(SeatItem* seat : itemsOf<SeatItem>(scene))
@@ -566,8 +577,9 @@ TEST_CASE("Hovering your plaque lifts no card", "[table]")
 TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]")
 {
     // Four seats with you in seat 1, and two cards down: yours and the next
-    // seat's. Yours sits 60 above the top of your hand; the other on its owner's
-    // side, its outer end 60 inside the felt's edge.
+    // seat's. Yours sits 60 above the top of your hand, unturned; the other in
+    // front of its owner's rack, turned to line up with it, its outer end 60
+    // inside the felt's edge.
     GameSnapshot snapshot = seatedTable(4, 1);
 
     snapshot.table = { PlayedCardView{ 1, Card(Rank::Ten, Suit::Hearts) },
@@ -575,7 +587,7 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
 
     TableScene scene;
 
-    scene.setTheme(Theme::light());
+    scene.setTheme(Theme::dark());
     scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
 
     const std::vector<CardItem*> played = playedCards(scene);
@@ -585,21 +597,30 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
     const QPointF yours(tablespace::centre.x(), tablespace::handTop - 60.0 - height / 2.0);
     const qreal radius = tablespace::feltRadius - 60.0 - height / 2.0;
 
+    // Seat 2 is the first clockwise of you, on the left, where its rack is.
+    const qreal rack = seatlayout::rackAngle(4, 1, 2);
+    const QPointF theirs = tablespace::centre + radius * QPointF(std::cos(rack), std::sin(rack));
+
     bool sawYours = false;
     bool sawTheirs = false;
 
     for(CardItem* card : played)
     {
         // The art's own rounding of 205.2: sizeForHeight() hands back whole pixels.
-        REQUIRE(card->boundingRect().height() == Catch::Approx(std::round(height)));
+        REQUIRE(card->cardSize().height() == Approx(std::round(height)));
 
         const QPointF at = card->scenePos();
-        const QPointF offset = at - tablespace::centre;
 
-        if(std::abs(at.x() - yours.x()) < 0.5 && std::abs(at.y() - yours.y()) < 0.5)
+        if(QLineF(at, yours).length() < 0.5)
+        {
             sawYours = true;
-        else if(std::abs(std::hypot(offset.x(), offset.y()) - radius) < 0.5)
+            REQUIRE(card->rotation() == 0.0);
+        }
+        else if(QLineF(at, theirs).length() < 0.5)
+        {
             sawTheirs = true;
+            REQUIRE(card->rotation() == 90.0);
+        }
     }
 
     REQUIRE(sawYours);
@@ -615,9 +636,54 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
 
     for(CardItem* card : playedCards(scene))
     {
-        REQUIRE(card->boundingRect().height()
-                == Catch::Approx(std::round(tablespace::playedCardHeight(5))));
+        REQUIRE(card->cardSize().height()
+                == Approx(std::round(tablespace::playedCardHeight(5))));
     }
+}
+
+TEST_CASE("The rhombus is on the felt only while a trick is played", "[table]")
+{
+    GameSnapshot snapshot = holdingThree(4, 1);
+
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+
+    const auto mark = [&]
+    {
+        const std::vector<LeadMarkItem*> marks = itemsOf<LeadMarkItem>(scene);
+        REQUIRE(marks.size() == 1);
+        return marks.front();
+    };
+
+    // Bidding: the seat being asked is bidding, not leading.
+    snapshot.betsPlaced = 2;
+    snapshot.activeSeat = 3;
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    REQUIRE_FALSE(mark()->isVisible());
+
+    // Every bid in, nothing played: on the seat being asked to lead, in line with
+    // its rack on the gold circle.
+    snapshot.betsPlaced = 4;
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    REQUIRE(mark()->isVisible());
+    REQUIRE(mark()->pos() == trickitem::leadMarkPlacement(4, 1, 3)->centre);
+
+    // Your lead: between your card and your hand.
+    snapshot.activeSeat = 1;
+    snapshot.table = { PlayedCardView{ 1, Card(Rank::Ten, Suit::Hearts) } };
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    REQUIRE(mark()->isVisible());
+    REQUIRE(mark()->pos() == QPointF(768.0, 820.0));
+
+    // The table cleared and nobody asked: nothing marked.
+    snapshot.table.clear();
+    snapshot.activeSeat = -1;
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    REQUIRE_FALSE(mark()->isVisible());
 }
 
 // ---- the floor the bid strip sits on, added in C2 ----

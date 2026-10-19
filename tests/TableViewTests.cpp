@@ -721,6 +721,34 @@ TEST_CASE("While a drag settles no rack is composed again", "[table]")
     REQUIRE(composed() > racks);
 }
 
+TEST_CASE("While a drag settles no played card's shadow is drawn again", "[table]")
+{
+    ShownTable table;
+
+    table.step(1);
+
+    const std::size_t shadows = table.scene.playedShadows().renders();
+
+    // The premise: fullTable() has five cards down, so their shadow was drawn and
+    // the count below counts something.
+    REQUIRE(shadows >= 1);
+
+    for(int step = 2 ; step <= 6 ; step++)
+    {
+        INFO("step " << step);
+
+        table.step(step);
+
+        REQUIRE(table.view.isSettling());
+        REQUIRE(table.scene.playedShadows().renders() == shadows);
+    }
+
+    table.view.finishResize();
+    table.paint();
+
+    REQUIRE(table.scene.playedShadows().renders() > shadows);
+}
+
 TEST_CASE("Once a drag settles everything is rasterized at the new scale", "[table]")
 {
     ShownTable table;

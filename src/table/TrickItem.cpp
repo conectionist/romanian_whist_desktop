@@ -1,34 +1,100 @@
 #include "TrickItem.h"
 
 #include "table/CardItem.h"
-
-#include <QPainter>
+#include "table/RackItem.h"
+#include "table/SeatLayout.h"
+#include "table/TableSpace.h"
 
 #include <cmath>
 
 namespace
 {
 
-// Rotated slightly toward the centre, so the trick looks laid down rather than
-// pasted on. Degrees at the extreme; a seat directly above or below is not
-// rotated at all.
-//
-// KEPT SMALL BECAUSE IT COSTS CLEARANCE. A card tilted by t occupies
-// w*cos(t) + h*sin(t) across, which at nine degrees is a sixth wider than the
-// card - and that sixth comes straight off the gap between neighbours. The
-// redesign's phase 6 replaces it with a turn that lines each card up with its
-// owner's rack.
-constexpr qreal maximumTilt = 6.0;
+// Whether `seat` is the player's own, drawn at the bottom above their hand.
+bool isHuman(unsigned int seatCount, int humanSeat, unsigned int seat)
+{
+    return humanSeat >= 0 && static_cast<unsigned int>(humanSeat) < seatCount
+           && static_cast<unsigned int>(humanSeat) == seat;
+}
 
-constexpr qreal pipRadiusInCards = 0.045;
-constexpr qreal pipDropInCards = 0.60;
+// The point `radius` from the table's centre at `angle` (radians, y down).
+QPointF onCircle(qreal radius, qreal angle)
+{
+    return tablespace::centre + QPointF(radius * std::cos(angle), radius * std::sin(angle));
+}
 
 }
 
-TrickItem::TrickItem(const CardRenderer* renderer, QGraphicsItem* parent)
+bool trickitem::seated(const GameSnapshot& snapshot)
+{
+    return snapshot.humanSeat >= 0
+           && static_cast<std::size_t>(snapshot.humanSeat) < snapshot.seats.size();
+}
+
+std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
+                                                             unsigned int seat)
+{
+    const QRectF panel = seatlayout::panelRect(seatCount, humanSeat, seat);
+
+    if(panel.isEmpty())
+        return std::nullopt;
+
+    const qreal height = tablespace::playedCardHeight(seatCount);
+
+    if(isHuman(seatCount, humanSeat, seat))
+    {
+        return Placement{ QPointF(tablespace::centre.x(),
+                                  tablespace::handTop - tablespace::playedInset - height / 2.0),
+                          0.0 };
+    }
+
+    // The felt's edge, the inset, then half the card: table.js trickPos().
+    const qreal angle = seatlayout::rackAngle(panel);
+    const qreal radius = tablespace::feltRadius - tablespace::playedInset - height / 2.0;
+
+    return Placement{ onCircle(radius, angle), rackitem::frameRotation(angle) };
+}
+
+std::optional<trickitem::Placement> trickitem::leadMarkPlacement(unsigned int seatCount, int humanSeat,
+                                                                 unsigned int seat)
+{
+    const QRectF panel = seatlayout::panelRect(seatCount, humanSeat, seat);
+
+    if(panel.isEmpty())
+        return std::nullopt;
+
+    if(isHuman(seatCount, humanSeat, seat))
+        return Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
+
+    const qreal angle = seatlayout::rackAngle(panel);
+
+    return Placement{ onCircle(tablespace::goldLineRadius, angle), rackitem::frameRotation(angle) };
+}
+
+std::optional<unsigned int> trickitem::leadSeat(const GameSnapshot& snapshot)
+{
+    // Not while anybody has still to bid: table.js draws the mark in the play
+    // phase only, and during the bidding the seat being asked is the bidder.
+    if(snapshot.seats.empty() || snapshot.betsPlaced < snapshot.seats.size())
+        return std::nullopt;
+
+    // The first card's owner - and still while a full trick waits to be cleared,
+    // which is when leadSeat's engine fallback would already name the winner.
+    if(!snapshot.table.empty())
+        return snapshot.table.front().seatIndex;
+
+    if(snapshot.activeSeat >= 0)
+        return static_cast<unsigned int>(snapshot.activeSeat);
+
+    return std::nullopt;
+}
+
+TrickItem::TrickItem(const CardRenderer* renderer, cardshadow::Cache* shadows, QGraphicsItem* parent)
     : QGraphicsObject(parent)
     , renderer(renderer)
+    , shadows(shadows ? shadows : &ownShadows)
 {
+    setFlag(QGraphicsItem::ItemHasNoContents);
 }
 
 CardItem* TrickItem::cardAt(std::size_t index)
@@ -39,56 +105,50 @@ CardItem* TrickItem::cardAt(std::size_t index)
     return cards[index];
 }
 
-void TrickItem::setTrick(const GameSnapshot& snapshot,
-                         const std::vector<QPointF>& positions,
-                         QPointF tableCentre,
-                         qreal cardHeight,
-                         const Theme& theme)
+void TrickItem::setTrick(const GameSnapshot& snapshot, const Theme& theme)
 {
-    prepareGeometryChange();
+    const unsigned int seatCount = static_cast<unsigned int>(snapshot.seats.size());
+    const qreal cardHeight = tablespace::playedCardHeight(seatCount);
+
+    // A WINNER ONCE THERE IS SOMETHING TO BEAT. The engine ranks a lone first card
+    // as winning, which it is; table.js highlights from the second card on, since
+    // until then the highlight says nothing the card does not.
+    const bool contested = snapshot.table.size() >= 2;
 
     for(std::size_t i = 0 ; i < snapshot.table.size() ; i++)
     {
         const PlayedCardView& played = snapshot.table[i];
 
         // Read off the entry, never derived from leadSeat and an offset - see
-        // the header. A seat index the layout does not have is a snapshot this
-        // scene cannot draw, and skipping it is better than indexing past the
-        // end of the vector.
-        if(played.seatIndex >= positions.size())
+        // the header. A seat this table cannot place is a snapshot this scene
+        // cannot draw, and leaving it off is better than inventing a place.
+        const std::optional<trickitem::Placement> place =
+            trickitem::cardPlacement(seatCount, snapshot.humanSeat, played.seatIndex);
+
+        if(!place)
         {
             // HIDDEN, not merely skipped. The item at this index may already be
             // on the table from a previous frame, and the hide pass below starts
             // past the end of THIS table - so an index inside it is one nothing
             // else reaches, and a bare `continue` leaves the last frame's card
-            // sitting there with its face, its tilt and its winning highlight.
+            // sitting there with its face, its turn and its winning highlight.
             cardAt(i)->hide();
             continue;
         }
 
         CardItem* item = cardAt(i);
 
-        const QPointF seat = positions[played.seatIndex];
-        const QPointF toward = seat - tableCentre;
-
         item->setCardHeight(cardHeight);
         item->setFace(played.card);
-        item->setPos(seat);
+        item->setPos(place->centre);
+        item->setRotation(place->rotation);
 
         // THE HIGHLIGHT IS isWinning AND IS NEVER RECOMPUTED. It is the engine's
         // own ranking of a partly played trick, filled from
         // getCurrentTrickLeader(), so it cannot disagree with the winner the
         // engine eventually declares.
-        item->setWinning(played.isWinning, theme.accent);
+        item->setPlayed(contested && played.isWinning, theme.table, shadows);
 
-        // Tilted by how far round the table the player sits, so seats opposite
-        // each other lean opposite ways. Zero for a seat straight above or
-        // below, which is where an unrotated card looks right anyway.
-        const qreal spread = qFuzzyIsNull(toward.y()) && qFuzzyIsNull(toward.x())
-                                 ? 0.0
-                                 : toward.x() / std::max(1.0, std::hypot(toward.x(), toward.y()));
-
-        item->setRotation(-spread * maximumTilt);
         item->setZValue(static_cast<qreal>(i));
         item->show();
     }
@@ -96,39 +156,14 @@ void TrickItem::setTrick(const GameSnapshot& snapshot,
     // Hidden rather than deleted, for the reason cardAt() gives.
     for(std::size_t i = snapshot.table.size() ; i < cards.size() ; i++)
         cards[i]->hide();
-
-    hasLead = !snapshot.table.empty() && snapshot.table.front().seatIndex < positions.size();
-
-    if(hasLead)
-    {
-        const QPointF card = positions[snapshot.table.front().seatIndex];
-
-        leadPip = card + QPointF(0.0, cardHeight * pipDropInCards);
-        pipRadius = cardHeight * pipRadiusInCards;
-        pipColour = theme.accent;
-    }
-
-    update();
 }
 
 QRectF TrickItem::boundingRect() const
 {
-    // The cards are children and carry their own rects; this only has to cover
-    // what THIS paints, which is the pip.
-    if(!hasLead)
-        return QRectF();
-
-    return QRectF(leadPip.x() - pipRadius, leadPip.y() - pipRadius,
-                  pipRadius * 2.0, pipRadius * 2.0);
+    // The cards are children and carry their own rects; this paints nothing.
+    return QRectF();
 }
 
-void TrickItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
+void TrickItem::paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget*)
 {
-    if(!hasLead || pipRadius <= 0.0)
-        return;
-
-    painter->setRenderHint(QPainter::Antialiasing);
-    painter->setPen(Qt::NoPen);
-    painter->setBrush(pipColour);
-    painter->drawEllipse(leadPip, pipRadius, pipRadius);
 }

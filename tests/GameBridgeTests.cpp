@@ -4,6 +4,7 @@
 #include "GameFixtures.h"
 
 #include "engine/GameBridge.h"
+#include "table/TrickItem.h"
 
 #include <romanian_whist/GameEngine.h>
 
@@ -815,4 +816,82 @@ TEST_CASE("Every snapshot names the seat on turn, or nobody", "[bridge]")
     // which is exactly what a publish() that stopped filling the field would do.
     REQUIRE(checker.sawSeat);
     REQUIRE(checker.sawNobody);
+}
+
+TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real game", "[bridge]")
+{
+    // trickitem::leadSeat() reads the snapshot's own fields - the trick's first
+    // entry, else the seat on turn, and only once every bid is in - rather than
+    // the engine's trick leader, which moves to the winner as a trick is won. What
+    // has to hold for that to be right is a fact about the bridge's frames, so it is
+    // checked over a whole schedule here, the way the case above checks activeSeat:
+    //
+    //   - with nothing on the table, a seat it marks is the one the engine will
+    //     have lead (snapshot.leadSeat is getTrickLeaderSeat() then) - including
+    //     onBettingComplete's frame, where a seat still on turn from the bidding
+    //     would be the wrong one;
+    //   - once a round is over and its table cleared, it marks nobody, though the
+    //     engine's leader still names somebody.
+    GameBridge bridge(std::nullopt, instant());
+
+    std::shared_ptr<const GameSnapshot> latest;
+    QObject::connect(&bridge, &GameBridge::stateChanged,
+                     [&latest](std::shared_ptr<const GameSnapshot> snapshot)
+                     { latest = std::move(snapshot); });
+
+    // After the bridge, so the latest snapshot is this callback's own - see above.
+    class LeadChecker : public IGameObserver
+    {
+    public:
+        explicit LeadChecker(const std::shared_ptr<const GameSnapshot>& _latest)
+            : latest(_latest)
+        {}
+
+        void onBettingComplete(const GameEngine&) override { checkEmpty(); }
+        void onTrickStarted(const GameEngine&, unsigned int, Seat) override { checkEmpty(); }
+        void onCardRequested(const GameEngine&, Seat) override { checkEmpty(); }
+        void onRoundComplete(const GameEngine&) override { checkOver(); }
+        void onGameOver(const GameEngine&) override { checkOver(); }
+
+        unsigned int marked = 0;
+        unsigned int wrong = 0;
+
+    private:
+        void checkEmpty()
+        {
+            if(!latest || !latest->table.empty())
+                return;
+
+            const std::optional<unsigned int> lead = trickitem::leadSeat(*latest);
+
+            if(!lead)
+                return;
+
+            ++marked;
+
+            if(*lead != latest->leadSeat)
+                ++wrong;
+        }
+
+        void checkOver()
+        {
+            if(latest && latest->table.empty() && trickitem::leadSeat(*latest))
+                ++wrong;
+        }
+
+        const std::shared_ptr<const GameSnapshot>& latest;
+    };
+
+    LeadChecker checker(latest);
+
+    GameEngine engine;
+    engine.addObserver(&bridge);
+    engine.addObserver(&checker);
+    engine.start(fixtures::buildSetup(4));
+    engine.run();
+
+    // Some frame had to mark a leader before a card was down, or this checked
+    // nothing: every trick's lead request is one.
+    REQUIRE(checker.marked > 0);
+    REQUIRE(checker.wrong == 0);
 }

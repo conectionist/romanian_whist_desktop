@@ -87,6 +87,8 @@ qt_add_library(desktop_core STATIC
     src/paint/Paths.h
     src/paint/Shadows.h
     src/paint/Shadows.cpp
+    src/paint/CardShadow.h
+    src/paint/CardShadow.cpp
 
     src/table/TableSpace.h
     src/table/TableSpace.cpp
@@ -102,6 +104,8 @@ qt_add_library(desktop_core STATIC
     src/table/SeatItem.cpp
     src/table/TrickItem.h
     src/table/TrickItem.cpp
+    src/table/LeadMarkItem.h
+    src/table/LeadMarkItem.cpp
     src/table/HandItem.h
     src/table/HandItem.cpp
     src/table/TableScene.h

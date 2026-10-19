@@ -1,0 +1,149 @@
+#include "CardShadow.h"
+
+#include "paint/DevicePixels.h"
+#include "paint/Paths.h"
+#include "paint/Shadows.h"
+
+#include <QPainter>
+#include <QPainterPath>
+#include <QRectF>
+
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+
+// page.html's .tcard .inner, in table units: 0 6px 14px, and the winning card's
+// 0 16px 24px under a 0 0 26px glow and a 2px ring.
+constexpr QPointF plainOffset(0.0, 6.0);
+constexpr qreal plainBlur = 14.0;
+
+constexpr QPointF winningOffset(0.0, 16.0);
+constexpr qreal winningBlur = 24.0;
+constexpr qreal glowBlur = 26.0;
+constexpr qreal ringWidth = 2.0;
+
+// The card's rounded corners, which the shadow and the ring follow: .tcard .inner's
+// border-radius, which also clips the art.
+constexpr qreal cornerRadius = 7.0;
+
+// The card centred on the origin, as CardItem draws it.
+QRectF cardRect(QSizeF size)
+{
+    return QRectF(QPointF(-size.width() / 2.0, -size.height() / 2.0), size);
+}
+
+// How far a shadow moved by `offset` and blurred by `blur` reaches past the card,
+// on each side.
+QMarginsF shadowReach(QPointF offset, qreal blur)
+{
+    const qreal reach = shadows::reach(blur);
+
+    return QMarginsF(std::max(0.0, reach - offset.x()), std::max(0.0, reach - offset.y()),
+                     std::max(0.0, reach + offset.x()), std::max(0.0, reach + offset.y()));
+}
+
+QMarginsF widest(QMarginsF a, QMarginsF b)
+{
+    return QMarginsF(std::max(a.left(), b.left()), std::max(a.top(), b.top()),
+                     std::max(a.right(), b.right()), std::max(a.bottom(), b.bottom()));
+}
+
+}
+
+QMarginsF cardshadow::reach(bool winning)
+{
+    // A unit more for the anti-aliased edge, as the racks have.
+    const QMarginsF edge(1.0, 1.0, 1.0, 1.0);
+
+    if(!winning)
+        return shadowReach(plainOffset, plainBlur) + edge;
+
+    const QMarginsF ring(ringWidth, ringWidth, ringWidth, ringWidth);
+
+    return widest(widest(shadowReach(winningOffset, winningBlur), shadowReach(QPointF(), glowBlur)), ring)
+           + edge;
+}
+
+cardshadow::Picture cardshadow::render(QSizeF size, bool winning, const Theme::TablePalette& palette,
+                                       qreal ratio)
+{
+    if(size.isEmpty() || ratio <= 0.0)
+        return {};
+
+    const QRectF card = cardRect(size);
+
+    // The picture's corner on a whole pixel at this ratio, as a rack's is.
+    const QRectF area = card.marginsAdded(reach(winning));
+    const QPointF corner(std::floor(area.left() * ratio) / ratio, std::floor(area.top() * ratio) / ratio);
+
+    QPixmap pixmap(QSize(static_cast<int>(std::ceil((area.right() - corner.x()) * ratio)),
+                         static_cast<int>(std::ceil((area.bottom() - corner.y()) * ratio))));
+    pixmap.setDevicePixelRatio(ratio);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.translate(-corner);
+
+    // OUTSIDE THE CARD ONLY, which drawShapeShadow() does on its own: CSS clips an
+    // outer box-shadow to outside the element, so where the art's own corners are
+    // rounder than the clip, the felt shows there and not a shadow.
+    const QPainterPath body = paths::rounded(card, cornerRadius);
+
+    if(!winning)
+    {
+        shadows::drawShapeShadow(painter, body, plainOffset, plainBlur, palette.playedShadow);
+    }
+    else
+    {
+        // Bottom to top: the deeper shadow, the glow, then the ring hard against the
+        // card's edge, rounded to match it.
+        shadows::drawShapeShadow(painter, body, winningOffset, winningBlur, palette.winningShadow);
+        shadows::drawShapeShadow(painter, body, QPointF(), glowBlur, palette.winningGlow);
+
+        painter.fillPath(paths::roundedBand(card.adjusted(-ringWidth, -ringWidth, ringWidth, ringWidth),
+                                            cornerRadius + ringWidth,
+                                            card, cornerRadius),
+                         palette.goldBright);
+    }
+
+    painter.end();
+
+    return { pixmap, corner };
+}
+
+cardshadow::Picture cardshadow::Cache::picture(QSizeF size, bool winning, const Theme::TablePalette& wanted,
+                                               qreal ratio)
+{
+    if(size.isEmpty() || ratio <= 0.0)
+        return {};
+
+    const int key = devicepixels::ratioKey(ratio);
+
+    if(key != ratioKey || wanted != palette)
+    {
+        entries.clear();
+        ratioKey = key;
+        palette = wanted;
+    }
+
+    for(const Entry& entry : entries)
+    {
+        if(entry.size == size && entry.winning == winning)
+            return entry.picture;
+    }
+
+    // Two card sizes and two states are four pictures. More means sizes are being
+    // kept that will not come back, so the set starts again rather than growing.
+    constexpr std::size_t most = 8;
+
+    if(entries.size() >= most)
+        entries.clear();
+
+    entries.push_back({ size, winning, render(size, winning, wanted, ratio) });
+    rendered++;
+
+    return entries.back().picture;
+}
