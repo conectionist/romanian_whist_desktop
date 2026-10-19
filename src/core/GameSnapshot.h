@@ -4,7 +4,8 @@
 // Ported from romanian_whist_terminal, src/GameView.h - struct GameView and the
 // three types under it, minus the fields a GUI has no use for: `message`,
 // `hint`, `error`, `elapsedMinutes`, `Phase`, and HandEntry::choice, which is
-// the number a terminal player types.
+// the number a terminal player types. The terminal's own Phase went; the
+// engine's GamePhase is carried below, so nothing here guesses it.
 //
 // What the screen shows, as plain data. Widgets read only this, never the
 // engine - see QT_CLIENT_PLAN_proposal1.md section 3. The engine has no locking
@@ -16,6 +17,7 @@
 // unique_ptr, and no bare Seat - Seat has no default constructor.
 
 #include <romanian_whist/Card.h>
+#include <romanian_whist/GameEngine.h>
 #include <romanian_whist/RoundType.h>
 
 #include <string>
@@ -76,6 +78,12 @@ struct GameSnapshot
     unsigned int trickCount = 0;
     unsigned int trickNumber = 0;      // 0 between the deal and the first trick
     romanian_whist::RoundType roundType = romanian_whist::RoundType::Normal;
+
+    // GameEngine::getPhase(), AS IT IS - not worked out from the bets and the seat
+    // on turn. Playing from onBettingComplete on, before anyone is asked for a
+    // card; RoundScored or GameOver once the last trick is won. The lead rhombus
+    // is drawn in Playing only, and the last bidder is still on turn in Betting.
+    romanian_whist::GamePhase phase = romanian_whist::GamePhase::NotStarted;
 
     bool hasTrump = false;             // no trump in an 8-card round
     romanian_whist::Card trump{};

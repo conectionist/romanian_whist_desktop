@@ -329,6 +329,7 @@ TEST_CASE("The scene stacks the table then the racks then the cards then the rho
 {
     GameSnapshot snapshot = holdingThree(4, 1);
     snapshot.betsPlaced = 4;
+    snapshot.phase = romanian_whist::GamePhase::Playing;
     snapshot.table = { PlayedCardView{ 2, Card(Rank::King, Suit::Hearts) } };
 
     TableScene scene;
@@ -656,15 +657,26 @@ TEST_CASE("The rhombus is on the felt only while a trick is played", "[table]")
     };
 
     // Bidding: the seat being asked is bidding, not leading.
+    snapshot.phase = romanian_whist::GamePhase::Betting;
     snapshot.betsPlaced = 2;
     snapshot.activeSeat = 3;
     scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
 
     REQUIRE_FALSE(mark()->isVisible());
 
-    // Every bid in, nothing played: on the seat being asked to lead, in line with
-    // its rack on the gold circle.
+    // The last bid's own frame: every bid in, the last bidder still on turn - but
+    // still bidding, and not the leader.
     snapshot.betsPlaced = 4;
+    snapshot.activeSeat = 2;
+    snapshot.leadSeat = 3;
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    REQUIRE_FALSE(mark()->isVisible());
+
+    // Play begun, nothing played and nobody asked yet: on the seat that will lead,
+    // in line with its rack on the gold circle.
+    snapshot.phase = romanian_whist::GamePhase::Playing;
+    snapshot.activeSeat = -1;
     scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
 
     REQUIRE(mark()->isVisible());
@@ -678,8 +690,8 @@ TEST_CASE("The rhombus is on the felt only while a trick is played", "[table]")
     REQUIRE(mark()->isVisible());
     REQUIRE(mark()->pos() == QPointF(768.0, 820.0));
 
-    // The table cleared and nobody asked: nothing marked.
-    snapshot.table.clear();
+    // The round scored, its last trick still on the table: nothing marked.
+    snapshot.phase = romanian_whist::GamePhase::RoundScored;
     snapshot.activeSeat = -1;
     scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
 

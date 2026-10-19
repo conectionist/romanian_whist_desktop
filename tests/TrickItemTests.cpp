@@ -39,6 +39,7 @@ GameSnapshot tableOf(unsigned int seatCount, int humanSeat, std::vector<PlayedCa
 
     snapshot.humanSeat = humanSeat;
     snapshot.betsPlaced = seatCount;
+    snapshot.phase = romanian_whist::GamePhase::Playing;
     snapshot.table = std::move(table);
     return snapshot;
 }
@@ -376,20 +377,48 @@ TEST_CASE("The winning card rises toward the table's centre", "[trick]")
 
 TEST_CASE("The rhombus marks nobody while the bids are coming in", "[trick]")
 {
-    GameSnapshot snapshot = tableOf(4, 0);
-    snapshot.betsPlaced = 2;
-    snapshot.activeSeat = 2;
+    SECTION("with a bid still to come")
+    {
+        GameSnapshot snapshot = tableOf(4, 0);
+        snapshot.phase = romanian_whist::GamePhase::Betting;
+        snapshot.betsPlaced = 2;
+        snapshot.activeSeat = 2;
 
-    // The seat being asked is the bidder, not a leader.
-    REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+        // The seat being asked is the bidder, not a leader.
+        REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+    }
 
-    // And no table at all is not a game in play.
-    REQUIRE_FALSE(trickitem::leadSeat(GameSnapshot()));
+    SECTION("on the last bid's own frame, with its bidder still on turn")
+    {
+        // Every bet is in, the table is empty and the last bidder is still the
+        // active seat - onBetPlaced, before the engine moves to Playing. Seat 0 bid
+        // last; seat 1 leads.
+        GameSnapshot snapshot = tableOf(4, 0);
+        snapshot.phase = romanian_whist::GamePhase::Betting;
+        snapshot.activeSeat = 0;
+        snapshot.leadSeat = 1;
+
+        REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+    }
+
+    SECTION("with no table at all")
+    {
+        REQUIRE_FALSE(trickitem::leadSeat(GameSnapshot()));
+    }
 }
 
 TEST_CASE("The rhombus marks whoever leads the trick", "[trick]")
 {
-    SECTION("before the first card, the seat being asked to play")
+    SECTION("once the bids are complete, before anyone is asked")
+    {
+        // onBettingComplete and onTrickStarted: nobody on turn, nothing down.
+        GameSnapshot snapshot = tableOf(4, 0);
+        snapshot.leadSeat = 3;
+
+        REQUIRE(trickitem::leadSeat(snapshot) == 3u);
+    }
+
+    SECTION("before the first card, while the leader is asked to play")
     {
         GameSnapshot snapshot = tableOf(4, 0);
         snapshot.activeSeat = 3;
@@ -418,13 +447,34 @@ TEST_CASE("The rhombus marks whoever leads the trick", "[trick]")
 
         REQUIRE(trickitem::leadSeat(snapshot) == 2u);
     }
+}
 
-    SECTION("nobody between tricks, with the table cleared and nobody asked")
+TEST_CASE("The rhombus marks nobody once the round's play is over", "[trick]")
+{
+    // The round's last trick stays on the table under the round sheet, and the
+    // engine's leader still names somebody - neither is a trick being led.
+    const std::vector<PlayedCardView> last = { played(2, romanian_whist::Rank::Two),
+                                               played(3, romanian_whist::Rank::Ace, true),
+                                               played(0, romanian_whist::Rank::Three),
+                                               played(1, romanian_whist::Rank::Four) };
+
+    SECTION("while the round is scored")
     {
-        // leadSeat names the next trick's leader here, and after a round's last
-        // trick there is no next trick - so it is not what the rhombus reads.
-        GameSnapshot snapshot = tableOf(4, 0);
-        snapshot.leadSeat = 1;
+        GameSnapshot snapshot = tableOf(4, 0, last);
+        snapshot.phase = romanian_whist::GamePhase::RoundScored;
+        snapshot.leadSeat = 3;
+
+        REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+
+        snapshot.table.clear();
+        REQUIRE_FALSE(trickitem::leadSeat(snapshot));
+    }
+
+    SECTION("once the game is over")
+    {
+        GameSnapshot snapshot = tableOf(4, 0, last);
+        snapshot.phase = romanian_whist::GamePhase::GameOver;
+        snapshot.leadSeat = 3;
 
         REQUIRE_FALSE(trickitem::leadSeat(snapshot));
     }

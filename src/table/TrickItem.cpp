@@ -73,20 +73,18 @@ std::optional<trickitem::Placement> trickitem::leadMarkPlacement(unsigned int se
 
 std::optional<unsigned int> trickitem::leadSeat(const GameSnapshot& snapshot)
 {
-    // Not while anybody has still to bid: table.js draws the mark in the play
-    // phase only, and during the bidding the seat being asked is the bidder.
-    if(snapshot.seats.empty() || snapshot.betsPlaced < snapshot.seats.size())
+    // In the play phase only, as table.js draws it: from the completed bids,
+    // before the first card is asked for, until the round's last trick is won.
+    if(snapshot.seats.empty() || snapshot.phase != romanian_whist::GamePhase::Playing)
         return std::nullopt;
 
     // The first card's owner - and still while a full trick waits to be cleared,
-    // which is when leadSeat's engine fallback would already name the winner.
+    // which is when the engine's own leader has already moved on to the winner.
     if(!snapshot.table.empty())
         return snapshot.table.front().seatIndex;
 
-    if(snapshot.activeSeat >= 0)
-        return static_cast<unsigned int>(snapshot.activeSeat);
-
-    return std::nullopt;
+    // Nothing down yet: the engine's leader for the trick about to start.
+    return snapshot.leadSeat;
 }
 
 TrickItem::TrickItem(const CardRenderer* renderer, cardshadow::Cache* shadows, QGraphicsItem* parent)

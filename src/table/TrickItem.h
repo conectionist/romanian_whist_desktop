@@ -58,13 +58,13 @@ std::optional<Placement> cardPlacement(unsigned int seatCount, int humanSeat, un
 // circle is under your cards. None where cardPlacement() has none.
 std::optional<Placement> leadMarkPlacement(unsigned int seatCount, int humanSeat, unsigned int seat);
 
-// WHICH SEAT THE RHOMBUS MARKS, if any: only once every seat has bid, and then
-// whoever played the trick's first card - or, before it is down, the seat being
-// asked to play, which is the one leading.
+// WHICH SEAT THE RHOMBUS MARKS, if any: only while the engine's phase is Playing,
+// and then whoever played the trick's first card - or, before it is down,
+// snapshot.leadSeat, the engine's leader for the trick about to start.
 //
-// NOT snapshot.leadSeat ON AN EMPTY TABLE. That falls back to the engine's trick
-// leader, which has already moved on to the next trick's from the moment one is
-// won - and after a round's last trick there is no next one to mark.
+// THE PHASE, NOT THE BIDS AND THE SEAT ON TURN. After the last bid is recorded the
+// bidder is still on turn, and after the round's last trick the finished trick is
+// still on the table; neither is a trick being led, and only the phase says so.
 std::optional<unsigned int> leadSeat(const GameSnapshot& snapshot);
 
 } // namespace trickitem

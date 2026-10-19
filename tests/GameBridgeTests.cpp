@@ -820,18 +820,17 @@ TEST_CASE("Every snapshot names the seat on turn, or nobody", "[bridge]")
 
 TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real game", "[bridge]")
 {
-    // trickitem::leadSeat() reads the snapshot's own fields - the trick's first
-    // entry, else the seat on turn, and only once every bid is in - rather than
-    // the engine's trick leader, which moves to the winner as a trick is won. What
-    // has to hold for that to be right is a fact about the bridge's frames, so it is
-    // checked over a whole schedule here, the way the case above checks activeSeat:
+    // trickitem::leadSeat() reads the snapshot's phase, the trick's first entry and
+    // the engine's leader. What has to hold for that to be right is a fact about the
+    // bridge's frames, so it is checked over a whole schedule here, the way the case
+    // above checks activeSeat:
     //
-    //   - with nothing on the table, a seat it marks is the one the engine will
-    //     have lead (snapshot.leadSeat is getTrickLeaderSeat() then) - including
-    //     onBettingComplete's frame, where a seat still on turn from the bidding
-    //     would be the wrong one;
-    //   - once a round is over and its table cleared, it marks nobody, though the
-    //     engine's leader still names somebody.
+    //   - on every bidding frame it marks nobody - onBetPlaced's above all, where
+    //     every bet is in, the table is empty and the last bidder is still on turn;
+    //   - from onBettingComplete on, with nothing on the table, it marks the seat
+    //     the engine will have lead (snapshot.leadSeat is getTrickLeaderSeat() then);
+    //   - once a round's play is over it marks nobody, though its last trick is
+    //     still on the table and the engine's leader still names somebody.
     GameBridge bridge(std::nullopt, instant());
 
     std::shared_ptr<const GameSnapshot> latest;
@@ -847,13 +846,26 @@ TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real
             : latest(_latest)
         {}
 
-        void onBettingComplete(const GameEngine&) override { checkEmpty(); }
+        void onBetRequested(const GameEngine&, Seat) override { checkNone(); }
+        void onBetPlaced(const GameEngine&, Seat, unsigned int) override { checkNone(); }
+
+        void onBettingComplete(const GameEngine&) override
+        {
+            // Play has begun, so this frame has to mark the leader - not skip it.
+            if(!latest || !trickitem::leadSeat(*latest))
+                ++wrong;
+
+            checkEmpty();
+        }
+
         void onTrickStarted(const GameEngine&, unsigned int, Seat) override { checkEmpty(); }
         void onCardRequested(const GameEngine&, Seat) override { checkEmpty(); }
-        void onRoundComplete(const GameEngine&) override { checkOver(); }
-        void onGameOver(const GameEngine&) override { checkOver(); }
+        void onRoundScored(const GameEngine&) override { checkNone(); }
+        void onRoundComplete(const GameEngine&) override { checkNone(); }
+        void onGameOver(const GameEngine&) override { checkNone(); }
 
         unsigned int marked = 0;
+        unsigned int unmarked = 0;
         unsigned int wrong = 0;
 
     private:
@@ -873,9 +885,14 @@ TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real
                 ++wrong;
         }
 
-        void checkOver()
+        void checkNone()
         {
-            if(latest && latest->table.empty() && trickitem::leadSeat(*latest))
+            if(!latest)
+                return;
+
+            ++unmarked;
+
+            if(trickitem::leadSeat(*latest))
                 ++wrong;
         }
 
@@ -890,8 +907,10 @@ TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real
     engine.start(fixtures::buildSetup(4));
     engine.run();
 
-    // Some frame had to mark a leader before a card was down, or this checked
-    // nothing: every trick's lead request is one.
+    // Some frame had to mark a leader before a card was down, and some had to mark
+    // nobody, or this checked nothing: every trick's lead request is one, and every
+    // bid the other.
     REQUIRE(checker.marked > 0);
+    REQUIRE(checker.unmarked > 0);
     REQUIRE(checker.wrong == 0);
 }
