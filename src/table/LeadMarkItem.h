@@ -5,11 +5,11 @@
 #include "table/TrickItem.h"
 
 #include <QGraphicsItem>
-#include <QPainterPath>
 #include <QPixmap>
 #include <QPointF>
 #include <QRectF>
 
+#include <cstddef>
 #include <optional>
 
 // WHO LEADS THIS TRICK (the table redesign's section 2.7): a small gold rhombus on
@@ -21,14 +21,6 @@
 // along the radius, so its long axis points at the leader. The item's rotation
 // (trickitem::leadMarkPlacement()) turns its frame so +y runs out along the radius,
 // and the rhombus is long in y.
-namespace leadmark
-{
-
-// The rhombus in the item's frame, centred on its origin and long in y.
-QPainterPath shape();
-
-} // namespace leadmark
-
 class LeadMarkItem : public QGraphicsItem
 {
 public:
@@ -41,6 +33,10 @@ public:
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
+    // How many times the picture has been drawn: READ-ONLY and for tests, which show
+    // with it that a resize settling leaves it alone.
+    std::size_t renders() const { return rendered; }
+
 private:
     Theme::TablePalette palette;
 
@@ -51,6 +47,7 @@ private:
     mutable QPixmap picture;
     mutable QPointF offset;
     mutable int pictureRatio = 0;
+    mutable std::size_t rendered = 0;
 };
 
 #endif

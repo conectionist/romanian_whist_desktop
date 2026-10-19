@@ -5,7 +5,7 @@
 #include "table/TableSpace.h"
 
 #include <QPainter>
-#include <QTransform>
+#include <QPainterPath>
 
 #include <cmath>
 #include <numbers>
@@ -39,11 +39,6 @@ QPainterPath diamond(qreal size)
 // corner, the glow's reach past the square's, and a unit for the anti-aliased edge.
 constexpr qreal pictureReach = (side + 2.0 * outline) / std::numbers::sqrt2 + shadows::reach(glowBlur) + 1.0;
 
-}
-
-QPainterPath leadmark::shape()
-{
-    return QTransform::fromScale(1.0, stretch).map(diamond(side));
 }
 
 LeadMarkItem::LeadMarkItem(QGraphicsItem* parent)
@@ -116,6 +111,7 @@ void LeadMarkItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWi
         picture = made.pixmap;
         offset = made.offset;
         pictureRatio = key;
+        rendered++;
     }
 
     painter->save();

@@ -11,7 +11,9 @@
 #include "paint/CardShadow.h"
 #include "paint/Theme.h"
 
+#include <QGraphicsScene>
 #include <QImage>
+#include <QPainter>
 #include <QList>
 #include <QMarginsF>
 #include <QPointF>
@@ -512,16 +514,84 @@ TEST_CASE("The rhombus sits on the gold circle, or between your card and your ha
     }
 }
 
-TEST_CASE("The rhombus is long along the radius", "[trick]")
+TEST_CASE("The rhombus is drawn long along the radius", "[trick]")
 {
     // An 11 x 11 square turned 45 degrees and stretched 1.45 along the item's y,
-    // which its rotation turns out along the radius toward the leader.
-    const QRectF bounds = leadmark::shape().boundingRect();
+    // which its rotation turns out along the radius toward the leader. Measured on
+    // what paint() draws - the opaque gold of the square, inside its glow and
+    // outline - so a stretch applied along the wrong axis fails here.
+    const Theme theme = Theme::dark();
+    const qreal scale = 4.0;
 
-    REQUIRE(bounds.width() == Catch::Approx(11.0 * std::sqrt(2.0)));
-    REQUIRE(bounds.height() == Catch::Approx(11.0 * std::sqrt(2.0) * 1.45));
-    REQUIRE(bounds.center().x() == Catch::Approx(0.0).margin(1e-9));
-    REQUIRE(bounds.center().y() == Catch::Approx(0.0).margin(1e-9));
+    for(const qreal rotation : { 0.0, 90.0 })
+    {
+        INFO("rotation " << rotation);
+
+        QGraphicsScene scene;
+        auto* mark = new LeadMarkItem;
+        scene.addItem(mark);
+        mark->setMark(trickitem::Placement{ QPointF(0.0, 0.0), rotation }, theme.table);
+
+        const QRectF source(-40.0, -40.0, 80.0, 80.0);
+        QImage image((source.size() * scale).toSize(), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+
+        QPainter painter(&image);
+        scene.render(&painter, QRectF(QPointF(), image.size()), source);
+        painter.end();
+
+        REQUIRE(mark->renders() == 1);
+
+        // The square is the only thing drawn opaque, and it is gold. Its spread, not
+        // its bounding box: anti-aliasing thins the sharp tips more along the long
+        // axis than the short, but a filled rhombus's spread along each axis is in
+        // the ratio of its diagonals exactly, whatever that does to the tips.
+        qreal count = 0.0;
+        QPointF sum;
+
+        std::vector<QPointF> lit;
+
+        for(int y = 0 ; y < image.height() ; y++)
+        {
+            for(int x = 0 ; x < image.width() ; x++)
+            {
+                const QColor colour = image.pixelColor(x, y);
+
+                if(colour.alpha() == 255 && std::abs(colour.red() - theme.table.goldBright.red()) < 8
+                   && std::abs(colour.blue() - theme.table.goldBright.blue()) < 8)
+                {
+                    lit.emplace_back(x + 0.5, y + 0.5);
+                    sum += lit.back();
+                    count += 1.0;
+                }
+            }
+        }
+
+        REQUIRE(count > 0.0);
+
+        const QPointF centre = sum / count;
+        qreal spreadX = 0.0;
+        qreal spreadY = 0.0;
+
+        for(const QPointF& point : lit)
+        {
+            spreadX += (point.x() - centre.x()) * (point.x() - centre.x());
+            spreadY += (point.y() - centre.y()) * (point.y() - centre.y());
+        }
+
+        // Long along the item's y: the scene's y unturned, the scene's x a quarter
+        // turn on.
+        const qreal ratio = rotation == 0.0 ? std::sqrt(spreadY / spreadX) : std::sqrt(spreadX / spreadY);
+
+        REQUIRE(ratio == Catch::Approx(1.45).margin(0.08));
+
+        // About the size of an 11 x 11 square: its area, at this scale.
+        REQUIRE(count == Catch::Approx(11.0 * 11.0 * 1.45 * scale * scale).epsilon(0.15));
+
+        // And centred where it was placed.
+        REQUIRE(centre.x() == Catch::Approx(image.width() / 2.0).margin(1.0));
+        REQUIRE(centre.y() == Catch::Approx(image.height() / 2.0).margin(1.0));
+    }
 }
 
 TEST_CASE("A rhombus with nowhere to go is hidden", "[trick]")
