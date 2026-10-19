@@ -159,7 +159,7 @@ TEST_CASE("Quarter-turn racks are turned exactly", "[rack]")
 // PHASE5_REVIEW_FINDINGS.md #2: a turn a hair above -180 snapped to -180 after it
 // had been brought into range, so it left the range and took QTransform's inexact
 // path for -180.
-TEST_CASE("A turn is always in (-180, 180], snapped or not", "[rack]")
+TEST_CASE("A turn stays in range however it is snapped", "[rack]")
 {
     // Either side of the top seat's angle, by a hair: both are the half turn.
     REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0 + 1e-15) == 180.0);
