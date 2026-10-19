@@ -187,16 +187,20 @@ qreal rackitem::frameRotation(qreal angle)
     // quarter turn short of the rack's angle.
     qreal turn = std::remainder(qRadiansToDegrees(angle) - 90.0, 360.0);
 
-    // (-180, 180]: QTransform::rotate() turns 180 exactly and -180 not.
+    // A QUARTER TURN EXACTLY, not the 89.99999999999999 a right angle can come back
+    // from radians as, so the four-player racks take QTransform's exact path - and
+    // so sit square on the pixel grid paint() snaps them to.
+    const qreal quarters = std::round(turn / 90.0) * 90.0;
+
+    if(std::abs(turn - quarters) < 1e-9)
+        turn = quarters;
+
+    // THEN (-180, 180]: QTransform::rotate() turns 180 exactly and -180 not. After
+    // the snap, so a turn a hair above -180 - which snaps to -180 - comes out 180.
     if(turn <= -180.0)
         turn += 360.0;
 
-    // AND A QUARTER TURN EXACTLY, not the 89.99999999999999 a right angle can come
-    // back from radians as, so the four-player racks take QTransform's exact path -
-    // and so sit square on the pixel grid paint() snaps them to.
-    const qreal quarters = std::round(turn / 90.0) * 90.0;
-
-    return std::abs(turn - quarters) < 1e-9 ? quarters : turn;
+    return turn;
 }
 
 rackitem::Shown rackitem::shownFor(const SeatView& seat)

@@ -156,6 +156,28 @@ TEST_CASE("Quarter-turn racks are turned exactly", "[rack]")
     REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, -1, 0)) == 0.0);
 }
 
+// PHASE5_REVIEW_FINDINGS.md #2: a turn a hair above -180 snapped to -180 after it
+// had been brought into range, so it left the range and took QTransform's inexact
+// path for -180.
+TEST_CASE("A turn is always in (-180, 180], snapped or not", "[rack]")
+{
+    // Either side of the top seat's angle, by a hair: both are the half turn.
+    REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0 + 1e-15) == 180.0);
+    REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0 - 1e-15) == 180.0);
+    REQUIRE(rackitem::frameRotation(3.0 * std::numbers::pi / 2.0) == 180.0);
+
+    // And all the way round, every turn is in range.
+    for(int step = -720 ; step <= 720 ; step++)
+    {
+        const qreal angle = step * std::numbers::pi / 360.0;
+        const qreal turn = rackitem::frameRotation(angle);
+
+        INFO("angle " << angle << ", turn " << turn);
+        REQUIRE(turn > -180.0);
+        REQUIRE(turn <= 180.0);
+    }
+}
+
 // ---- the cards in it ----
 
 TEST_CASE("A rack's card is the mock-up's size and the art's shape", "[rack]")
