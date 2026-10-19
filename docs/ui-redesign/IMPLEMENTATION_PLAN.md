@@ -307,11 +307,15 @@ cache behaviour; it is already a single seam for exactly this.
   then stretched 1.45× along the radial direction (`rotate(a − 90°) · scaleY(1.45) · rotate(45°)`),
   gold-bright fill, 1 px `rgba(60,40,10,0.5)` outline, glow blur 10 `rgba(242,211,140,0.8)`. The
   outline and the glow are box-shadows of the square, so the stretch stretches them too.
-  When: only once every seat has bid (table.js draws it in the play phase only). Which seat: the
-  first card's owner once a card is down (the same as `GameSnapshot::leadSeat` then); before the
-  first card of a trick, the seat being asked to play (`activeSeat`); otherwise none. *Not*
-  `leadSeat` on an empty table: there it is the engine's trick leader, which names the next
-  trick's leader even after a round's last trick.
+  When: only while the engine's phase is `Playing` (`GameSnapshot::phase`, from
+  `GameEngine::getPhase()`), as table.js draws it in its play phase only. That runs from
+  `onBettingComplete`, before anyone is asked for a card, until the round's last trick is won.
+  Which seat: the first card's owner once a card is down, including while a full trick waits to be
+  cleared; before that, `GameSnapshot::leadSeat`, the engine's leader for the trick about to
+  start. *Not* worked out from the bids and the seat on turn: during the last bid's frame every
+  bid is in and the last bidder is still on turn, and once the round is scored its last trick
+  is still on the table. (Corrected in phase 6's review; phase 6 first read `betsPlaced` and
+  `activeSeat`.)
 
 ### 2.8 The human's hand
 
@@ -909,8 +913,8 @@ Done when: the played cards and rhombus match the mock-up for 4 and 6 players.
 
 **Outcome:**
 
-- **The count is 377 tests**, passing on the `default` preset with Qt 6.11.2, and the `default`
-  and `release` builds have no warnings. 364 − 6 + 19:
+- **The count is 384 tests**: 377 at the phase's first commit, and 7 more from its review
+  round. 364 − 6 + 19 + 7:
   - **Six `SeatLayoutTests` cases retired** with `seatlayout::seatCentres()` and `ringRect()`,
     which lost their last caller here (the owner's decision, 2026-10-19): "Seat centres are
     fractions of the rect…", "No two seats share a centre" (now covered by "No two panels
@@ -922,22 +926,44 @@ Done when: the played cards and rhombus match the mock-up for 4 and 6 players.
   - **19 added:** 16 in `TrickItemTests` (its two defensive cases are kept under their new
     meaning), a scene case for the rhombus, a drag-settle case for the shadows, and a
     `GameBridgeTests` case that runs a real four-seat game.
+  - **7 more from the review round:**
+    - the rhombus marks nobody once the round's play is over;
+    - a played card's shadow lies a whole number of pixels from the card's corner;
+    - the winner's ring has no inner edge for the felt to show through;
+    - `devicepixels::canvas()`'s anchoring;
+    - `seatlayout::place()` and `humanSeated()`;
+    - a settling drag doesn't draw the rhombus again.
+
+    "The rhombus is long along the radius" became "…drawn long along the radius": it now
+    measures what `LeadMarkItem` paints.
 - **Section 2.7 was corrected in three places**, now written into it above:
   - every played card casts a shadow, not only the winner;
   - the winner is highlighted only from the second card (the owner's decision, 2026-10-19:
     as the mock-up);
-  - the rhombus shows only once every bid is in. Before a card is down it reads `activeSeat`,
-    not `leadSeat`, which on an empty table already names the next trick's leader.
+  - the rhombus shows only in the engine's `Playing` phase. Phase 6 first guessed that phase
+    from `betsPlaced` and `activeSeat`. That marked the last bidder during their final bid's
+    frame, hid the mark when play began, and left it under the round sheet. The review round
+    put `GameSnapshot::phase` on the snapshot instead.
 - **What later phases take from here:**
+  - **Where a seat is:** `seatlayout::place()` gives a seat's panel, whether it is the
+    human's, and its rack's angle. `TableScene::relayout()` works out every seat's once
+    (`seatlayout::places()`), and the racks, the trick and the rhombus all read it.
+    `seatlayout::humanSeated()` is the one "is somebody at the table" rule.
   - **Where a played card goes:** `trickitem::cardPlacement()`, and the rhombus
-    `trickitem::leadMarkPlacement()`, both from `seatlayout::rackAngle()`. The turn is
+    `trickitem::leadMarkPlacement()`, both from a `Place`. The turn is
     `rackitem::frameRotation()`, so four players' cards are exact quarter turns.
-    `trickitem::leadSeat()` is which seat is marked. `trickitem::seated()` is the one "is
-    somebody at the table" test; `TableScene` uses it too.
+    `trickitem::leadSeat()` is which seat is marked.
+  - **The engine's phase is on the snapshot:** `GameSnapshot::phase`. Phase 8's trick panel
+    can read it rather than guessing the phase.
   - **The card shadow:** `src/paint/CardShadow.h`. `cardshadow::render()` draws `.tcard`'s
-    box-shadows (plain, or winning: shadow, glow and ring) as one picture in the card's own
-    frame. `cardshadow::Cache` is owned by `TableScene` like the other caches.
+    box-shadows (plain, or winning: shadow, glow and ring) as one picture, laid a whole number
+    of pixels from the card's own corner. The winner's ring is filled through under the card.
+    It takes `cardshadow::Colours`, its four colours, not the whole palette.
     **Phase 7 can give the hand its shadow through the same cache.**
+  - **One picture cache:** `src/paint/PictureCache.h`. The panels, racks and card shadows all
+    keep their pictures in it, and `devicepixels::canvas()` is the one place a picture's corner
+    is put on a whole pixel. The per-item memo in front of each cache is still copied four
+    times; see `PHASE5_REVIEW_FINDINGS.md` #12.
   - **`CardItem::setPlayed()`** replaces `setWinning()`. Only played cards cast a shadow, so the
     hand is untouched. `CardItem::cardSize()` is public: a played card's `boundingRect()`
     reaches past the card.
@@ -945,22 +971,26 @@ Done when: the played cards and rhombus match the mock-up for 4 and 6 players.
     before the 1.45 stretch, at 1.45 times the ratio, as CSS blurs the box before transforming
     it.
   - **New table-space constants:** `tablespace::playedInset` (60) and `leadMarkHumanY` (820).
-- **Resizing**, release build, `[.timing]`. One run, against phase 5's recorded runs (not
-  measured back to back):
+- **Resizing**, release build, `[.timing]`, one run per column, against phase 5's recorded runs
+  (not measured back to back):
 
-  | | Phase 5 | Phase 6 |
-  |---|---|---|
-  | Drag frame, median | 7.3–7.6 ms | 8.0 ms |
-  | Drag frame, worst | 8.3–8.6 ms | 8.7 ms |
-  | First step | 70–73 ms | 70 ms |
-  | Settle frame | 76–79 ms | 81 ms |
+  | | Phase 5 | Phase 6, first run | Phase 6, after review |
+  |---|---|---|---|
+  | Drag frame, median | 7.3–7.6 ms | 8.0 ms | 8.0 ms |
+  | Drag frame, worst | 8.3–8.6 ms | 8.7 ms | 9.1 ms |
+  | First step | 70–73 ms | 70 ms | 75 ms |
+  | Settle frame | 76–79 ms | 81 ms | 83 ms |
 
-  The shadows cost about half a millisecond a drag frame: five pictures blended at their turns,
-  as the racks cost. The settle frame draws them again at the new ratio.
-
-  **Measured without a winner or the rhombus.** `fullTable()` had no winning card and no bets
-  then. Since the phase 6 review it has both, so the winner's three-layer picture and the
-  rhombus are on the timed table. These figures are from before that and were not re-run.
+  - **The shadows cost about half a millisecond a drag frame:** five pictures blended at their
+    turns, as the racks cost.
+  - **The settle frame draws them again** at the new ratio.
+  - **The first run's timed table had no winner and no rhombus.** `fullTable()` gained both in
+    the review round. The refreshed run, at `6c4ae69`, times the winner's three-layer picture
+    and the rhombus too.
+    - The drag frame's median doesn't move.
+    - The first step and the settle frame, where those pictures are drawn afresh, cost about
+      2–5 ms more. That is within one run's noise of each other, so read it as "a little", not as
+      a measurement.
 - **Pitfall: `src/paint/` does not include `src/table/`.** The card shadow's corner radius (7)
   therefore lives in `CardShadow.cpp`, not in `TableSpace.h`.
 
