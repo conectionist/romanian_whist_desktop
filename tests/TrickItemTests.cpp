@@ -135,7 +135,7 @@ TEST_CASE("An opponent's card lies in front of their rack, turned to it", "[tric
                     trickitem::cardPlacement(seatCount, humanSeat, seat);
                 REQUIRE(place);
 
-                const qreal rack = seatlayout::rackAngle(seatCount, humanSeat, seat);
+                const qreal rack = seatlayout::place(seatCount, humanSeat, seat)->angle;
 
                 // On the line to the rack, its outer end 60 inside the felt's edge...
                 REQUIRE(distanceFromCentre(place->centre) == Catch::Approx(radius));
@@ -502,7 +502,7 @@ TEST_CASE("The rhombus sits on the gold circle, or between your card and your ha
             const std::optional<trickitem::Placement> mark = trickitem::leadMarkPlacement(seatCount, 0, seat);
             REQUIRE(mark);
 
-            const qreal rack = seatlayout::rackAngle(seatCount, 0, seat);
+            const qreal rack = seatlayout::place(seatCount, 0, seat)->angle;
 
             REQUIRE(distanceFromCentre(mark->centre) == Catch::Approx(tablespace::goldLineRadius));
             REQUIRE(std::cos(angleOf(mark->centre) - rack) == Catch::Approx(1.0));

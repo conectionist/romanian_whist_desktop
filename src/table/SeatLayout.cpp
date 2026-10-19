@@ -104,11 +104,6 @@ qreal seatlayout::rackAngle(QRectF panel)
     return angle;
 }
 
-qreal seatlayout::rackAngle(unsigned int seatCount, int humanSeat, unsigned int seat)
-{
-    return rackAngle(panelRect(seatCount, humanSeat, seat));
-}
-
 QPointF seatlayout::onCircle(qreal angle, qreal radius)
 {
     return tablespace::centre + radius * QPointF(std::cos(angle), std::sin(angle));

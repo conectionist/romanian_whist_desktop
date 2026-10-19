@@ -602,7 +602,7 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
     const qreal radius = tablespace::feltRadius - 60.0 - height / 2.0;
 
     // Seat 2 is the first clockwise of you, on the left, where its rack is.
-    const qreal rack = seatlayout::rackAngle(4, 1, 2);
+    const qreal rack = seatlayout::place(4, 1, 2)->angle;
     const QPointF theirs = tablespace::centre + radius * QPointF(std::cos(rack), std::sin(rack));
 
     bool sawYours = false;
