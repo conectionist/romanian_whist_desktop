@@ -1,6 +1,7 @@
 #ifndef LEAD_MARK_ITEM_H
 #define LEAD_MARK_ITEM_H
 
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 #include "table/TrickItem.h"
 
@@ -35,7 +36,7 @@ public:
 
     // How many times the picture has been drawn: READ-ONLY and for tests, which show
     // with it that a resize settling leaves it alone.
-    std::size_t renders() const { return rendered; }
+    std::size_t renders() const { return memo.compositions(); }
 
 private:
     Theme::TablePalette palette;
@@ -44,10 +45,7 @@ private:
     // drawn on every frame of a drag otherwise. Drawn before the stretch, as CSS
     // blurs the box before its transform, at the ratio the stretch will magnify it
     // to.
-    mutable QPixmap picture;
-    mutable QPointF offset;
-    mutable int pictureRatio = 0;
-    mutable std::size_t rendered = 0;
+    mutable PictureMemo memo;
 };
 
 #endif

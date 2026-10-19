@@ -40,7 +40,7 @@ void CardItem::setCardHeight(qreal height)
     // is never repainted and the new one may never be visited.
     prepareGeometryChange();
     cardHeight = height;
-    shadowStale = true;
+    shadowMemo.invalidate();
     update();
 }
 
@@ -58,7 +58,7 @@ void CardItem::setPlayed(bool isWinning, const Theme::TablePalette& palette, car
     winning = isWinning;
     colours = cast;
     shadows = cache;
-    shadowStale = true;
+    shadowMemo.invalidate();
     update();
 }
 
@@ -162,14 +162,5 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
 const cardshadow::Picture& CardItem::shadow(QSizeF size, qreal ratio) const
 {
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(shadowStale || key != shadowRatio)
-    {
-        shadowPicture = shadows->picture(size, winning, colours, ratio);
-        shadowRatio = key;
-        shadowStale = false;
-    }
-
-    return shadowPicture;
+    return shadowMemo.picture(ratio, [&] { return shadows->picture(size, winning, colours, ratio); });
 }

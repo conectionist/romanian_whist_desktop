@@ -194,7 +194,7 @@ void SeatItem::setSeat(const SeatView& view, bool isActive, bool isBiddingOpen, 
         return;
 
     shown = now;
-    stale = true;
+    memo.invalidate();
     update();
 }
 
@@ -206,7 +206,7 @@ void SeatItem::setPanelSize(QSizeF panelSize)
     prepareGeometryChange();
     size = panelSize;
     shown = shownNow();
-    stale = true;
+    memo.invalidate();
     update();
 }
 
@@ -216,7 +216,7 @@ void SeatItem::setPortrait(unsigned int portrait)
         return;
 
     look = portrait;
-    stale = true;
+    memo.invalidate();
     update();
 }
 
@@ -275,44 +275,36 @@ void SeatItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
 const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ratio) const
 {
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(!stale && composedRatio == key && !composed.pixmap.isNull())
-        return composed;
-
-    const panel::Picture frame = panels->picture(size, theme.table, active, ratio);
-
-    // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate transform.
-    // The panel is left stale, so the next real paint composes rather than finding
-    // a null picture marked as current.
-    if(frame.pixmap.isNull())
+    return memo.picture(ratio, [&]() -> panel::Picture
     {
-        static const panel::Picture none;
-        return none;
-    }
+        const panel::Picture frame = panels->picture(size, theme.table, active, ratio);
 
-    composed.pixmap = QPixmap(frame.pixmap.size());
-    composed.pixmap.setDevicePixelRatio(ratio);
-    composed.pixmap.fill(Qt::transparent);
-    composed.offset = frame.offset;
+        // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate
+        // transform. Null, which the memo does not keep as current, so the next real
+        // paint composes.
+        if(frame.pixmap.isNull())
+            return {};
 
-    QPainter painter(&composed.pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.drawPixmap(QPointF(0.0, 0.0), frame.pixmap);
+        panel::Picture composed;
+        composed.pixmap = QPixmap(frame.pixmap.size());
+        composed.pixmap.setDevicePixelRatio(ratio);
+        composed.pixmap.fill(Qt::transparent);
+        composed.offset = frame.offset;
 
-    // The item's own units from here: the panel's top-left is where the chrome's
-    // offset says it is in the picture.
-    painter.translate(-frame.offset - layout.panel.topLeft());
+        QPainter painter(&composed.pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.drawPixmap(QPointF(0.0, 0.0), frame.pixmap);
 
-    paintPortrait(painter, layout.portrait);
-    paintText(painter, layout.text);
-    painter.end();
+        // The item's own units from here: the panel's top-left is where the chrome's
+        // offset says it is in the picture.
+        painter.translate(-frame.offset - layout.panel.topLeft());
 
-    composedRatio = key;
-    stale = false;
-    composedCount++;
+        paintPortrait(painter, layout.portrait);
+        paintText(painter, layout.text);
+        painter.end();
 
-    return composed;
+        return composed;
+    });
 }
 
 void SeatItem::paintPortrait(QPainter& painter, const QRectF& box) const

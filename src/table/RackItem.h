@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "paint/PictureCache.h"
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
 #include <romanian_whist/Card.h>
@@ -192,7 +193,7 @@ public:
     // which show with it that a resize settling leaves it alone - SeatItem's twin.
     // The cache may have had it already; rackitem::Cache::renders() counts those
     // that were composed.
-    std::size_t compositions() const { return composedCount; }
+    std::size_t compositions() const { return memo.compositions(); }
 
 private:
     const CardRenderer* renderer;
@@ -207,12 +208,11 @@ private:
     // paint and every hit test, and it is eight projected cards to work out.
     QRectF bounds;
 
-    // The rack's picture. The ratio is compared on its own, because it changes
-    // without any setter.
-    mutable rackitem::Picture composed;
-    mutable int composedRatio = 0;
-    mutable bool stale = true;
-    mutable std::size_t composedCount = 0;
+    // The rack's picture at `ratio`, from the shared cache when what it shows or
+    // the ratio has changed, and kept otherwise.
+    const rackitem::Picture& composedAt(qreal ratio) const;
+
+    mutable PictureMemo memo;
 };
 
 #endif

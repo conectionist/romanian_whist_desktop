@@ -2,6 +2,7 @@
 #define CARD_ITEM_H
 
 #include "paint/CardShadow.h"
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
 #include <romanian_whist/Card.h>
@@ -92,7 +93,8 @@ private:
     bool dimmed = false;
 
     // The shadow's picture, asked of the cache only when it is stale or the ratio
-    // has moved - RackItem::picture()'s pattern - rather than on every paint.
+    // has moved, through the same PictureMemo the racks and panels keep theirs in,
+    // rather than on every paint.
     const cardshadow::Picture& shadow(QSizeF size, qreal ratio) const;
 
     // On the felt, and the trick's winner. The colours are the shadow's and the
@@ -103,9 +105,7 @@ private:
     cardshadow::Colours colours;
     cardshadow::Cache* shadows = nullptr;
 
-    mutable cardshadow::Picture shadowPicture;
-    mutable int shadowRatio = 0;
-    mutable bool shadowStale = true;
+    mutable PictureMemo shadowMemo;
 };
 
 #endif

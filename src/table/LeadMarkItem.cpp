@@ -55,7 +55,7 @@ void LeadMarkItem::setMark(std::optional<trickitem::Placement> place, const Them
     if(colours != palette)
     {
         palette = colours;
-        pictureRatio = 0;
+        memo.invalidate();
         update();
     }
 
@@ -86,12 +86,14 @@ void LeadMarkItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWi
 
     // At the pixels the stretch will spread it over, so its long axis stays sharp.
     const qreal pictureAt = ratio * stretch;
-    const int key = devicepixels::ratioKey(pictureAt);
 
-    if(key != pictureRatio || picture.isNull())
+    const devicepixels::Canvas& picture = memo.picture(pictureAt, [&]
     {
         devicepixels::Canvas made = devicepixels::canvas(
             QRectF(-pictureReach, -pictureReach, 2.0 * pictureReach, 2.0 * pictureReach), pictureAt);
+
+        if(made.pixmap.isNull())
+            return made;
 
         QPainter draw(&made.pixmap);
         draw.setRenderHint(QPainter::Antialiasing);
@@ -110,15 +112,15 @@ void LeadMarkItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWi
         draw.fillPath(square, palette.goldBright);
         draw.end();
 
-        picture = made.pixmap;
-        offset = made.offset;
-        pictureRatio = key;
-        rendered++;
-    }
+        return made;
+    });
+
+    if(picture.pixmap.isNull())
+        return;
 
     painter->save();
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
     painter->scale(1.0, stretch);
-    painter->drawPixmap(offset, picture);
+    painter->drawPixmap(picture.offset, picture.pixmap);
     painter->restore();
 }

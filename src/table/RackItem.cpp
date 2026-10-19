@@ -397,7 +397,7 @@ void RackItem::setRack(const SeatView& seat, const Theme& theme)
 
     showing = now;
     palette = theme.table;
-    stale = true;
+    memo.invalidate();
     update();
 }
 
@@ -410,9 +410,9 @@ void RackItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 {
     // At the pixels it lands on - or, while a resize settles, at the scale it
     // began from, so the cached rack is drawn scaled rather than composed again.
-    const QPixmap rack = picture(devicepixels::effectiveRatio(*painter));
+    const rackitem::Picture& rack = composedAt(devicepixels::effectiveRatio(*painter));
 
-    if(rack.isNull())
+    if(rack.pixmap.isNull())
         return;
 
     // ON A WHOLE DEVICE PIXEL. The picture's corner is whole only in the rack's own
@@ -421,23 +421,22 @@ void RackItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // pixel, and the filter samples each at its centre. Turned any other way it is
     // filtered after all, as every played card is.
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
-    painter->drawPixmap(devicepixels::snapped(*painter, composed.offset), rack);
+    painter->drawPixmap(devicepixels::snapped(*painter, rack.offset), rack.pixmap);
 }
 
 QPixmap RackItem::picture(qreal ratio) const
 {
+    return composedAt(ratio).pixmap;
+}
+
+const rackitem::Picture& RackItem::composedAt(qreal ratio) const
+{
+    static const rackitem::Picture none;
+
     if(ratio <= 0.0 || !renderer)
-        return QPixmap();
+        return none;
 
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(stale || composedRatio != key)
-    {
-        composed = racks->picture(showing, palette, ratio, *renderer);
-        composedRatio = key;
-        stale = false;
-        composedCount++;
-    }
-
-    return composed.pixmap;
+    // A rack with no cards is a null picture, which the memo keeps asking for - at
+    // the cost of the cache's first line, which returns it at once.
+    return memo.picture(ratio, [&] { return racks->picture(showing, palette, ratio, *renderer); });
 }

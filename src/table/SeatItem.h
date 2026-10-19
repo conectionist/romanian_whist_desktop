@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "paint/Panel.h"
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
 #include <QGraphicsObject>
@@ -169,7 +170,7 @@ public:
     // How many times this panel has been composed: READ-ONLY and for tests, which
     // show with it that a resize settling, or a snapshot that changes nothing
     // here, leaves the cached panel alone - TableTopItem::renders()'s twin.
-    std::size_t compositions() const { return composedCount; }
+    std::size_t compositions() const { return memo.compositions(); }
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
@@ -205,12 +206,8 @@ private:
     // What the composed picture shows, and is painted from.
     seatitem::Shown shown;
 
-    // The composed panel, and whether anything it shows has changed since. The
-    // ratio is compared on its own, because it changes without any setter.
-    mutable panel::Picture composed;
-    mutable int composedRatio = 0;
-    mutable bool stale = true;
-    mutable std::size_t composedCount = 0;
+    // The composed panel, kept until what it shows or the ratio changes.
+    mutable PictureMemo memo;
 };
 
 #endif

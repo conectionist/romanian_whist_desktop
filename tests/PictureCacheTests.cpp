@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "paint/PictureCache.h"
+#include "paint/PictureMemo.h"
 
 #include <QPixmap>
 
@@ -74,4 +75,70 @@ TEST_CASE("A new ratio or style starts the cache again", "[picture-cache]")
     // And the pictures of the old ratio are gone with it.
     ask(cache, 1, 1.0, 7);
     REQUIRE(cache.renders() == 4);
+}
+
+// ---- one item's picture, kept between paints (PHASE5_REVIEW_FINDINGS.md #12) ----
+//
+// The panels, the racks, the played cards' shadows and the lead rhombus each kept
+// a copy of this, and the copies had drifted: two of them kept a null picture as
+// current (#3), so an item with something to show could go on drawing nothing.
+
+namespace
+{
+
+// Composes into `memo` at `ratio`, from `picture`, and counts the calls.
+struct Composer
+{
+    PictureMemo memo;
+    int calls = 0;
+
+    const devicepixels::Canvas& at(qreal ratio, const QPixmap& picture = QPixmap(4, 4))
+    {
+        return memo.picture(ratio, [&]
+        {
+            calls++;
+            return devicepixels::Canvas{ picture, QPointF() };
+        });
+    }
+};
+
+}
+
+TEST_CASE("A kept picture is not composed again until it changes", "[picture-memo]")
+{
+    Composer item;
+
+    item.at(1.0);
+    item.at(1.0);
+    REQUIRE(item.calls == 1);
+    REQUIRE(item.memo.compositions() == 1);
+
+    // What it shows changed.
+    item.memo.invalidate();
+    item.at(1.0);
+    REQUIRE(item.calls == 2);
+
+    // Painted at another ratio, which no setter announces.
+    item.at(2.0);
+    REQUIRE(item.calls == 3);
+    REQUIRE(item.memo.compositions() == 3);
+}
+
+TEST_CASE("A null picture is never kept as current", "[picture-memo]")
+{
+    Composer item;
+
+    // Nothing to show this time - an allocation that failed, or no chrome yet.
+    REQUIRE(item.at(1.0, QPixmap()).pixmap.isNull());
+
+    // The next paint composes again, rather than drawing nothing for good...
+    REQUIRE_FALSE(item.at(1.0).pixmap.isNull());
+    REQUIRE(item.calls == 2);
+
+    // ...and only what was made is counted.
+    REQUIRE(item.memo.compositions() == 1);
+
+    // Then it is kept as usual.
+    item.at(1.0);
+    REQUIRE(item.calls == 2);
 }
