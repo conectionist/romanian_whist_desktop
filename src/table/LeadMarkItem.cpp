@@ -66,7 +66,9 @@ void LeadMarkItem::setMark(std::optional<trickitem::Placement> place, const Them
     }
 
     setPos(place->centre);
-    setRotation(place->rotation);
+    // Only when it turns: setRotation() repaints even for the angle it already has.
+    if(rotation() != place->rotation)
+        setRotation(place->rotation);
     show();
 }
 

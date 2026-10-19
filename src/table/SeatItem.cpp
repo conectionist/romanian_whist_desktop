@@ -180,13 +180,21 @@ void SeatItem::setSeat(const SeatView& view, bool isActive, bool isBiddingOpen, 
     const seatitem::Shown now = shownNow();
 
     // The active seat's chrome differs too, and `active` is in the marker.
-    if(now != shown || theme.table != palette.table)
-    {
-        shown = now;
-        stale = true;
-    }
+    //
+    // REPAINTED ONLY WHEN IT CHANGES. This runs for every panel on every snapshot,
+    // about 1300 a game, and an update() of a panel that shows the same as before
+    // repaints it, the felt and the racks beneath it, and your hand under yours,
+    // for nothing - #8's waste in PHASE5_REVIEW_FINDINGS.md, found here by its test.
+    // The picture is drawn from `shown` and the table's palette alone.
+    const bool changed = now != shown || theme.table != palette.table;
 
     theme = palette;
+
+    if(!changed)
+        return;
+
+    shown = now;
+    stale = true;
     update();
 }
 

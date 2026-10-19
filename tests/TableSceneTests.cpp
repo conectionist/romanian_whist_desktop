@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include "TableFixtures.h"
+
 #include "table/TableScene.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
@@ -19,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QGraphicsItem>
+#include <QList>
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QImage>
@@ -889,4 +892,39 @@ TEST_CASE("A card rendered into a HiDPI image is rasterized at the image's ratio
     rendered.setDevicePixelRatio(1.0);
 
     REQUIRE(rendered == expected);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #8. relayout() runs on every snapshot - about 1300 a
+// game - and setRotation() repaints an item's whole area even when the angle is the
+// one it already has. The racks, the played cards and the rhombus are all turned
+// there, so a snapshot that changed nothing on the table repainted all of them, and
+// the felt, the shadows and the panels beneath. Written for that, this also caught
+// SeatItem::setSeat() repainting every panel, and your hand under yours.
+TEST_CASE("A snapshot that changes nothing repaints nothing", "[table]")
+{
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+
+    // fullTable() is mid-trick: racks on the rim, five cards down, one of them
+    // winning, and the rhombus on the felt - everything that is turned.
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+    QCoreApplication::processEvents();
+
+    QList<QRectF> repainted;
+    QObject::connect(&scene, &QGraphicsScene::changed,
+                     [&repainted](const QList<QRectF>& regions) { repainted += regions; });
+
+    // The same table again, as a new frame: nothing on it has moved.
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+    QCoreApplication::processEvents();
+
+    REQUIRE(repainted.isEmpty());
+
+    // The control: a frame that does change something is seen to.
+    GameSnapshot moved = fullTable();
+    moved.table.pop_back();
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(moved));
+    QCoreApplication::processEvents();
+
+    REQUIRE_FALSE(repainted.isEmpty());
 }
