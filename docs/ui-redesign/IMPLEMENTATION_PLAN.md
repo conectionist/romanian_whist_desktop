@@ -957,6 +957,10 @@ Done when: the played cards and rhombus match the mock-up for 4 and 6 players.
 
   The shadows cost about half a millisecond a drag frame: five pictures blended at their turns,
   as the racks cost. The settle frame draws them again at the new ratio.
+
+  **Measured without a winner or the rhombus.** `fullTable()` had no winning card and no bets
+  then. Since the phase 6 review it has both, so the winner's three-layer picture and the
+  rhombus are on the timed table. These figures are from before that and were not re-run.
 - **Pitfall: `src/paint/` does not include `src/table/`.** The card shadow's corner radius (7)
   therefore lives in `CardShadow.cpp`, not in `TableSpace.h`.
 

@@ -100,6 +100,9 @@ public:
     // The played cards' shadow pictures, READ-ONLY and for tests in the same way.
     const cardshadow::Cache& playedShadows() const { return shadowPictures; }
 
+    // The lead rhombus, READ-ONLY and for tests in the same way.
+    const LeadMarkItem* leadMarkItem() const { return leadMark; }
+
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
