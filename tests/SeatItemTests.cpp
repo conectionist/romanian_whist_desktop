@@ -118,6 +118,10 @@ TEST_CASE("A seat whose hand can be seen draws the same panel as one whose canno
         QPainter painter(&image);
         plaque.scene.render(&painter, QRectF(QPointF(), bounds.size()), bounds);
 
+        // ENDED BEFORE THE IMAGE LEAVES: returned with the painter still on it, the
+        // image is only safe if the copy is elided (PHASE5_REVIEW_FINDINGS.md #7).
+        painter.end();
+
         return image;
     };
 
