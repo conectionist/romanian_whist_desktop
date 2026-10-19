@@ -140,6 +140,21 @@ QTransform rackitem::cardTransform(std::size_t count, std::size_t index)
     return transform;
 }
 
+QTransform rackitem::artTransform(QSize art, bool face)
+{
+    if(art.isEmpty())
+        return QTransform();
+
+    const QSizeF size = cardSize();
+    const QTransform scale = QTransform::fromScale(size.width() / art.width(), size.height() / art.height());
+
+    if(!face)
+        return scale;
+
+    // Half round about the flat card's middle: its top-left to its bottom-right.
+    return scale * QTransform(-1.0, 0.0, 0.0, -1.0, size.width(), size.height());
+}
+
 qreal rackitem::farMagnification()
 {
     return perspective / (perspective - cardSize().height() * std::sin(tilt));
@@ -243,11 +258,14 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     const qreal artRatio = ratio * farMagnification();
 
     std::vector<QPixmap> arts;
+    std::vector<bool> faceUp;
     arts.reserve(count);
+    faceUp.reserve(count);
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
         QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, artRatio) : QPixmap();
+        faceUp.push_back(!art.isNull());
 
         if(art.isNull())
             art = renderer.back(artSize, artRatio);
@@ -295,7 +313,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
         art.setDevicePixelRatio(1.0);
 
         QBrush brush(art);
-        brush.setTransform(QTransform::fromScale(size.width() / art.width(), size.height() / art.height()));
+        brush.setTransform(artTransform(art.size(), faceUp[i]));
 
         painter.save();
         painter.setTransform(cardTransform(count, i), true);

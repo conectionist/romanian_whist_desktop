@@ -62,6 +62,17 @@ QPolygonF cardQuad(std::size_t count, std::size_t index);
 // the rack is painted through.
 QTransform cardTransform(std::size_t count, std::size_t index);
 
+// HOW A CARD'S ART IS LAID ON THE FLAT CARD, from the art's own pixels: scaled to
+// fill it - and, for a face, turned half round.
+//
+// A FACE READS FROM ITS TOP AT THE RAISED END. The flat card hangs from the rail by
+// its top edge and its far end rises toward the owner, so a card worn on the
+// forehead, facing the table, has its top up at that far end. Laid the other way,
+// the top opponent's Forehead card was upside down to you, and the side seats'
+// were turned the wrong way. A back is the same either way round, and is left as
+// it was.
+QTransform artTransform(QSize art, bool face);
+
 // How much a card's far edge is magnified by the perspective, so its picture can
 // be made at that many more pixels and stay sharp where it is largest.
 qreal farMagnification();

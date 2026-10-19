@@ -293,6 +293,108 @@ TEST_CASE("A rack shows faces only when the seat's hand can be seen", "[rack]")
     REQUIRE(unseen.faces.empty());
 }
 
+// ---- which way up a Forehead face stands (PHASE5_REVIEW_FINDINGS.md #4) ----
+//
+// A card worn on the forehead faces the table with its top up - and in the rack,
+// "up" is the far end, which rises toward the owner. The flat card hangs from the
+// rail by ITS top edge, so the face has to be laid on it half round: drawn the
+// other way, the top opponent's card was upside down to you.
+
+TEST_CASE("A face is laid on the rack's card half round, and a back is not", "[rack]")
+{
+    const QSize art(124, 180);
+    const QRectF flat(QPointF(), rackitem::cardSize());
+
+    const QTransform face = rackitem::artTransform(art, true);
+    const QTransform back = rackitem::artTransform(art, false);
+
+    // Both fill the flat card exactly.
+    REQUIRE(face.mapRect(QRectF(QPointF(), QSizeF(art))) == flat);
+    REQUIRE(back.mapRect(QRectF(QPointF(), QSizeF(art))) == flat);
+
+    // The art's top-left is the flat card's top-left for a back, and its
+    // bottom-right - the far end's corner - for a face.
+    REQUIRE(back.map(QPointF(0.0, 0.0)) == QPointF(0.0, 0.0));
+    REQUIRE(face.map(QPointF(0.0, 0.0)) == flat.bottomRight());
+
+    // And through the rack, for every card of a full row: the face's top edge lands
+    // on the far end, out toward the owner (+y in the rack's frame).
+    for(std::size_t i = 0 ; i < rackitem::mostCards ; i++)
+    {
+        INFO("card " << i);
+
+        const QTransform through = face * rackitem::cardTransform(rackitem::mostCards, i);
+        const QPointF top = through.map(QPointF(art.width() / 2.0, 0.0));
+        const QPointF bottom = through.map(QPointF(art.width() / 2.0, art.height()));
+
+        REQUIRE(top.y() > bottom.y());
+    }
+}
+
+TEST_CASE("A Forehead face is drawn with its top at the raised end", "[rack]")
+{
+    // MEASURED IN WHAT render() DRAWS, so the transform above is the one it uses.
+    // The seven of hearts is top-heavy - its seventh pip sits above the middle - so
+    // whichever half of the rack's card holds more of its red is where its top went.
+    const CardRenderer renderer;
+    const Card seven(Rank::Seven, Suit::Hearts);
+    const qreal ratio = 4.0;
+
+    const auto red = [](QRgb pixel)
+    {
+        return qRed(pixel) > 110 && qGreen(pixel) * 2 < qRed(pixel) && qBlue(pixel) * 2 < qRed(pixel);
+    };
+
+    // The premise: the art itself has more red in its top half than its bottom.
+    const QImage art = renderer.face(seven, rackitem::cardSize().toSize(), ratio).toImage();
+    REQUIRE_FALSE(art.isNull());
+
+    int artTop = 0;
+    int artBottom = 0;
+
+    for(int y = 0 ; y < art.height() ; y++)
+    {
+        for(int x = 0 ; x < art.width() ; x++)
+        {
+            if(red(art.pixel(x, y)))
+                (y < art.height() / 2 ? artTop : artBottom)++;
+        }
+    }
+
+    REQUIRE(artTop > artBottom);
+
+    // The rack's picture, sampled over the flat card's own grid through its
+    // transform, so the perspective's magnification of the far end counts for
+    // nothing: each half of the flat card is sampled as often as the other.
+    rackitem::Shown shown;
+    shown.count = 1;
+    shown.faces = { seven };
+
+    const rackitem::Picture picture = rackitem::render(shown, Theme::dark().table, ratio, renderer);
+    REQUIRE_FALSE(picture.pixmap.isNull());
+
+    const QImage drawn = picture.pixmap.toImage();
+    const QTransform card = rackitem::cardTransform(1, 0);
+    const QSizeF size = rackitem::cardSize();
+
+    int nearHalf = 0;
+    int farHalf = 0;
+
+    for(qreal v = 0.25 ; v < size.height() ; v += 0.5)
+    {
+        for(qreal u = 0.25 ; u < size.width() ; u += 0.5)
+        {
+            const QPoint pixel = ((card.map(QPointF(u, v)) - picture.offset) * ratio).toPoint();
+
+            if(drawn.valid(pixel) && red(drawn.pixel(pixel)))
+                (v < size.height() / 2.0 ? nearHalf : farHalf)++;
+        }
+    }
+
+    // The top-heavy half is the far one: the face stands the right way up.
+    REQUIRE(farHalf > nearHalf);
+}
+
 TEST_CASE("An empty rack draws nothing at all", "[rack]")
 {
     // No cards and no rail, as table.js draws neither for an empty hand.
