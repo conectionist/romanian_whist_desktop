@@ -4,6 +4,7 @@
 #include "core/GameSnapshot.h"
 #include "paint/CardShadow.h"
 #include "paint/Theme.h"
+#include "table/SeatLayout.h"
 
 #include <QGraphicsObject>
 #include <QPointF>
@@ -31,11 +32,6 @@ struct Placement
     qreal rotation = 0.0;
 };
 
-// Whether the snapshot has a player at the table, which decides whether a hand is
-// drawn and whether the bottom seat's card goes above it. TableScene asks this too,
-// so the two cannot disagree about it.
-bool seated(const GameSnapshot& snapshot);
-
 // WHERE `seat`'S PLAYED CARD LIES.
 //
 // An opponent's - and a spectated seat 0's, which is drawn as one - is on the line
@@ -48,14 +44,20 @@ bool seated(const GameSnapshot& snapshot);
 // Yours is centred above your hand, its bottom edge playedInset above the hand's
 // top, and not turned.
 //
-// None for a seat with no panel - a player count section 2.5 has no row for, or a
-// seat that is not at the table.
+// From the seat's place, worked out once (seatlayout::place()); the card's size
+// is the table's, by `seatCount`.
+Placement cardPlacement(unsigned int seatCount, const seatlayout::Place& place);
+
+// The same for a seat by number: none for a seat with no panel - a player count
+// section 2.5 has no row for, or a seat that is not at the table.
 std::optional<Placement> cardPlacement(unsigned int seatCount, int humanSeat, unsigned int seat);
 
 // WHERE THE LEAD RHOMBUS GOES FOR `seat`: an opponent's on the felt's gold circle
 // at its rack's angle, between the rack and the card, turned so its long axis
 // points at the rack; yours in the gap between your card and your hand, where the
 // circle is under your cards. None where cardPlacement() has none.
+Placement leadMarkPlacement(const seatlayout::Place& place);
+
 std::optional<Placement> leadMarkPlacement(unsigned int seatCount, int humanSeat, unsigned int seat);
 
 // WHICH SEAT THE RHOMBUS MARKS, if any: only while the engine's phase is Playing,
@@ -97,7 +99,9 @@ public:
                        QGraphicsItem* parent = nullptr);
 
     // Every card on the table, each where trickitem::cardPlacement() puts it.
-    void setTrick(const GameSnapshot& snapshot, const Theme& theme);
+    // `places` is every seat's, seatlayout::places() for the snapshot's table, as
+    // TableScene has already worked them out for the racks.
+    void setTrick(const GameSnapshot& snapshot, const seatlayout::Places& places, const Theme& theme);
 
     QRectF boundingRect() const override;
 

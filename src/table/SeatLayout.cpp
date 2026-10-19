@@ -38,6 +38,11 @@ constexpr qreal rackSlideExtra = 9.0 * std::numbers::pi / 180.0;
 
 }
 
+bool seatlayout::humanSeated(unsigned int seatCount, int humanSeat)
+{
+    return humanSeat >= 0 && static_cast<unsigned int>(humanSeat) < seatCount;
+}
+
 unsigned int seatlayout::stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int seat)
 {
     if(seatCount == 0)
@@ -46,8 +51,8 @@ unsigned int seatlayout::stepsFromBottom(unsigned int seatCount, int humanSeat, 
     // Out of range is read as "nobody", not clamped and not wrapped: a seat
     // index that does not exist is a caller bug, and rotating the table by a
     // modulo of it would hide that behind a layout that merely looks odd.
-    const bool seated = humanSeat >= 0 && static_cast<unsigned int>(humanSeat) < seatCount;
-    const unsigned int bottomSeat = seated ? static_cast<unsigned int>(humanSeat) : 0u;
+    const unsigned int bottomSeat = humanSeated(seatCount, humanSeat) ? static_cast<unsigned int>(humanSeat)
+                                                                      : 0u;
 
     // Unsigned arithmetic wraps, so the modulo is what keeps `seat` behind
     // `bottomSeat` at a positive offset rather than an enormous one.
@@ -104,7 +109,35 @@ qreal seatlayout::rackAngle(unsigned int seatCount, int humanSeat, unsigned int 
     return rackAngle(panelRect(seatCount, humanSeat, seat));
 }
 
+QPointF seatlayout::onCircle(qreal angle, qreal radius)
+{
+    return tablespace::centre + radius * QPointF(std::cos(angle), std::sin(angle));
+}
+
 QPointF seatlayout::rackOrigin(qreal angle)
 {
-    return tablespace::centre + tablespace::rackRadius * QPointF(std::cos(angle), std::sin(angle));
+    return onCircle(angle, tablespace::rackRadius);
+}
+
+std::optional<seatlayout::Place> seatlayout::place(unsigned int seatCount, int humanSeat, unsigned int seat)
+{
+    const QRectF panel = panelRect(seatCount, humanSeat, seat);
+
+    if(panel.isEmpty())
+        return std::nullopt;
+
+    const bool human = humanSeated(seatCount, humanSeat) && static_cast<unsigned int>(humanSeat) == seat;
+
+    return Place{ panel, human, human ? 0.0 : rackAngle(panel) };
+}
+
+seatlayout::Places seatlayout::places(unsigned int seatCount, int humanSeat)
+{
+    Places all;
+    all.reserve(seatCount);
+
+    for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+        all.push_back(place(seatCount, humanSeat, seat));
+
+    return all;
 }

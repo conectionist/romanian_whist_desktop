@@ -12,19 +12,6 @@
 
 #include <algorithm>
 
-namespace
-{
-
-// NOBODY SEATED, NO HAND. Section 14: a spectated table "has no human... and the
-// bottom hand area is not drawn at all". trickitem's test, so the hand and the card
-// that goes above it cannot disagree about whether somebody is sitting there.
-bool seated(const GameSnapshot& snapshot)
-{
-    return trickitem::seated(snapshot);
-}
-
-}
-
 TableScene::TableScene(QObject* parent)
     : QGraphicsScene(parent)
 {
@@ -124,7 +111,7 @@ std::optional<qreal> TableScene::overlayBottom() const
 
     // AND ABOVE THE HAND, which in table space sits higher than the panel it is
     // drawn under: the strip must not cover the cards you are bidding on.
-    if(seated(*snapshot))
+    if(seatlayout::humanSeated(seatCount, snapshot->humanSeat))
         bottom = std::min(bottom, tablespace::handTop);
 
     // A GAP, so the strip does not sit flush against what it clears and read as
@@ -142,6 +129,11 @@ void TableScene::relayout()
 
     ensureSeats(seatCount);
 
+    // EVERY SEAT'S PLACE, ONCE: its panel, and its rack's angle, which the rack, its
+    // played card and the rhombus all line up with.
+    const seatlayout::Places places = seatlayout::places(static_cast<unsigned int>(seatCount),
+                                                         snapshot->humanSeat);
+
     // Whether anyone has still to bid, which is all the pills need to know about
     // the phase: until then a bid is shown, not judged.
     const bool biddingOpen = snapshot->betsPlaced < seatCount;
@@ -152,21 +144,21 @@ void TableScene::relayout()
 
         const unsigned int seat = static_cast<unsigned int>(i);
         const unsigned int count = static_cast<unsigned int>(seatCount);
-        const QRectF panel = seatlayout::panelRect(count, snapshot->humanSeat, seat);
+        const std::optional<seatlayout::Place>& place = places[i];
 
         RackItem* rack = racks[i];
 
         // A player count section 2.5 has no row for: the seat is not drawn rather
         // than drawn somewhere invented.
-        if(panel.isEmpty())
+        if(!place)
         {
             item->hide();
             rack->hide();
             continue;
         }
 
-        item->setPanelSize(panel.size());
-        item->setPos(panel.center());
+        item->setPanelSize(place->panel.size());
+        item->setPos(place->panel.center());
 
         // THE LOOK FOLLOWS THE PLACE, not the seat index: the bottom seat wears the
         // first, as the mock-up's "You" does, and the rest go clockwise from it.
@@ -190,30 +182,29 @@ void TableScene::relayout()
         // EVERY RACK BUT YOURS (section 2.6): your hand is the fan at the bottom. A
         // spectated game has nobody there, so seat 0's rack stands on the rim at the
         // bottom, in line with its panel.
-        if(static_cast<int>(i) == snapshot->humanSeat)
+        if(place->human)
         {
             rack->hide();
             continue;
         }
 
-        const qreal angle = seatlayout::rackAngle(panel);
-
-        rack->setPos(seatlayout::rackOrigin(angle));
-        rack->setRotation(rackitem::frameRotation(angle));
+        rack->setPos(seatlayout::rackOrigin(place->angle));
+        rack->setRotation(rackitem::frameRotation(place->angle));
         rack->setRack(snapshot->seats[i], theme);
         rack->show();
     }
 
     // THE TRICK AND WHO LEADS IT (section 2.7): each card in front of its owner's
     // rack, and the rhombus on the felt in line with the leader's.
-    trick->setTrick(*snapshot, theme);
+    trick->setTrick(*snapshot, places, theme);
 
     const std::optional<unsigned int> lead = trickitem::leadSeat(*snapshot);
+    std::optional<trickitem::Placement> mark;
 
-    leadMark->setMark(lead ? trickitem::leadMarkPlacement(static_cast<unsigned int>(seatCount),
-                                                          snapshot->humanSeat, *lead)
-                           : std::nullopt,
-                      theme.table);
+    if(lead && *lead < places.size() && places[*lead])
+        mark = trickitem::leadMarkPlacement(*places[*lead]);
+
+    leadMark->setMark(mark, theme.table);
 
     // THE FAN FOLLOWS THE SNAPSHOT HERE AND NOWHERE ELSE. Between turns that is
     // the whole of it - drawn, never playable, since a snapshot carries no
@@ -232,5 +223,7 @@ void TableScene::relayout()
     // Section 2.8: the fan's top edge at y = 850, centred on the table. The
     // fan's origin is the middle of its cards, hence the half card.
     hand->setPos(tablespace::centre.x(), tablespace::handTop + tablespace::handCardHeight / 2.0);
-    hand->setVisible(seated(*snapshot));
+    // NOBODY SEATED, NO HAND. Section 14: a spectated table "has no human... and the
+    // bottom hand area is not drawn at all".
+    hand->setVisible(seatlayout::humanSeated(static_cast<unsigned int>(seatCount), snapshot->humanSeat));
 }

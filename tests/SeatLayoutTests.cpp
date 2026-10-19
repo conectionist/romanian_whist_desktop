@@ -310,3 +310,45 @@ TEST_CASE("A table the panels have no row for gets no panels", "[seat-layout]")
     REQUIRE(seatlayout::panelRect(7, 0, 0).isEmpty());
     REQUIRE(seatlayout::panelRect(4, 0, 4).isEmpty());
 }
+
+TEST_CASE("Somebody is seated only at a seat that is at the table", "[seat-layout]")
+{
+    REQUIRE(seatlayout::humanSeated(4, 0));
+    REQUIRE(seatlayout::humanSeated(4, 3));
+
+    // A spectator game, and an index past the table, read as nobody.
+    REQUIRE_FALSE(seatlayout::humanSeated(4, -1));
+    REQUIRE_FALSE(seatlayout::humanSeated(4, 4));
+}
+
+TEST_CASE("A seat's place is its panel, and its rack's angle unless it is yours", "[seat-layout]")
+{
+    for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
+    {
+        for(const int humanSeat : { -1, 0, 1 })
+        {
+            const seatlayout::Places all = seatlayout::places(seatCount, humanSeat);
+            REQUIRE(all.size() == seatCount);
+
+            for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+            {
+                INFO("seatCount " << seatCount << ", humanSeat " << humanSeat << ", seat " << seat);
+
+                REQUIRE(all[seat].has_value());
+
+                const seatlayout::Place& place = *all[seat];
+                const bool yours = humanSeat == static_cast<int>(seat);
+
+                REQUIRE(place.panel == seatlayout::panelRect(seatCount, humanSeat, seat));
+                REQUIRE(place.human == yours);
+
+                if(!yours)
+                    REQUIRE(place.angle == seatlayout::rackAngle(place.panel));
+            }
+        }
+    }
+
+    // None for a seat with no panel.
+    REQUIRE_FALSE(seatlayout::place(4, 0, 4));
+    REQUIRE_FALSE(seatlayout::place(7, 0, 1));
+}

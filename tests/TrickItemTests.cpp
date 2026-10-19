@@ -46,6 +46,15 @@ GameSnapshot tableOf(unsigned int seatCount, int humanSeat, std::vector<PlayedCa
     return snapshot;
 }
 
+// TrickItem::setTrick() with every seat's place worked out for the snapshot's
+// table, as TableScene works them out.
+void setTrickOf(TrickItem& trick, const GameSnapshot& snapshot, const Theme& theme)
+{
+    trick.setTrick(snapshot,
+                   seatlayout::places(static_cast<unsigned int>(snapshot.seats.size()), snapshot.humanSeat),
+                   theme);
+}
+
 PlayedCardView played(unsigned int seat, romanian_whist::Rank rank, bool winning = false)
 {
     PlayedCardView entry;
@@ -257,7 +266,7 @@ TEST_CASE("A trick entry the table cannot place hides its card rather than stran
     const Theme theme = Theme::dark();
 
     // Frame one: two cards, both placeable, both on the table.
-    trick.setTrick(tableOf(4, 0, { played(0, romanian_whist::Rank::Ace),
+    setTrickOf(trick, tableOf(4, 0, { played(0, romanian_whist::Rank::Ace),
                                    played(1, romanian_whist::Rank::King) }),
                    theme);
 
@@ -270,7 +279,7 @@ TEST_CASE("A trick entry the table cannot place hides its card rather than stran
     // Frame two: the same two entries, but the first names a seat this table does
     // not have. THE TABLE HAS NOT SHRUNK - it is still two entries long - so the
     // hide pass below the loop starts at index 2 and never touches index 0.
-    trick.setTrick(tableOf(4, 0, { played(99, romanian_whist::Rank::Queen),
+    setTrickOf(trick, tableOf(4, 0, { played(99, romanian_whist::Rank::Queen),
                                    played(1, romanian_whist::Rank::King) }),
                    theme);
 
@@ -290,7 +299,7 @@ TEST_CASE("Each card is placed and turned where cardPlacement() says", "[trick]"
 {
     TrickItem trick(nullptr);
 
-    trick.setTrick(tableOf(6, 2, { played(3, romanian_whist::Rank::Two),
+    setTrickOf(trick, tableOf(6, 2, { played(3, romanian_whist::Rank::Two),
                                    played(4, romanian_whist::Rank::Three),
                                    played(5, romanian_whist::Rank::Four),
                                    played(0, romanian_whist::Rank::Five),
@@ -325,7 +334,7 @@ TEST_CASE("The winner is highlighted from the second card, and only as the engin
 
     // ONE CARD: the engine ranks it winning, and it is; but there is nothing yet
     // for it to beat, and table.js draws no highlight.
-    trick.setTrick(tableOf(4, 0, { played(1, romanian_whist::Rank::Ten, true) }), Theme::dark());
+    setTrickOf(trick, tableOf(4, 0, { played(1, romanian_whist::Rank::Ten, true) }), Theme::dark());
 
     std::vector<CardItem*> cards = cardsOf(trick);
     REQUIRE(cards.size() == 1);
@@ -333,7 +342,7 @@ TEST_CASE("The winner is highlighted from the second card, and only as the engin
 
     // TWO, AND THE LOWER ONE WINNING - a trump, say. The highlight is isWinning and
     // is never worked out here, so it goes where the engine put it.
-    trick.setTrick(tableOf(4, 0, { played(1, romanian_whist::Rank::Ten),
+    setTrickOf(trick, tableOf(4, 0, { played(1, romanian_whist::Rank::Ten),
                                    played(2, romanian_whist::Rank::Two, true) }),
                    Theme::dark());
 

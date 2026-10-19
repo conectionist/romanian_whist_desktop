@@ -5,43 +5,11 @@
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
 
-#include <cmath>
-
-namespace
+trickitem::Placement trickitem::cardPlacement(unsigned int seatCount, const seatlayout::Place& place)
 {
-
-// Whether `seat` is the player's own, drawn at the bottom above their hand.
-bool isHuman(unsigned int seatCount, int humanSeat, unsigned int seat)
-{
-    return humanSeat >= 0 && static_cast<unsigned int>(humanSeat) < seatCount
-           && static_cast<unsigned int>(humanSeat) == seat;
-}
-
-// The point `radius` from the table's centre at `angle` (radians, y down).
-QPointF onCircle(qreal radius, qreal angle)
-{
-    return tablespace::centre + QPointF(radius * std::cos(angle), radius * std::sin(angle));
-}
-
-}
-
-bool trickitem::seated(const GameSnapshot& snapshot)
-{
-    return snapshot.humanSeat >= 0
-           && static_cast<std::size_t>(snapshot.humanSeat) < snapshot.seats.size();
-}
-
-std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
-                                                             unsigned int seat)
-{
-    const QRectF panel = seatlayout::panelRect(seatCount, humanSeat, seat);
-
-    if(panel.isEmpty())
-        return std::nullopt;
-
     const qreal height = tablespace::playedCardHeight(seatCount);
 
-    if(isHuman(seatCount, humanSeat, seat))
+    if(place.human)
     {
         return Placement{ QPointF(tablespace::centre.x(),
                                   tablespace::handTop - tablespace::playedInset - height / 2.0),
@@ -49,26 +17,40 @@ std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCo
     }
 
     // The felt's edge, the inset, then half the card: table.js trickPos().
-    const qreal angle = seatlayout::rackAngle(panel);
     const qreal radius = tablespace::feltRadius - tablespace::playedInset - height / 2.0;
 
-    return Placement{ onCircle(radius, angle), rackitem::frameRotation(angle) };
+    return Placement{ seatlayout::onCircle(place.angle, radius), rackitem::frameRotation(place.angle) };
+}
+
+std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
+                                                             unsigned int seat)
+{
+    const std::optional<seatlayout::Place> place = seatlayout::place(seatCount, humanSeat, seat);
+
+    if(!place)
+        return std::nullopt;
+
+    return cardPlacement(seatCount, *place);
+}
+
+trickitem::Placement trickitem::leadMarkPlacement(const seatlayout::Place& place)
+{
+    if(place.human)
+        return Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
+
+    return Placement{ seatlayout::onCircle(place.angle, tablespace::goldLineRadius),
+                      rackitem::frameRotation(place.angle) };
 }
 
 std::optional<trickitem::Placement> trickitem::leadMarkPlacement(unsigned int seatCount, int humanSeat,
                                                                  unsigned int seat)
 {
-    const QRectF panel = seatlayout::panelRect(seatCount, humanSeat, seat);
+    const std::optional<seatlayout::Place> place = seatlayout::place(seatCount, humanSeat, seat);
 
-    if(panel.isEmpty())
+    if(!place)
         return std::nullopt;
 
-    if(isHuman(seatCount, humanSeat, seat))
-        return Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
-
-    const qreal angle = seatlayout::rackAngle(panel);
-
-    return Placement{ onCircle(tablespace::goldLineRadius, angle), rackitem::frameRotation(angle) };
+    return leadMarkPlacement(*place);
 }
 
 std::optional<unsigned int> trickitem::leadSeat(const GameSnapshot& snapshot)
@@ -103,7 +85,7 @@ CardItem* TrickItem::cardAt(std::size_t index)
     return cards[index];
 }
 
-void TrickItem::setTrick(const GameSnapshot& snapshot, const Theme& theme)
+void TrickItem::setTrick(const GameSnapshot& snapshot, const seatlayout::Places& places, const Theme& theme)
 {
     const unsigned int seatCount = static_cast<unsigned int>(snapshot.seats.size());
     const qreal cardHeight = tablespace::playedCardHeight(seatCount);
@@ -120,10 +102,10 @@ void TrickItem::setTrick(const GameSnapshot& snapshot, const Theme& theme)
         // Read off the entry, never derived from leadSeat and an offset - see
         // the header. A seat this table cannot place is a snapshot this scene
         // cannot draw, and leaving it off is better than inventing a place.
-        const std::optional<trickitem::Placement> place =
-            trickitem::cardPlacement(seatCount, snapshot.humanSeat, played.seatIndex);
+        const std::optional<seatlayout::Place>* seat =
+            played.seatIndex < places.size() ? &places[played.seatIndex] : nullptr;
 
-        if(!place)
+        if(!seat || !*seat)
         {
             // HIDDEN, not merely skipped. The item at this index may already be
             // on the table from a previous frame, and the hide pass below starts
@@ -138,8 +120,10 @@ void TrickItem::setTrick(const GameSnapshot& snapshot, const Theme& theme)
 
         item->setCardHeight(cardHeight);
         item->setFace(played.card);
-        item->setPos(place->centre);
-        item->setRotation(place->rotation);
+        const trickitem::Placement place = trickitem::cardPlacement(seatCount, **seat);
+
+        item->setPos(place.centre);
+        item->setRotation(place.rotation);
 
         // THE HIGHLIGHT IS isWinning AND IS NEVER RECOMPUTED. It is the engine's
         // own ranking of a partly played trick, filled from

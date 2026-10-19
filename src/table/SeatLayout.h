@@ -4,6 +4,9 @@
 #include <QPointF>
 #include <QRectF>
 
+#include <optional>
+#include <vector>
+
 // Where the seats go, and the only arithmetic in phase B.
 //
 // A free function rather than a TableScene member, on the same grounds
@@ -19,6 +22,12 @@
 // general form of that rule and Theme is its other half.
 namespace seatlayout
 {
+
+// WHETHER SOMEBODY IS SITTING AT THE TABLE: `humanSeat` is the snapshot's, an index
+// or -1 for a spectator game, and an index past the table is read as -1 rather
+// than trusted. The one place that rule lives - the bottom seat, the hand, and
+// whether the bottom card goes above it all follow it.
+bool humanSeated(unsigned int seatCount, int humanSeat);
 
 // How many seats clockwise `seat` is from the one at the bottom - yours, or seat
 // 0's in a spectator game. 0 for the bottom seat itself. panelRect() places a seat
@@ -67,9 +76,33 @@ qreal rackAngle(QRectF panel);
 // for a seat with no panel, which TableScene does not draw a rack for.
 qreal rackAngle(unsigned int seatCount, int humanSeat, unsigned int seat);
 
+// The point `radius` from the table's centre at `angle` (radians, y down): a rack's
+// origin, a played card's centre, the lead rhombus's.
+QPointF onCircle(qreal angle, qreal radius);
+
 // The point on the rim a rack stands at: tablespace::rackRadius from the centre,
 // at `angle`.
 QPointF rackOrigin(qreal angle);
+
+// WHERE A SEAT IS, worked out once: its panel, whether it is the human's - drawn at
+// the bottom above their hand rather than on the rim - and otherwise its rack's
+// angle, which its rack, its played card and the lead rhombus all line up with.
+struct Place
+{
+    QRectF panel;
+    bool human = false;
+    qreal angle = 0.0;      // rackAngle(panel); 0 for the human's seat, which has no rack
+};
+
+// None for a seat with no panel, as panelRect() has none.
+std::optional<Place> place(unsigned int seatCount, int humanSeat, unsigned int seat);
+
+// Every seat's, in seat order: what TableScene works out once per relayout and
+// hands to the racks, the trick and the rhombus, so rackAngle()'s slide runs once a
+// seat rather than once for each of them.
+using Places = std::vector<std::optional<Place>>;
+
+Places places(unsigned int seatCount, int humanSeat);
 
 } // namespace seatlayout
 
