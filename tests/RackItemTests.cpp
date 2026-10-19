@@ -302,15 +302,15 @@ TEST_CASE("A rack shows faces only when the seat's hand can be seen", "[rack]")
 
 TEST_CASE("A face is laid on the rack's card half round, and a back is not", "[rack]")
 {
-    const QSize art(124, 180);
+    const QSizeF art(124.0, 180.0);
     const QRectF flat(QPointF(), rackitem::cardSize());
 
     const QTransform face = rackitem::artTransform(art, true);
     const QTransform back = rackitem::artTransform(art, false);
 
     // Both fill the flat card exactly.
-    REQUIRE(face.mapRect(QRectF(QPointF(), QSizeF(art))) == flat);
-    REQUIRE(back.mapRect(QRectF(QPointF(), QSizeF(art))) == flat);
+    REQUIRE(face.mapRect(QRectF(QPointF(), art)) == flat);
+    REQUIRE(back.mapRect(QRectF(QPointF(), art)) == flat);
 
     // The art's top-left is the flat card's top-left for a back, and its
     // bottom-right - the far end's corner - for a face.

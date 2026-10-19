@@ -140,7 +140,7 @@ QTransform rackitem::cardTransform(std::size_t count, std::size_t index)
     return transform;
 }
 
-QTransform rackitem::artTransform(QSize art, bool face)
+QTransform rackitem::artTransform(QSizeF art, bool face)
 {
     if(art.isEmpty())
         return QTransform();
@@ -251,11 +251,19 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     // Made at the pixels its FAR end covers, which the perspective magnifies, so
     // the art is sampled down along the card rather than up at its far edge.
     //
+    // AT A RATIO OF 1, IN THOSE PIXELS: the renderer makes round(size x ratio) of
+    // them either way, so this is the same picture, but one a texture brush can be
+    // turned half round. A brush draws a pixmap of another ratio at its
+    // device-independent size, but not under a transform that turns it - and
+    // setting a shared pixmap's ratio to 1 copies its pixels out of the
+    // renderer's cache.
+    //
     // A face that will not load stands in the rack as a back: the card is there,
     // and a gap would say it was not. With no art at all the card is left out of
     // the shadow as well, rather than cut out of it as a hole.
-    const QSize artSize = size.toSize();
     const qreal artRatio = ratio * farMagnification();
+    const QSize artSize(std::max(1, qRound(size.width() * artRatio)),
+                        std::max(1, qRound(size.height() * artRatio)));
 
     std::vector<QPixmap> arts;
     std::vector<bool> faceUp;
@@ -264,11 +272,11 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, artRatio) : QPixmap();
+        QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, 1.0) : QPixmap();
         faceUp.push_back(!art.isNull());
 
         if(art.isNull())
-            art = renderer.back(artSize, artRatio);
+            art = renderer.back(artSize, 1.0);
 
         arts.push_back(art);
     }
@@ -303,17 +311,15 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        QPixmap& art = arts[i];
+        const QPixmap& art = arts[i];
 
         if(art.isNull())
             continue;
 
         // A BRUSH OVER THE CARD'S ROUNDED RECT, not a blit: a fill keeps the edge
         // anti-aliased under the projective transform, and a clip would not.
-        art.setDevicePixelRatio(1.0);
-
         QBrush brush(art);
-        brush.setTransform(artTransform(art.size(), faceUp[i]));
+        brush.setTransform(artTransform(QSizeF(art.size()), faceUp[i]));
 
         painter.save();
         painter.setTransform(cardTransform(count, i), true);
