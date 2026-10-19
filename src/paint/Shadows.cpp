@@ -170,9 +170,11 @@ void shadows::drawCircleShadow(QPainter& painter, QPointF centre, qreal radius, 
 }
 
 void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPointF offset,
-                              qreal blur, const QColor& colour)
+                              qreal blur, const QColor& colour, Side side)
 {
-    if(shape.isEmpty() || colour.alpha() == 0)
+    Q_ASSERT(side != Side::Inset);
+
+    if(shape.isEmpty() || colour.alpha() == 0 || side == Side::Inset)
         return;
 
     const qreal ratio = devicepixels::effectiveRatio(painter);
@@ -212,8 +214,10 @@ void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPoi
     // OUTSIDE THE SHAPE ONLY, as CSS clips an outer shadow: the blurred shadow
     // times what the unmoved shape leaves uncovered. Its own anti-aliased coverage
     // rather than a clip path, which the raster engine draws aliased - and under a
-    // panel that is not quite opaque, the edge would show.
-    const std::vector<float> hole = coverage(shape, QPointF(), bounds, pixels, ratio);
+    // panel that is not quite opaque, the edge would show. Beneath, nothing is cut.
+    const std::vector<float> hole = side == Side::Beneath
+                                        ? std::vector<float>(shadow.size(), 0.0f)
+                                        : coverage(shape, QPointF(), bounds, pixels, ratio);
 
     QImage picture(pixels, QImage::Format_ARGB32_Premultiplied);
 

@@ -298,7 +298,13 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     silhouette.addPath(railBody);
     silhouette.setFillRule(Qt::WindingFill);
 
-    shadows::drawShapeShadow(painter, silhouette, rowShadowOffset, rowShadowBlur, palette.rackShadow);
+    // BENEATH, NOT CUT AWAY: CSS's drop-shadow filter composites the row's shadow
+    // under it, and the cards and the rail are opaque and painted straight over it.
+    // Cut out under them, each anti-aliased edge pixel got the shadow twice reduced,
+    // and a light seam showed round every card (PHASE5_REVIEW_FINDINGS.md #1). The
+    // rail's own shadow below is a CSS box-shadow, which CSS does cut, and stays so.
+    shadows::drawShapeShadow(painter, silhouette, rowShadowOffset, rowShadowBlur, palette.rackShadow,
+                             shadows::Side::Beneath);
 
     // EACH CARD, later ones over earlier, as the mock-up's DOM order stacks them.
 
