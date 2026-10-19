@@ -1,43 +1,54 @@
 # Phase 5 review findings (PR #30)
 
 What an `xhigh` `/code-review` of PR #30 ("racks on the rim") found after the PR had been merged.
-Nothing here crashes or breaks a test.
+Nothing here crashed or broke a test.
 
-**Revised after phase 6's review round:** every finding was checked against
-`redesign/phase-6-trick` at `6c4ae69`, and the line numbers are for that commit.
-- One finding is fixed: #11, by `bbff23d`.
-- Phase 6 added new places for #2, #3, #8 and #12. Each finding names them.
-- The rest are still open and still deferred to a later phase.
+**All twelve are fixed.**
+- #11 was fixed in phase 6's review round (`bbff23d`).
+- The other eleven were fixed on `redesign/phase-5-review-fixes`, one commit each. #3 and #12
+  share one.
+- The hashes are that branch's. The squash merge keeps them reachable through its pull request.
+- **Tests:** #1, #2, #4, #6, #8 and #10 each have a test that was run against the old code and
+  failed there. #3 and #12 have unit tests of the new `PictureMemo`. #5 and #7 change only how
+  the code reads. #9 is checked by the 1920×1080 screenshots, which are pixel-identical before and
+  after.
+
+The findings below are as they were reported, checked against `redesign/phase-6-trick` at
+`6c4ae69`, with line numbers for that commit. A **Fixed** line at the top of each says what
+changed.
 
 **Severity:** 1 = code quality only, 3 = a user can see it, 5 = crash or wrong game.
 **Complexity:** 1 = a one- or two-line change, 3 = a new helper or API, 5 = a large refactor.
 
 | # | Finding | Sev. | Cplx. | Status |
 |---|---|---|---|---|
-| 1 | [The rack's shadow is cut away under the cards](#1-the-racks-shadow-is-cut-away-under-the-cards) | 3 | 3 | Open |
-| 2 | [`frameRotation()` can return -180](#2-framerotation-can-return--180) | 2 | 1 | Open, wider since phase 6 |
-| 3 | [A null rack picture is kept as current](#3-a-null-rack-picture-is-kept-as-current) | 2 | 1 | Open, wider since phase 6 |
-| 4 | [Forehead faces are drawn upside down](#4-forehead-faces-are-drawn-upside-down) | 4 | 2 | Open |
-| 5 | [`rackAngle()` returns 0 for "no rack"](#5-rackangle-returns-0-for-no-rack) | 1 | 2 | Open |
-| 6 | [The card-back line's corners use one axis](#6-the-card-back-lines-corners-use-one-axis) | 2 | 1 | Open |
-| 7 | [A test returns an image its painter is still drawing on](#7-a-test-returns-an-image-its-painter-is-still-drawing-on) | 1 | 1 | Open |
-| 8 | [`setRotation()` repaints even when the angle is the same](#8-setrotation-repaints-even-when-the-angle-is-the-same) | 2 | 1 | Open, wider since phase 6 |
-| 9 | [`setDevicePixelRatio()` copies the cached card art](#9-setdevicepixelratio-copies-the-cached-card-art) | 1 | 2 | Open |
-| 10 | [The rack cache empties too soon](#10-the-rack-cache-empties-too-soon) | 1 | 1 | Open |
-| 11 | [The rack cache is a copy of the panel cache](#11-the-rack-cache-is-a-copy-of-the-panel-cache) | 1 | 4 | **Fixed** (`bbff23d`) |
-| 12 | [Every item copies SeatItem's picture memo](#12-every-item-copies-seatitems-picture-memo) | 2 | 3 | Open, wider since phase 6 |
+| 1 | [The rack's shadow is cut away under the cards](#1-the-racks-shadow-is-cut-away-under-the-cards) | 3 | 3 | Fixed (`9ae4fef`) |
+| 2 | [`frameRotation()` can return -180](#2-framerotation-can-return--180) | 2 | 1 | Fixed (`6b74526`) |
+| 3 | [A null rack picture is kept as current](#3-a-null-rack-picture-is-kept-as-current) | 2 | 1 | Fixed (`2215dc8`, with #12) |
+| 4 | [Forehead faces are drawn upside down](#4-forehead-faces-are-drawn-upside-down) | 4 | 2 | Fixed (`98a7fc3`) |
+| 5 | [`rackAngle()` returns 0 for "no rack"](#5-rackangle-returns-0-for-no-rack) | 1 | 2 | Fixed (`8e48d5b`) |
+| 6 | [The card-back line's corners use one axis](#6-the-card-back-lines-corners-use-one-axis) | 2 | 1 | Fixed (`b4466bd`) |
+| 7 | [A test returns an image its painter is still drawing on](#7-a-test-returns-an-image-its-painter-is-still-drawing-on) | 1 | 1 | Fixed (`e2c8342`) |
+| 8 | [`setRotation()` repaints even when the angle is the same](#8-setrotation-repaints-even-when-the-angle-is-the-same) | 2 | 1 | Fixed (`f2e5a87`) |
+| 9 | [`setDevicePixelRatio()` copies the cached card art](#9-setdevicepixelratio-copies-the-cached-card-art) | 1 | 2 | Fixed (`8a01473`) |
+| 10 | [The rack cache empties too soon](#10-the-rack-cache-empties-too-soon) | 1 | 1 | Fixed (`66a8319`) |
+| 11 | [The rack cache is a copy of the panel cache](#11-the-rack-cache-is-a-copy-of-the-panel-cache) | 1 | 4 | Fixed (`bbff23d`) |
+| 12 | [Every item copies SeatItem's picture memo](#12-every-item-copies-seatitems-picture-memo) | 2 | 3 | Fixed (`2215dc8`) |
 
-**Suggested order:**
-- **#4 first,** because players see it. Then #1.
-- **#2, #3, #6, #7, #8 and #10** take a few minutes each.
-- **#12 is now the one refactor left.** #11, its other half, is done. It covers four items now, and
-  doing it also fixes #3.
+**How they were fixed, in order:** #4 first, because players saw it. Then #9, checked
+pixel-identical on the 1920×1080 screenshots before the racks changed. Then the quick ones (#2, #6,
+#7, #10, #8). Then #1, which changes the racks' edges. Then #5, and #12 last, which also fixed #3.
 
 ---
 
 ## 1. The rack's shadow is cut away under the cards
 
 `src/table/RackItem.cpp:271`. Severity 3, complexity 3.
+
+**Fixed** in `9ae4fef`: `drawShapeShadow()` takes a `Side`, as `drawCircleShadow()` does, and the
+rack's row uses `Side::Beneath`. The rail's own shadow is a CSS box-shadow and stays `Outer`. Test:
+a shape over its shadow from beneath meets it in one edge: 0.69 at a half-covered pixel, where the
+cut-away shadow gave 0.596.
 
 The rack's drop shadow, the CSS `drop-shadow` under the whole row, is drawn with
 `drawShapeShadow`, which cuts the shadow away wherever the cards and rail are. They are opaque and
@@ -60,6 +71,10 @@ through under the card.
 
 `src/table/RackItem.cpp:169`. Severity 2, complexity 1.
 
+**Fixed** in `6b74526`: the turn is snapped to a quarter turn first and brought into range after.
+Test: a hair either side of the top seat's angle both give 180, and every turn all the way round is
+in range.
+
 `frameRotation()` brings the angle into (-180, 180] and only then snaps it to an exact quarter turn.
 An angle just above -180 therefore snaps to -180. That is outside the function's documented range,
 and it takes the path that `QTransform::rotate()` does not handle exactly, which the comment at line
@@ -79,6 +94,8 @@ exactly -pi/2 for the top seat, which is why phase 6's "exact quarter turns" tes
 ## 3. A null rack picture is kept as current
 
 `src/table/RackItem.cpp:393`. Severity 2, complexity 1.
+
+**Fixed** in `2215dc8`, with #12: the shared `PictureMemo` never keeps a null picture as current.
 
 `RackItem::picture()` stores whatever the shared cache returns and clears `stale`, even when that
 picture is null for a rack that has cards. `SeatItem::picture()` (`SeatItem.cpp:268`) deliberately
@@ -101,6 +118,11 @@ because it recomposes whenever its picture is null.
 
 `src/table/RackItem.cpp:105`. Severity 4, complexity 2.
 
+**Fixed** in `98a7fc3`: `rackitem::artTransform()` lays a face half round, so its top is at the
+raised end. Tests: the transform, and a pixel test on `render()`'s own output. In it the top-heavy
+seven of hearts has its red at the far end; on the old drawing it failed, 2090 far against 2314
+near.
+
 A Forehead face is mapped with the card's top edge at the rail and its bottom at the raised far end.
 A card standing in a rack and facing the table would have its top at the raised edge. Card backs are
 symmetric, which hides this, but faces are not.
@@ -115,6 +137,10 @@ upright from the human's side of the table.
 ## 5. `rackAngle()` returns 0 for "no rack"
 
 `src/table/SeatLayout.h:77`. Severity 1, complexity 2.
+
+**Fixed** in `8e48d5b`: the seat form of `rackAngle()` is removed, and its tests read
+`seatlayout::place()->angle`. `Place::angle` is still 0 for your own seat, guarded by the `human`
+flag beside it.
 
 `rackAngle(seatCount, humanSeat, seat)` returns 0.0 for a seat with no panel. 0 radians is also a
 real rack angle (the right-hand seat), so a caller can't tell "no rack here" from a real answer.
@@ -134,6 +160,9 @@ rack.
 
 `src/paint/CardRenderer.cpp:395`. Severity 2, complexity 1.
 
+**Fixed** in `b4466bd`: each radius uses its own axis. Test: at four shapes, nothing is drawn
+outside the body's corner grown by a pixel.
+
 The new dark line round the card back uses `7*pixelsPerUnit` (the horizontal scale) for both corner
 radii. The cream body underneath was drawn with `7*sx` by `7*sy`, because the painter scales each
 axis on its own. The two corners match only when the aspect is exactly 100:145.
@@ -149,6 +178,9 @@ standard aspect, so on the table this barely shows.
 
 `tests/SeatItemTests.cpp:111`. Severity 1, complexity 1.
 
+**Fixed** in `e2c8342`: the painter is ended before the image is returned. No other test helper did
+this.
+
 The `drawn` lambda returns its `QImage` while the `QPainter` is still active (no `painter.end()`).
 `RackItemTests`' `drawnAt` ends the painter before returning.
 
@@ -162,6 +194,11 @@ flushed.
 ## 8. `setRotation()` repaints even when the angle is the same
 
 `src/table/TableScene.cpp:192`. Severity 2, complexity 1.
+
+**Fixed** in `f2e5a87`: the racks, the played cards and the rhombus are turned only when their angle
+changes. Its test, "A snapshot that changes nothing repaints nothing", also found
+`SeatItem::setSeat()` calling `update()` on every snapshot. That repainted every name panel, and
+your hand under yours, and it is fixed in the same commit.
 
 `relayout()` calls `rack->setRotation()` for every visible rack on every snapshot and theme change.
 `QGraphicsItem::setRotation` calls `prepareGeometryChange()` before its equality check, so even an
@@ -185,6 +222,11 @@ they share.
 
 `src/table/RackItem.cpp:295`. Severity 1, complexity 2.
 
+**Fixed** in `8a01473`: the rack asks the renderer for its art at a ratio of 1, in the same pixels,
+so nothing is detached. Scaling the brush by the art's device-independent size was tried first: Qt
+drew backs right but a half-turned face (#4) unturned and tiled. The screenshots are pixel-identical
+to before.
+
 `art.setDevicePixelRatio(1.0)` on a `QPixmap` shared with `CardRenderer`'s cache detaches it, so
 every `render()` deep-copies the pixels of each card art it uses.
 
@@ -198,6 +240,9 @@ of about 80 × 117 px on every settle.
 ## 10. The rack cache empties too soon
 
 `src/table/RackItem.h:135`. Severity 1, complexity 1.
+
+**Fixed** in `66a8319`: `PictureCache` drops only its oldest picture at its cap, for every cache,
+and the rack cache holds 16.
 
 The shared rack cache throws everything away when it reaches 12 entries, a size chosen for "a
 round's worth and a Forehead card or two". A 6-player Forehead round adds five different face
@@ -226,6 +271,8 @@ one copy could silently miss the other.
 ## 12. Every item copies SeatItem's picture memo
 
 `src/table/RackItem.h:200`, `src/table/CardItem.h:106`, `src/table/LeadMarkItem.h:47`.
+
+**Fixed** in `2215dc8`: `src/paint/PictureMemo.h` is the one copy, and all four items use it.
 Severity 2, complexity 3. (Was "RackItem copies SeatItem's picture memo".)
 
 Each item that draws a cached picture keeps its own memo: the picture, the ratio it was made at, a
