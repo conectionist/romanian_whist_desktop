@@ -14,9 +14,11 @@
 // ONE RATIO AND ONE STYLE AT A TIME. A new ratio means the window was resized or
 // moved to another screen, and a new style a theme change; either way the old
 // pictures are never asked for again, so they are dropped rather than kept.
-// Within one, a picture per key, found by a linear search - there are a handful -
-// and the set starts again at `Most`, since more means keys that will not come
-// back are being kept.
+// Within one, a picture per key, found by a linear search - there are a handful.
+//
+// AT `Most`, THE OLDEST GOES, and only it. Clearing them all made a full cache draw
+// again pictures it had just been asked for: a six-player Forehead round's faces
+// cleared every rack back a round had drawn (PHASE5_REVIEW_FINDINGS.md #10).
 //
 // BY VALUE, which costs a reference count: a reference into the cache would
 // dangle the moment another item's request cleared it.
@@ -45,7 +47,7 @@ public:
         }
 
         if(entries.size() >= Most)
-            entries.clear();
+            entries.erase(entries.begin());
 
         entries.push_back({ key, std::forward<Render>(render)() });
         rendered++;

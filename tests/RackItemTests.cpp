@@ -578,3 +578,34 @@ TEST_CASE("Racks showing the same cards share one picture", "[rack]")
 
     REQUIRE(racks.renders() == 2);
 }
+
+// PHASE5_REVIEW_FINDINGS.md #10. A round draws every rack's backs from eight cards
+// down to one; a six-player Forehead round then shows five opponents' faces. The
+// cache held twelve and cleared itself at the twelfth, so the faces threw away the
+// backs and the next round drew every one of them again.
+TEST_CASE("A Forehead round's faces leave the round's backs in the cache", "[rack]")
+{
+    const CardRenderer renderer;
+    const Theme::TablePalette palette = Theme::dark().table;
+    rackitem::Cache racks;
+
+    const auto ask = [&](const rackitem::Shown& shown) { racks.picture(shown, palette, 1.0, renderer); };
+
+    for(std::size_t count = 8 ; count >= 1 ; count--)
+        ask(rackitem::shownFor(holding(static_cast<unsigned int>(count))));
+
+    const Card faces[] = { Card(Rank::Two, Suit::Hearts), Card(Rank::Nine, Suit::Clubs),
+                           Card(Rank::Jack, Suit::Spades), Card(Rank::Ace, Suit::Diamonds),
+                           Card(Rank::Five, Suit::Hearts) };
+
+    for(const Card& face : faces)
+        ask(rackitem::shownFor(showing(face)));
+
+    REQUIRE(racks.renders() == 13);
+
+    // The next round deals again from eight: every back is still held.
+    for(std::size_t count = 8 ; count >= 1 ; count--)
+        ask(rackitem::shownFor(holding(static_cast<unsigned int>(count))));
+
+    REQUIRE(racks.renders() == 13);
+}

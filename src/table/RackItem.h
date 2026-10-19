@@ -141,9 +141,10 @@ public:
     std::size_t renders() const { return pictures.renders(); }
 
 private:
-    // A round deals each rack down from eight cards, so a dozen is a round's worth
-    // and a Forehead card or two besides.
-    PictureCache<Shown, Theme::TablePalette, 12> pictures;
+    // A round deals each rack down from eight cards: eight pictures of backs. A
+    // six-player Forehead round adds a face for each of the five opponents, so
+    // sixteen holds a round's backs, a Forehead round's faces and room to spare.
+    PictureCache<Shown, Theme::TablePalette, 16> pictures;
 };
 
 } // namespace rackitem
