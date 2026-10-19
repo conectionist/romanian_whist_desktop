@@ -6,9 +6,12 @@
 #include <QImage>
 #include <QPainter>
 #include <QPointF>
+#include <QRectF>
+#include <QSizeF>
 #include <QTransform>
 #include <QWidget>
 
+#include <cmath>
 #include <optional>
 
 // THE ONE RULE FOR HOW MANY PIXELS A PIXMAP NEEDS, and the one quantization every
@@ -131,6 +134,50 @@ TEST_CASE("A snapped point lands on a whole device pixel", "[device-pixels]")
 
     REQUIRE(snapped.x() == Catch::Approx(10.2));
     REQUIRE(snapped.y() == Catch::Approx(4.0));
+}
+
+// A canvas covers its area from a corner on the grid: the origin's, or a whole
+// number of pixels from an anchor - at a ratio where the two grids differ.
+TEST_CASE("A canvas covers its area from a whole pixel of its anchor", "[device-pixels]")
+{
+    const qreal ratio = 0.78;
+    const QRectF area(-60.3, -80.1, 120.6, 170.2);
+
+    SECTION("anchored on the origin")
+    {
+        const devicepixels::Canvas made = devicepixels::canvas(area, ratio);
+
+        REQUIRE(made.pixmap.devicePixelRatio() == Catch::Approx(ratio));
+        REQUIRE(made.offset.x() * ratio == Catch::Approx(std::round(made.offset.x() * ratio)));
+        REQUIRE(made.offset.y() * ratio == Catch::Approx(std::round(made.offset.y() * ratio)));
+
+        const QRectF covered(made.offset, QSizeF(made.pixmap.size()) / ratio);
+        REQUIRE(covered.contains(area));
+
+        // And no more than a pixel past it on any side.
+        REQUIRE(area.left() - covered.left() < 1.0 / ratio);
+        REQUIRE(covered.right() - area.right() < 1.0 / ratio);
+
+        REQUIRE(made.pixmap.toImage().pixelColor(0, 0).alpha() == 0);
+    }
+
+    SECTION("anchored on a point off the grid")
+    {
+        const QPointF anchor(-54.99, -79.0);
+        const devicepixels::Canvas made = devicepixels::canvas(area, ratio, anchor);
+
+        const QPointF steps = (made.offset - anchor) * ratio;
+
+        REQUIRE(steps.x() == Catch::Approx(std::round(steps.x())));
+        REQUIRE(steps.y() == Catch::Approx(std::round(steps.y())));
+        REQUIRE(QRectF(made.offset, QSizeF(made.pixmap.size()) / ratio).contains(area));
+    }
+
+    SECTION("nothing for an empty area or ratio")
+    {
+        REQUIRE(devicepixels::canvas(QRectF(), ratio).pixmap.isNull());
+        REQUIRE(devicepixels::canvas(area, 0.0).pixmap.isNull());
+    }
 }
 
 // Ten-thousandths: the two ratios a resize really produced, which a hundredths

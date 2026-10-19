@@ -84,7 +84,7 @@ inline constexpr qreal beadOuterRadius = 453.0;
 // THE GOLD CIRCLE ON THE FELT, by its OUTER edge. The mock-up draws it as a CSS
 // border on a box inset 24 into the felt, and a border lies inside its box - so
 // the line runs from 414.5 to 416, centred 0.75 inside the radius section 2.4
-// gives it. The lead rhombus sits on it from phase 6.
+// gives it. The lead rhombus sits on it.
 inline constexpr qreal goldLineRadius = 416.0;
 inline constexpr qreal goldLineWidth = 1.5;
 
@@ -108,6 +108,16 @@ inline constexpr qreal handCardHeight = 225.0;
 // Where the top of the human's hand is (section 2.8). Their played card sits 60
 // above it.
 inline constexpr qreal handTop = 850.0;
+
+// THE PLAYED CARDS (section 2.7). Each opponent's lies on the line from the centre
+// to its rack with its outer end this far inside the felt's edge, and yours with
+// its bottom edge this far above your hand. trickitem::cardPlacement() is where.
+inline constexpr qreal playedInset = 60.0;
+
+// THE LEAD RHOMBUS (section 2.7): an opponent's sits on the gold circle
+// (goldLineRadius) in line with their rack. Yours would sit under your hand there,
+// so it goes in the gap between your card and your hand, half way.
+inline constexpr qreal leadMarkHumanY = handTop - playedInset / 2.0;
 
 // THE NAME PANELS (section 2.5). Every opponent's is this size; where each one
 // goes is seatlayout::panelRect(), from a table hand-tuned per player count.
@@ -146,8 +156,9 @@ qreal playedCardHeight(std::size_t seatCount);
 // no two files can disagree about what is drawn over what.
 //
 // GAPS OF TEN, so a later phase adds its rung without renumbering the others. The
-// lead rhombus arrives in phase 6 and the pinned panels in phase 8. The bid strip and the modal sheets are widgets over the viewport until
-// phases 8 and 10, and so above all of these by construction.
+// pinned panels arrive in phase 8. The bid strip and the modal sheets are widgets
+// over the viewport until phases 8 and 10, and so above all of these by
+// construction.
 //
 // The room is not here: it is the view's background, beneath every item.
 namespace z

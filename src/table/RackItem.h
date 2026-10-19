@@ -2,6 +2,7 @@
 #define RACK_ITEM_H
 
 #include "core/GameSnapshot.h"
+#include "paint/PictureCache.h"
 #include "paint/Theme.h"
 
 #include <romanian_whist/Card.h>
@@ -103,11 +104,7 @@ Shown shownFor(const SeatView& seat);
 // A RACK AS A PICTURE, in its own frame: the shadow, the cards and the rail, made
 // at `ratio`. `offset` is where its top-left goes in the rack's frame, on a whole
 // pixel at that ratio. Null for a rack with no cards.
-struct Picture
-{
-    QPixmap pixmap;
-    QPointF offset;
-};
+using Picture = devicepixels::Canvas;
 
 Picture render(const Shown& shown, const Theme::TablePalette& palette, qreal ratio,
                const CardRenderer& renderer);
@@ -130,19 +127,12 @@ public:
                     const CardRenderer& renderer);
 
     // How many pictures this has rendered: READ-ONLY and for tests.
-    std::size_t renders() const { return rendered; }
+    std::size_t renders() const { return pictures.renders(); }
 
 private:
-    struct Entry
-    {
-        Shown shown;
-        Picture picture;
-    };
-
-    int ratioKey = 0;
-    Theme::TablePalette palette;
-    std::vector<Entry> entries;
-    std::size_t rendered = 0;
+    // A round deals each rack down from eight cards, so a dozen is a round's worth
+    // and a Forehead card or two besides.
+    PictureCache<Shown, Theme::TablePalette, 12> pictures;
 };
 
 } // namespace rackitem

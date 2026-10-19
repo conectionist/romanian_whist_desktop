@@ -212,15 +212,13 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     // The picture's corner on a whole pixel at this ratio, so the cards and the rail
     // are laid on its grid as they were drawn.
-    const QRectF area = extent(count).marginsAdded(shadowMargins);
-    const QPointF corner(std::floor(area.left() * ratio) / ratio, std::floor(area.top() * ratio) / ratio);
+    devicepixels::Canvas canvas = devicepixels::canvas(extent(count).marginsAdded(shadowMargins), ratio);
+    const QPointF corner = canvas.offset;
 
-    QPixmap pixmap(QSize(static_cast<int>(std::ceil((area.right() - corner.x()) * ratio)),
-                         static_cast<int>(std::ceil((area.bottom() - corner.y()) * ratio))));
-    pixmap.setDevicePixelRatio(ratio);
-    pixmap.fill(Qt::transparent);
+    if(canvas.pixmap.isNull())
+        return {};
 
-    QPainter painter(&pixmap);
+    QPainter painter(&canvas.pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     painter.translate(-corner);
@@ -328,7 +326,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     painter.end();
 
-    return { pixmap, corner };
+    return { canvas.pixmap, corner };
 }
 
 rackitem::Picture rackitem::Cache::picture(const Shown& shown, const Theme::TablePalette& wanted,
@@ -337,33 +335,7 @@ rackitem::Picture rackitem::Cache::picture(const Shown& shown, const Theme::Tabl
     if(shown.count == 0 || ratio <= 0.0)
         return {};
 
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(key != ratioKey || wanted != palette)
-    {
-        entries.clear();
-        ratioKey = key;
-        palette = wanted;
-    }
-
-    for(const Entry& entry : entries)
-    {
-        if(entry.shown == shown)
-            return entry.picture;
-    }
-
-    // A round deals each rack down from eight cards, so a dozen is a round's worth
-    // and a Forehead card or two besides. More means pictures are being kept that
-    // will not come back, so the set starts again rather than growing.
-    constexpr std::size_t most = 12;
-
-    if(entries.size() >= most)
-        entries.clear();
-
-    entries.push_back({ shown, render(shown, wanted, ratio, renderer) });
-    rendered++;
-
-    return entries.back().picture;
+    return pictures.picture(shown, wanted, ratio, [&] { return render(shown, wanted, ratio, renderer); });
 }
 
 RackItem::RackItem(const CardRenderer* _renderer, rackitem::Cache* _racks, QGraphicsItem* parent)

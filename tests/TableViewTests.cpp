@@ -5,6 +5,7 @@
 #include "table/TableView.h"
 #include "table/RackItem.h"
 #include "table/SeatItem.h"
+#include "table/LeadMarkItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
@@ -719,6 +720,67 @@ TEST_CASE("While a drag settles no rack is composed again", "[table]")
     table.paint();
 
     REQUIRE(composed() > racks);
+}
+
+TEST_CASE("While a drag settles no played card's shadow is drawn again", "[table]")
+{
+    ShownTable table;
+
+    table.step(1);
+
+    const std::size_t shadows = table.scene.playedShadows().renders();
+
+    // The premise: fullTable() has five cards down and one of them winning, so the
+    // plain shadow and the winner's - the largest picture - were both drawn, and
+    // the count below counts something.
+    REQUIRE(shadows >= 2);
+
+    for(int step = 2 ; step <= 6 ; step++)
+    {
+        INFO("step " << step);
+
+        table.step(step);
+
+        REQUIRE(table.view.isSettling());
+        REQUIRE(table.scene.playedShadows().renders() == shadows);
+    }
+
+    table.view.finishResize();
+    table.paint();
+
+    REQUIRE(table.scene.playedShadows().renders() > shadows);
+}
+
+TEST_CASE("While a drag settles the lead rhombus is not drawn again", "[table]")
+{
+    ShownTable table;
+
+    table.step(1);
+
+    const LeadMarkItem* mark = table.scene.leadMarkItem();
+    REQUIRE(mark != nullptr);
+
+    // The premise: fullTable() is mid-trick, so the rhombus is on the felt and was
+    // drawn once at the settled scale.
+    REQUIRE(mark->isVisible());
+
+    const std::size_t drawn = mark->renders();
+    REQUIRE(drawn >= 1);
+
+    for(int step = 2 ; step <= 6 ; step++)
+    {
+        INFO("step " << step);
+
+        table.step(step);
+
+        REQUIRE(table.view.isSettling());
+        REQUIRE(mark->renders() == drawn);
+    }
+
+    table.view.finishResize();
+    table.paint();
+
+    REQUIRE(mark->renders() > drawn);
 }
 
 TEST_CASE("Once a drag settles everything is rasterized at the new scale", "[table]")

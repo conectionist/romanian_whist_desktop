@@ -58,6 +58,7 @@ void refreshFromEngine(GameSnapshot& snapshot, const GameEngine& game)
     snapshot.trickCount = game.getCurrentRoundTrickCount();
     snapshot.trickNumber = game.getCurrentTrickNumber();
     snapshot.roundType = game.getCurrentRoundType();
+    snapshot.phase = game.getPhase();
 
     const std::optional<romanian_whist::Card> trump = game.getCurrentTrumpCard();
     snapshot.hasTrump = trump.has_value();

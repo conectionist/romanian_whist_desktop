@@ -217,6 +217,20 @@ Theme::TablePalette tablePalette()
     table.railEdge = rgba(30, 14, 4, 0.6);
     table.railShadow = rgba(0, 0, 0, 0.6);
 
+    // Section 2.7, from page.html's .tcard and .leadpip.
+    //
+    // .tcard .inner: box-shadow 0 6px 14px rgba(0, 0, 0, 0.45). The winning one's:
+    // 0 0 0 2px gold-bright, 0 0 26px rgba(242, 211, 140, 0.55), 0 16px 24px
+    // rgba(0, 0, 0, 0.5) - its ring is goldBright above.
+    table.playedShadow = rgba(0, 0, 0, 0.45);
+    table.winningShadow = rgba(0, 0, 0, 0.5);
+    table.winningGlow = rgba(242, 211, 140, 0.55);
+
+    // .leadpip: background gold-bright, box-shadow 0 0 0 1px rgba(60, 40, 10, 0.5),
+    // 0 0 10px rgba(242, 211, 140, 0.8).
+    table.leadMarkOutline = rgba(60, 40, 10, 0.5);
+    table.leadMarkGlow = rgba(242, 211, 140, 0.8);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

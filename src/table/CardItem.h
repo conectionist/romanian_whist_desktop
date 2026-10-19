@@ -1,9 +1,11 @@
 #ifndef CARD_ITEM_H
 #define CARD_ITEM_H
 
+#include "paint/CardShadow.h"
+#include "paint/Theme.h"
+
 #include <romanian_whist/Card.h>
 
-#include <QColor>
 #include <QGraphicsObject>
 
 #include <optional>
@@ -48,25 +50,38 @@ public:
     // cannot be set to a shape the art does not have.
     void setCardHeight(qreal height);
 
-    // The winning card of a partly played trick: a raised shadow and a thin
-    // accent hairline (section 18). THE CALLER READS PlayedCardView::isWinning
+    // A CARD ON THE FELT (the table redesign's section 2.7): it casts a shadow,
+    // and the winning card of a partly played trick rises toward its own top,
+    // ringed in gold-bright and glowing. THE CALLER READS PlayedCardView::isWinning
     // AND NEVER RECOMPUTES IT - that is the engine's own ranking, so the
     // highlight cannot disagree with the winner it eventually declares.
-    void setWinning(bool winning, QColor accent);
+    //
+    // `shadows` is the picture cache every played card shares, owned with the
+    // renderer, which outlives the item. A card in your hand is never set
+    // played, and casts nothing.
+    void setPlayed(bool winning, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
+
+    // What setPlayed() last said. READ-ONLY and for tests.
+    bool isPlayed() const { return played; }
+    bool isWinning() const { return winning; }
 
     // 45% opacity plus a slight desaturation, baked into the cached pixmap by
     // CardRenderer rather than applied here, so this stays a blit.
     void setDimmed(bool dimmed);
 
-    // ORIGIN AT THE CENTRE, not the top left. A card is placed at a seat's
-    // centre and rotated toward the middle of the table, and both of those are
-    // one line when the origin is the middle of the card.
+    // The card itself, in table units, from the art's aspect: empty without a
+    // renderer or a height. Not boundingRect(), which a played card's shadow and
+    // rise reach past.
+    QSizeF cardSize() const;
+
+    // ORIGIN AT THE CENTRE, not the top left. A card is placed in front of its
+    // owner's rack and turned to line up with it, and both of those are one line
+    // when the origin is the middle of the card.
     QRectF boundingRect() const override;
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
-    QSizeF cardSize() const;
 
     const CardRenderer* renderer;
 
@@ -74,9 +89,23 @@ private:
     std::optional<romanian_whist::Card> card;
 
     qreal cardHeight = 0.0;
-    bool winning = false;
     bool dimmed = false;
-    QColor accent;
+
+    // The shadow's picture, asked of the cache only when it is stale or the ratio
+    // has moved - RackItem::picture()'s pattern - rather than on every paint.
+    const cardshadow::Picture& shadow(QSizeF size, qreal ratio) const;
+
+    // On the felt, and the trick's winner. The colours are the shadow's and the
+    // ring's - four of the table's, not all of them - and the cache is where
+    // their picture comes from.
+    bool played = false;
+    bool winning = false;
+    cardshadow::Colours colours;
+    cardshadow::Cache* shadows = nullptr;
+
+    mutable cardshadow::Picture shadowPicture;
+    mutable int shadowRatio = 0;
+    mutable bool shadowStale = true;
 };
 
 #endif
