@@ -7,8 +7,9 @@
 
 // THE ONE CACHE POLICY behind the panels', the racks' and the played cards'
 // pictures: one ratio and one style at a time, a picture per key, and - since
-// PHASE5_REVIEW_FINDINGS.md #10 - only the oldest dropped when it is full, where it
-// used to clear everything and draw again what it had just been asked for.
+// PHASE5_REVIEW_FINDINGS.md #10 and #15 - only the one least recently asked for
+// dropped when it is full, where it used to clear everything and draw again what it
+// had just been asked for.
 namespace
 {
 
@@ -38,7 +39,7 @@ TEST_CASE("A picture asked for again is not drawn again", "[picture-cache]")
     REQUIRE(cache.renders() == 1);
 }
 
-TEST_CASE("A full cache drops only its oldest picture", "[picture-cache]")
+TEST_CASE("A full cache drops only one picture", "[picture-cache]")
 {
     Cache cache;
 
@@ -58,6 +59,29 @@ TEST_CASE("A full cache drops only its oldest picture", "[picture-cache]")
 
     // The first was the one that went.
     ask(cache, 1);
+    REQUIRE(cache.renders() == 5);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #15: the oldest drawn went first, even when it had just
+// been asked for - a rack's backs, every frame, before faces never seen again.
+TEST_CASE("A full cache drops the picture least recently asked for", "[picture-cache]")
+{
+    Cache cache;
+
+    ask(cache, 1);
+    ask(cache, 2);
+    ask(cache, 3);
+
+    // The first is asked for again, so the second is now the one least wanted...
+    ask(cache, 1);
+    ask(cache, 4);
+    REQUIRE(cache.renders() == 4);
+
+    // ...and it is the one that went.
+    ask(cache, 1);
+    REQUIRE(cache.renders() == 4);
+
+    ask(cache, 2);
     REQUIRE(cache.renders() == 5);
 }
 

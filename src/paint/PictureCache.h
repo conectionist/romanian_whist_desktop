@@ -3,6 +3,7 @@
 
 #include "paint/DevicePixels.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -16,9 +17,12 @@
 // pictures are never asked for again, so they are dropped rather than kept.
 // Within one, a picture per key, found by a linear search - there are a handful.
 //
-// AT `Most`, THE OLDEST GOES, and only it. Clearing them all made a full cache draw
-// again pictures it had just been asked for: a six-player Forehead round's faces
-// cleared every rack back a round had drawn (PHASE5_REVIEW_FINDINGS.md #10).
+// AT `Most`, THE LEAST RECENTLY ASKED FOR GOES, and only it. Clearing them all made
+// a full cache draw again pictures it had just been asked for: a six-player
+// Forehead round's faces cleared every rack back a round had drawn
+// (PHASE5_REVIEW_FINDINGS.md #10). Dropping the oldest drawn did the same more
+// slowly: the backs, asked for on every frame, went before faces never seen again
+// (#15).
 //
 // BY VALUE, which costs a reference count: a reference into the cache would
 // dangle the moment another item's request cleared it.
@@ -40,10 +44,14 @@ public:
             held = style;
         }
 
-        for(const Entry& entry : entries)
+        for(auto entry = entries.begin() ; entry != entries.end() ; ++entry)
         {
-            if(entry.key == key)
-                return entry.picture;
+            if(entry->key == key)
+            {
+                // To the back, the most recently asked for.
+                std::rotate(entry, entry + 1, entries.end());
+                return entries.back().picture;
+            }
         }
 
         devicepixels::Canvas made = std::forward<Render>(render)();
