@@ -47,11 +47,16 @@ The owner wants to see each phase's visual result without running the app. When 
    `WHIST_SHOTS_DIR=build/shots/phase-N ./build/tests/desktop_tests "[.screenshot]"`.
    It writes `table-3-players.png` … `table-6-players.png` and `bidding.png` at 1920×1080, and
    `table-empty.png`: the table alone at 1920×1034, which is exactly the mock-up's scale and place.
+   It also writes `hand-1-card.png`, `hand-4-cards.png` and `hand-8-cards.png`: the table with your
+   hand, at the same 1920×1034 (added in phase 7).
 2. Pair each one with the mock-up picture of the same name in `docs/ui-redesign/screenshots/`
    (`.jpg`): client on the left, mock-up on the right, each labelled. Save the pair as
    `build/shots/phase-N/compare-<name>.png` (Pillow is installed). `build/` is git-ignored, so
    these are never committed. `table-empty.png` has no namesake: pair it with
    `table-4-players.jpg` cropped below its 46 px menu bar (y 46–1080), as `compare-table-empty.png`.
+   The `hand-*.png` shots pair with their namesakes cropped the same way. Those mock-up pictures
+   come from `docs/ui-redesign/mockup/source/capture_hands.py`, which takes them again if the
+   mock-up changes. Add a close-up of each hand pair too: the hand is small in a whole page.
 3. Link the comparison images in the message. Add a line or two on what moved closer to the
    mock-up and what still differs. Until phase 8 replaces the side panels, the page is expected to
    be a mix of new and old.
