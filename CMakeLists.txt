@@ -117,6 +117,10 @@ qt_add_library(desktop_core STATIC
     src/table/HandItem.cpp
     src/table/TableButtonItem.h
     src/table/TableButtonItem.cpp
+    src/table/CardText.h
+    src/table/CardText.cpp
+    src/table/ScoreboardItem.h
+    src/table/ScoreboardItem.cpp
     src/table/TableScene.h
     src/table/TableScene.cpp
     src/table/TableView.h
@@ -126,10 +130,6 @@ qt_add_library(desktop_core STATIC
     src/ui/SnapshotLog.cpp
     src/ui/CardArtWindow.h
     src/ui/CardArtWindow.cpp
-    src/ui/InfoStrip.h
-    src/ui/InfoStrip.cpp
-    src/ui/ScoreboardWidget.h
-    src/ui/ScoreboardWidget.cpp
 
     src/ui/BidStrip.h
     src/ui/BidStrip.cpp

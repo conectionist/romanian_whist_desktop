@@ -4,6 +4,7 @@
 #include "table/HandItem.h"
 #include "table/LeadMarkItem.h"
 #include "table/RackItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
 #include "table/TableButtonItem.h"
@@ -37,6 +38,14 @@ TableScene::TableScene(QObject* parent)
     hand = new HandItem(&cards, &shadowPictures);
     hand->setZValue(tablespace::z::hand);
     addItem(hand);
+
+    // THE SCOREBOARD (section 2.9), drawn larger than the table as the mock-up's
+    // is, and hidden until placeHud() has a corner and a game for it.
+    scoreboard = new ScoreboardItem(&cards, &panels);
+    scoreboard->setZValue(tablespace::z::hud);
+    scoreboard->setScale(tablespace::hudScale);
+    scoreboard->hide();
+    addItem(scoreboard);
 
     // THE CORNER BUTTONS (section 2.11), DISABLED UNTIL PHASE 11 builds the sheets
     // they open: drawn where the mock-up has them, muted, taking no click.
@@ -114,6 +123,8 @@ void TableScene::placeHud()
 {
     const bool shown = pin && snapshot;
 
+    scoreboard->setVisible(shown);
+
     for(TableButtonItem* button : { history, lastTrick })
         button->setVisible(shown);
 
@@ -123,6 +134,9 @@ void TableScene::placeHud()
     // The inset is in the window's pixels, so in table units it is larger the
     // smaller the table is drawn.
     const qreal inset = tablespace::hudInset / pin->scale;
+
+    // TOP-LEFT, growing right and down.
+    scoreboard->setPos(pin->visible.left() + inset, pin->visible.top() + inset);
 
     // BOTTOM-LEFT, side by side (table.js fit()).
     const QPointF corner(pin->visible.left() + inset, pin->visible.bottom() - inset);
@@ -277,5 +291,6 @@ void TableScene::relayout()
     hand->setVisible(seatlayout::humanSeated(static_cast<unsigned int>(seatCount), snapshot->humanSeat));
 
     // The corner panels, shown from the first snapshot on.
+    scoreboard->setSnapshot(*snapshot, theme);
     placeHud();
 }

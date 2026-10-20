@@ -1,7 +1,6 @@
 #include "RoundSheet.h"
 
-#include "InfoStrip.h"
-#include "ScoreboardWidget.h"
+#include "table/ScoreboardItem.h"
 
 #include <QBoxLayout>
 #include <QFont>
@@ -23,9 +22,9 @@ constexpr unsigned int warnAt = payoutStreak - 1;
 QString roundsheet::titleFor(const RoundResult& result)
 {
     // THE CARD COUNT AND THE ROUND TYPE THROUGH infostrip's OWN FUNCTIONS, not
-    // second copies of either. The three words are already on screen across the top of the table
-    // all round, and two spellings of Forehead is exactly the drift section 7
-    // warns about - one of them would be the one lupdate collects.
+    // second copies of either. The scoreboard says the same round all round, and
+    // two spellings of Forehead is exactly the drift section 7 warns about - one of
+    // them would be the one lupdate collects.
     //
     // One arg() taking three rather than three chained: a player cannot reach
     // this string, but the rule SnapshotLog.cpp states holds anyway - arg() fills
@@ -51,7 +50,8 @@ QString roundsheet::arrowFor(const RoundSeatResult& seat)
 QString roundsheet::roundScoreFor(const RoundSeatResult& seat)
 {
     // THE SIGN IS THE CUE and the colour only makes it quick, which is section
-    // 18's rule and the same round ScoreboardWidget takes. A negative number
+    // 18's rule and the one the scoreboard's round column kept until the table
+    // redesign's phase 8 took the column away. A negative number
     // already carries its own minus; a positive one has to be given its plus, or
     // the two columns read as unrelated kinds of number.
     return seat.roundScore > 0 ? QStringLiteral("+%1").arg(seat.roundScore)
@@ -211,10 +211,15 @@ void RoundSheet::clearRows()
 
 void RoundSheet::addHeadings()
 {
-    // In the scoreboard's own words, through its own functions - the same four
-    // columns the panel beside the table carries all round, so a player reads
-    // one table rather than two vocabularies, and a translator sees one string
-    // each rather than two spellings to keep in step.
+    // The scoreboard's words where they are the same column - the bid - so a
+    // translator sees one string rather than two spellings to keep in step. The
+    // other three are this sheet's own since the redesign's phase 8 gave the
+    // scoreboard TAKEN and PTS and took its round score away; they keep the
+    // "scoreboard" context they were translated under, so the catalogue still has
+    // them. Phase 10 restyles this sheet and settles its words with its look.
+    //
+    // A literal at every call site, for BidStrip.h's reason: a wrapper of our own
+    // would hide these from lupdate.
     const auto heading = [this](const QString& text, int column, Qt::Alignment align)
     {
         QLabel* label = new QLabel(text, rows);
@@ -229,9 +234,9 @@ void RoundSheet::addHeadings()
 
     heading(QCoreApplication::translate("roundsheet", "Name"), 0, Qt::AlignLeft);
     heading(scoreboard::headingBid(), 1, Qt::AlignRight);
-    heading(scoreboard::headingWon(), 2, Qt::AlignRight);
-    heading(scoreboard::headingRound(), 3, Qt::AlignRight);
-    heading(scoreboard::headingTotal(), 4, Qt::AlignRight);
+    heading(QCoreApplication::translate("scoreboard", "Won"), 2, Qt::AlignRight);
+    heading(QCoreApplication::translate("scoreboard", "Round"), 3, Qt::AlignRight);
+    heading(QCoreApplication::translate("scoreboard", "Total"), 4, Qt::AlignRight);
 }
 
 void RoundSheet::addRow(const RoundSeatResult& seat)
@@ -246,8 +251,8 @@ void RoundSheet::addRow(const RoundSeatResult& seat)
         return label;
     };
 
-    // The human's row bold, which is what ScoreboardWidget does and for the same
-    // reason: a table of four names is read by finding your own first.
+    // The human's row bold, as the scoreboard drew it until the table redesign's
+    // phase 8: a table of four names is read by finding your own first.
     QLabel* name = cell(QString::fromStdString(seat.name), 0, Qt::AlignLeft);
 
     if(seat.isHuman)

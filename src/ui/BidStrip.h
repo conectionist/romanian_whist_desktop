@@ -31,8 +31,8 @@ QT_END_NAMESPACE
 namespace bidstrip
 {
 
-// TRANSLATED, the same choice InfoStrip makes and for the reason spelled out at
-// length in its header: these are words a player reads, so they must move when a
+// TRANSLATED, the same choice the scoreboard makes and for the reason spelled out
+// at length in table/ScoreboardItem.h: these are words a player reads, so they must move when a
 // translation is loaded - unlike snapshotlog's fixed ASCII, which tests assert
 // on.
 //
@@ -43,7 +43,7 @@ namespace bidstrip
 // sweep section 7 says must have nothing left to find.
 
 // What the strip says, from one prompt. No widget here, which is what makes it
-// the part worth a test - the split SnapshotLog.h argues for and InfoStrip
+// the part worth a test - the split SnapshotLog.h argues for and the scoreboard
 // follows.
 struct Fields
 {
@@ -69,8 +69,8 @@ Fields fieldsFor(const BetPrompt& prompt);
 
 } // namespace bidstrip
 
-// The widget. Dumb by design, like InfoStrip: it asks fieldsFor() what to say
-// and builds buttons for it.
+// The widget. Dumb by design: it asks fieldsFor() what to say and builds buttons
+// for it.
 //
 // IT KNOWS NOTHING ABOUT PROVIDERS OR PROMPT IDS. It emits the bid that was
 // chosen and MainWindow does the rest - which is what keeps the generation gate

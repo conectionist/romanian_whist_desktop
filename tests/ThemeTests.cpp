@@ -319,9 +319,10 @@ TEST_CASE("Every colour drawn as text on the plaque holds AA against it", "[them
 {
     for(const Theme& theme : { Theme::light(), Theme::dark() })
     {
-        // The regression this case exists for. accentText is the round type in
-        // InfoStrip and nothing else yet; if a later phase reaches for `accent`
-        // to colour another word, this is the line that should stop it.
+        // The regression this case exists for. accentText was the round type in
+        // the info strip, which the table redesign's phase 8 folded into the
+        // scoreboard; if a later phase reaches for `accent` to colour another
+        // word, this is the line that should stop it.
         REQUIRE(contrastRatio(theme.accentText, theme.seatPlaque) >= 4.5);
 
         // Its neighbours, in the same case rather than a second one: they are
@@ -351,7 +352,7 @@ TEST_CASE("The text accent is the accent, darkened", "[theme]")
 }
 
 // THE KEY LEADS ITS PAINTERS again, for the colour C4a added. Nothing Theme
-// paints reads accentText - InfoStrip colours a QLabel with it - so this is the
+// paints reads accentText - the info strip coloured a QLabel with it - so this is the
 // bid-colour case's argument one more time, and the reason it is written now
 // rather than when a painter finally does read it.
 TEST_CASE("Recolouring the text accent invalidates the cached background", "[theme]")

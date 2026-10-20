@@ -3,18 +3,17 @@
 
 #include "paint/Theme.h"
 #include "table/HandItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
-#include "ui/InfoStrip.h"
 #include "ui/MainMenuPage.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/PromptBar.h"
 #include "ui/RoundSheet.h"
-#include "ui/ScoreboardWidget.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/GameEngine.h>
@@ -112,21 +111,19 @@ MainWindow::MainWindow(QWidget *parent)
     showMainMenu();
 }
 
-// Section 12's four regions, minus the two that are not B2b's: the prompt bar,
-// which has no prompts to carry until phase C, and the elapsed clock, which
-// section 19 keeps off the snapshot and phase E puts on a QTimer.
+// The table page: the table, with the scoreboard and the corner buttons pinned
+// to its corners inside it since the table redesign's phase 8, and the prompt bar
+// beneath it.
 //
-// THE PALETTE IS RESOLVED ONCE, here, and handed to all three. Each widget
+// THE PALETTE IS RESOLVED ONCE, here, and handed to everything. Each widget
 // asking QGuiApplication for the scheme itself would work today and would be
-// three places to change when section 20's preference arrives.
+// several places to change when section 20's preference arrives.
 void MainWindow::buildTable()
 {
     theme = Theme::forScheme(QGuiApplication::styleHints()->colorScheme());
 
     scene = new TableScene(this);
     table = new TableView(scene, this);
-    infoStrip = new InfoStrip(this);
-    scoreboard = new ScoreboardWidget(this);
 
     // OVER the table rather than in the layout below it: a strip that appears
     // only on your turn would move everything beneath it every round, which is
@@ -151,30 +148,20 @@ void MainWindow::buildTable()
     connect(promptBar, &PromptBar::menuRequested, this, &MainWindow::showPauseMenu);
 
     scene->setTheme(theme);
-    infoStrip->setTheme(theme);
-    scoreboard->setTheme(theme);
     bidStrip->setTheme(theme);
     promptBar->setTheme(theme);
 
-    // The strip full width across the top, then the table and the scoreboard
-    // side by side. The table takes the stretch: the scoreboard is as wide as
-    // its widest name and no wider, and everything left over is green.
-    auto* body = new QHBoxLayout;
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(0);
-    body->addWidget(table, 1);
-    body->addWidget(scoreboard);
-
+    // THE TABLE TAKES THE PAGE. The info strip that ran across its top and the
+    // scoreboard column beside it are the scoreboard pinned in its top-left corner
+    // now (section 2.9), drawn by the scene at the table's scale.
     auto* central = new QWidget(this);
 
     auto* stack = new QVBoxLayout(central);
     stack->setContentsMargins(0, 0, 0, 0);
     stack->setSpacing(0);
-    stack->addWidget(infoStrip);
-    stack->addLayout(body, 1);
+    stack->addWidget(table, 1);
 
-    // SECTION 12'S FOURTH REGION, full width beneath the table AND the
-    // scoreboard, which is where that section's mockup draws it: it is where the
+    // SECTION 12'S FOURTH REGION, full width beneath the table: it is where the
     // game talks to you, and one line always in the same place is the whole
     // point of it.
     stack->addWidget(promptBar);
@@ -513,25 +500,9 @@ void MainWindow::abandonToMenu()
     showMainMenu();
 }
 
-void MainWindow::capScoreboard()
-{
-    if(!scoreboard)
-        return;
-
-    // A THIRD OF THE WINDOW at most, which is about what section 12's mockup
-    // gives it. Never below the panel's own minimum, which is the numbers in
-    // full plus enough name to elide - past that the panel would be lying
-    // rather than merely cramped.
-    const int wanted = width() / 3;
-    const int floor = scoreboard->minimumSizeHint().width();
-
-    scoreboard->setMaximumWidth(std::max(wanted, floor));
-}
-
 void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
-    capScoreboard();
 
     // The overlay is a child rather than a layout item, so nothing else moves
     // it. Only while it is up: a hidden widget's geometry is nobody's business,
@@ -769,8 +740,6 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     // thing they click.
     scene->setSnapshot(snapshot);
     hand->setPlayable(false);
-    infoStrip->setSnapshot(*snapshot);
-    scoreboard->setSnapshot(*snapshot);
 
     updateStatus(*snapshot);
 }
@@ -800,7 +769,7 @@ void MainWindow::updateStatus(const GameSnapshot& snapshot)
 
     // THE ROUND TYPE COMES FROM infostrip, not from a switch of its own. This
     // window had a third spelling of the same three words until B2b: the log's
-    // fixed ASCII, the info strip's, and this. Two is the right number and the
+    // fixed ASCII, the scoreboard's, and this. Two is the right number and the
     // comment on snapshotlog says why - one for machines, one for people - so
     // the people-facing one is shared and the log's stays separate.
     statusBar()->showMessage(tr("Round %1/%2 - %3 (%4)")

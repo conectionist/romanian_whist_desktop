@@ -1,5 +1,7 @@
 #include "TextRuns.h"
 
+#include "paint/Fonts.h"
+
 #include <QFontMetricsF>
 #include <QPainter>
 
@@ -59,7 +61,8 @@ void walk(const textruns::Run& run, const textruns::Style& style, Visit&& visit)
         visit(run.text.mid(start), base);
 }
 
-qreal runWidth(const textruns::Run& run, const textruns::Style& style)
+// In the FONT's units, which are `style.scale` times the line's.
+qreal runAdvance(const textruns::Run& run, const textruns::Style& style)
 {
     const QFontMetricsF metrics(fontOf(run, style));
     qreal advance = 0.0;
@@ -110,21 +113,47 @@ QString textruns::text(const Line& line)
     return whole;
 }
 
+textruns::Style textruns::plainStyle(const QFont& font, qreal pixels, const QColor& colour)
+{
+    const fonts::Sized sized = fonts::sized(font, pixels);
+
+    return { sized.font, sized.font, colour, colour, colour, colour, sized.scale };
+}
+
+textruns::Metrics textruns::metrics(const Style& style)
+{
+    const QFontMetricsF font(style.plain);
+
+    return { font.ascent() / style.scale, font.descent() / style.scale,
+             font.lineSpacing() / style.scale };
+}
+
+qreal textruns::baselineIn(const Style& style, qreal top, qreal height)
+{
+    const Metrics measured = metrics(style);
+
+    return top + (height - (measured.ascent + measured.descent)) / 2.0 + measured.ascent;
+}
+
 qreal textruns::width(const Line& line, const Style& style)
 {
     qreal total = 0.0;
 
     for(const Run& run : line)
-        total += runWidth(run, style);
+        total += runAdvance(run, style);
 
-    return total;
+    return total / style.scale;
 }
 
 void textruns::paint(QPainter& painter, QPointF origin, const Line& line, const Style& style)
 {
     painter.save();
 
-    qreal x = origin.x();
+    // In the fonts' own units from here, scaled down to the line's.
+    painter.translate(origin);
+    painter.scale(1.0 / style.scale, 1.0 / style.scale);
+
+    qreal x = 0.0;
 
     for(const Run& run : line)
     {
@@ -136,7 +165,7 @@ void textruns::paint(QPainter& painter, QPointF origin, const Line& line, const 
         walk(run, style, [&](const QString& piece, const QColor& colour)
         {
             painter.setPen(colour);
-            painter.drawText(QPointF(x, origin.y()), piece);
+            painter.drawText(QPointF(x, 0.0), piece);
             x += metrics.horizontalAdvance(piece);
         });
     }

@@ -61,7 +61,7 @@ QT_END_NAMESPACE
 namespace newgame
 {
 
-// TRANSLATED, the choice BidStrip and InfoStrip make, through
+// TRANSLATED, the choice BidStrip and the scoreboard make, through
 // QCoreApplication::translate() with an explicit context at every call site
 // rather than a tr() of our own - Q_DECLARE_TR_FUNCTIONS is class-only whatever
 // its name suggests, and a hand-rolled wrapper hides every string from lupdate.
@@ -159,11 +159,11 @@ bool isObserver(BotLevel level);
 inline constexpr unsigned int MinimumSeats = 2;
 inline constexpr unsigned int MaximumSeats = 6;
 
-// Long enough for any name a scoreboard can show without eliding, and the reason
-// there is a cap at all: ScoreboardWidget sizes its name column from the widest
-// name it is given, so an unbounded one takes the table's width with it. The
-// terminal's own limit is 10, set by a fixed-width seat table this client does
-// not have.
+// Long enough for any name a player would choose, and the reason there is a cap
+// at all: the scoreboard and the seat panels are fixed widths that elide a name
+// past them, and an unbounded one would be read as its first few letters and an
+// ellipsis. The terminal's own limit is 10, set by a fixed-width seat table this
+// client does not have.
 inline constexpr int MaximumNameLength = 20;
 
 struct Config

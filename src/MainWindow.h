@@ -32,12 +32,10 @@ class BidStrip;
 class CardArtWindow;
 class GameOverPanel;
 class HandItem;
-class InfoStrip;
 class MainMenuPage;
 class PauseOverlay;
 class PromptBar;
 class RoundSheet;
-class ScoreboardWidget;
 class TableScene;
 class TableView;
 
@@ -86,7 +84,7 @@ protected:
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
 
-    // Caps the scoreboard's share of the window - see capScoreboard().
+    // Keeps the overlays over the whole page - see the body.
     void resizeEvent(QResizeEvent* event) override;
 
 private slots:
@@ -149,11 +147,8 @@ private slots:
 private:
     void appendLine(const QString& line);
 
-    // Section 12's window: the info strip across the top, the table and the
-    // scoreboard side by side beneath it. Phase B is this.
-    //
-    // The central widget was the bare TableView until B2b, with no layout at
-    // all, so this introduces the container the other two hang off.
+    // Section 12's window: the table, with the scoreboard pinned inside it since
+    // the table redesign's phase 8, and the prompt bar beneath it.
     void buildTable();
 
     // Moves the .ui's log into a dock, hidden by default. B2's half of A5's
@@ -165,13 +160,6 @@ private:
     // Builds the View menu. Must run AFTER buildLogDock(), which owns the
     // action this adds.
     void buildViewMenu();
-
-    // HOW THE WINDOW DIVIDES, which is this window's decision and not the
-    // panel's. ScoreboardWidget asks for the width its widest name and its
-    // headings need, and that is right of it - but at a small window that width
-    // is half the screen, and section 12 has the table as the region everything
-    // else is arranged around. The panel yields; the green does not.
-    void capScoreboard();
 
     // Shows the card-art window, creating it the first time. Parented to this
     // window with Qt::Window, so it is a top-level window that still dies with
@@ -239,17 +227,15 @@ private:
 
     Ui::MainWindow *ui;
 
-    // ONE PALETTE, owned here and handed to all three, rather than each widget
+    // ONE PALETTE, owned here and handed to everything, rather than each widget
     // resolving the system scheme for itself. Phase E's preference is a single
-    // setter on this member and three calls out of it.
+    // setter on this member and a call out of it per widget.
     Theme theme = Theme::light();
 
-    // The table and the two panels. Qt owns every one of them through the
-    // widget tree, so these are handles rather than ownership.
+    // The table. Qt owns it through the widget tree, so these are handles rather
+    // than ownership. The scoreboard is an item in the scene.
     TableScene* scene = nullptr;
     TableView* table = nullptr;
-    InfoStrip* infoStrip = nullptr;
-    ScoreboardWidget* scoreboard = nullptr;
 
     // Section 15.1's strip, floated over the bottom of the table rather than
     // laid out beneath it - see TableView::setBottomOverlay() for why. Hidden

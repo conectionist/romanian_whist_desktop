@@ -56,7 +56,31 @@ struct Style
     // inside a run of any colour.
     QColor redSuit;
     QColor blackSuit;
+
+    // HOW MANY TIMES THE SIZE THEY ARE DRAWN AT the two fonts are set: 1, unless
+    // the size is fractional - see fonts::sized(), whose `scale` this is.
+    qreal scale = 1.0;
 };
+
+// A style of one colour and one font, at the pixel size `pixels`, which may be
+// fractional: what a line with no emphasis and no suit glyph needs.
+Style plainStyle(const QFont& font, qreal pixels, const QColor& colour);
+
+// The plain font's measurements, at the size the line is drawn.
+struct Metrics
+{
+    qreal ascent = 0.0;
+    qreal descent = 0.0;
+
+    // CSS's line-height: normal.
+    qreal lineSpacing = 0.0;
+};
+
+Metrics metrics(const Style& style);
+
+// Where the line's baseline goes in a line box of `height` at `top`: CSS's
+// half-leading, fonts::baselineIn()'s rule.
+qreal baselineIn(const Style& style, qreal top, qreal height);
 
 // How wide paint() draws the line.
 qreal width(const Line& line, const Style& style);

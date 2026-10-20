@@ -82,8 +82,7 @@ void BidStrip::setTheme(const Theme& palette)
 {
     theme = palette;
 
-    // Through a palette rather than a stylesheet, the call InfoStrip makes and
-    // for the same reason: section 18.1's rule is that colours come from Theme,
+    // Through a palette rather than a stylesheet: section 18.1's rule is that colours come from Theme,
     // and a stylesheet would be a second place deciding what colour things are.
     QPalette colours = QWidget::palette();
     colours.setColor(QPalette::Window, theme.seatPlaque);
@@ -123,8 +122,9 @@ void BidStrip::rebuild()
     // Hidden rather than emptied, so the strip does not reserve a line for a
     // sentence it is not showing. This widget is an overlay and appears only on
     // your turn, so a height that changes with the prompt costs nothing - which
-    // is exactly what is NOT true of InfoStrip, whose height must not move
-    // because the table is laid out beneath it.
+    // was exactly what was NOT true of the info strip that ran across the table's
+    // top until the redesign's phase 8, whose height must not move because the
+    // table was laid out beneath it.
     explanation->setVisible(!fields.explanation.isEmpty());
 
     // 0..highest INCLUSIVE. An 8-card round offers nine bids, and bidding zero

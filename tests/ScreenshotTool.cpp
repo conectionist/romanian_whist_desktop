@@ -581,8 +581,10 @@ GameSnapshot handMoment(const HandShot& shot)
         seat.name = names[i];
         seat.isHuman = i == 0;
 
-        // Seat 1 bid first, as it leads.
-        seat.bidOrder = (i + 3) % 4;
+        // Seat 1 bid first, as it leads. ONE-BASED, as the engine's
+        // getBiddingOrder() is: the scoreboard lists the rows in this order since
+        // the redesign's phase 8, and a 0 there is "not known yet".
+        seat.bidOrder = (i + 3) % 4 + 1;
         seat.hasBet = true;
         seat.bet = shot.bids[i];
 

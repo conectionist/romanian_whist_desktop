@@ -5,6 +5,8 @@
 #include "paint/Fonts.h"
 #include "paint/Icons.h"
 #include "paint/Theme.h"
+#include "table/ScoreboardItem.h"
+#include "table/SeatLayout.h"
 #include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
@@ -22,6 +24,7 @@
 
 #include <cmath>
 #include <memory>
+#include <vector>
 
 // THE CORNER PANELS (the table redesign's sections 2.9 to 2.11): pinned to the
 // window's corners rather than to the table, and drawn at the table's scale.
@@ -84,10 +87,42 @@ struct LoneButton
     }
 };
 
-// Where an item's own rect lands in the view's viewport, in pixels.
-QRectF onScreen(const TableView& view, const TableButtonItem& button)
+// A corner panel's own rect in table space: the panel as drawn, without the
+// shadow round it. Every corner panel has its top-left at its origin.
+template<typename Panel>
+QRectF inScene(const Panel& panel)
 {
-    return view.viewportTransform().mapRect(button.mapRectToScene(QRectF(QPointF(), button.size())));
+    return panel.mapRectToScene(QRectF(QPointF(), panel.size()));
+}
+
+// And where that lands in the view's viewport, in pixels.
+template<typename Panel>
+QRectF onScreen(const TableView& view, const Panel& panel)
+{
+    return view.viewportTransform().mapRect(inScene(panel));
+}
+
+// A table of `seats`, you at the bottom, mid-play, with a trump: the scoreboard
+// at its tallest for that many rows.
+GameSnapshot tableOf(unsigned int seats)
+{
+    using romanian_whist::Card;
+    using romanian_whist::Rank;
+    using romanian_whist::Suit;
+
+    GameSnapshot snapshot = fullTable();
+
+    snapshot.seats.resize(seats);
+    snapshot.betsPlaced = seats;
+    snapshot.hasTrump = true;
+    snapshot.trump = Card(Rank::Queen, Suit::Clubs);
+
+    for(unsigned int i = 0 ; i < seats ; i++)
+        snapshot.seats[i].bidOrder = i + 1;
+
+    snapshot.table.clear();
+
+    return snapshot;
 }
 
 // Windows of every shape: the screenshot size, a laptop, the size the suite plays
@@ -265,5 +300,80 @@ TEST_CASE("The corner buttons stay eight pixels in from the bottom-left corner",
 
         // At the table's own scale: 76 units tall.
         REQUIRE(std::abs(history.height() - tablebutton::height * scale) < 1e-6);
+    }
+}
+
+TEST_CASE("The scoreboard stays eight pixels in from the top-left corner", "[hud]")
+{
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+
+    TableView view(&scene);
+    view.show();
+
+    for(const QSize& size : shapes)
+    {
+        INFO("window " << size.width() << "x" << size.height());
+
+        view.resize(size);
+        QCoreApplication::processEvents();
+
+        const qreal scale = view.transform().m11();
+        const ScoreboardItem& scoreboard = *scene.scoreboardItem();
+        const QRectF placed = onScreen(view, scoreboard);
+
+        REQUIRE(scoreboard.isVisible());
+        REQUIRE(std::abs(placed.left() - tablespace::hudInset) < 1e-6);
+        REQUIRE(std::abs(placed.top() - tablespace::hudInset) < 1e-6);
+
+        // Drawn 1.2 times the table, as page.html's .score is.
+        REQUIRE(std::abs(placed.width() - scoreboard.size().width() * tablespace::hudScale * scale) < 1e-6);
+    }
+}
+
+// THE PLAN'S PROMISE FOR PHASE 8: at the window sizes people play at, nothing in a
+// corner covers a seat, and nothing in a corner is cut off by the window. Each
+// size as a bare view the size of the whole window, which is a little stricter
+// than the real one: the menu bar takes height, and a wider viewport leaves the
+// corners more room beside the table.
+TEST_CASE("The corner panels sit inside the window and clear of every seat", "[hud]")
+{
+    const QSize windows[] = { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900) };
+
+    for(unsigned int seats = 3 ; seats <= 6 ; seats++)
+    {
+        TableScene scene;
+        scene.setTheme(Theme::dark());
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(tableOf(seats)));
+
+        TableView view(&scene);
+        view.show();
+
+        for(const QSize& window : windows)
+        {
+            INFO(seats << " seats, window " << window.width() << "x" << window.height());
+
+            view.resize(window);
+            QCoreApplication::processEvents();
+
+            const QRectF viewport(QPointF(), QSizeF(view.viewport()->size()));
+
+            std::vector<QRectF> corners = { inScene(*scene.scoreboardItem()),
+                                            inScene(*scene.historyButton()),
+                                            inScene(*scene.lastTrickButton()) };
+
+            for(const QRectF& corner : corners)
+            {
+                REQUIRE(viewport.contains(view.viewportTransform().mapRect(corner)));
+
+                for(unsigned int seat = 0 ; seat < seats ; seat++)
+                {
+                    INFO("seat " << seat);
+
+                    REQUIRE_FALSE(corner.intersects(seatlayout::panelRect(seats, 0, seat)));
+                }
+            }
+        }
     }
 }

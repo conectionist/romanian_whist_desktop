@@ -2,7 +2,7 @@
 
 #include "GameFixtures.h"
 
-#include "ui/InfoStrip.h"
+#include "table/ScoreboardItem.h"
 #include "ui/RoundSheet.h"
 
 #include <QLabel>

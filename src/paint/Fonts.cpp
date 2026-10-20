@@ -6,6 +6,8 @@
 #include <QStringList>
 #include <QtLogging>
 
+#include <cmath>
+
 namespace fonts
 {
 
@@ -59,6 +61,26 @@ QFont heading()
     return chain({ QStringLiteral("Marcellus"), QStringLiteral("Cinzel"),
                    QStringLiteral("Georgia") },
                  QFont::Serif);
+}
+
+Sized sized(QFont font, qreal pixels)
+{
+    // Tenths are the finest the mock-up writes, so ten is as far as this looks.
+    constexpr int finest = 10;
+
+    for(int multiple = 1 ; multiple < finest ; multiple++)
+    {
+        const qreal whole = pixels * multiple;
+
+        if(std::abs(whole - std::round(whole)) < 1e-6)
+        {
+            font.setPixelSize(static_cast<int>(std::round(whole)));
+            return { font, static_cast<qreal>(multiple) };
+        }
+    }
+
+    font.setPixelSize(static_cast<int>(std::round(pixels * finest)));
+    return { font, static_cast<qreal>(finest) };
 }
 
 QFont body()

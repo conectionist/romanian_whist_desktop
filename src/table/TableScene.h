@@ -18,6 +18,7 @@
 
 class HandItem;
 class LeadMarkItem;
+class ScoreboardItem;
 class SeatItem;
 class TableButtonItem;
 class TableTopItem;
@@ -115,6 +116,9 @@ public:
     // drawn without a view, or a table with no snapshot yet, has no corner panels.
     void pinHud(const QRectF& visible, qreal scale);
 
+    // Section 2.9's scoreboard, top-left. READ-ONLY and for tests.
+    const ScoreboardItem* scoreboardItem() const { return scoreboard; }
+
     // Section 2.11's two buttons. Disabled until phase 11 gives them their sheets.
     TableButtonItem* historyButton() const { return history; }
     TableButtonItem* lastTrickButton() const { return lastTrick; }
@@ -174,6 +178,7 @@ private:
     HandItem* hand = nullptr;
 
     // The corner panels (tablespace::z::hud).
+    ScoreboardItem* scoreboard = nullptr;
     TableButtonItem* history = nullptr;
     TableButtonItem* lastTrick = nullptr;
 
