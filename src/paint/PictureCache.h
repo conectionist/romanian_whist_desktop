@@ -46,16 +46,25 @@ public:
                 return entry.picture;
         }
 
+        devicepixels::Canvas made = std::forward<Render>(render)();
+
+        // A NULL PICTURE IS NEVER HELD, as PictureMemo never keeps one as current:
+        // held, it would be found by every later request and the item would go on
+        // drawing nothing (PHASE5_REVIEW_FINDINGS.md #13).
+        if(made.pixmap.isNull())
+            return made;
+
         if(entries.size() >= Most)
             entries.erase(entries.begin());
 
-        entries.push_back({ key, std::forward<Render>(render)() });
+        entries.push_back({ key, std::move(made) });
         rendered++;
 
         return entries.back().picture;
     }
 
-    // How many pictures this has rendered: READ-ONLY and for tests.
+    // How many pictures this has rendered and holds, so not the null ones:
+    // READ-ONLY and for tests.
     std::size_t renders() const { return rendered; }
 
 private:

@@ -61,6 +61,31 @@ TEST_CASE("A full cache drops only its oldest picture", "[picture-cache]")
     REQUIRE(cache.renders() == 5);
 }
 
+// PHASE5_REVIEW_FINDINGS.md #13: the cache held a null picture as it held any
+// other, so the item asking for it was handed the null on every later paint too.
+TEST_CASE("A null picture is never held", "[picture-cache]")
+{
+    Cache cache;
+    int calls = 0;
+
+    const auto nullFirst = [&calls]
+    {
+        calls++;
+        return calls == 1 ? devicepixels::Canvas{} : pictureOf(1);
+    };
+
+    REQUIRE(cache.picture(1, 0, 1.0, nullFirst).pixmap.isNull());
+
+    // Asked again, it renders again rather than finding the null.
+    REQUIRE_FALSE(cache.picture(1, 0, 1.0, nullFirst).pixmap.isNull());
+    REQUIRE(calls == 2);
+
+    // Only the picture it holds is counted, and it is held.
+    REQUIRE(cache.renders() == 1);
+    cache.picture(1, 0, 1.0, nullFirst);
+    REQUIRE(calls == 2);
+}
+
 TEST_CASE("A new ratio or style starts the cache again", "[picture-cache]")
 {
     Cache cache;
