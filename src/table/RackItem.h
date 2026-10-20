@@ -189,10 +189,11 @@ public:
     // Public because it is the contract a test can check, as TableTopItem's is.
     QPixmap picture(qreal ratio) const;
 
-    // How many times this rack has asked for a new picture: READ-ONLY and for tests,
-    // which show with it that a resize settling leaves it alone - SeatItem's twin.
-    // The cache may have had it already; rackitem::Cache::renders() counts those
-    // that were composed.
+    // How many new pictures this rack has taken, composed or found in the cache:
+    // READ-ONLY and for tests, which show with it that a resize settling leaves it
+    // alone - SeatItem's twin. rackitem::Cache::renders() counts those that were
+    // composed. A request that came back null - as it always does for a rack with
+    // no cards - is not counted.
     std::size_t compositions() const { return memo.compositions(); }
 
 private:
