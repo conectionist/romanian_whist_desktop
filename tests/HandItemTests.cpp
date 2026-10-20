@@ -467,6 +467,47 @@ TEST_CASE("A raised card rises along its own tilt and is hit where it rose to", 
     REQUIRE(cards[0]->pos().y() == Catch::Approx(handitem::cardPlacement(3, 0, size).centre.y()));
 }
 
+TEST_CASE("The next card still wins where it covers the raised card's risen face", "[hand]")
+{
+    // THE ORDER INSIDE slotAt(): each card's resting place first, walking down from
+    // the top, and the raised card's risen part only at its own turn. The card above
+    // it is drawn over its risen face, so a point on both is that card's. Testing the
+    // risen part first - for the raised card, or for every card - would hand it the
+    // raised one, and no other case here would notice.
+    Fanned fan(promptOf({ true, true, true }));
+
+    const std::vector<CardItem*> cards = fan.cards();
+    const QSizeF size = cards[0]->cardSize();
+
+    // Raised from a point on the first card alone.
+    fan.hoverAt(cards[0]->mapToParent(QPointF(-size.width() / 4.0, 0.0)));
+
+    REQUIRE(cards[0]->isRaised());
+
+    // Just inside the second card's left edge, half way down.
+    const QPointF where = cards[1]->mapToParent(QPointF(-size.width() / 2.0 + 2.0, 0.0));
+
+    // The premise: the point is on the second card and on the first one's risen face.
+    REQUIRE(onCard(*cards[1], where));
+    REQUIRE(cards[0]->cardRect().translated(0.0, -cardshadow::raisedLift)
+                .contains(cards[0]->mapFromParent(where)));
+
+    std::vector<std::size_t> clicked;
+
+    QObject::connect(&fan.item, &HandItem::cardClicked,
+                     [&clicked](std::size_t slot){ clicked.push_back(slot); });
+
+    fan.clickAt(where);
+
+    REQUIRE(clicked == std::vector<std::size_t>{ 1 });
+
+    // And the cursor moving there raises the second card in the first one's place.
+    fan.hoverAt(where);
+
+    REQUIRE(cards[1]->isRaised());
+    REQUIRE_FALSE(cards[0]->isRaised());
+}
+
 TEST_CASE("Only a playable card is raised", "[hand]")
 {
     // A dimmed card rising under the cursor says it can be clicked, which is exactly
