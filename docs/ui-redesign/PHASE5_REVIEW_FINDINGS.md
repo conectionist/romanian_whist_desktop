@@ -11,8 +11,8 @@ Nothing here crashed or broke a test.
 - The hashes are that branch's. The squash merge keeps them reachable through its pull request.
 - **Tests:** #1, #2, #4, #6, #8 and #10 each have a test that was run against the old code and
   failed there. #3 and #12 have unit tests of the new `PictureMemo`. #5 and #7 change only how
-  the code reads. #9 is checked by the 1920×1080 screenshots, which are pixel-identical before and
-  after.
+  the code reads. #9 is checked by the 1920×1080 screenshots: the five table shots are
+  pixel-identical before and after (see #9 for the sixth).
 
 The findings below are as they were reported, checked against `redesign/phase-6-trick` at
 `6c4ae69`, with line numbers for that commit. A **Fixed** line at the top of each says what
@@ -36,8 +36,8 @@ changed.
 | 11 | [The rack cache is a copy of the panel cache](#11-the-rack-cache-is-a-copy-of-the-panel-cache) | 1 | 4 | Fixed (`bbff23d`) |
 | 12 | [Every item copies SeatItem's picture memo](#12-every-item-copies-seatitems-picture-memo) | 2 | 3 | Fixed (`2215dc8`) |
 
-**How they were fixed, in order:** #4 first, because players saw it. Then #9, checked
-pixel-identical on the 1920×1080 screenshots before the racks changed. Then the quick ones (#2, #6,
+**How they were fixed, in order:** #4 first, because players saw it. Then #9, checked on the
+1920×1080 screenshots before the racks changed. Then the quick ones (#2, #6,
 #7, #10, #8). Then #1, which changes the racks' edges. Then #5, and #12 last, which also fixed #3.
 
 ---
@@ -225,8 +225,10 @@ they share.
 
 **Fixed** in `8a01473`: the rack asks the renderer for its art at a ratio of 1, in the same pixels,
 so nothing is detached. Scaling the brush by the art's device-independent size was tried first: Qt
-drew backs right but a half-turned face (#4) unturned and tiled. The screenshots are pixel-identical
-to before.
+drew backs right but a half-turned face (#4) unturned and tiled. Compared on their RGB channels,
+the five table shots are pixel-identical to before. The empty table differs by up to 4 levels in 43
+pixels of the logo's lettering (y 511–523). That's the band phase 4 found varies between runs, and
+it has no racks in it.
 
 `art.setDevicePixelRatio(1.0)` on a `QPixmap` shared with `CardRenderer`'s cache detaches it, so
 every `render()` deep-copies the pixels of each card art it uses.
@@ -307,7 +309,9 @@ numbers are for `07bce0e`, the PR's head when it was reviewed.
   and failed there. #16's new assertions don't compile against the old code: the type is the fix.
   #17, #19, #21, #22 and #23 change only how the code reads or how fast it runs. The existing
   tests cover them.
-- **The screenshots are pixel-identical** to `07bce0e`'s, all six of them.
+- **The screenshots:** compared on their RGB channels, the five table shots are pixel-identical
+  to `07bce0e`'s. The empty table differs by up to 4 levels in the logo's lettering (y 511–523).
+  That's the band phase 4 found varies between runs, so a second run may match there or not.
 - **#13 and #14 undid part of #3's fix.** #3 and #12 put the null-picture rule into
   `PictureMemo`, but the cache behind the memo still held a null (#13). The memo also dropped a
   good picture for a null one (#14).
