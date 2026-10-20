@@ -269,18 +269,24 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     const QSize artSize(std::max(1, qRound(size.width() * artRatio)),
                         std::max(1, qRound(size.height() * artRatio)));
 
-    std::vector<QPixmap> arts;
-    std::vector<bool> faceUp;
+    // Each card's art and whether it is a face, which is laid the other way up.
+    struct Art
+    {
+        QPixmap pixmap;
+        bool face = false;
+    };
+
+    std::vector<Art> arts;
     arts.reserve(count);
-    faceUp.reserve(count);
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, 1.0) : QPixmap();
-        faceUp.push_back(!art.isNull());
+        Art art;
+        art.pixmap = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, 1.0) : QPixmap();
+        art.face = !art.pixmap.isNull();
 
-        if(art.isNull())
-            art = renderer.back(artSize, 1.0);
+        if(!art.face)
+            art.pixmap = renderer.back(artSize, 1.0);
 
         arts.push_back(art);
     }
@@ -291,7 +297,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        if(!arts[i].isNull())
+        if(!arts[i].pixmap.isNull())
             silhouette.addPath(cardTransform(count, i).map(body));
     }
 
@@ -321,7 +327,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        const QPixmap& art = arts[i];
+        const QPixmap& art = arts[i].pixmap;
 
         if(art.isNull())
             continue;
@@ -329,7 +335,7 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
         // A BRUSH OVER THE CARD'S ROUNDED RECT, not a blit: a fill keeps the edge
         // anti-aliased under the projective transform, and a clip would not.
         QBrush brush(art);
-        brush.setTransform(artTransform(QSizeF(art.size()), faceUp[i]));
+        brush.setTransform(artTransform(QSizeF(art.size()), arts[i].face));
 
         painter.save();
         painter.setTransform(cardTransform(count, i), true);
