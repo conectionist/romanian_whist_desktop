@@ -6,7 +6,10 @@
 #include "paint/Theme.h"
 
 #include <QColor>
+#include <QCoreApplication>
+#include <QGraphicsScene>
 #include <QImage>
+#include <QList>
 #include <QPixmap>
 #include <QPointF>
 #include <QRectF>
@@ -118,6 +121,36 @@ TEST_CASE("Switching between light and dark leaves the table's picture alone", "
 
     REQUIRE(item.picture(0.5).cacheKey() == first.cacheKey());
     REQUIRE(item.renders() == 1);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #18: the picture was kept, but setTheme() still asked
+// for the whole felt to be repainted on every flip.
+TEST_CASE("Switching between light and dark repaints nothing", "[table-top]")
+{
+    // Before the scene, so it outlives the connection that writes to it.
+    QList<QRectF> repainted;
+
+    QGraphicsScene scene;
+    auto* item = new TableTopItem;
+    scene.addItem(item);
+    item->setTheme(Theme::light());
+    QCoreApplication::processEvents();
+
+    QObject::connect(&scene, &QGraphicsScene::changed,
+                     [&repainted](const QList<QRectF>& regions) { repainted += regions; });
+
+    item->setTheme(Theme::dark());
+    QCoreApplication::processEvents();
+
+    REQUIRE(repainted.isEmpty());
+
+    // The control: a palette that does change is repainted.
+    Theme recoloured = Theme::dark();
+    recoloured.table.logoOrnament = QColor(1, 2, 3);
+    item->setTheme(recoloured);
+    QCoreApplication::processEvents();
+
+    REQUIRE_FALSE(repainted.isEmpty());
 }
 
 // SECTION 2.4'S BEAD: three rings between the felt and the wood, 440 to 449 the

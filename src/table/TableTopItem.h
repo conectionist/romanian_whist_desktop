@@ -1,6 +1,7 @@
 #ifndef TABLE_TOP_ITEM_H
 #define TABLE_TOP_ITEM_H
 
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
 #include <QGraphicsItem>
@@ -47,6 +48,13 @@ public:
     TableTopItem();
 
     // The colours, and the wood and felt textures, come from here.
+    //
+    // ONLY THE TABLE'S OWN PALETTE, theme.table, ASKS FOR A NEW PICTURE: it is all of
+    // the theme the picture reads besides the textures and the logo's font - and
+    // those are fixed resources. The rest of the theme changes between light and
+    // dark while the table does not, so the whole theme would paint the same
+    // picture again, and repaint the felt, whenever the system's colour scheme
+    // flipped (PHASE5_REVIEW_FINDINGS.md #18).
     void setTheme(const Theme& theme);
 
     QRectF boundingRect() const override;
@@ -60,23 +68,14 @@ public:
 
     // How many times the picture has been painted. READ-ONLY and for tests, which
     // are how a resize is shown to leave the cache alone (TableViewTests).
-    std::size_t renders() const { return renderCount; }
+    std::size_t renders() const { return memo.compositions(); }
 
 private:
     Theme theme = Theme::light();
 
-    // ONE PICTURE AT A TIME. A new ratio means the window was resized, and the
-    // old one is never asked for again.
-    //
-    // KEYED ON THE TABLE'S OWN PALETTE, theme.table, which is all of the theme the
-    // picture reads besides the textures and the logo's font - and those are fixed
-    // resources. The rest of the theme changes between light and dark while the
-    // table does not, so a key on all of it would paint the same picture again
-    // whenever the system's colour scheme flipped.
-    mutable QPixmap cached;
-    mutable int cachedRatio = 0;
-    mutable Theme::TablePalette cachedPalette;
-    mutable std::size_t renderCount = 0;
+    // ONE PICTURE AT A TIME, as every item on the table keeps its own. A new ratio
+    // means the window was resized, and the old one is never asked for again.
+    mutable PictureMemo memo;
 };
 
 #endif
