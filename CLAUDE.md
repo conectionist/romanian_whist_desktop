@@ -63,3 +63,33 @@ The owner wants to see each phase's visual result without running the app. When 
 
 If a phase's screenshots are pixel-identical to the previous phase's, say so, and still link the
 comparisons.
+
+## Explaining something visual: text first, then offer a recording
+
+When something visual needs explaining and isn't obvious, explain it in text first, with a
+screenshot if that helps. Then **offer** to show it in the running app. Don't record unless the
+owner says yes. The owner finds the recording very useful, and the GIF most of all, but it isn't
+the default.
+
+When the owner says yes:
+
+1. The owner starts the app and sets up the state, or uses the one already on screen. Before
+   moving the mouse, say how long the demo will take and whether it will click: a click plays a card
+   in their game.
+2. Find the window with `xdotool search --onlyvisible --classname romanian_whist_desktop`, then
+   `xdotool getwindowgeometry <id>`. Screen coordinates are the window's position plus window
+   coordinates. The window may be on the second monitor.
+3. Drive it from a short Python script in the scratchpad. Move with `xdotool mousemove` in 1 px
+   steps with short pauses, so hover events fire and the owner can watch it happen.
+4. Record the area of interest with the real cursor. ImageMagick's `import` leaves the cursor out,
+   so use ffmpeg. Stop the recording by writing `q` to its stdin. Take stills the same way, with
+   `-frames:v 1` in place of the codec options:
+   ```
+   nice -n 19 ffmpeg -y -loglevel error -f x11grab -draw_mouse 1 -framerate 25 -video_size <w>x<h> \
+       -i :0.0+<x>,<y> -c:v libx264 -preset ultrafast -pix_fmt yuv444p demo.mkv
+   nice -n 19 ffmpeg -y -loglevel error -i demo.mkv \
+       -vf "fps=12,scale=780:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" demo.gif
+   ```
+5. Put two or three labelled stills side by side with Pillow, enlarged around the spot that
+   matters. Keep everything in the scratchpad, never in the repo.
+6. Link the GIF and the stills, with a line for each frame on what it shows.
