@@ -20,7 +20,7 @@ trickitem::Placement trickitem::cardPlacement(unsigned int seatCount, const seat
     // The felt's edge, the inset, then half the card: table.js trickPos().
     const qreal radius = tablespace::feltRadius - tablespace::playedInset - height / 2.0;
 
-    return Placement{ seatlayout::onCircle(place.angle, radius), rackitem::frameRotation(place.angle) };
+    return Placement{ seatlayout::onCircle(*place.angle, radius), rackitem::frameRotation(*place.angle) };
 }
 
 std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
@@ -39,8 +39,8 @@ trickitem::Placement trickitem::leadMarkPlacement(const seatlayout::Place& place
     if(place.human)
         return Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
 
-    return Placement{ seatlayout::onCircle(place.angle, tablespace::goldLineRadius),
-                      rackitem::frameRotation(place.angle) };
+    return Placement{ seatlayout::onCircle(*place.angle, tablespace::goldLineRadius),
+                      rackitem::frameRotation(*place.angle) };
 }
 
 std::optional<trickitem::Placement> trickitem::leadMarkPlacement(unsigned int seatCount, int humanSeat,

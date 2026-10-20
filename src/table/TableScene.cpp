@@ -189,8 +189,8 @@ void TableScene::relayout()
             continue;
         }
 
-        rack->setPos(seatlayout::rackOrigin(place->angle));
-        turnTo(*rack, rackitem::frameRotation(place->angle));
+        rack->setPos(seatlayout::rackOrigin(*place->angle));
+        turnTo(*rack, rackitem::frameRotation(*place->angle));
         rack->setRack(snapshot->seats[i], theme);
         rack->show();
     }

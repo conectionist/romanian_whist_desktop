@@ -71,10 +71,10 @@ QRectF panelRect(unsigned int seatCount, int humanSeat, unsigned int seat);
 //
 // The angle is what the played card and the lead rhombus line up with from phase 6.
 //
-// FOR A SEAT, READ place(), which has no answer for a seat with no panel. A seat
-// form of this used to return 0 there, which is also the right-hand seat's real
-// angle (PHASE5_REVIEW_FINDINGS.md #5).
-qreal rackAngle(QRectF panel);
+// NONE FOR AN EMPTY PANEL, which has no rack. This and a seat form of it used to
+// return 0 there, which is also the right-hand seat's real angle
+// (PHASE5_REVIEW_FINDINGS.md #5 and #16). For a seat, read place().
+std::optional<qreal> rackAngle(QRectF panel);
 
 // The point `radius` from the table's centre at `angle` (radians, y down): a rack's
 // origin, a played card's centre, the lead rhombus's.
@@ -91,7 +91,7 @@ struct Place
 {
     QRectF panel;
     bool human = false;
-    qreal angle = 0.0;      // rackAngle(panel); 0 for the human's seat, which has no rack
+    std::optional<qreal> angle;     // rackAngle(panel); none for the human's seat, which has no rack
 };
 
 // None for a seat with no panel, as panelRect() has none.

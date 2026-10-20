@@ -82,7 +82,7 @@ TEST_CASE("Every rack stands on the rim clear of its own panel", "[rack]")
                     continue;
 
                 const QRectF panel = place->panel;
-                const QPointF origin = seatlayout::rackOrigin(place->angle);
+                const QPointF origin = seatlayout::rackOrigin(place->angle.value());
 
                 REQUIRE(QLineF(tablespace::centre, origin).length() == Approx(tablespace::rackRadius));
                 REQUIRE_FALSE(clearOf(panel).contains(origin));
@@ -95,16 +95,16 @@ TEST_CASE("Four players' racks face their panels squarely", "[rack]")
 {
     // Left, top and right: each panel's centre is straight out from the table's,
     // and with section 2.5's panels no rack has to slide.
-    REQUIRE(seatlayout::place(4, 0, 1)->angle == Approx(std::numbers::pi));
-    REQUIRE(seatlayout::place(4, 0, 2)->angle == Approx(-std::numbers::pi / 2.0));
-    REQUIRE(seatlayout::place(4, 0, 3)->angle == Approx(0.0).margin(1e-12));
+    REQUIRE(seatlayout::place(4, 0, 1)->angle.value() == Approx(std::numbers::pi));
+    REQUIRE(seatlayout::place(4, 0, 2)->angle.value() == Approx(-std::numbers::pi / 2.0));
+    REQUIRE(seatlayout::place(4, 0, 3)->angle.value() == Approx(0.0).margin(1e-12));
 }
 
 TEST_CASE("The bottom seat's rack is at the bottom", "[rack]")
 {
     // A spectated game's seat 0 sits where you would, and stands its rack on the rim
     // straight below the centre.
-    REQUIRE(seatlayout::place(4, -1, 0)->angle == Approx(std::numbers::pi / 2.0));
+    REQUIRE(seatlayout::place(4, -1, 0)->angle.value() == Approx(std::numbers::pi / 2.0));
     REQUIRE(seatlayout::rackOrigin(std::numbers::pi / 2.0).x() == Approx(tablespace::centre.x()));
 }
 
@@ -119,7 +119,7 @@ TEST_CASE("A rack under its own panel slides clockwise until it is clear", "[rac
 
     REQUIRE(clearOf(panel).contains(seatlayout::rackOrigin(straight)));
 
-    const qreal angle = seatlayout::rackAngle(panel);
+    const qreal angle = seatlayout::rackAngle(panel).value();
 
     REQUIRE(angle > straight);
     REQUIRE_FALSE(clearOf(panel).contains(seatlayout::rackOrigin(angle)));
@@ -158,10 +158,10 @@ TEST_CASE("Quarter-turn racks are turned exactly", "[rack]")
     REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0) == 180.0);
 
     // And as seatlayout::place() hands them over.
-    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 1)->angle) == 90.0);
-    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 2)->angle) == 180.0);
-    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 3)->angle) == -90.0);
-    REQUIRE(rackitem::frameRotation(seatlayout::place(4, -1, 0)->angle) == 0.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 1)->angle.value()) == 90.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 2)->angle.value()) == 180.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 3)->angle.value()) == -90.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, -1, 0)->angle.value()) == 0.0);
 }
 
 // PHASE5_REVIEW_FINDINGS.md #2: a turn a hair above -180 snapped to -180 after it
