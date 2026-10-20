@@ -25,6 +25,19 @@ Phase branches are reviewed and PR'd against their parent `claude/*` branch, nev
 When running `/code-review` on a phase branch, diff against that parent branch (currently
 `claude/zealous-lamport-zac87a`), or pass the PR number so GitHub's base branch is used.
 
+## Changing a PR: never `gh pr edit`
+
+`gh pr edit` always fails on this repo, with "GraphQL: Projects (classic) is being deprecated …
+(repository.pullRequest.projectCards)", and changes nothing. Don't try it first. Change a PR's
+description or title through the REST API from the start, with the body written to a file:
+
+```
+gh api -X PATCH repos/conectionist/romanian_whist_desktop/pulls/<N> -F body=@<file>
+gh api -X PATCH repos/conectionist/romanian_whist_desktop/pulls/<N> -f title='<title>'
+```
+
+`gh pr view` and `gh pr create` work as usual.
+
 ## End of every redesign phase: show the owner side-by-side screenshots
 
 The owner wants to see each phase's visual result without running the app. When a
