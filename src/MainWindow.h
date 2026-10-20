@@ -34,10 +34,10 @@ class GameOverPanel;
 class HandItem;
 class MainMenuPage;
 class PauseOverlay;
-class PromptBar;
 class RoundSheet;
 class TableScene;
 class TableView;
+class TrickPanelItem;
 
 // Phase C's window: phase B's table with a human in one of the seats, and the
 // two things that let them answer for themselves - section 15.1's bid strip and
@@ -137,7 +137,7 @@ private slots:
     void showNewGameDialog();
 
     // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
-    // its own slot because that is what the Menu button connects to.
+    // its own slot because that is what the menu bar's Menu item connects to.
     void showPauseMenu();
 
     // Abandons the running game and returns to the main menu. The second stop
@@ -147,8 +147,8 @@ private slots:
 private:
     void appendLine(const QString& line);
 
-    // Section 12's window: the table, with the scoreboard pinned inside it since
-    // the table redesign's phase 8, and the prompt bar beneath it.
+    // Section 12's window: the table, with the scoreboard, the trick panel and the
+    // corner buttons pinned inside it since the table redesign's phase 8.
     void buildTable();
 
     // Moves the .ui's log into a dock, hidden by default. B2's half of A5's
@@ -157,8 +157,8 @@ private:
     // action that empties the window is not a diagnostic.
     void buildLogDock();
 
-    // Builds the View menu. Must run AFTER buildLogDock(), which owns the
-    // action this adds.
+    // Builds the menu bar: the temporary Menu item and the View menu. Must run
+    // AFTER buildLogDock(), which owns an action this adds.
     void buildViewMenu();
 
     // Shows the card-art window, creating it the first time. Parented to this
@@ -233,7 +233,7 @@ private:
     Theme theme = Theme::light();
 
     // The table. Qt owns it through the widget tree, so these are handles rather
-    // than ownership. The scoreboard is an item in the scene.
+    // than ownership. The scoreboard and the trick panel are items in the scene.
     TableScene* scene = nullptr;
     TableView* table = nullptr;
 
@@ -242,8 +242,10 @@ private:
     // except while the engine is parked waiting for your bid.
     BidStrip* bidStrip = nullptr;
 
-    // Section 12's fourth region, and the last to be built.
-    PromptBar* promptBar = nullptr;
+    // SECTION 12'S FOURTH REGION, "where the game talks to you", which is the
+    // trick panel in the table's top-right corner since the redesign's phase 8.
+    // Owned by the scene; a handle, as `hand` is, for the same second source.
+    TrickPanelItem* trickPanel = nullptr;
 
     // The pause menu, a child of the stack rather than a page in it or a dialog
     // of its own - it covers whichever page is showing and dims it. Its
@@ -307,15 +309,6 @@ private:
     // column is measured from. Cleared by startGame() above.
     std::chrono::steady_clock::time_point started;
     bool haveStarted = false;
-
-    // THE LAST FRAME, kept because the prompt bar needs a fact from it that the
-    // prompt does not carry: which suit is being followed. Legality lives only on
-    // the prompt and the lead suit only on the snapshot, so the bar is the one
-    // thing in the client that has to read both at once.
-    //
-    // By shared_ptr, which is what crosses the boundary - so this is a refcount
-    // bump rather than a copy of six hands.
-    std::shared_ptr<const GameSnapshot> lastSnapshot;
 
     // What the status bar was last told, so it is rewritten only when the round
     // or the trick moves rather than on every one of a game's ~1300 frames.

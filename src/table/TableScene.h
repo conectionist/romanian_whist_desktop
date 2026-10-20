@@ -23,6 +23,7 @@ class SeatItem;
 class TableButtonItem;
 class TableTopItem;
 class TrickItem;
+class TrickPanelItem;
 
 // The table: name panels round it, racks on its rim, the trick on its felt.
 //
@@ -119,6 +120,11 @@ public:
     // Section 2.9's scoreboard, top-left. READ-ONLY and for tests.
     const ScoreboardItem* scoreboardItem() const { return scoreboard; }
 
+    // Section 2.10's trick panel, top-right. Like the fan, it has a second source
+    // the snapshot cannot supply - the prompt for your card - and MainWindow hands
+    // that over through here.
+    TrickPanelItem* trickPanelItem() const { return trickPanel; }
+
     // Section 2.11's two buttons. Disabled until phase 11 gives them their sheets.
     TableButtonItem* historyButton() const { return history; }
     TableButtonItem* lastTrickButton() const { return lastTrick; }
@@ -179,6 +185,7 @@ private:
 
     // The corner panels (tablespace::z::hud).
     ScoreboardItem* scoreboard = nullptr;
+    TrickPanelItem* trickPanel = nullptr;
     TableButtonItem* history = nullptr;
     TableButtonItem* lastTrick = nullptr;
 

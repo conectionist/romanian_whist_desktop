@@ -11,6 +11,7 @@
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
 #include "table/TrickItem.h"
+#include "table/TrickPanelItem.h"
 #include "table/Turn.h"
 
 #include <algorithm>
@@ -46,6 +47,13 @@ TableScene::TableScene(QObject* parent)
     scoreboard->setScale(tablespace::hudScale);
     scoreboard->hide();
     addItem(scoreboard);
+
+    // THE TRICK PANEL (section 2.10), the same.
+    trickPanel = new TrickPanelItem(&panels);
+    trickPanel->setZValue(tablespace::z::hud);
+    trickPanel->setScale(tablespace::hudScale);
+    trickPanel->hide();
+    addItem(trickPanel);
 
     // THE CORNER BUTTONS (section 2.11), DISABLED UNTIL PHASE 11 builds the sheets
     // they open: drawn where the mock-up has them, muted, taking no click.
@@ -124,6 +132,7 @@ void TableScene::placeHud()
     const bool shown = pin && snapshot;
 
     scoreboard->setVisible(shown);
+    trickPanel->setVisible(shown);
 
     for(TableButtonItem* button : { history, lastTrick })
         button->setVisible(shown);
@@ -137,6 +146,11 @@ void TableScene::placeHud()
 
     // TOP-LEFT, growing right and down.
     scoreboard->setPos(pin->visible.left() + inset, pin->visible.top() + inset);
+
+    // TOP-RIGHT, growing left and down: placed by its right edge, at its drawn
+    // width.
+    trickPanel->setPos(pin->visible.right() - inset - trickPanel->size().width() * tablespace::hudScale,
+                       pin->visible.top() + inset);
 
     // BOTTOM-LEFT, side by side (table.js fit()).
     const QPointF corner(pin->visible.left() + inset, pin->visible.bottom() - inset);
@@ -292,5 +306,6 @@ void TableScene::relayout()
 
     // The corner panels, shown from the first snapshot on.
     scoreboard->setSnapshot(*snapshot, theme);
+    trickPanel->setSnapshot(*snapshot, theme);
     placeHud();
 }

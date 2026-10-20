@@ -6,19 +6,18 @@
 #include "table/ScoreboardItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
+#include "table/TrickPanelItem.h"
 #include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
 #include "ui/MainMenuPage.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
-#include "ui/PromptBar.h"
 #include "ui/RoundSheet.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/GameEngine.h>
 
-#include <QBoxLayout>
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QDockWidget>
@@ -111,9 +110,9 @@ MainWindow::MainWindow(QWidget *parent)
     showMainMenu();
 }
 
-// The table page: the table, with the scoreboard and the corner buttons pinned
-// to its corners inside it since the table redesign's phase 8, and the prompt bar
-// beneath it.
+// The table page: the table and nothing else. Since the table redesign's phase 8
+// the scoreboard, the trick panel and the corner buttons are pinned to its corners
+// inside it, drawn by the scene at the table's scale.
 //
 // THE PALETTE IS RESOLVED ONCE, here, and handed to everything. Each widget
 // asking QGuiApplication for the scheme itself would work today and would be
@@ -143,28 +142,15 @@ void MainWindow::buildTable()
 
     connect(hand, &HandItem::cardClicked, this, &MainWindow::onCardPicked);
 
-    promptBar = new PromptBar(this);
+    // THE TRICK PANEL, owned by the scene as the fan is, and for the fan's reason a
+    // handle here: it has the same second source, the prompt for your card.
+    trickPanel = scene->trickPanelItem();
 
-    connect(promptBar, &PromptBar::menuRequested, this, &MainWindow::showPauseMenu);
+    // THE CORNER BUTTONS ARE LEFT UNCONNECTED, and the scene builds them disabled:
+    // Round history and Last trick open the sheets phase 11 builds.
 
     scene->setTheme(theme);
     bidStrip->setTheme(theme);
-    promptBar->setTheme(theme);
-
-    // THE TABLE TAKES THE PAGE. The info strip that ran across its top and the
-    // scoreboard column beside it are the scoreboard pinned in its top-left corner
-    // now (section 2.9), drawn by the scene at the table's scale.
-    auto* central = new QWidget(this);
-
-    auto* stack = new QVBoxLayout(central);
-    stack->setContentsMargins(0, 0, 0, 0);
-    stack->setSpacing(0);
-    stack->addWidget(table, 1);
-
-    // SECTION 12'S FOURTH REGION, full width beneath the table: it is where the
-    // game talks to you, and one line always in the same place is the whole
-    // point of it.
-    stack->addWidget(promptBar);
 
     // TWO PAGES, and the table keeps its own state between games. The menu is
     // page 0 because that is what the window opens on; nothing is destroyed when
@@ -182,9 +168,12 @@ void MainWindow::buildTable()
     // and the uniformity free.
     connect(menuPage, &MainMenuPage::quitRequested, this, &MainWindow::close);
 
+    // THE TABLE TAKES THE PAGE. The info strip that ran across its top, the
+    // scoreboard column beside it and the prompt bar beneath it are the
+    // scoreboard and the trick panel in its corners now (sections 2.9 and 2.10).
     pages = new QStackedWidget(this);
     pages->addWidget(menuPage);
-    pages->addWidget(central);
+    pages->addWidget(table);
 
     setCentralWidget(pages);
 
@@ -549,10 +538,19 @@ void MainWindow::buildLogDock()
 
 void MainWindow::buildViewMenu()
 {
-    // The menu bar is in MainWindow.ui and is empty; this is the first thing put
-    // into it. In code rather than in the .ui because the action needs a
-    // connection either way, and a designer-declared action that is only ever
-    // reached from here would be split across two files for nothing.
+    // THE PAUSE MENU'S WAY IN FOR THE MOUSE, a top-level item rather than a menu:
+    // it was the prompt bar's Menu button until the table redesign's phase 8 took
+    // the prompt bar away, and Esc is its keyboard half. TEMPORARY, by the owner's
+    // call of 2026-10-20: phase 9 restyles this bar after the mock-up's - New Game,
+    // Settings, Rules and Exit - and Exit replaces it.
+    QAction* pause = menuBar()->addAction(tr("&Menu"));
+    pause->setObjectName(QStringLiteral("menu"));
+    connect(pause, &QAction::triggered, this, &MainWindow::showPauseMenu);
+
+    // The menu bar is in MainWindow.ui and is empty. In code rather than in the
+    // .ui because the action needs a connection either way, and a
+    // designer-declared action that is only ever reached from here would be split
+    // across two files for nothing.
     QMenu* view = menuBar()->addMenu(tr("&View"));
 
     // Qt's own action for the dock, not one of ours - see buildLogDock().
@@ -604,16 +602,15 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // The two cached prompts matter most: they name a promptId belonging to a
     // provider prepare() is about to destroy. The generation gate would drop a
     // click carrying one (section 4.2), so this is belt and braces rather than
-    // the defence - but a stale PlayPrompt is also what the prompt bar and the
-    // fan would be redrawn from.
+    // the defence - but a stale PlayPrompt is also what the fan would be redrawn
+    // from. The trick panel holds its own copy, and is cleared below.
     activeBetPrompt = BetPrompt{};
     activePrompt = PlayPrompt{};
-    lastSnapshot.reset();
 
     bidStrip->hide();
     hand->clear();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
     // lives on. Unreachable today - every path here comes from the menu page,
@@ -716,8 +713,6 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - started);
 
     appendLine(snapshotlog::format(*snapshot, elapsed));
-
-    lastSnapshot = snapshot;
 
     // THE SHEET GOES WHEN THE GAME MOVES ON, which is what dismisses it for a
     // player who did not ask to be waited for: the dwell ends, onRoundComplete()
@@ -845,7 +840,9 @@ void MainWindow::onCardRequested(PlayPrompt prompt)
     hand->setPrompt(prompt);
     hand->setPlayable(true);
 
-    promptBar->setFields(promptbar::fieldsFor(prompt, lastSnapshot ? *lastSnapshot : GameSnapshot{}));
+    // AND THE TRICK PANEL, which says why the dimmed cards are out: legality from
+    // the prompt, the suit being followed from the frame it already holds.
+    trickPanel->setPrompt(prompt);
 }
 
 void MainWindow::onCardPicked(std::size_t slot)
@@ -874,7 +871,7 @@ void MainWindow::onCardPicked(std::size_t slot)
         return;
 
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     if(!controller.provider())
         return;
@@ -901,7 +898,7 @@ void MainWindow::onCardPicked(std::size_t slot)
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
     // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc raises the pause
-    // menu, which is the keyboard half of the prompt bar's Menu button, and
+    // menu, which is the keyboard half of the menu bar's Menu item, and
     // dismisses it again - so the key that opened it is the key that leaves.
     // Checked first because the digit path below subtracts Key_1 from whatever
     // arrives and would otherwise have to reason about the result.
@@ -961,7 +958,7 @@ void MainWindow::onGameStopped()
 {
     bidStrip->hide();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     appendLine(tr("-- stopped --"));
 
@@ -1023,7 +1020,7 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
 
     bidStrip->hide();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     appendLine(tr("-- game over --"));
 
@@ -1073,7 +1070,7 @@ void MainWindow::showFailure(QString what)
 
     bidStrip->hide();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     appendLine(tr("-- the game thread failed: %1 --").arg(what));
     statusBar()->showMessage(tr("The game ended in an error: %1").arg(what));

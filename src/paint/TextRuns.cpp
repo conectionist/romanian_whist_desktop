@@ -135,6 +135,26 @@ qreal textruns::baselineIn(const Style& style, qreal top, qreal height)
     return top + (height - (measured.ascent + measured.descent)) / 2.0 + measured.ascent;
 }
 
+textruns::Line textruns::emphasised(const QString& sentence, const QString& strong)
+{
+    const qsizetype at = sentence.indexOf(QStringLiteral("%1"));
+
+    if(at < 0)
+        return { Run{ sentence } };
+
+    Line line;
+
+    if(at > 0)
+        line.push_back(Run{ sentence.left(at) });
+
+    line.push_back(Run{ strong, Emphasis::Strong });
+
+    if(at + 2 < sentence.size())
+        line.push_back(Run{ sentence.mid(at + 2) });
+
+    return line;
+}
+
 qreal textruns::width(const Line& line, const Style& style)
 {
     qreal total = 0.0;

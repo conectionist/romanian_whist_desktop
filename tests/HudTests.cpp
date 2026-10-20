@@ -11,6 +11,7 @@
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableView.h"
+#include "table/TrickPanelItem.h"
 
 #include <QCoreApplication>
 #include <QFontMetricsF>
@@ -360,6 +361,7 @@ TEST_CASE("The corner panels sit inside the window and clear of every seat", "[h
             const QRectF viewport(QPointF(), QSizeF(view.viewport()->size()));
 
             std::vector<QRectF> corners = { inScene(*scene.scoreboardItem()),
+                                            inScene(*scene.trickPanelItem()),
                                             inScene(*scene.historyButton()),
                                             inScene(*scene.lastTrickButton()) };
 
@@ -375,5 +377,34 @@ TEST_CASE("The corner panels sit inside the window and clear of every seat", "[h
                 }
             }
         }
+    }
+}
+
+TEST_CASE("The trick panel stays eight pixels in from the top-right corner", "[hud]")
+{
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+
+    TableView view(&scene);
+    view.show();
+
+    for(const QSize& size : shapes)
+    {
+        INFO("window " << size.width() << "x" << size.height());
+
+        view.resize(size);
+        QCoreApplication::processEvents();
+
+        const qreal scale = view.transform().m11();
+        const TrickPanelItem& panel = *scene.trickPanelItem();
+        const QRectF placed = onScreen(view, panel);
+
+        REQUIRE(panel.isVisible());
+        REQUIRE(std::abs(placed.right() - (view.viewport()->width() - tablespace::hudInset)) < 1e-6);
+        REQUIRE(std::abs(placed.top() - tablespace::hudInset) < 1e-6);
+
+        // 264 units, drawn 1.2 times the table, as page.html's .trickinfo is.
+        REQUIRE(std::abs(placed.width() - trickpanel::width * tablespace::hudScale * scale) < 1e-6);
     }
 }

@@ -88,6 +88,19 @@ TEST_CASE("A line reads as its runs one after another", "[text-runs]")
     REQUIRE(textruns::text(line) == QStringLiteral("Bids so far: 3 of 6 tricks"));
 }
 
+TEST_CASE("A sentence's one strong part goes where its marker is", "[text-runs]")
+{
+    REQUIRE(textruns::emphasised(QStringLiteral("Leader: %1"), QStringLiteral("Bogdan"))
+            == Line{ Run{ "Leader: " }, Run{ "Bogdan", Emphasis::Strong } });
+
+    // A translation may put it first, or in the middle.
+    REQUIRE(textruns::emphasised(QStringLiteral("%1 conduce"), QStringLiteral("Bogdan"))
+            == Line{ Run{ "Bogdan", Emphasis::Strong }, Run{ " conduce" } });
+
+    REQUIRE(textruns::emphasised(QStringLiteral("Ia %1 acum"), QStringLiteral("Ana"))
+            == Line{ Run{ "Ia " }, Run{ "Ana", Emphasis::Strong }, Run{ " acum" } });
+}
+
 TEST_CASE("A strong run is measured in its own font", "[text-runs]")
 {
     // Bold is wider, so a line measured all plain would be centred off by the

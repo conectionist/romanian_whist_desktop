@@ -44,6 +44,11 @@ using Line = std::vector<Run>;
 // cannot see the emphasis.
 QString text(const Line& line);
 
+// A SENTENCE WITH ONE PART STANDING OUT: `sentence` holds %1 where `strong` goes,
+// and nothing else to fill in - "Leader: %1" and "Bogdan". The sentence is the
+// translator's, so %1 may be anywhere in it, or at either end.
+Line emphasised(const QString& sentence, const QString& strong);
+
 // How a panel sets its runs.
 struct Style
 {

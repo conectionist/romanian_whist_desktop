@@ -23,7 +23,7 @@ add_executable(desktop_tests
     RoundSheetTests.cpp
     MainWindowTests.cpp
     HandItemTests.cpp
-    PromptBarTests.cpp
+    TrickPanelTests.cpp
     ThemeTests.cpp
     FontsTests.cpp
     CardRendererTests.cpp

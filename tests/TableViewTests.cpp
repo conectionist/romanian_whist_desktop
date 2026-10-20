@@ -6,7 +6,9 @@
 #include "table/RackItem.h"
 #include "table/SeatItem.h"
 #include "table/LeadMarkItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/TableButtonItem.h"
+#include "table/TrickPanelItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
@@ -662,6 +664,12 @@ TEST_CASE("While a drag settles no panel is composed again", "[table]")
             // again either.
             if(const auto* button = dynamic_cast<const TableButtonItem*>(item))
                 total += button->compositions();
+
+            if(const auto* scoreboard = dynamic_cast<const ScoreboardItem*>(item))
+                total += scoreboard->compositions();
+
+            if(const auto* trickPanel = dynamic_cast<const TrickPanelItem*>(item))
+                total += trickPanel->compositions();
         }
 
         return total;
