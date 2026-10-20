@@ -876,7 +876,7 @@ TEST_CASE("A card in your hand reaches as far as its look", "[hand]")
             == body.translated(0.0, -30.0).marginsAdded(cardshadow::reach(cardshadow::Look::Raised)));
 }
 
-TEST_CASE("A card's own rect is its size, centred on its origin", "[hand]")
+TEST_CASE("A card's own rect is its size centred on its origin", "[hand]")
 {
     // WRITTEN OUT, not asked of cardshadow::cardRect(): every other test here, the
     // fan's hit test and the shadows all take "on the card" from that one function,
