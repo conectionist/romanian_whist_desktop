@@ -8,6 +8,7 @@
 #include <QMarginsF>
 #include <QPixmap>
 #include <QPointF>
+#include <QRectF>
 #include <QSizeF>
 
 #include <cstddef>
@@ -55,6 +56,11 @@ constexpr qreal lift(Look look)
 {
     return look == Look::Winning ? winningLift : look == Look::Raised ? raisedLift : 0.0;
 }
+
+// THE CARD ITSELF, of `size`, centred on its origin: where CardItem draws it, where
+// HandItem hits it, and what every shadow is cast around - before the lift. The one
+// definition, so none of those can drift from the others.
+QRectF cardRect(QSizeF size);
 
 // How far the picture reaches past the card, in its frame, before the lift - so
 // CardItem's rect covers it.

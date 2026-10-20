@@ -149,19 +149,11 @@ private:
     }
 };
 
-// A card's own rect, centred on its origin as CardItem draws it: not
-// boundingRect(), which reaches past the card for its shadow.
-QRectF bodyOf(const CardItem& card)
-{
-    const QSizeF size = card.cardSize();
-
-    return QRectF(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
-}
-
-// Whether a point in the fan's coordinates is on the card as it rests.
+// Whether a point in the fan's coordinates is on the card as it rests: its own
+// rect, not boundingRect(), which reaches past the card for its shadow.
 bool onCard(const CardItem& card, QPointF where)
 {
-    return bodyOf(card).contains(card.mapFromParent(where));
+    return card.cardRect().contains(card.mapFromParent(where));
 }
 
 // TABLE.JS'S OWN TRANSFORM FOR A CARD, written out the way CSS builds it rather than
@@ -379,7 +371,7 @@ TEST_CASE("A raised card stays raised over the strip it rose from", "[hand]")
     // to it.
     REQUIRE(onCard(*cards[0], where));
     REQUIRE_FALSE(onCard(*cards[1], where));
-    REQUIRE_FALSE(bodyOf(*cards[0]).translated(0.0, -cardshadow::raisedLift)
+    REQUIRE_FALSE(cards[0]->cardRect().translated(0.0, -cardshadow::raisedLift)
                       .contains(cards[0]->mapFromParent(where)));
 
     fan.hoverAt(where);
@@ -725,8 +717,7 @@ TEST_CASE("A card in your hand reaches as far as its look", "[hand]")
     card.setCardHeight(225.0);
     card.setFace(SpadesAce);
 
-    const QSizeF size = card.cardSize();
-    const QRectF body(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+    const QRectF body = card.cardRect();
 
     card.setHeld(false, theme.table, &shadows);
 
@@ -740,6 +731,28 @@ TEST_CASE("A card in your hand reaches as far as its look", "[hand]")
     REQUIRE(card.isRaised());
     REQUIRE(card.boundingRect()
             == body.translated(0.0, -30.0).marginsAdded(cardshadow::reach(cardshadow::Look::Raised)));
+}
+
+TEST_CASE("A card's own rect is its size, centred on its origin", "[hand]")
+{
+    // WRITTEN OUT, not asked of cardshadow::cardRect(): every other test here, the
+    // fan's hit test and the shadows all take "on the card" from that one function,
+    // so this is the one place that says what it has to be.
+    CardRenderer renderer;
+
+    CardItem card(&renderer);
+    card.setCardHeight(225.0);
+
+    const QSizeF size = card.cardSize();
+
+    REQUIRE_FALSE(size.isEmpty());
+    REQUIRE(card.cardRect() == QRectF(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height()));
+
+    // And raised, it is still the card at rest: the rise is drawn, not a move.
+    cardshadow::Cache shadows;
+    card.setHeld(true, Theme::dark().table, &shadows);
+
+    REQUIRE(card.cardRect() == QRectF(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height()));
 }
 
 TEST_CASE("Your hand's shadows are pictures of their own in the shared cache", "[hand]")

@@ -65,8 +65,8 @@ public:
     // the playable card under the cursor - it rises toward its own top, ringed in
     // gold-bright and glowing. THE RISE IS DRAWN, NOT A MOVE: the item stays where
     // the fan put it and turned as the fan turned it, so the card rises along its
-    // own tilt, and what lies under the cursor is still decided by where the card
-    // rests (HandItem).
+    // own tilt, and what lies under the cursor is decided by HandItem: where each
+    // card rests, and where the raised one has risen to.
     void setHeld(bool raised, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
 
     // What setPlayed() or setHeld() last said: READ-ONLY and for tests. None for a
@@ -84,6 +84,11 @@ public:
     // renderer or a height. Not boundingRect(), which a played card's shadow and
     // rise reach past.
     QSizeF cardSize() const;
+
+    // That size where paint() draws it, centred on the origin and before any rise
+    // (cardshadow::cardRect()). Not boundingRect() either. What "on the card" means
+    // to HandItem's hit test and to the tests.
+    QRectF cardRect() const;
 
     // ORIGIN AT THE CENTRE, not the top left. A card is placed in front of its
     // owner's rack and turned to line up with it, and both of those are one line

@@ -50,12 +50,6 @@ Cast castOf(Look look)
 
 constexpr qreal ringWidth = 2.0;
 
-// The card centred on the origin, as CardItem draws it.
-QRectF cardRect(QSizeF size)
-{
-    return QRectF(QPointF(-size.width() / 2.0, -size.height() / 2.0), size);
-}
-
 // How far a shadow moved by `offset` and blurred by `blur` reaches past the card,
 // on each side.
 QMarginsF shadowReach(QPointF offset, qreal blur)
@@ -91,6 +85,11 @@ QColor glowColour(Look look, const cardshadow::Colours& colours)
     return look == Look::Raised ? colours.raisedGlow : colours.winningGlow;
 }
 
+}
+
+QRectF cardshadow::cardRect(QSizeF size)
+{
+    return QRectF(QPointF(-size.width() / 2.0, -size.height() / 2.0), size);
 }
 
 QMarginsF cardshadow::reach(Look look)

@@ -537,10 +537,7 @@ bool onACard(const HandItem& hand, QPointF where)
         if(!card)
             continue;
 
-        const QSizeF size = card->cardSize();
-        const QRectF body(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
-
-        if(body.contains(card->mapFromScene(where)))
+        if(card->cardRect().contains(card->mapFromScene(where)))
             return true;
     }
 

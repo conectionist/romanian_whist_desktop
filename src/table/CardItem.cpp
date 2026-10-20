@@ -88,21 +88,24 @@ QSizeF CardItem::cardSize() const
     return renderer->sizeForHeight(cardHeight);
 }
 
+QRectF CardItem::cardRect() const
+{
+    return cardshadow::cardRect(cardSize());
+}
+
 QRectF CardItem::boundingRect() const
 {
-    const QSizeF size = cardSize();
-
-    if(size.isEmpty())
+    if(cardSize().isEmpty())
         return QRectF();
 
-    const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+    const QRectF body = cardRect();
 
     if(!cast)
-        return card;
+        return body;
 
     // The shadow's whole reach, and the rise, so the scene neither clips the
     // highlight nor leaves a trail behind a card that moves.
-    return card.translated(0.0, -cardshadow::lift(*cast)).marginsAdded(cardshadow::reach(*cast));
+    return body.translated(0.0, -cardshadow::lift(*cast)).marginsAdded(cardshadow::reach(*cast));
 }
 
 void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -130,7 +133,7 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // afresh on every step of the drag.
     const qreal dpr = devicepixels::effectiveRatio(*painter);
 
-    const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+    const QRectF body = cardRect();
 
     // THE WINNER RISES toward its own top, which on every seat's card points at
     // the table's centre, and so does a raised card in your hand, along its tilt -
@@ -146,16 +149,16 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // (cardshadow::render()), so both go down from the one point. A card turned by
     // other than a quarter turn is resampled anyway, and this moves it under half
     // a pixel.
-    const QPointF at = devicepixels::snapped(*painter, card.topLeft());
+    const QPointF at = devicepixels::snapped(*painter, body.topLeft());
 
     // Under the card: one cached picture, turned with the card by the item's
     // rotation, so the shadow falls toward the card's own bottom.
     if(cast && shadows)
     {
-        const cardshadow::Picture& cast = shadow(size, dpr);
+        const cardshadow::Picture& picture = shadow(size, dpr);
 
-        if(!cast.pixmap.isNull())
-            painter->drawPixmap(at + (cast.offset - card.topLeft()), cast.pixmap);
+        if(!picture.pixmap.isNull())
+            painter->drawPixmap(at + (picture.offset - body.topLeft()), picture.pixmap);
     }
 
     const QSize pixels(qRound(size.width()), qRound(size.height()));
@@ -163,8 +166,8 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     const CardRenderer::State state =
         dimmed ? CardRenderer::State::Dimmed : CardRenderer::State::Normal;
 
-    const QPixmap pixmap = this->card ? renderer->face(*this->card, pixels, dpr, state)
-                                      : renderer->back(pixels, dpr);
+    const QPixmap pixmap = card ? renderer->face(*card, pixels, dpr, state)
+                                : renderer->back(pixels, dpr);
 
     painter->drawPixmap(at, pixmap);
 }

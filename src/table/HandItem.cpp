@@ -31,12 +31,6 @@ constexpr qreal arc = 1.6;
 constexpr qreal turnStep = 1.9;
 constexpr qreal hingeDepth = 1.3;
 
-// The card centred on its own origin, as CardItem draws it.
-QRectF bodyOf(QSizeF card)
-{
-    return QRectF(-card.width() / 2.0, -card.height() / 2.0, card.width(), card.height());
-}
-
 // WHETHER TWO HANDS WOULD FAN THE SAME, which is the only question setHand()
 // asks before deciding to do nothing.
 //
@@ -276,7 +270,7 @@ void HandItem::layOut()
         return;
 
     const QSizeF card = renderer->sizeForHeight(cardHeight);
-    const QRectF body = bodyOf(card);
+    const QRectF body = cardshadow::cardRect(card);
 
     // A card at rest and risen: everywhere it can be hit, so everywhere this item
     // has to cover for the scene to send it the event.
@@ -318,7 +312,7 @@ std::optional<std::size_t> HandItem::slotAt(QPointF position) const
     for(std::size_t i = fan.size() ; i-- > 0 ; )
     {
         const CardItem* item = fan[i].item;
-        const QRectF body = bodyOf(item->cardSize());
+        const QRectF body = item->cardRect();
         const QPointF local = item->mapFromParent(position);
 
         if(body.contains(local))

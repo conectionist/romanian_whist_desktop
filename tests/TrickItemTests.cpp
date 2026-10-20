@@ -678,7 +678,7 @@ TEST_CASE("The shadow picture reaches past the card, furthest below it", "[trick
         const cardshadow::Picture picture = cardshadow::render(size, look, cardshadow::colours(theme.table), 1.0);
         REQUIRE_FALSE(picture.pixmap.isNull());
 
-        const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+        const QRectF card = cardshadow::cardRect(size);
         const QRectF covered(picture.offset, QSizeF(picture.pixmap.size()));
 
         REQUIRE(covered.contains(card));
@@ -709,7 +709,7 @@ TEST_CASE("The winner's ring has no inner edge for the felt to show through", "[
         cardshadow::render(size, cardshadow::Look::Winning, cardshadow::colours(theme.table), ratio);
     const QImage image = picture.pixmap.toImage();
 
-    const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+    const QRectF card = cardshadow::cardRect(size);
 
     // Each side's middle, from just outside the card - well inside the 2-unit ring,
     // whose outer edge is anti-aliased over the glow - to a few units inside it.
@@ -742,7 +742,7 @@ TEST_CASE("A played card's shadow lies whole pixels from the card's corner", "[t
     const Theme theme = Theme::dark();
     const QSizeF size(110.4, 160.0);
     const qreal ratio = 0.78;
-    const QPointF cardCorner(-size.width() / 2.0, -size.height() / 2.0);
+    const QPointF cardCorner = cardshadow::cardRect(size).topLeft();
 
     for(const cardshadow::Look look : { cardshadow::Look::Played, cardshadow::Look::Winning })
     {
