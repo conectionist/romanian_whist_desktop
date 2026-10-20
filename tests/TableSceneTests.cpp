@@ -902,6 +902,10 @@ TEST_CASE("A card rendered into a HiDPI image is rasterized at the image's ratio
 // SeatItem::setSeat() repainting every panel, and your hand under yours.
 TEST_CASE("A snapshot that changes nothing repaints nothing", "[table]")
 {
+    // BEFORE THE SCENE, so it outlives the connection that writes to it
+    // (PHASE5_REVIEW_FINDINGS.md #20).
+    QList<QRectF> repainted;
+
     TableScene scene;
     scene.setTheme(Theme::dark());
 
@@ -910,7 +914,6 @@ TEST_CASE("A snapshot that changes nothing repaints nothing", "[table]")
     scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
     QCoreApplication::processEvents();
 
-    QList<QRectF> repainted;
     QObject::connect(&scene, &QGraphicsScene::changed,
                      [&repainted](const QList<QRectF>& regions) { repainted += regions; });
 
