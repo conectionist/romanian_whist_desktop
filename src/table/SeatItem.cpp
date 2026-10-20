@@ -277,7 +277,9 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
 {
     return memo.picture(ratio, [&]() -> panel::Picture
     {
-        const panel::Picture frame = panels->picture(size, theme.table, active, ratio);
+        const panel::Picture frame = panels->picture(size, theme.table,
+                                                     active ? panel::State::Active : panel::State::Plain,
+                                                     ratio);
 
         // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate
         // transform. Null, which the memo neither keeps as current nor lets replace

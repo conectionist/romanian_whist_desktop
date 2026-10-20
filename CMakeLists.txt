@@ -91,6 +91,10 @@ qt_add_library(desktop_core STATIC
     src/paint/Shadows.cpp
     src/paint/CardShadow.h
     src/paint/CardShadow.cpp
+    src/paint/TextRuns.h
+    src/paint/TextRuns.cpp
+    src/paint/Icons.h
+    src/paint/Icons.cpp
 
     src/table/TableSpace.h
     src/table/TableSpace.cpp
