@@ -3,6 +3,8 @@
 #include "MainWindow.h"
 #include "WindowDriving.h"
 #include "core/GameSnapshot.h"
+#include "engine/Prompts.h"
+#include "table/CardItem.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
@@ -12,7 +14,10 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDir>
+#include <QGraphicsItem>
+#include <QGraphicsSceneHoverEvent>
 #include <QLineEdit>
 #include <QPixmap>
 #include <QPushButton>
@@ -24,6 +29,7 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <array>
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -477,4 +483,193 @@ TEST_CASE("A screenshot of the empty table at the mock-up's own scale", "[.scree
     std::cout << path.toStdString() << ": the empty table\n";
 
     CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1034));
+}
+
+// ---- the hand, for the redesign's phase 7 ----
+//
+// hand-1-card.png, hand-4-cards.png and hand-8-cards.png: a bare view at the
+// mock-up's own scale, as table-empty.png is, to set beside the pictures of the same
+// names in docs/ui-redesign/screenshots/ below their 46-pixel menu bar. None of the
+// mock-up's own pictures shows a hand of eight, so those three were taken for this by
+// docs/ui-redesign/mockup/source/capture_hands.py, at the same moment: four players,
+// Bogdan on your left has led the King of Hearts, and it is your turn, with the same
+// cards in the same order, those that follow suit lit and the rest dimmed - and in
+// the 8-card picture the Queen of Hearts raised, as though the cursor were on it.
+//
+// KEPT IN STEP WITH capture_hands.py's SHOTS, card for card.
+namespace
+{
+
+struct HandShot
+{
+    const char* file;
+
+    // 1-based, of 24: the round of a 4-player game that deals this many cards.
+    unsigned int round;
+    std::optional<romanian_whist::Card> trump;
+
+    // In the order the hand shows them, which is the mock-up's: trump first, then
+    // alternating colours, high to low. Those that may follow the King of Hearts are
+    // lit, the rest dimmed.
+    std::vector<romanian_whist::Card> hand;
+    std::vector<bool> legal;
+
+    // The card under the cursor, if any.
+    std::optional<std::size_t> raised;
+
+    // Yours first, then clockwise.
+    std::array<unsigned int, 4> bids;
+};
+
+std::vector<HandShot> handShots()
+{
+    using romanian_whist::Card;
+    using romanian_whist::Rank;
+    using romanian_whist::Suit;
+
+    const Card sevenOfClubs(Rank::Seven, Suit::Clubs);
+
+    return {
+        { "hand-1-card.png", 1, sevenOfClubs,
+          { Card(Rank::Jack, Suit::Diamonds) },
+          { true }, std::nullopt, { 0, 1, 0, 0 } },
+        { "hand-4-cards.png", 7, sevenOfClubs,
+          { Card(Rank::Nine, Suit::Clubs), Card(Rank::Ace, Suit::Spades),
+            Card(Rank::Ten, Suit::Hearts), Card(Rank::Eight, Suit::Hearts) },
+          { false, false, true, true }, std::nullopt, { 1, 2, 0, 1 } },
+        { "hand-8-cards.png", 11, std::nullopt,
+          { Card(Rank::Ace, Suit::Spades), Card(Rank::Jack, Suit::Spades), Card(Rank::Eight, Suit::Spades),
+            Card(Rank::Queen, Suit::Hearts), Card(Rank::Nine, Suit::Hearts), Card(Rank::Seven, Suit::Hearts),
+            Card(Rank::Ten, Suit::Clubs), Card(Rank::Queen, Suit::Diamonds) },
+          { false, false, false, true, true, true, false, false }, 3, { 2, 3, 1, 1 } },
+    };
+}
+
+// The moment the picture shows, as the snapshot the scene draws from: the mock-up's
+// four names, nobody with a trick yet, every bid in, and seat 1's King on the felt.
+GameSnapshot handMoment(const HandShot& shot)
+{
+    using romanian_whist::Card;
+    using romanian_whist::Rank;
+    using romanian_whist::Suit;
+
+    const unsigned int cards = static_cast<unsigned int>(shot.hand.size());
+    const char* const names[] = { "You", "Bogdan", "Ana", "Costel" };
+
+    GameSnapshot snapshot;
+
+    snapshot.humanSeat = 0;
+    snapshot.activeSeat = 0;
+    snapshot.roundNumber = shot.round;
+    snapshot.roundCount = 24;
+    snapshot.trickCount = cards;
+    snapshot.trickNumber = 1;
+    snapshot.phase = romanian_whist::GamePhase::Playing;
+    snapshot.hasTrump = shot.trump.has_value();
+    snapshot.trump = shot.trump.value_or(Card());
+    snapshot.leadSeat = 1;
+    snapshot.hasLeadSuit = true;
+    snapshot.leadSuit = Suit::Hearts;
+    snapshot.table = { PlayedCardView{ 1, Card(Rank::King, Suit::Hearts), true } };
+    snapshot.seats.resize(4);
+
+    for(unsigned int i = 0 ; i < 4 ; i++)
+    {
+        SeatView& seat = snapshot.seats[i];
+
+        seat.seatIndex = i;
+        seat.name = names[i];
+        seat.isHuman = i == 0;
+
+        // Seat 1 bid first, as it leads.
+        seat.bidOrder = (i + 3) % 4;
+        seat.hasBet = true;
+        seat.bet = shot.bids[i];
+
+        // Seat 1 has played its card.
+        seat.cardsLeft = i == 1 ? cards - 1 : cards;
+
+        snapshot.betSum += shot.bids[i];
+    }
+
+    snapshot.betsPlaced = 4;
+
+    for(const Card& card : shot.hand)
+        snapshot.hand.push_back(HandEntry{ card });
+
+    return snapshot;
+}
+
+}
+
+TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
+{
+    const QString dir = shotsDirectory();
+    REQUIRE(QDir().mkpath(dir));
+
+    for(const HandShot& shot : handShots())
+    {
+        DYNAMIC_SECTION(shot.file)
+        {
+            TableScene scene;
+            scene.setTheme(Theme::dark());
+            scene.setSnapshot(std::make_shared<const GameSnapshot>(handMoment(shot)));
+
+            // YOUR TURN, as MainWindow hands it to the fan: the prompt's cards, with
+            // which of them may be played.
+            PlayPrompt prompt;
+            prompt.promptId = 1;
+
+            for(std::size_t i = 0 ; i < shot.hand.size() ; i++)
+            {
+                prompt.entries.push_back(HandEntry{ shot.hand[i], shot.legal[i] });
+                prompt.handIndex.push_back(i);
+            }
+
+            HandItem* hand = scene.handItem();
+            hand->setPrompt(prompt);
+            hand->setPlayable(true);
+
+            TableView view(&scene);
+            view.resize(1920, 1034);
+            view.show();
+            pump(200);
+
+            // THE CURSOR ON THE RAISED CARD, through the scene as a real one would
+            // arrive: on its middle, which no other card and no panel covers.
+            if(shot.raised)
+            {
+                const CardItem* raised = nullptr;
+
+                for(QGraphicsItem* child : hand->childItems())
+                {
+                    const CardItem* card = dynamic_cast<const CardItem*>(child);
+
+                    if(card && card->zValue() == static_cast<qreal>(*shot.raised))
+                        raised = card;
+                }
+
+                REQUIRE(raised != nullptr);
+
+                QGraphicsSceneHoverEvent hover(QEvent::GraphicsSceneHoverMove);
+                hover.setScenePos(raised->scenePos());
+                QCoreApplication::sendEvent(&scene, &hover);
+                pump(100);
+
+                CHECK(raised->isRaised());
+            }
+
+            const QPixmap picture = view.grab();
+            const QString path = QDir(dir).filePath(QString::fromUtf8(shot.file));
+            REQUIRE(picture.save(path));
+
+            std::cout << path.toStdString() << ": your hand of " << shot.hand.size() << "\n";
+
+            CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1034));
+            CHECK(hand->slotCount() == shot.hand.size());
+
+            for(std::size_t i = 0 ; i < shot.hand.size() ; i++)
+                CHECK(hand->isPlayable(i) == shot.legal[i]);
+        }
+    }
 }

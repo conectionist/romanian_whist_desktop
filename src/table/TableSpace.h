@@ -151,6 +151,16 @@ QSize minimumViewport();
 // smaller from five, where six cards have to share the felt.
 qreal playedCardHeight(std::size_t seatCount);
 
+// A CARD'S OR A MARK'S PLACE in table space: its centre, and its turn in DEGREES as
+// QGraphicsItem::setRotation() takes it. The played cards, the lead rhombus and
+// the cards in your hand are each placed by one (trickitem::cardPlacement(),
+// trickitem::leadMarkPlacement(), handitem::cardPlacement()).
+struct Placement
+{
+    QPointF centre;
+    qreal rotation = 0.0;
+};
+
 // THE STACKING ORDER, bottom to top, in one place: section 3's ladder as the
 // redesign's phase 3 set it out. Every item in the scene takes its z from here, so
 // no two files can disagree about what is drawn over what.

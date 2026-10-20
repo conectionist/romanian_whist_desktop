@@ -33,7 +33,7 @@ TableScene::TableScene(QObject* parent)
     leadMark = new LeadMarkItem;
     addItem(leadMark);
 
-    hand = new HandItem(&cards);
+    hand = new HandItem(&cards, &shadowPictures);
     hand->setZValue(tablespace::z::hand);
     addItem(hand);
 }
@@ -200,7 +200,7 @@ void TableScene::relayout()
     trick->setTrick(*snapshot, places, theme);
 
     const std::optional<unsigned int> lead = trickitem::leadSeat(*snapshot);
-    std::optional<trickitem::Placement> mark;
+    std::optional<tablespace::Placement> mark;
 
     if(lead && *lead < places.size() && places[*lead])
         mark = trickitem::leadMarkPlacement(*places[*lead]);
@@ -218,12 +218,12 @@ void TableScene::relayout()
     // snapshot, and the colour scheme can flip while the engine is parked waiting
     // for a card - in a blind round the snapshot hand it would take is empty,
     // which would leave nothing to click and no way to answer.
+    //
+    // THE FAN LAYS ITSELF OUT in table space (handitem::cardPlacement(), section
+    // 2.8), so the item stays at the scene's origin, as the trick does.
     hand->setCardHeight(tablespace::handCardHeight);
     hand->setHand(snapshot->hand);
 
-    // Section 2.8: the fan's top edge at y = 850, centred on the table. The
-    // fan's origin is the middle of its cards, hence the half card.
-    hand->setPos(tablespace::centre.x(), tablespace::handTop + tablespace::handCardHeight / 2.0);
     // NOBODY SEATED, NO HAND. Section 14: a spectated table "has no human... and the
     // bottom hand area is not drawn at all".
     hand->setVisible(seatlayout::humanSeated(static_cast<unsigned int>(seatCount), snapshot->humanSeat));

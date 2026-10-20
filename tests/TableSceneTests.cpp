@@ -152,21 +152,43 @@ TEST_CASE("A seated table holds the hand where section 2.8 puts it", "[table]")
     REQUIRE(hand->isVisible());
     REQUIRE(hand->slotCount() == 3);
 
-    // Centred on the table, its cards' top edge at y = 850 and their height the
-    // mock-up's 225. The fan's bounding rect reaches above the cards by the hover
-    // lift, so it is the BOTTOM edge that says where the cards are.
-    REQUIRE(hand->pos().x() == Catch::Approx(tablespace::centre.x()));
+    // THE FAN LAYS ITSELF OUT IN TABLE SPACE, so the item is at the scene's origin
+    // and each card where handitem::cardPlacement() puts it: the mock-up's 225 tall,
+    // centred on the table, the middle one of three square to it with its top at
+    // y = 850.
+    REQUIRE(hand->pos() == QPointF(0.0, 0.0));
 
-    const QRectF fan = hand->sceneBoundingRect();
-
-    REQUIRE(fan.center().x() == Catch::Approx(tablespace::centre.x()));
-    REQUIRE(fan.bottom() == Catch::Approx(tablespace::handTop + tablespace::handCardHeight));
+    std::vector<CardItem*> cards;
 
     for(CardItem* card : itemsOf<CardItem>(scene))
     {
         if(card->parentItem() == hand)
-            REQUIRE(card->boundingRect().height() == Catch::Approx(tablespace::handCardHeight));
+            cards.push_back(card);
     }
+
+    REQUIRE(cards.size() == 3);
+
+    std::sort(cards.begin(), cards.end(),
+              [](const CardItem* a, const CardItem* b) { return a->zValue() < b->zValue(); });
+
+    for(std::size_t i = 0 ; i < cards.size() ; i++)
+    {
+        INFO("slot " << i);
+
+        const QSizeF size = cards[i]->cardSize();
+        const tablespace::Placement place = handitem::cardPlacement(3, i, size);
+
+        REQUIRE(size.height() == Catch::Approx(tablespace::handCardHeight));
+        REQUIRE(cards[i]->scenePos().x() == Catch::Approx(place.centre.x()));
+        REQUIRE(cards[i]->scenePos().y() == Catch::Approx(place.centre.y()));
+        REQUIRE(cards[i]->rotation() == Catch::Approx(place.rotation).margin(1e-12));
+    }
+
+    const QSizeF middle = cards[1]->cardSize();
+    const QPointF top = cards[1]->mapToScene(QPointF(0.0, -middle.height() / 2.0));
+
+    REQUIRE(top.x() == Catch::Approx(tablespace::centre.x()));
+    REQUIRE(top.y() == Catch::Approx(tablespace::handTop));
 }
 
 TEST_CASE("A spectated table draws no hand", "[table]")
@@ -447,16 +469,12 @@ PlayPrompt playingThree()
     return prompt;
 }
 
-// WHERE YOUR PLAQUE AND YOUR FAN OVERLAP. The plaque is drawn from y = 1063 (its
-// centre at 1105, 84 tall) and the cards reach down to 1075 (section 2.8: 850 plus
-// 225).
+// WHERE YOUR PLAQUE AND YOUR FAN OVERLAP. Your panel's top is at y = 1046 and the
+// middle card's bottom at 1075 (section 2.8: 850 plus 225).
 //
 // AND ON TWO CARDS AT ONCE, x = 808 being where the third card overlaps the
-// second. A press reaches the scene with a hover in front of it, and a hover
-// lifts the card under the point - which moves it out from under the point. On
-// one card alone the press then finds nothing and the case passes whether the
-// plaque blocks it or not; here the second card is still underneath, and a press
-// that gets through plays it.
+// second. A press that got through the plaque would play one of them, whichever
+// the hit test picks, and the case would see it.
 const QPointF underYourPlaque(808.0, 1070.0);
 
 // The middle card, well clear of the plaque.
@@ -493,12 +511,33 @@ void hoverAt(QGraphicsScene& scene, QPointF where)
     QCoreApplication::sendEvent(&scene, &hover);
 }
 
-// A lifted card is one moved up off the fan's line, which is y = 0.
+// A lifted card is a raised one: the rise is drawn by the card, which stays where
+// the fan put it.
 bool aCardIsLifted(const HandItem& hand)
 {
     for(QGraphicsItem* child : hand.childItems())
     {
-        if(child->pos().y() < 0.0)
+        const CardItem* card = dynamic_cast<const CardItem*>(child);
+
+        if(card && card->isRaised())
+            return true;
+    }
+
+    return false;
+}
+
+// Whether a point is on one of your cards as it rests, in the card's own frame:
+// every card is turned, and its bounding rect reaches past it for the shadow.
+bool onACard(const HandItem& hand, QPointF where)
+{
+    for(QGraphicsItem* child : hand.childItems())
+    {
+        const CardItem* card = dynamic_cast<const CardItem*>(child);
+
+        if(!card)
+            continue;
+
+        if(card->cardRect().contains(card->mapFromScene(where)))
             return true;
     }
 
@@ -513,12 +552,7 @@ void requireOverlapAt(const TableScene& scene, QPointF where)
     REQUIRE(mine != nullptr);
     REQUIRE(mine->contains(mine->mapFromScene(where)));
 
-    bool onACard = false;
-
-    for(QGraphicsItem* child : scene.handItem()->childItems())
-        onACard = onACard || child->sceneBoundingRect().contains(where);
-
-    REQUIRE(onACard);
+    REQUIRE(onACard(*scene.handItem(), where));
 }
 
 }
@@ -565,15 +599,37 @@ TEST_CASE("Hovering your plaque lifts no card", "[table]")
 
     requireOverlapAt(scene, underYourPlaque);
 
-    // From nowhere straight onto the plaque. Not from the card first: a lifted
-    // card rises out from under this point, which would clear the lift on its
-    // own and hide the defect.
+    // From nowhere straight onto the plaque.
     hoverAt(scene, underYourPlaque);
 
     REQUIRE_FALSE(aCardIsLifted(*hand));
 
     // The control: the card lifts where nothing covers it.
     hoverAt(scene, onTheCardAlone);
+
+    REQUIRE(aCardIsLifted(*hand));
+}
+
+TEST_CASE("A card under a still cursor lifts when your turn comes", "[table]")
+{
+    // THROUGH THE SCENE'S OWN HOVER, as the app gets it: the cursor comes to rest on
+    // a card between turns, when nothing lifts, and has not moved when the prompt
+    // arrives. The scene sends nothing then, so the fan has to remember where the
+    // cursor is.
+    TableScene scene;
+
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
+
+    HandItem* hand = scene.handItem();
+
+    hoverAt(scene, onTheCardAlone);
+
+    REQUIRE_FALSE(aCardIsLifted(*hand));
+
+    // Your turn, as MainWindow deals it.
+    hand->setPrompt(playingThree());
+    hand->setPlayable(true);
 
     REQUIRE(aCardIsLifted(*hand));
 }

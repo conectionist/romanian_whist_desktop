@@ -46,9 +46,11 @@ class QSvgRenderer;
 class CardRenderer
 {
 public:
-    // Whether the card is one the player may act on. Section 18 renders the
-    // illegal case as 45% opacity plus a slight desaturation, explicitly NOT as
-    // grey-on-white, which is unreadable at card size.
+    // Whether the card is one the player may act on. The illegal case is
+    // darkened and dulled, as the table redesign's mock-up does it - and
+    // explicitly NOT grey-on-white, which section 18 rejects as unreadable at
+    // card size. It stays opaque: section 18's 45% opacity let the card beneath
+    // show through an overlapping hand (amended in the redesign's phase 7).
     //
     // BAKED INTO THE CACHED PIXMAP rather than applied by the caller, so B2's
     // CardItem::paint() stays a blit and a dimmed card costs nothing to draw

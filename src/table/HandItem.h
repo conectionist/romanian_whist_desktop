@@ -3,9 +3,13 @@
 
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
+#include "paint/CardShadow.h"
 #include "paint/Theme.h"
+#include "table/TableSpace.h"
 
 #include <QGraphicsObject>
+#include <QRectF>
+#include <QSizeF>
 
 #include <cstddef>
 #include <optional>
@@ -14,7 +18,27 @@
 class CardItem;
 class CardRenderer;
 
-// Your hand, fanned across the bottom of the table.
+// WHERE YOUR CARDS GO, which is the part of the fan with a right answer - so a free
+// function, as trickitem's and rackitem's are, checked with no scene.
+//
+// The table redesign's section 2.8, from table.js renderHand(). The cards step
+// along the bottom of the rim, centred on the table: 84 apart, closing up so the fan
+// is never wider than 720, which a full hand of eight is - each card then covers
+// about half of the one before it. They drop away toward the ends on an arc, and
+// each is turned 1.9 degrees for every step it is from the middle, about a hinge
+// 1.3 card-heights below its own top: under your panel, so the fan opens from it.
+namespace handitem
+{
+
+// SLOT `slot` OF A FAN OF `count` cards of `card` size, in table units: where the
+// card's centre goes and how far it is turned. `slot` counts from the left and must
+// be below `count`. Before the arc and the turn every card's top is
+// tablespace::handTop, so the middle card of an odd hand stands exactly there.
+tablespace::Placement cardPlacement(std::size_t count, std::size_t slot, QSizeF card);
+
+} // namespace handitem
+
+// Your hand, fanned along the bottom of the table.
 //
 // TWO SOURCES, NEVER ONE, and section 4.0 is the whole of why. Between turns the
 // fan comes from GameSnapshot::hand and is drawn DISABLED: a snapshot carries no
@@ -36,8 +60,11 @@ class HandItem : public QGraphicsObject
 
 public:
     // The renderer outlives every item, exactly as CardItem documents: TableScene
-    // owns it by value and the items are its children.
-    explicit HandItem(const CardRenderer* renderer, QGraphicsItem* parent = nullptr);
+    // owns it by value and the items are its children. `shadows` is the cards'
+    // shadow cache, owned with it and shared with the played cards; null gives the
+    // fan one of its own.
+    explicit HandItem(const CardRenderer* renderer, cardshadow::Cache* shadows = nullptr,
+                      QGraphicsItem* parent = nullptr);
 
     // BETWEEN TURNS. Drawn disabled whatever this says, because a snapshot's hand
     // is for looking at - see the class comment.
@@ -59,8 +86,10 @@ public:
     // Nothing to show: between games, and after the fan has been answered.
     void clear();
 
-    // The unit the rest of the table is laid out in. The fan's own metrics -
-    // overlap, lift, the box it occupies - all derive from it.
+    // The cards' height, in table units: tablespace::handCardHeight on the table.
+    // Their width follows from the art. The fan's steps, arc and turn are section
+    // 2.8's own numbers, so a card of another size is spaced the same - up to a
+    // card as wide as the fan, which stacks them.
     void setCardHeight(qreal height);
 
     void setTheme(const Theme& theme);
@@ -119,16 +148,47 @@ private:
     };
 
     void rebuild();
+
+    // Every card where cardPlacement() puts it, and the box they cover. Then
+    // showLift(), which is all a hover changes: which card is raised.
     void layOut();
+    void showLift();
 
     // WHICH SLOT IS UNDER A POINT, and it is not "the first whose box contains
-    // it". The cards overlap by 40% of their width and later ones are drawn ON
-    // TOP, so the card a player is pointing at is the LAST one that contains the
-    // point. First-match returns the card underneath, and every click in an
-    // overlap - which is most of the fan - plays a neighbour.
+    // it". The cards overlap by about half and later ones are drawn ON TOP, so
+    // the card a player is pointing at is the LAST one that contains the point.
+    // First-match returns the card underneath, and every click in an overlap -
+    // which is most of the fan - plays a neighbour.
+    //
+    // IN EACH CARD'S OWN FRAME, since every card is turned, and on the card as it
+    // RESTS - plus, for the raised card, where it has risen to. That is the
+    // mock-up's rule: the browser hovers the button, which stays where it is, and
+    // the face, which rises. Tested on the risen card alone, the strip it rose
+    // from would let the cursor go, the card would drop back under it, and it
+    // would rise again on the next move: a card that flickers.
+    //
+    // THE PRICE, ACCEPTED ON PURPOSE: in that strip the raised card is hit while
+    // something else is drawn there - the card beneath it, or the felt - so a
+    // click there plays the raised card, not the face under the cursor. No rule
+    // can make the two agree there without the flicker: raised, the card uncovers
+    // the strip; dropped, it covers it again. The card played is the one that is
+    // lit, the strip is the bottom 30 of a 225-high card, under your plaque for
+    // the middle cards, and players click nearer a card's middle. Not raising a
+    // card for a cursor in its bottom 30 would make them agree, at the cost of
+    // the mock-up's behaviour; PR #33's review weighed that and left it.
     std::optional<std::size_t> slotAt(QPointF position) const;
 
+    // The slot to raise for a cursor at `position`: slotAt(), if that card can be
+    // played. None for no cursor. The one rule for a hover and for a hand that
+    // changes under a cursor that has not moved.
+    std::optional<std::size_t> liftAt(std::optional<QPointF> position) const;
+
     const CardRenderer* renderer;
+
+    // The cards' shadows, shared with the played cards unless the fan was given
+    // none (see the constructor).
+    cardshadow::Cache ownShadows;
+    cardshadow::Cache* shadows;
 
     Theme theme = Theme::light();
 
@@ -142,6 +202,11 @@ private:
 
     qreal cardHeight = 0.0;
     bool playable = false;
+
+    // Every card at rest and risen, in this item's coordinates: what the fan can be
+    // hit on, and so what boundingRect() is. It does not depend on which card is
+    // raised, so a hover moves no geometry.
+    QRectF bounds;
 
     // WHICH OF THE TWO SOURCES is currently on screen. The class comment above is
     // about there being two; this is the one bit that says which, and it is here
@@ -157,9 +222,16 @@ private:
 
     Source source = Source::Snapshot;
 
-    // The slot under the cursor, lifted. Disengaged when the cursor is off the
-    // fan or the hand is not playable.
+    // The slot under the cursor, raised. Disengaged when the cursor is off the
+    // fan, on a card that cannot be played, or the hand is not playable.
     std::optional<std::size_t> hovered;
+
+    // WHERE THE CURSOR LAST WAS over the fan, in this item's coordinates, and
+    // disengaged once it has left. Kept because the hand changes under a cursor
+    // that has not moved - your turn arrives, the fan is rebuilt - and the scene
+    // sends no hover for that. layOut() and setPlayable() raise the card now
+    // under it, as the mock-up's browser does.
+    std::optional<QPointF> cursor;
 };
 
 #endif

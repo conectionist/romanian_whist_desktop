@@ -2528,6 +2528,12 @@ photograph of felt.
 | Typography | The platform UI font throughout. Card ranks in tabular figures so `10` and `4` occupy the same box. |
 | Scoreboard numbers | Tabular figures, right-aligned. Positive round scores green with a `+`, negative red with a `−`. |
 
+> **AMENDED IN THE TABLE REDESIGN'S PHASE 7: an illegal card is darkened, not see-through.** It is
+> drawn opaque, at brightness 0.55 and saturation 0.55, as the redesign's mock-up does it (`page.html`
+> `.hcard.illegal .face`). At 45% opacity the cards of a hand, which overlap by about half, showed the
+> card beneath through each dimmed one. The owner's decision, 2026-10-20. Grey-on-white stays ruled
+> out, for the reason above. `CardRenderer::State::Dimmed` is where it is drawn.
+
 ### 18.1 The two seams that make all of this replaceable
 
 The design above will change — the background, the seat art, the card faces and the backs are all

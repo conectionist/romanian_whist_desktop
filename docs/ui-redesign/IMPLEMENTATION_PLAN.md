@@ -24,7 +24,8 @@ from, which classes change, in what order, and how to tell each step is done.
 | `mockup/romanian_whist_table.html` | The approved mock-up. Self-contained, works offline (fonts load from Google Fonts when online and fall back otherwise) |
 | `mockup/source/page.html`, `mockup/source/table.js` | The mock-up's readable source: markup + CSS, and the script. **Every number in section 2 comes from these two files** |
 | `mockup/source/build_mockup.py` | Rebuilds the HTML from the sources plus the client's own card art and textures |
-| `screenshots/*.jpg` | The mock-up at 1920×1080 with 3, 4, 5 and 6 players, bidding, and a close-up of racks and played cards |
+| `mockup/source/capture_hands.py` | Photographs the mock-up's hand with 1, 4 and 8 cards in headless Chrome, at the moment `tests/ScreenshotTool.cpp`'s hand shots draw (added in phase 7) |
+| `screenshots/*.jpg` | The mock-up at 1920×1080 with 3, 4, 5 and 6 players, bidding, and a close-up of racks and played cards; and since phase 7 `hand-1-card.jpg`, `hand-4-cards.jpg`, `hand-8-cards.jpg` |
 | `reference/inspiration.webp` | The image the owner started from. Mood only; the mock-up supersedes it wherever they differ |
 
 Also added outside this folder, by the same commit:
@@ -321,15 +322,30 @@ cache behaviour; it is already a single seam for exactly this.
 
 `table.js` `renderHand()`; `.hcard`.
 
-- Card **154.9 × 225** (the same size as the trump card on the scoreboard).
+- Card **154.9 × 225** (the same size as the trump card on the scoreboard). The client's art makes
+  it 155 × 225 (`CardRenderer::sizeForHeight()`), and the formulas below use the card's real width.
 - n cards: `step = min(84, (720 − 154.9)/(n − 1))`, total width `(n − 1)·step + 154.9`, centred on
   x = 768. Card *i*: left `768 − total/2 + i·step`, top `850 + (i − mid)²·1.6`, rotated
   `(i − mid)·1.9°` about the point (w/2, 1.3·h) in the card's own frame. Later cards on top.
-- Hover on a legal card lifts it 30 along its own up, adds a 2 px gold-bright ring and a gold glow.
-  Illegal cards are dimmed (brightness 0.55, saturation 0.55 in the mock-up; keep the client's
-  existing 45%-plus-desaturate treatment if it reads the same). Order, legality, the snapshot vs
-  prompt source, blind backs and keyboard selection are all `HandItem`'s existing behaviour and do
-  not change.
+- **Every card casts a shadow** (`.hcard .face`): `-3px 4px 10px rgba(0,0,0,0.45)`, radius 8, in
+  the card's own turned frame. *(Added in phase 7; this list used to give none.)*
+- Hover on a legal card lifts it 30 along its own up. It then casts a 2 px gold-bright ring, a glow
+  `0 0 22px rgba(242,211,140,0.7)` and a shadow `0 14px 22px rgba(0,0,0,0.5)` in place of the plain
+  one (`.hcard.playable:hover .face`). **The card stays hovered over its resting place as well as
+  where it has risen to**: the browser hovers the button, which does not move, and its face, which
+  does. Hovering only the risen card makes a card flicker when the cursor is near its bottom edge.
+  The next card still wins where it overlaps the risen part, since it is drawn on top. *(Phase 7.)*
+  - **A card under a cursor that hasn't moved rises too,** as soon as the hand becomes playable or
+    is redrawn: the browser applies `:hover` again after every `render()`, with no mouse move.
+    *(Phase 7's review.)*
+  - **In the strip a raised card rose out of, a click plays the raised card**, though the card
+    beneath (or the felt) now shows there. The mock-up does the same, since the browser still hits
+    the button. Matching the drawing there would bring the flicker back. *(Phase 7's review.)*
+- Illegal cards are dimmed: brightness 0.55, then saturation 0.55, opaque, as the mock-up does.
+  **Decided by the owner, 2026-10-20** (phase 7): the client's old 45% opacity let the card beneath
+  show through a hand that overlaps by half. Section 18 of `QT_CLIENT_PLAN_proposal1.md` carries the
+  amendment. Order, legality, the snapshot vs prompt source, blind backs and keyboard selection are
+  all `HandItem`'s existing behaviour and do not change.
 - The human's panel (z above the hand) covers the bottom of the hand. That is intended.
 
 ### 2.9 Scoreboard (top-left)
@@ -996,7 +1012,7 @@ Done when: the played cards and rhombus match the mock-up for 4 and 6 players.
 - **Pitfall: `src/paint/` does not include `src/table/`.** The card shadow's corner radius (7)
   therefore lives in `CardShadow.cpp`, not in `TableSpace.h`.
 
-### Phase 7: the human's hand
+### Phase 7: the human's hand ✅ COMPLETE
 
 Files: `src/table/HandItem.*`, `src/core/HandLayout.*` if the geometry lives there,
 `tests/HandItemTests.cpp`, `tests/HandLayoutTests.cpp`.
@@ -1006,6 +1022,137 @@ Files: `src/table/HandItem.*`, `src/core/HandLayout.*` if the geometry lives the
    new numbers (rewrite expected values where they encode the old ones).
 
 Done when: the hand matches the mock-up with 1, 4 and 8 cards, and clicking still plays the right card.
+
+**Outcome:**
+
+- **The count is 418 tests**: 411 at the phase's first commits, and 7 more from its review round
+  (401 + 17, none retired). All pass on the `default`, `release` and `clang` presets with Qt 6.11.2,
+  building without a warning. The phase started from 401: phase 6's 384 plus the phase 5 review
+  fixes (#32).
+  - One `CardRendererTests` case for the dimming, four `HandItemTests` cases for the hand's shadow
+    looks, and five for the fan.
+  - **The review round's seven:** six in `HandItemTests` (a card's own rect, written out by hand; a
+    card wider than the fan stacks the hand; the next card wins over a raised card's risen face; and
+    three for a still cursor) and one in `TableSceneTests` (a still cursor, through the scene's own
+    hover).
+  - **Rewritten, keeping their intent:**
+    - "The fan draws one card per slot and centres them" is now "…where cardPlacement() puts it",
+      plus a mirror case for 1 to 8 cards.
+    - "The cards overlap rather than sitting end to end" is now "The fan steps 84 apart until eight
+      cards close it to 720".
+    - "The slot under an overlap is the upper card" takes its point in the card's own frame.
+    - "A dimmed card is not the same image as a lit one" lost its alpha assertion, which encoded the
+      45% opacity.
+    - "A seated table holds the hand where section 2.8 puts it" checks every card.
+    - The two plaque cases read `CardItem::isRaised()`.
+    - The shadow drag case is now "While a drag settles no card's shadow is drawn again".
+  - The `HandItemTests` cases use the table's card height. At their old 100, section 2.8's fixed 84
+    step leaves gaps between the cards.
+  - **Checked by mutation**, each case against the defect it guards:
+    - testing the raised card only where it has risen fails the flicker case;
+    - dropping the risen part from the hit test fails the risen-hit case;
+    - testing the risen part before the other cards fails only the next-card case;
+    - dropping the lift from `setPlayable()` fails the two your-turn cases, and dropping it from
+      `layOut()` fails the rebuild case.
+- **Three decisions by the owner, 2026-10-20:**
+  - **Illegal cards darken, opaque**, as the mock-up does (brightness 0.55, then saturate 0.55). The
+    45% opacity showed the card beneath through a hand that overlaps by half. Section 2.8 and section
+    18 of `QT_CLIENT_PLAN_proposal1.md` say so.
+  - **Hand screenshots with the mock-up beside them, committed:** see below.
+  - **One `[.timing]` run** at the end of the phase.
+- **Section 2.8 was corrected in six places**, now written into it above:
+  - every hand card casts a shadow;
+  - the hover's ring, glow and shadow;
+  - the hover's hit area;
+  - the dimming;
+  - and from the review round, a card under a still cursor rising, and the strip's mismatch.
+- **PR #33's review** (eight commits after the phase's six):
+  - **Fixed: a card under a still cursor stayed down when your turn came.** The fan worked out which
+    card to raise only on a mouse move, and a prompt arriving, a rebuild or a theme change is not
+    one. `HandItem` now keeps the cursor's last position over the fan (forgotten when it leaves), and
+    `layOut()` and `setPlayable()` raise the card under it through `liftAt()`, the rule a hover uses.
+  - **Fixed: `capture_hands.py` saved a failed page.** A failed check drew a red banner, Chrome
+    photographed it, and the script saved that over the committed picture and exited 0. The page now
+    marks `<body>` only once every check has passed, and the script reads that mark
+    (`--dump-dom`) before each shot, stopping with the banner's reason and saving nothing.
+  - **Fixed: a card wider than the fan reversed the hand.** The step went negative above 720, laying
+    each card left of the one before it while still drawing it on top. It is clamped at zero, so the
+    hand stacks. Defensive only: the table's cards are 155 wide.
+  - **`cardshadow::cardRect()`** is the one definition of where a card is in its own frame:
+    `CardItem` draws there (`CardItem::cardRect()`), `HandItem` hits there, and every shadow is cast
+    round it. It also removed locals in `CardItem::paint()` that shadowed members.
+  - **`HandItem` has `ItemHasNoContents`**, as `TrickItem` has: it paints nothing, and its rect
+    covers the whole fan. Presses and hovers still reach it.
+  - **Documented, not changed:** the strip's mismatch above, in `HandItem::slotAt()`'s comment.
+  - **Not changed, at the owner's call:** `showLift()` updates every card on a hover change, where
+    only two can change. It costs microseconds.
+  - The screenshots before and after the review's fixes are pixel-identical, 9 of 9.
+  - The round also added `CLAUDE.md`'s "Explaining something visual" section: a working rule about
+    offering screen recordings, not phase 7's work.
+- **The hand matches the mock-up.**
+  - `capture_hands.py` photographs the mock-up at the moment the client's hand shots draw.
+  - Over the 8-card hand the two differ by about 5 levels on average, and only at edges.
+  - A dimmed card's white is 140 in both, so Chrome applies `brightness()` and `saturate()` to sRGB
+    values, as `CardRenderer` does.
+  - `table-empty.png` is unchanged but for the logo's known band.
+- **What later phases take from here:**
+  - **Where a card in your hand goes:** `handitem::cardPlacement(count, slot, card)`, a
+    `tablespace::Placement`.
+    - `HandItem` sits at the scene's origin with its cards in table space, as `TrickItem` does.
+    - **`tablespace::Placement`** is the one `{centre, rotation}` for the trick, the rhombus and the
+      hand; it was `trickitem::Placement`.
+  - **A card's look:** `cardshadow::Look` (`Played`, `Winning`, `Held`, `Raised`), with `lift()` and
+    `reach()`.
+    - `CardItem::setHeld()` sits beside `setPlayed()`, and `look()` / `isRaised()` are for tests.
+    - The hand shares the played cards' cache, `TableScene::cardShadows()` (was `playedShadows()`).
+  - **The rise is drawn, not a move:** a raised card's `pos` and rotation stay its resting place.
+    Phase 12's card-to-table animation can start from `pos` as it is.
+  - **The hit test** asks each card in its own frame: at rest, plus the raised card where it rose to.
+    Anything that changes the hand's shape must keep both. "On the card" is
+    `cardshadow::cardRect()`, everywhere.
+  - **The fan remembers the cursor.** Anything that changes the hand without a mouse move must end
+    in `layOut()` or `setPlayable()`, so the card under a still cursor is raised again.
+  - **For phase 12:**
+    - the mock-up's 0.15 s ease on the hover;
+    - its pointer and not-allowed cursors;
+    - a keyboard focus ring.
+    None are ported: the first is motion, and the client has no focus model for cards.
+  - **The hand screenshots:** `hand-1-card.png`, `hand-4-cards.png` and `hand-8-cards.png` from the
+    screenshot tool, paired with `screenshots/hand-*.jpg` as `CLAUDE.md` says.
+    `mockup/source/capture_hands.py` takes those again if the mock-up changes. Its shots and
+    `ScreenshotTool.cpp`'s `handShots()` must stay card for card the same. It saves nothing for a
+    page that did not finish setting up, so a table.js change that breaks it stops it with a reason.
+- **Resizing**, release build, `[.timing]`, one run, against phase 6's recorded runs (not measured
+  back to back):
+
+  | | Phase 6, after review | Phase 7 |
+  |---|---|---|
+  | Drag frame, median | 8.0 ms | 8.8 ms |
+  | Drag frame, worst | 9.1 ms | 9.9 ms |
+  | First step | 75 ms | 78 ms |
+  | Settle frame | 83 ms | 88 ms |
+
+  - **The hand costs about 0.8 ms a drag frame.** That is eight cards drawn turned, where they used
+    to be square to the screen, plus eight shadow pictures blended at their turns. The played cards'
+    five cost about half a millisecond in phase 6.
+  - It is under the 1 ms the phase allowed before acting. The fix in reserve is one cached picture
+    of the resting fan, recomposed on a hover, and it was not built.
+  - The first step and the settle frame draw the hand's two pictures afresh: a few ms, within one
+    run's noise.
+
+- **Pitfall: the built mock-up leans on its host.** `romanian_whist_table.html` starts at its
+  `<title>`, with no doctype and no charset, and sets neither `body { margin: 0 }` nor
+  `[hidden] { display: none }`.
+  - Opened bare in Chrome, it renders in quirks mode and reads its UTF-8 as Latin-1, so the suit
+    glyphs come out as three letters.
+  - Its hidden bid strip and modal scrim, which set their own `display`, show over the table.
+  - `capture_hands.py` supplies all four.
+- **Pitfall: Chrome loads no font from a `file://` URL into a `file://` page** (CORS), so the
+  capture embeds the TTFs as data URIs.
+- **Pitfall: CSS turns about `transform-origin`; QGraphicsItem turns about the item's origin.**
+  `CardItem`'s origin is its middle, so `cardPlacement()` puts the middle where turning about the
+  hinge would have carried it. `setTransformOriginPoint()` would also work, but then `pos` would no
+  longer be the card's middle, which the hit test and phase 12's animation both read.
 
 ### Phase 8: scoreboard, trick panel, bottom buttons
 
