@@ -69,16 +69,24 @@ enum class Side
 void drawCircleShadow(QPainter& painter, QPointF centre, qreal radius, qreal blur,
                       const QColor& colour, Side side);
 
-// Any other shape's outer box-shadow: the shape, moved by `offset`, blurred by
-// `blur` and filled with `colour` - drawn outside the shape only, as CSS clips an
-// outer shadow to outside the element's border box, which matters under the
+// Any other shape's shadow: the shape, moved by `offset`, blurred by `blur` and
+// filled with `colour`.
+//
+// OUTER, the default, is a box-shadow: drawn outside the shape only, as CSS clips
+// an outer shadow to outside the element's border box, which matters under the
 // panels that are not quite opaque.
+//
+// BENEATH is a drop-shadow under an opaque shape painted straight over it, as
+// drawCircleShadow()'s is: not cut away under the shape, so the shape's
+// anti-aliased edge meets one shadow rather than a shadow cut by a second edge -
+// which left a light seam round every card in a rack (PHASE5_REVIEW_FINDINGS.md
+// #1). Inset is not drawn for shapes.
 //
 // RASTERIZED AND BLURRED: the shape's alpha at the pixels it lands on, padded by
 // three sigmas, then three box blurs across and three down, which is the usual
 // Gaussian approximation and costs the same at any blur.
 void drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPointF offset, qreal blur,
-                     const QColor& colour);
+                     const QColor& colour, Side side = Side::Outer);
 
 } // namespace shadows
 

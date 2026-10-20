@@ -3,6 +3,7 @@
 
 #include "core/GameSnapshot.h"
 #include "paint/PictureCache.h"
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
 #include <romanian_whist/Card.h>
@@ -61,6 +62,17 @@ QPolygonF cardQuad(std::size_t count, std::size_t index);
 // The flat card, QRectF(QPointF(), cardSize()), onto cardQuad(). What a card in
 // the rack is painted through.
 QTransform cardTransform(std::size_t count, std::size_t index);
+
+// HOW A CARD'S ART IS LAID ON THE FLAT CARD, from the art's own size: scaled to
+// fill it - and, for a face, turned half round.
+//
+// A FACE READS FROM ITS TOP AT THE RAISED END. The flat card hangs from the rail by
+// its top edge and its far end rises toward the owner, so a card worn on the
+// forehead, facing the table, has its top up at that far end. Laid the other way,
+// the top opponent's Forehead card was upside down to you, and the side seats'
+// were turned the wrong way. A back is the same either way round, and is left as
+// it was.
+QTransform artTransform(QSizeF art, bool face);
 
 // How much a card's far edge is magnified by the perspective, so its picture can
 // be made at that many more pixels and stay sharp where it is largest.
@@ -130,9 +142,10 @@ public:
     std::size_t renders() const { return pictures.renders(); }
 
 private:
-    // A round deals each rack down from eight cards, so a dozen is a round's worth
-    // and a Forehead card or two besides.
-    PictureCache<Shown, Theme::TablePalette, 12> pictures;
+    // A round deals each rack down from eight cards: eight pictures of backs. A
+    // six-player Forehead round adds a face for each of the five opponents, so
+    // sixteen holds a round's backs, a Forehead round's faces and room to spare.
+    PictureCache<Shown, Theme::TablePalette, 16> pictures;
 };
 
 } // namespace rackitem
@@ -176,11 +189,12 @@ public:
     // Public because it is the contract a test can check, as TableTopItem's is.
     QPixmap picture(qreal ratio) const;
 
-    // How many times this rack has asked for a new picture: READ-ONLY and for tests,
-    // which show with it that a resize settling leaves it alone - SeatItem's twin.
-    // The cache may have had it already; rackitem::Cache::renders() counts those
-    // that were composed.
-    std::size_t compositions() const { return composedCount; }
+    // How many new pictures this rack has taken, composed or found in the cache:
+    // READ-ONLY and for tests, which show with it that a resize settling leaves it
+    // alone - SeatItem's twin. rackitem::Cache::renders() counts those that were
+    // composed. A request that came back null - as it always does for a rack with
+    // no cards - is not counted.
+    std::size_t compositions() const { return memo.compositions(); }
 
 private:
     const CardRenderer* renderer;
@@ -195,12 +209,11 @@ private:
     // paint and every hit test, and it is eight projected cards to work out.
     QRectF bounds;
 
-    // The rack's picture. The ratio is compared on its own, because it changes
-    // without any setter.
-    mutable rackitem::Picture composed;
-    mutable int composedRatio = 0;
-    mutable bool stale = true;
-    mutable std::size_t composedCount = 0;
+    // The rack's picture at `ratio`, from the shared cache when what it shows or
+    // the ratio has changed, and kept otherwise.
+    const rackitem::Picture& composedAt(qreal ratio) const;
+
+    mutable PictureMemo memo;
 };
 
 #endif

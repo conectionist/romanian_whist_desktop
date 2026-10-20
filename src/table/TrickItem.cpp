@@ -4,6 +4,7 @@
 #include "table/RackItem.h"
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
+#include "table/Turn.h"
 
 trickitem::Placement trickitem::cardPlacement(unsigned int seatCount, const seatlayout::Place& place)
 {
@@ -19,7 +20,7 @@ trickitem::Placement trickitem::cardPlacement(unsigned int seatCount, const seat
     // The felt's edge, the inset, then half the card: table.js trickPos().
     const qreal radius = tablespace::feltRadius - tablespace::playedInset - height / 2.0;
 
-    return Placement{ seatlayout::onCircle(place.angle, radius), rackitem::frameRotation(place.angle) };
+    return Placement{ seatlayout::onCircle(*place.angle, radius), rackitem::frameRotation(*place.angle) };
 }
 
 std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
@@ -38,8 +39,8 @@ trickitem::Placement trickitem::leadMarkPlacement(const seatlayout::Place& place
     if(place.human)
         return Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
 
-    return Placement{ seatlayout::onCircle(place.angle, tablespace::goldLineRadius),
-                      rackitem::frameRotation(place.angle) };
+    return Placement{ seatlayout::onCircle(*place.angle, tablespace::goldLineRadius),
+                      rackitem::frameRotation(*place.angle) };
 }
 
 std::optional<trickitem::Placement> trickitem::leadMarkPlacement(unsigned int seatCount, int humanSeat,
@@ -123,7 +124,7 @@ void TrickItem::setTrick(const GameSnapshot& snapshot, const seatlayout::Places&
         const trickitem::Placement place = trickitem::cardPlacement(seatCount, **seat);
 
         item->setPos(place.centre);
-        item->setRotation(place.rotation);
+        turnTo(*item, place.rotation);
 
         // THE HIGHLIGHT IS isWinning AND IS NEVER RECOMPUTED. It is the engine's
         // own ranking of a partly played trick, filled from

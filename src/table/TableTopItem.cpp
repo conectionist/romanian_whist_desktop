@@ -458,8 +458,15 @@ TableTopItem::TableTopItem()
 
 void TableTopItem::setTheme(const Theme& palette)
 {
+    const bool changed = palette.table != theme.table;
+
     theme = palette;
-    update();
+
+    if(changed)
+    {
+        memo.invalidate();
+        update();
+    }
 }
 
 QRectF TableTopItem::boundingRect() const
@@ -469,17 +476,10 @@ QRectF TableTopItem::boundingRect() const
 
 QPixmap TableTopItem::picture(qreal ratio) const
 {
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(cached.isNull() || cachedRatio != key || cachedPalette != theme.table)
+    return memo.picture(ratio, [&]
     {
-        cached = tabletop::render(theme, ratio);
-        cachedRatio = key;
-        cachedPalette = theme.table;
-        renderCount++;
-    }
-
-    return cached;
+        return devicepixels::Canvas{ tabletop::render(theme, ratio), QPointF() };
+    }).pixmap;
 }
 
 void TableTopItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)

@@ -225,7 +225,7 @@ add a further 9° so the row's width clears the panel corner. Remember the final
 (`rackAngle[s]`); the played card and the lead rhombus use it. *(Phase 5: with the table of
 section 2.5 the slide never fires. Every rim point is already clear of its panel grown by 10; the
 top seat's panel ends at y −22 and its rim point is at y 60. The client implements the rule
-anyway, and `seatlayout::rackAngle()` is where to read the result.)*
+anyway, and `seatlayout::place()` is where to read the result.)*
 
 **Frame.** Rotate the rack's local frame by `φ = atan2(−cos a, sin a)` so local +y points
 **outwards**, towards the owner, and local −y points at the table centre.
@@ -863,8 +863,10 @@ Done when: `screenshots/detail-racks-and-played-cards.jpg` is matched for the ra
 - **A rack is drawn on a whole device pixel**: `RackItem::paint()` snaps the picture's corner, and
   `rackitem::frameRotation()` gives quarter turns exactly. So four players' racks are pixel-exact.
 - **What later phases take from here:**
-  - **The rack angle:** `seatlayout::rackAngle(seatCount, humanSeat, seat)`, in radians with y
-    down. It's 90° for the bottom seat, which is what a spectated seat 0 uses.
+  - **The rack angle:** `seatlayout::place(seatCount, humanSeat, seat)->angle`, in radians with
+    y down. It's a `std::optional`, empty for your own seat, which has no rack. It's 90° for the
+    bottom seat, which is what a spectated seat 0 uses. `seatlayout::places()` gives every seat's
+    at once, and `seatlayout::rackAngle(panel)` gives a panel's.
     `seatlayout::rackOrigin(angle)` is the point on the rim at `tablespace::rackRadius` (452).
     **Phase 6 turns the played cards and places the rhombus by this angle**:
     `TableScene::trickPositions()` still uses the nominal seat angles.

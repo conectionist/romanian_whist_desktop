@@ -12,6 +12,7 @@
 #include <QPixmap>
 #include <QSet>
 #include <QSvgRenderer>
+#include <QtMath>
 
 #include <cstdlib>
 #include <ios>
@@ -312,4 +313,42 @@ TEST_CASE("The back is the mock-up's burgundy and gold", "[card-renderer]")
 
     CHECK(qAlpha(edge) == 255);
     CHECK(qRed(edge) < 0xF2 - 20);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #6. The body's corner is 7 of its units on each axis,
+// and the units are scaled separately across and down, so at any shape but 100:145
+// it is an ellipse. The hairline round it used the horizontal scale for both radii:
+// on a tall card its corner was squarer than the body's, and it was drawn out past
+// the body, over the transparent corner.
+TEST_CASE("The back's hairline stays inside the body's corner at any shape", "[card-renderer]")
+{
+    const CardRenderer renderer;
+
+    for(const QSize size : { QSize(60, 300), QSize(300, 60), QSize(41, 90), QSize(200, 290) })
+    {
+        INFO("size " << size.width() << " x " << size.height());
+
+        const QImage back = renderer.back(size, 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+
+        // The body's top-left corner: an ellipse of these radii, in pixels.
+        const qreal across = 7.0 * size.width() / 100.0;
+        const qreal down = 7.0 * size.height() / 145.0;
+
+        for(int y = 0 ; y < qCeil(down) ; y++)
+        {
+            for(int x = 0 ; x < qCeil(across) ; x++)
+            {
+                // Outside the corner's ellipse grown by a pixel, for the edge's
+                // anti-aliasing: nothing of the card may be drawn there.
+                const qreal dx = (across - (x + 0.5)) / (across + 1.0);
+                const qreal dy = (down - (y + 0.5)) / (down + 1.0);
+
+                if(dx * dx + dy * dy <= 1.0)
+                    continue;
+
+                INFO("pixel " << x << ", " << y);
+                REQUIRE(qAlpha(back.pixel(x, y)) < 10);
+            }
+        }
+    }
 }

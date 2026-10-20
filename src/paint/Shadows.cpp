@@ -170,9 +170,11 @@ void shadows::drawCircleShadow(QPainter& painter, QPointF centre, qreal radius, 
 }
 
 void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPointF offset,
-                              qreal blur, const QColor& colour)
+                              qreal blur, const QColor& colour, Side side)
 {
-    if(shape.isEmpty() || colour.alpha() == 0)
+    Q_ASSERT(side != Side::Inset);
+
+    if(shape.isEmpty() || colour.alpha() == 0 || side == Side::Inset)
         return;
 
     const qreal ratio = devicepixels::effectiveRatio(painter);
@@ -212,8 +214,12 @@ void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPoi
     // OUTSIDE THE SHAPE ONLY, as CSS clips an outer shadow: the blurred shadow
     // times what the unmoved shape leaves uncovered. Its own anti-aliased coverage
     // rather than a clip path, which the raster engine draws aliased - and under a
-    // panel that is not quite opaque, the edge would show.
-    const std::vector<float> hole = coverage(shape, QPointF(), bounds, pixels, ratio);
+    // panel that is not quite opaque, the edge would show. Beneath, nothing is cut,
+    // and there is no hole to make: an empty one is read as uncovered everywhere
+    // (PHASE5_REVIEW_FINDINGS.md #19).
+    const std::vector<float> hole = side == Side::Beneath
+                                        ? std::vector<float>()
+                                        : coverage(shape, QPointF(), bounds, pixels, ratio);
 
     QImage picture(pixels, QImage::Format_ARGB32_Premultiplied);
 
@@ -224,7 +230,8 @@ void shadows::drawShapeShadow(QPainter& painter, const QPainterPath& shape, QPoi
         for(int x = 0 ; x < pixels.width() ; x++)
         {
             const std::size_t at = static_cast<std::size_t>(y) * pixels.width() + x;
-            const qreal alpha = colour.alphaF() * shadow[at] * (1.0f - hole[at]);
+            const float cut = hole.empty() ? 0.0f : hole[at];
+            const qreal alpha = colour.alphaF() * shadow[at] * (1.0f - cut);
 
             row[x] = qPremultiply(qRgba(colour.red(), colour.green(), colour.blue(),
                                         qBound(0, qRound(alpha * 255.0), 255)));

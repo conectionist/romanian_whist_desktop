@@ -9,6 +9,7 @@
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
 #include "table/TrickItem.h"
+#include "table/Turn.h"
 
 #include <algorithm>
 
@@ -188,8 +189,8 @@ void TableScene::relayout()
             continue;
         }
 
-        rack->setPos(seatlayout::rackOrigin(place->angle));
-        rack->setRotation(rackitem::frameRotation(place->angle));
+        rack->setPos(seatlayout::rackOrigin(*place->angle));
+        turnTo(*rack, rackitem::frameRotation(*place->angle));
         rack->setRack(snapshot->seats[i], theme);
         rack->show();
     }

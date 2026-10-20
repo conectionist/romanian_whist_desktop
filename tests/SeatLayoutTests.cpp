@@ -342,7 +342,11 @@ TEST_CASE("A seat's place is its panel, and its rack's angle unless it is yours"
                 REQUIRE(place.panel == seatlayout::panelRect(seatCount, humanSeat, seat));
                 REQUIRE(place.human == yours);
 
-                if(!yours)
+                // Yours has no rack, so no angle - not a 0 that is also the
+                // right-hand seat's (PHASE5_REVIEW_FINDINGS.md #16).
+                if(yours)
+                    REQUIRE_FALSE(place.angle.has_value());
+                else
                     REQUIRE(place.angle == seatlayout::rackAngle(place.panel));
             }
         }
@@ -351,4 +355,12 @@ TEST_CASE("A seat's place is its panel, and its rack's angle unless it is yours"
     // None for a seat with no panel.
     REQUIRE_FALSE(seatlayout::place(4, 0, 4));
     REQUIRE_FALSE(seatlayout::place(7, 0, 1));
+}
+
+// PHASE5_REVIEW_FINDINGS.md #16: an empty panel's angle was 0, the right-hand seat's
+// real one, so "no rack" read as a rack to the right.
+TEST_CASE("An empty panel has no rack angle", "[seat-layout]")
+{
+    REQUIRE_FALSE(seatlayout::rackAngle(QRectF()).has_value());
+    REQUIRE(seatlayout::rackAngle(seatlayout::panelRect(4, 0, 3)).has_value());
 }

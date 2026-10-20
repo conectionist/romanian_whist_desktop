@@ -72,10 +72,10 @@ QRectF seatlayout::panelRect(unsigned int seatCount, int humanSeat, unsigned int
     return QRectF(panelCorners[seatCount - fewestSeats][steps - 1], tablespace::panelSize);
 }
 
-qreal seatlayout::rackAngle(QRectF panel)
+std::optional<qreal> seatlayout::rackAngle(QRectF panel)
 {
     if(panel.isEmpty())
-        return 0.0;
+        return std::nullopt;
 
     const QPointF centre = panel.center();
     const QRectF clear = panel.adjusted(-rackClearance, -rackClearance, rackClearance, rackClearance);
@@ -104,11 +104,6 @@ qreal seatlayout::rackAngle(QRectF panel)
     return angle;
 }
 
-qreal seatlayout::rackAngle(unsigned int seatCount, int humanSeat, unsigned int seat)
-{
-    return rackAngle(panelRect(seatCount, humanSeat, seat));
-}
-
 QPointF seatlayout::onCircle(qreal angle, qreal radius)
 {
     return tablespace::centre + radius * QPointF(std::cos(angle), std::sin(angle));
@@ -128,7 +123,7 @@ std::optional<seatlayout::Place> seatlayout::place(unsigned int seatCount, int h
 
     const bool human = humanSeated(seatCount, humanSeat) && static_cast<unsigned int>(humanSeat) == seat;
 
-    return Place{ panel, human, human ? 0.0 : rackAngle(panel) };
+    return Place{ panel, human, human ? std::nullopt : rackAngle(panel) };
 }
 
 seatlayout::Places seatlayout::places(unsigned int seatCount, int humanSeat)

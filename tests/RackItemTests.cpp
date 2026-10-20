@@ -20,6 +20,7 @@
 #include <QTransform>
 
 #include <cmath>
+#include <optional>
 #include <numbers>
 
 using Catch::Approx;
@@ -73,8 +74,15 @@ TEST_CASE("Every rack stands on the rim clear of its own panel", "[rack]")
             {
                 INFO(count << " seats, human " << humanSeat << ", seat " << seat);
 
-                const QRectF panel = seatlayout::panelRect(count, humanSeat, seat);
-                const QPointF origin = seatlayout::rackOrigin(seatlayout::rackAngle(count, humanSeat, seat));
+                // Your seat has no rack: your hand is the fan at the bottom.
+                const std::optional<seatlayout::Place> place = seatlayout::place(count, humanSeat, seat);
+                REQUIRE(place);
+
+                if(place->human)
+                    continue;
+
+                const QRectF panel = place->panel;
+                const QPointF origin = seatlayout::rackOrigin(place->angle.value());
 
                 REQUIRE(QLineF(tablespace::centre, origin).length() == Approx(tablespace::rackRadius));
                 REQUIRE_FALSE(clearOf(panel).contains(origin));
@@ -87,16 +95,16 @@ TEST_CASE("Four players' racks face their panels squarely", "[rack]")
 {
     // Left, top and right: each panel's centre is straight out from the table's,
     // and with section 2.5's panels no rack has to slide.
-    REQUIRE(seatlayout::rackAngle(4, 0, 1) == Approx(std::numbers::pi));
-    REQUIRE(seatlayout::rackAngle(4, 0, 2) == Approx(-std::numbers::pi / 2.0));
-    REQUIRE(seatlayout::rackAngle(4, 0, 3) == Approx(0.0).margin(1e-12));
+    REQUIRE(seatlayout::place(4, 0, 1)->angle.value() == Approx(std::numbers::pi));
+    REQUIRE(seatlayout::place(4, 0, 2)->angle.value() == Approx(-std::numbers::pi / 2.0));
+    REQUIRE(seatlayout::place(4, 0, 3)->angle.value() == Approx(0.0).margin(1e-12));
 }
 
 TEST_CASE("The bottom seat's rack is at the bottom", "[rack]")
 {
     // A spectated game's seat 0 sits where you would, and stands its rack on the rim
     // straight below the centre.
-    REQUIRE(seatlayout::rackAngle(4, -1, 0) == Approx(std::numbers::pi / 2.0));
+    REQUIRE(seatlayout::place(4, -1, 0)->angle.value() == Approx(std::numbers::pi / 2.0));
     REQUIRE(seatlayout::rackOrigin(std::numbers::pi / 2.0).x() == Approx(tablespace::centre.x()));
 }
 
@@ -111,7 +119,7 @@ TEST_CASE("A rack under its own panel slides clockwise until it is clear", "[rac
 
     REQUIRE(clearOf(panel).contains(seatlayout::rackOrigin(straight)));
 
-    const qreal angle = seatlayout::rackAngle(panel);
+    const qreal angle = seatlayout::rackAngle(panel).value();
 
     REQUIRE(angle > straight);
     REQUIRE_FALSE(clearOf(panel).contains(seatlayout::rackOrigin(angle)));
@@ -149,11 +157,33 @@ TEST_CASE("Quarter-turn racks are turned exactly", "[rack]")
     REQUIRE(rackitem::frameRotation(std::numbers::pi) == 90.0);
     REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0) == 180.0);
 
-    // And as rackAngle() hands them over.
-    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, 0, 1)) == 90.0);
-    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, 0, 2)) == 180.0);
-    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, 0, 3)) == -90.0);
-    REQUIRE(rackitem::frameRotation(seatlayout::rackAngle(4, -1, 0)) == 0.0);
+    // And as seatlayout::place() hands them over.
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 1)->angle.value()) == 90.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 2)->angle.value()) == 180.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, 0, 3)->angle.value()) == -90.0);
+    REQUIRE(rackitem::frameRotation(seatlayout::place(4, -1, 0)->angle.value()) == 0.0);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #2: a turn a hair above -180 snapped to -180 after it
+// had been brought into range, so it left the range and took QTransform's inexact
+// path for -180.
+TEST_CASE("A turn stays in range however it is snapped", "[rack]")
+{
+    // Either side of the top seat's angle, by a hair: both are the half turn.
+    REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0 + 1e-15) == 180.0);
+    REQUIRE(rackitem::frameRotation(-std::numbers::pi / 2.0 - 1e-15) == 180.0);
+    REQUIRE(rackitem::frameRotation(3.0 * std::numbers::pi / 2.0) == 180.0);
+
+    // And all the way round, every turn is in range.
+    for(int step = -720 ; step <= 720 ; step++)
+    {
+        const qreal angle = step * std::numbers::pi / 360.0;
+        const qreal turn = rackitem::frameRotation(angle);
+
+        INFO("angle " << angle << ", turn " << turn);
+        REQUIRE(turn > -180.0);
+        REQUIRE(turn <= 180.0);
+    }
 }
 
 // ---- the cards in it ----
@@ -291,6 +321,108 @@ TEST_CASE("A rack shows faces only when the seat's hand can be seen", "[rack]")
     const rackitem::Shown unseen = rackitem::shownFor(holding(1));
     REQUIRE(unseen.count == 1);
     REQUIRE(unseen.faces.empty());
+}
+
+// ---- which way up a Forehead face stands (PHASE5_REVIEW_FINDINGS.md #4) ----
+//
+// A card worn on the forehead faces the table with its top up - and in the rack,
+// "up" is the far end, which rises toward the owner. The flat card hangs from the
+// rail by ITS top edge, so the face has to be laid on it half round: drawn the
+// other way, the top opponent's card was upside down to you.
+
+TEST_CASE("A face is laid on the rack's card half round, and a back is not", "[rack]")
+{
+    const QSizeF art(124.0, 180.0);
+    const QRectF flat(QPointF(), rackitem::cardSize());
+
+    const QTransform face = rackitem::artTransform(art, true);
+    const QTransform back = rackitem::artTransform(art, false);
+
+    // Both fill the flat card exactly.
+    REQUIRE(face.mapRect(QRectF(QPointF(), art)) == flat);
+    REQUIRE(back.mapRect(QRectF(QPointF(), art)) == flat);
+
+    // The art's top-left is the flat card's top-left for a back, and its
+    // bottom-right - the far end's corner - for a face.
+    REQUIRE(back.map(QPointF(0.0, 0.0)) == QPointF(0.0, 0.0));
+    REQUIRE(face.map(QPointF(0.0, 0.0)) == flat.bottomRight());
+
+    // And through the rack, for every card of a full row: the face's top edge lands
+    // on the far end, out toward the owner (+y in the rack's frame).
+    for(std::size_t i = 0 ; i < rackitem::mostCards ; i++)
+    {
+        INFO("card " << i);
+
+        const QTransform through = face * rackitem::cardTransform(rackitem::mostCards, i);
+        const QPointF top = through.map(QPointF(art.width() / 2.0, 0.0));
+        const QPointF bottom = through.map(QPointF(art.width() / 2.0, art.height()));
+
+        REQUIRE(top.y() > bottom.y());
+    }
+}
+
+TEST_CASE("A Forehead face is drawn with its top at the raised end", "[rack]")
+{
+    // MEASURED IN WHAT render() DRAWS, so the transform above is the one it uses.
+    // The seven of hearts is top-heavy - its seventh pip sits above the middle - so
+    // whichever half of the rack's card holds more of its red is where its top went.
+    const CardRenderer renderer;
+    const Card seven(Rank::Seven, Suit::Hearts);
+    const qreal ratio = 4.0;
+
+    const auto red = [](QRgb pixel)
+    {
+        return qRed(pixel) > 110 && qGreen(pixel) * 2 < qRed(pixel) && qBlue(pixel) * 2 < qRed(pixel);
+    };
+
+    // The premise: the art itself has more red in its top half than its bottom.
+    const QImage art = renderer.face(seven, rackitem::cardSize().toSize(), ratio).toImage();
+    REQUIRE_FALSE(art.isNull());
+
+    int artTop = 0;
+    int artBottom = 0;
+
+    for(int y = 0 ; y < art.height() ; y++)
+    {
+        for(int x = 0 ; x < art.width() ; x++)
+        {
+            if(red(art.pixel(x, y)))
+                (y < art.height() / 2 ? artTop : artBottom)++;
+        }
+    }
+
+    REQUIRE(artTop > artBottom);
+
+    // The rack's picture, sampled over the flat card's own grid through its
+    // transform, so the perspective's magnification of the far end counts for
+    // nothing: each half of the flat card is sampled as often as the other.
+    rackitem::Shown shown;
+    shown.count = 1;
+    shown.faces = { seven };
+
+    const rackitem::Picture picture = rackitem::render(shown, Theme::dark().table, ratio, renderer);
+    REQUIRE_FALSE(picture.pixmap.isNull());
+
+    const QImage drawn = picture.pixmap.toImage();
+    const QTransform card = rackitem::cardTransform(1, 0);
+    const QSizeF size = rackitem::cardSize();
+
+    int nearHalf = 0;
+    int farHalf = 0;
+
+    for(qreal v = 0.25 ; v < size.height() ; v += 0.5)
+    {
+        for(qreal u = 0.25 ; u < size.width() ; u += 0.5)
+        {
+            const QPoint pixel = ((card.map(QPointF(u, v)) - picture.offset) * ratio).toPoint();
+
+            if(drawn.valid(pixel) && red(drawn.pixel(pixel)))
+                (v < size.height() / 2.0 ? nearHalf : farHalf)++;
+        }
+    }
+
+    // The top-heavy half is the far one: the face stands the right way up.
+    REQUIRE(farHalf > nearHalf);
 }
 
 TEST_CASE("An empty rack draws nothing at all", "[rack]")
@@ -453,4 +585,35 @@ TEST_CASE("Racks showing the same cards share one picture", "[rack]")
     right.picture(1.0);
 
     REQUIRE(racks.renders() == 2);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #10. A round draws every rack's backs from eight cards
+// down to one; a six-player Forehead round then shows five opponents' faces. The
+// cache held twelve and cleared itself at the twelfth, so the faces threw away the
+// backs and the next round drew every one of them again.
+TEST_CASE("A Forehead round's faces leave the round's backs in the cache", "[rack]")
+{
+    const CardRenderer renderer;
+    const Theme::TablePalette palette = Theme::dark().table;
+    rackitem::Cache racks;
+
+    const auto ask = [&](const rackitem::Shown& shown) { racks.picture(shown, palette, 1.0, renderer); };
+
+    for(std::size_t count = 8 ; count >= 1 ; count--)
+        ask(rackitem::shownFor(holding(static_cast<unsigned int>(count))));
+
+    const Card faces[] = { Card(Rank::Two, Suit::Hearts), Card(Rank::Nine, Suit::Clubs),
+                           Card(Rank::Jack, Suit::Spades), Card(Rank::Ace, Suit::Diamonds),
+                           Card(Rank::Five, Suit::Hearts) };
+
+    for(const Card& face : faces)
+        ask(rackitem::shownFor(showing(face)));
+
+    REQUIRE(racks.renders() == 13);
+
+    // The next round deals again from eight: every back is still held.
+    for(std::size_t count = 8 ; count >= 1 ; count--)
+        ask(rackitem::shownFor(holding(static_cast<unsigned int>(count))));
+
+    REQUIRE(racks.renders() == 13);
 }

@@ -174,6 +174,49 @@ TEST_CASE("A shape's shadow is the same profile and lies outside the shape only"
     REQUIRE(alphaAt(image, QPointF(120.0, 200.0)) < 0.01);
 }
 
+// BENEATH, for a shape painted opaque straight over its own shadow - the rack's row
+// of cards, whose drop-shadow CSS composites under it (PHASE5_REVIEW_FINDINGS.md
+// #1). Cut to outside the shape, the shadow under an anti-aliased edge pixel was
+// reduced once by the cut and again by the shape over it: c + s(1 - c)^2 where the
+// eye expects c + s(1 - c), a light seam round the shape.
+TEST_CASE("A shape over its shadow from beneath meets it in one edge", "[shadows]")
+{
+    const QColor shade(0, 0, 0, 191);
+
+    // Not cut: the shadow lies under the shape as well.
+    {
+        QImage image = canvas();
+        QPainterPath square;
+        square.addRect(QRectF(40.0, 40.0, 160.0, 320.0));
+
+        QPainter painter(&image);
+        shadows::drawShapeShadow(painter, square, QPointF(), blur, shade, shadows::Side::Beneath);
+        painter.end();
+
+        REQUIRE(alphaAt(image, QPointF(120.0, 200.0)) == Catch::Approx(shade.alphaF()).margin(0.02));
+    }
+
+    // The square's right edge through the middle of a pixel, the square laid over
+    // its shadow: half covered by the square, the rest by the shadow at its edge,
+    // which is half the shade.
+    QImage image = canvas();
+    QPainterPath square;
+    square.addRect(QRectF(40.0, 40.0, 160.5, 320.0));
+
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        shadows::drawShapeShadow(painter, square, QPointF(), blur, shade, shadows::Side::Beneath);
+        painter.fillPath(square, Qt::white);
+    }
+
+    const qreal edge = shade.alphaF() * 0.5;
+    const qreal rim = image.pixelColor(200, 200).alphaF();
+
+    // 0.69 here; cut to outside the square, it was 0.59.
+    REQUIRE(rim == Catch::Approx(0.5 + 0.5 * edge).margin(0.03));
+}
+
 TEST_CASE("A shape's shadow moves with its offset", "[shadows]")
 {
     QImage image = canvas();

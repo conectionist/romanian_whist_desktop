@@ -384,7 +384,12 @@ QImage CardRenderer::paintBack(QSize physical) const
     // card art window in the light theme). In the racks, the mock-up's only backs,
     // rackCardEdge is drawn over it, as it is over a Forehead face's. In pixels,
     // as the faces' line is, and inside the image.
-    const qreal pixelsPerUnit = physical.width() / 100.0;
+    //
+    // ITS CORNERS ARE THE BODY'S, ON EACH AXIS: the body was drawn in units scaled
+    // separately across and down, so its corner is 7 units of each, an ellipse at
+    // any shape but 100:145 - and the line has to follow it there too.
+    const qreal pixelsAcross = physical.width() / 100.0;
+    const qreal pixelsDown = physical.height() / 145.0;
     const qreal hairline = std::max(1.0, physical.width() * 0.006);
 
     painter.resetTransform();
@@ -392,7 +397,7 @@ QImage CardRenderer::paintBack(QSize physical) const
     painter.setPen(QPen(QColor(0, 0, 0, 90), hairline));
     painter.drawRoundedRect(QRectF(QPointF(0.0, 0.0), QSizeF(physical))
                                 .adjusted(hairline / 2.0, hairline / 2.0, -hairline / 2.0, -hairline / 2.0),
-                            7.0 * pixelsPerUnit - hairline / 2.0, 7.0 * pixelsPerUnit - hairline / 2.0);
+                            7.0 * pixelsAcross - hairline / 2.0, 7.0 * pixelsDown - hairline / 2.0);
 
     return image;
 }

@@ -32,6 +32,7 @@ add_executable(desktop_tests
     TableTopTests.cpp
     ShadowsTests.cpp
     PanelTests.cpp
+    PictureCacheTests.cpp
     GradientsTests.cpp
     SeatLayoutTests.cpp
     TrickItemTests.cpp

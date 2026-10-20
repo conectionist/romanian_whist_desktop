@@ -140,6 +140,21 @@ QTransform rackitem::cardTransform(std::size_t count, std::size_t index)
     return transform;
 }
 
+QTransform rackitem::artTransform(QSizeF art, bool face)
+{
+    if(art.isEmpty())
+        return QTransform();
+
+    const QSizeF size = cardSize();
+    const QTransform scale = QTransform::fromScale(size.width() / art.width(), size.height() / art.height());
+
+    if(!face)
+        return scale;
+
+    // Half round about the flat card's middle: its top-left to its bottom-right.
+    return scale * QTransform(-1.0, 0.0, 0.0, -1.0, size.width(), size.height());
+}
+
 qreal rackitem::farMagnification()
 {
     return perspective / (perspective - cardSize().height() * std::sin(tilt));
@@ -172,16 +187,20 @@ qreal rackitem::frameRotation(qreal angle)
     // quarter turn short of the rack's angle.
     qreal turn = std::remainder(qRadiansToDegrees(angle) - 90.0, 360.0);
 
-    // (-180, 180]: QTransform::rotate() turns 180 exactly and -180 not.
+    // A QUARTER TURN EXACTLY, not the 89.99999999999999 a right angle can come back
+    // from radians as, so the four-player racks take QTransform's exact path - and
+    // so sit square on the pixel grid paint() snaps them to.
+    const qreal quarters = std::round(turn / 90.0) * 90.0;
+
+    if(std::abs(turn - quarters) < 1e-9)
+        turn = quarters;
+
+    // THEN (-180, 180]: QTransform::rotate() turns 180 exactly and -180 not. After
+    // the snap, so a turn a hair above -180 - which snaps to -180 - comes out 180.
     if(turn <= -180.0)
         turn += 360.0;
 
-    // AND A QUARTER TURN EXACTLY, not the 89.99999999999999 a right angle can come
-    // back from radians as, so the four-player racks take QTransform's exact path -
-    // and so sit square on the pixel grid paint() snaps them to.
-    const qreal quarters = std::round(turn / 90.0) * 90.0;
-
-    return std::abs(turn - quarters) < 1e-9 ? quarters : turn;
+    return turn;
 }
 
 rackitem::Shown rackitem::shownFor(const SeatView& seat)
@@ -236,21 +255,38 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
     // Made at the pixels its FAR end covers, which the perspective magnifies, so
     // the art is sampled down along the card rather than up at its far edge.
     //
+    // AT A RATIO OF 1, IN THOSE PIXELS: the renderer makes round(size x ratio) of
+    // them either way, so this is the same picture, but one a texture brush can be
+    // turned half round. A brush draws a pixmap of another ratio at its
+    // device-independent size, but not under a transform that turns it - and
+    // setting a shared pixmap's ratio to 1 copies its pixels out of the
+    // renderer's cache.
+    //
     // A face that will not load stands in the rack as a back: the card is there,
     // and a gap would say it was not. With no art at all the card is left out of
     // the shadow as well, rather than cut out of it as a hole.
-    const QSize artSize = size.toSize();
     const qreal artRatio = ratio * farMagnification();
+    const QSize artSize(std::max(1, qRound(size.width() * artRatio)),
+                        std::max(1, qRound(size.height() * artRatio)));
 
-    std::vector<QPixmap> arts;
+    // Each card's art and whether it is a face, which is laid the other way up.
+    struct Art
+    {
+        QPixmap pixmap;
+        bool face = false;
+    };
+
+    std::vector<Art> arts;
     arts.reserve(count);
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        QPixmap art = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, artRatio) : QPixmap();
+        Art art;
+        art.pixmap = i < shown.faces.size() ? renderer.face(shown.faces[i], artSize, 1.0) : QPixmap();
+        art.face = !art.pixmap.isNull();
 
-        if(art.isNull())
-            art = renderer.back(artSize, artRatio);
+        if(!art.face)
+            art.pixmap = renderer.back(artSize, 1.0);
 
         arts.push_back(art);
     }
@@ -261,14 +297,20 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        if(!arts[i].isNull())
+        if(!arts[i].pixmap.isNull())
             silhouette.addPath(cardTransform(count, i).map(body));
     }
 
     silhouette.addPath(railBody);
     silhouette.setFillRule(Qt::WindingFill);
 
-    shadows::drawShapeShadow(painter, silhouette, rowShadowOffset, rowShadowBlur, palette.rackShadow);
+    // BENEATH, NOT CUT AWAY: CSS's drop-shadow filter composites the row's shadow
+    // under it, and the cards and the rail are opaque and painted straight over it.
+    // Cut out under them, each anti-aliased edge pixel got the shadow twice reduced,
+    // and a light seam showed round every card (PHASE5_REVIEW_FINDINGS.md #1). The
+    // rail's own shadow below is a CSS box-shadow, which CSS does cut, and stays so.
+    shadows::drawShapeShadow(painter, silhouette, rowShadowOffset, rowShadowBlur, palette.rackShadow,
+                             shadows::Side::Beneath);
 
     // EACH CARD, later ones over earlier, as the mock-up's DOM order stacks them.
 
@@ -285,17 +327,15 @@ rackitem::Picture rackitem::render(const Shown& shown, const Theme::TablePalette
 
     for(std::size_t i = 0 ; i < count ; i++)
     {
-        QPixmap& art = arts[i];
+        const QPixmap& art = arts[i].pixmap;
 
         if(art.isNull())
             continue;
 
         // A BRUSH OVER THE CARD'S ROUNDED RECT, not a blit: a fill keeps the edge
         // anti-aliased under the projective transform, and a clip would not.
-        art.setDevicePixelRatio(1.0);
-
         QBrush brush(art);
-        brush.setTransform(QTransform::fromScale(size.width() / art.width(), size.height() / art.height()));
+        brush.setTransform(artTransform(QSizeF(art.size()), arts[i].face));
 
         painter.save();
         painter.setTransform(cardTransform(count, i), true);
@@ -363,7 +403,7 @@ void RackItem::setRack(const SeatView& seat, const Theme& theme)
 
     showing = now;
     palette = theme.table;
-    stale = true;
+    memo.invalidate();
     update();
 }
 
@@ -376,9 +416,9 @@ void RackItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 {
     // At the pixels it lands on - or, while a resize settles, at the scale it
     // began from, so the cached rack is drawn scaled rather than composed again.
-    const QPixmap rack = picture(devicepixels::effectiveRatio(*painter));
+    const rackitem::Picture& rack = composedAt(devicepixels::effectiveRatio(*painter));
 
-    if(rack.isNull())
+    if(rack.pixmap.isNull())
         return;
 
     // ON A WHOLE DEVICE PIXEL. The picture's corner is whole only in the rack's own
@@ -387,23 +427,22 @@ void RackItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // pixel, and the filter samples each at its centre. Turned any other way it is
     // filtered after all, as every played card is.
     painter->setRenderHint(QPainter::SmoothPixmapTransform);
-    painter->drawPixmap(devicepixels::snapped(*painter, composed.offset), rack);
+    painter->drawPixmap(devicepixels::snapped(*painter, rack.offset), rack.pixmap);
 }
 
 QPixmap RackItem::picture(qreal ratio) const
 {
+    return composedAt(ratio).pixmap;
+}
+
+const rackitem::Picture& RackItem::composedAt(qreal ratio) const
+{
+    static const rackitem::Picture none;
+
     if(ratio <= 0.0 || !renderer)
-        return QPixmap();
+        return none;
 
-    const int key = devicepixels::ratioKey(ratio);
-
-    if(stale || composedRatio != key)
-    {
-        composed = racks->picture(showing, palette, ratio, *renderer);
-        composedRatio = key;
-        stale = false;
-        composedCount++;
-    }
-
-    return composed.pixmap;
+    // A rack with no cards is a null picture, which the memo keeps asking for - at
+    // the cost of the cache's first line, which returns it at once.
+    return memo.picture(ratio, [&] { return racks->picture(showing, palette, ratio, *renderer); });
 }
