@@ -3,7 +3,8 @@
 What an `xhigh` `/code-review` of PR #30 ("racks on the rim") found after the PR had been merged.
 Nothing here crashed or broke a test.
 
-**All twelve are fixed.**
+**All twelve are fixed.** A second review, of the PR that fixed them, found eleven more:
+[#13–#23](#second-review-pr-32), all fixed as well.
 - #11 was fixed in phase 6's review round (`bbff23d`).
 - The other eleven were fixed on `redesign/phase-5-review-fixes`, one commit each. #3 and #12
   share one.
@@ -294,3 +295,152 @@ changes. `SeatItem` had it first (`SeatItem.h:210`).
 
 **Fix:** one small helper that holds the cached picture, the ratio it was made at and the stale
 flag, used by all four items.
+
+# Second review (PR #32)
+
+An `xhigh` `/code-review` of PR #32, the branch that fixed #1–#12, found eleven more. They are
+numbered on from #12 so a comment can name one without saying which review it came from. Line
+numbers are for `07bce0e`, the PR's head when it was reviewed.
+
+**All eleven are fixed** on `redesign/phase-5-review-fixes`, one commit each.
+- **Tests:** #13, #14, #15, #18 and #20's own fix have tests that were run against the old code
+  and failed there. #16's new assertions don't compile against the old code: the type is the fix.
+  #17, #19, #21, #22 and #23 change only how the code reads or how fast it runs. The existing
+  tests cover them.
+- **The screenshots are pixel-identical** to `07bce0e`'s, all six of them.
+- **#13 and #14 undid part of #3's fix.** #3 and #12 put the null-picture rule into
+  `PictureMemo`, but the cache behind the memo still held a null (#13). The memo also dropped a
+  good picture for a null one (#14).
+
+| # | Finding | Sev. | Cplx. | Status |
+|---|---|---|---|---|
+| 13 | [The picture cache holds a null picture](#13-the-picture-cache-holds-a-null-picture) | 3 | 1 | Fixed (`1845035`) |
+| 14 | [A null composition replaces the memo's picture](#14-a-null-composition-replaces-the-memos-picture) | 2 | 2 | Fixed (`e6c508f`) |
+| 15 | [The cache drops the oldest, not the least recently used](#15-the-cache-drops-the-oldest-not-the-least-recently-used) | 2 | 1 | Fixed (`dc1dc3a`) |
+| 16 | [The human's seat still has a rack angle of 0](#16-the-humans-seat-still-has-a-rack-angle-of-0) | 2 | 3 | Fixed (`4e27f4e`) |
+| 17 | [The `setRotation()` guard is copied three times](#17-the-setrotation-guard-is-copied-three-times) | 1 | 1 | Fixed (`829b151`) |
+| 18 | [The table top keeps its own memo and repaints on every theme](#18-the-table-top-keeps-its-own-memo-and-repaints-on-every-theme) | 2 | 2 | Fixed (`bdfe4de`) |
+| 19 | [A shadow beneath its shape fills a buffer of zeros](#19-a-shadow-beneath-its-shape-fills-a-buffer-of-zeros) | 2 | 2 | Fixed (`79cad7f`) |
+| 20 | [A test's lambda writes to a list destroyed before its scene](#20-a-tests-lambda-writes-to-a-list-destroyed-before-its-scene) | 1 | 1 | Fixed (`268b587`) |
+| 21 | [The plan names the removed seat form of `rackAngle()`](#21-the-plan-names-the-removed-seat-form-of-rackangle) | 1 | 1 | Fixed (`4c46f3d`) |
+| 22 | [`RackItem::compositions()`'s comment doesn't match its count](#22-rackitemcompositionss-comment-doesnt-match-its-count) | 1 | 1 | Fixed (`4fb7431`) |
+| 23 | [A rack's art and face flags are parallel vectors](#23-a-racks-art-and-face-flags-are-parallel-vectors) | 1 | 1 | Fixed (`3fb14fb`) |
+
+**How they were fixed, in order:** the picture rules first (#13, #14, #15, then #22, whose comment
+depends on them). Then the quick ones (#23, #20, #17, #19). Then #18, and #16 before #21, whose
+doc names #16's new type.
+
+## 13. The picture cache holds a null picture
+
+`src/paint/PictureCache.h:52`. Severity 3, complexity 1.
+
+**Fixed** in `1845035`: a null render is returned but not held or counted, so the next request
+renders again. Test: "A null picture is never held".
+
+`PictureCache` stored whatever `render()` returned. A rack whose render failed once, for example
+a canvas that failed to allocate, was handed that null by the cache on every later paint, so the
+memo's "never keep a null" rule could not help. The rack drew nothing until the ratio or palette
+changed. The same held for the panels and the card shadows.
+
+## 14. A null composition replaces the memo's picture
+
+`src/paint/PictureMemo.h:40`. Severity 2, complexity 2.
+
+**Fixed** in `e6c508f`: a null leaves the held picture, its ratio and its stale flag alone. A
+stale picture is still never handed back. Test: "A null picture leaves the one kept alone".
+
+A paint at a degenerate ratio of 0 replaced SeatItem's composed panel with a null, so the next
+paint at the real ratio composed the portrait and text again. Before #12, SeatItem's own memo kept
+its picture.
+
+## 15. The cache drops the oldest, not the least recently used
+
+`src/paint/PictureCache.h:50`. Severity 2, complexity 1.
+
+**Fixed** in `dc1dc3a`: a hit moves its entry to the back, so the front, which is dropped, is the
+least recently asked for. Test: "A full cache drops the picture least recently asked for".
+
+With #10's fix, a full cache dropped the picture drawn first. A run of one-card Forehead rounds
+could then evict the rack backs, which are asked for every frame, before faces that are never seen
+again.
+
+## 16. The human's seat still has a rack angle of 0
+
+`src/table/SeatLayout.h:94`. Severity 2, complexity 3.
+
+**Fixed** in `4e27f4e`: `Place::angle` and `rackAngle(QRectF)` are `std::optional<qreal>`, empty
+for the human's seat and for an empty panel. `human` stays, and `human == !angle`. Tests: the
+`place()` case checks the human's seat has no angle, and "An empty panel has no rack angle".
+
+#5 removed the seat form of `rackAngle()`, but `Place::angle` was still 0 for your own seat, and
+`rackAngle()` returned 0 for an empty panel. 0 is the right-hand seat's real angle, so a caller that
+forgot to check `human` got a valid-looking rack angle.
+
+## 17. The `setRotation()` guard is copied three times
+
+`src/table/TableScene.cpp:197`, `TrickItem.cpp:128`, `LeadMarkItem.cpp:70`. Severity 1,
+complexity 1.
+
+**Fixed** in `829b151`: `src/table/Turn.h`'s `turnTo()` holds the guard and the reason for it, and
+all three items turn through it.
+
+#8's fix wrote the same guard into each of the three. The next item turned from a snapshot would
+have needed a fourth copy, or brought back the repaint.
+
+## 18. The table top keeps its own memo and repaints on every theme
+
+`src/table/TableTopItem.h:76`. Severity 2, complexity 2.
+
+**Fixed** in `bdfe4de`: `TableTopItem` keeps its picture in a `PictureMemo`, and `setTheme()`
+invalidates and repaints only when `theme.table` changes. Test: "Switching between light and dark
+repaints nothing".
+
+It was the fifth copy of the memo logic that #12 removed from the other four. And while it kept
+its picture across a light/dark flip, its `setTheme()` called `update()` every time, so a flip
+repainted the whole felt for nothing.
+
+## 19. A shadow beneath its shape fills a buffer of zeros
+
+`src/paint/Shadows.cpp:219`. Severity 2, complexity 2.
+
+**Fixed** in `79cad7f`: beneath, the hole is an empty vector, read as uncovered everywhere.
+
+For `Side::Beneath`, `drawShapeShadow()` allocated and zero-filled a float buffer the size of the
+whole picture, only to multiply every pixel by 1 − 0. That happened on every rack render.
+
+## 20. A test's lambda writes to a list destroyed before its scene
+
+`tests/TableSceneTests.cpp:914`. Severity 1, complexity 1.
+
+**Fixed** in `268b587`: `repainted` is declared before the scene, so it outlives the connection.
+
+The lambda connected to `QGraphicsScene::changed` captured `repainted` by reference, and
+`repainted` was declared after the scene, so it was destroyed first. The review suggested a
+context object, but the only one to hand is the scene, which would still outlive the list. Moving
+the declaration is the fix. #18's new test is written the same way.
+
+## 21. The plan names the removed seat form of `rackAngle()`
+
+`docs/ui-redesign/IMPLEMENTATION_PLAN.md:866`. Severity 1, complexity 1.
+
+**Fixed** in `4c46f3d`: the plan reads a seat's angle from `seatlayout::place()->angle`, and says
+it is empty for your own seat.
+
+## 22. `RackItem::compositions()`'s comment doesn't match its count
+
+`src/table/RackItem.h:192`. Severity 1, complexity 1.
+
+**Fixed** in `4fb7431`: the comment says it counts the pictures the rack took, and not a request
+that came back null.
+
+It said "how many times this rack has asked for a new picture", but `PictureMemo` counts only
+pictures that aren't null. A rack with no cards asks on every paint, and the count stays still.
+
+## 23. A rack's art and face flags are parallel vectors
+
+`src/table/RackItem.cpp:273`. Severity 1, complexity 1.
+
+**Fixed** in `3fb14fb`: one vector of `{ pixmap, face }`.
+
+`arts` and `std::vector<bool> faceUp` had to be kept the same length and order by hand, and a
+slip would have laid a face unturned or a back turned.
