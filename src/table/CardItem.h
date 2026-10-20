@@ -57,14 +57,24 @@ public:
     // AND NEVER RECOMPUTES IT - that is the engine's own ranking, so the
     // highlight cannot disagree with the winner it eventually declares.
     //
-    // `shadows` is the picture cache every played card shares, owned with the
-    // renderer, which outlives the item. A card in your hand is never set
-    // played, and casts nothing.
+    // `shadows` is the picture cache every card that casts a shadow shares, owned
+    // with the renderer, which outlives the item.
     void setPlayed(bool winning, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
 
-    // What setPlayed() last said. READ-ONLY and for tests.
-    bool isPlayed() const { return played; }
-    bool isWinning() const { return winning; }
+    // A CARD IN YOUR HAND (section 2.8): it casts the hand's shadow, and raised -
+    // the playable card under the cursor - it rises toward its own top, ringed in
+    // gold-bright and glowing. THE RISE IS DRAWN, NOT A MOVE: the item stays where
+    // the fan put it and turned as the fan turned it, so the card rises along its
+    // own tilt, and what lies under the cursor is still decided by where the card
+    // rests (HandItem).
+    void setHeld(bool raised, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
+
+    // What setPlayed() or setHeld() last said: READ-ONLY and for tests. None for a
+    // card set neither, which casts nothing.
+    std::optional<cardshadow::Look> look() const { return cast; }
+    bool isPlayed() const { return cast == cardshadow::Look::Played || cast == cardshadow::Look::Winning; }
+    bool isWinning() const { return cast == cardshadow::Look::Winning; }
+    bool isRaised() const { return cast == cardshadow::Look::Raised; }
 
     // Darkened and dulled (CardRenderer::State::Dimmed), baked into the cached
     // pixmap by CardRenderer rather than applied here, so this stays a blit.
@@ -97,11 +107,12 @@ private:
     // rather than on every paint.
     const cardshadow::Picture& shadow(QSizeF size, qreal ratio) const;
 
-    // On the felt, and the trick's winner. The colours are the shadow's and the
-    // ring's - four of the table's, not all of them - and the cache is where
-    // their picture comes from.
-    bool played = false;
-    bool winning = false;
+    // What it casts: on the felt or in your hand, and how. The colours are the
+    // shadows', the glows' and the ring's - a few of the table's, not all of
+    // them - and the cache is where their picture comes from.
+    void setCast(cardshadow::Look look, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
+
+    std::optional<cardshadow::Look> cast;
     cardshadow::Colours colours;
     cardshadow::Cache* shadows = nullptr;
 

@@ -1,14 +1,20 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "CardStringMaker.h"
 #include "GameFixtures.h"
 
 #include "paint/CardRenderer.h"
+#include "paint/CardShadow.h"
+#include "paint/Shadows.h"
+#include "paint/Theme.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
 
 #include <QGraphicsScene>
 #include <QGraphicsSceneMouseEvent>
+#include <QImage>
+#include <QMarginsF>
 #include <QObject>
 #include <QPointF>
 #include <QString>
@@ -368,6 +374,112 @@ TEST_CASE("The same snapshot hand twice does not rebuild the fan", "[hand]")
 
     for(CardItem* card : fan.cards())
         REQUIRE(card->data(0).toString().isEmpty());
+}
+
+// ---- what a card in your hand casts (section 2.8) ----
+//
+// page.html's .hcard .face: a shadow down and to the left at rest, and under the
+// cursor a deeper one below, a glow and the gold-bright ring, the card risen 30
+// along its own tilt.
+
+TEST_CASE("A card in your hand casts its shadow down and to the left", "[hand]")
+{
+    // -3px 4px 10px: the blur reaches as far as shadows::reach(10) round a shadow
+    // moved 3 left and 4 down, and a unit more for the anti-aliased edge.
+    const qreal blur = shadows::reach(10.0);
+    const QMarginsF reach = cardshadow::reach(cardshadow::Look::Held);
+
+    REQUIRE(reach.left() == Catch::Approx(blur + 3.0 + 1.0));
+    REQUIRE(reach.top() == Catch::Approx(blur - 4.0 + 1.0));
+    REQUIRE(reach.right() == Catch::Approx(blur - 3.0 + 1.0));
+    REQUIRE(reach.bottom() == Catch::Approx(blur + 4.0 + 1.0));
+
+    // It does not rise: only the card under the cursor does.
+    REQUIRE(cardshadow::lift(cardshadow::Look::Held) == 0.0);
+
+    // And nothing under the card: CSS clips an outer shadow to outside the element.
+    const Theme theme = Theme::dark();
+    const cardshadow::Picture picture =
+        cardshadow::render(QSizeF(155.0, 225.0), cardshadow::Look::Held, cardshadow::colours(theme.table), 1.0);
+
+    REQUIRE_FALSE(picture.pixmap.isNull());
+    REQUIRE(qAlpha(picture.pixmap.toImage().pixel((-picture.offset).toPoint())) == 0);
+}
+
+TEST_CASE("A raised card in your hand rises 30 and glows inside the ring", "[hand]")
+{
+    REQUIRE(cardshadow::lift(cardshadow::Look::Raised) == 30.0);
+
+    // 0 0 22px of glow on every side, the 0 14px 22px shadow further below, and a
+    // unit for the edge. The 2px ring is inside the glow's reach.
+    const qreal blur = shadows::reach(22.0);
+    const QMarginsF reach = cardshadow::reach(cardshadow::Look::Raised);
+
+    REQUIRE(reach.left() == Catch::Approx(blur + 1.0));
+    REQUIRE(reach.top() == Catch::Approx(blur + 1.0));
+    REQUIRE(reach.right() == Catch::Approx(blur + 1.0));
+    REQUIRE(reach.bottom() == Catch::Approx(blur + 14.0 + 1.0));
+
+    // The ring is filled through under the card, as the winner's is, so the art
+    // meets one edge.
+    const Theme theme = Theme::dark();
+    const cardshadow::Picture picture =
+        cardshadow::render(QSizeF(155.0, 225.0), cardshadow::Look::Raised, cardshadow::colours(theme.table), 1.0);
+
+    REQUIRE_FALSE(picture.pixmap.isNull());
+    REQUIRE(picture.pixmap.toImage().pixelColor((-picture.offset).toPoint()) == theme.table.goldBright);
+}
+
+TEST_CASE("A card in your hand reaches as far as its look", "[hand]")
+{
+    // CardItem's rect is what the scene repaints and clips to, so it has to hold the
+    // shadow, and for the raised card the rise as well.
+    CardRenderer renderer;
+    cardshadow::Cache shadows;
+    const Theme theme = Theme::dark();
+
+    CardItem card(&renderer);
+    card.setCardHeight(225.0);
+    card.setFace(SpadesAce);
+
+    const QSizeF size = card.cardSize();
+    const QRectF body(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+
+    card.setHeld(false, theme.table, &shadows);
+
+    REQUIRE_FALSE(card.isRaised());
+    REQUIRE_FALSE(card.isPlayed());
+    REQUIRE(card.look() == cardshadow::Look::Held);
+    REQUIRE(card.boundingRect() == body.marginsAdded(cardshadow::reach(cardshadow::Look::Held)));
+
+    card.setHeld(true, theme.table, &shadows);
+
+    REQUIRE(card.isRaised());
+    REQUIRE(card.boundingRect()
+            == body.translated(0.0, -30.0).marginsAdded(cardshadow::reach(cardshadow::Look::Raised)));
+}
+
+TEST_CASE("Your hand's shadows are pictures of their own in the shared cache", "[hand]")
+{
+    // One cache for the felt and the hand, as TableScene owns it: the hand's two
+    // looks are two more pictures, never a played card's handed back.
+    const Theme theme = Theme::dark();
+    const cardshadow::Colours colours = cardshadow::colours(theme.table);
+    cardshadow::Cache shadows;
+
+    const QSizeF hand(155.0, 225.0);
+
+    shadows.picture(QSizeF(141.0, 205.0), cardshadow::Look::Played, colours, 1.0);
+    shadows.picture(hand, cardshadow::Look::Held, colours, 1.0);
+    shadows.picture(hand, cardshadow::Look::Raised, colours, 1.0);
+
+    REQUIRE(shadows.renders() == 3);
+
+    // Eight cards at rest share the one.
+    for(int i = 0 ; i < 8 ; i++)
+        shadows.picture(hand, cardshadow::Look::Held, colours, 1.0);
+
+    REQUIRE(shadows.renders() == 3);
 }
 
 // ---- the answer the seated-game tests play with ----

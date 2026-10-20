@@ -260,6 +260,13 @@ struct ThemeColours
         QColor winningShadow;
         QColor winningGlow;
 
+        // THE CARDS IN YOUR HAND (section 2.8), added in the redesign's phase 7.
+        // Each casts a shadow down and to the left; raised under the cursor, it
+        // casts a deeper one and glows inside the winner's gold-bright ring.
+        QColor heldShadow;
+        QColor raisedShadow;
+        QColor raisedGlow;
+
         // The lead rhombus: gold-bright, with a dark hairline round it and a glow.
         QColor leadMarkOutline;
         QColor leadMarkGlow;

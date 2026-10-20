@@ -226,6 +226,14 @@ Theme::TablePalette tablePalette()
     table.winningShadow = rgba(0, 0, 0, 0.5);
     table.winningGlow = rgba(242, 211, 140, 0.55);
 
+    // Section 2.8, from page.html's .hcard. .hcard .face: box-shadow -3px 4px 10px
+    // rgba(0, 0, 0, 0.45). Raised under the cursor, .hcard.playable:hover .face:
+    // 0 0 0 2px gold-bright, 0 0 22px rgba(242, 211, 140, 0.7), 0 14px 22px
+    // rgba(0, 0, 0, 0.5).
+    table.heldShadow = rgba(0, 0, 0, 0.45);
+    table.raisedShadow = rgba(0, 0, 0, 0.5);
+    table.raisedGlow = rgba(242, 211, 140, 0.7);
+
     // .leadpip: background gold-bright, box-shadow 0 0 0 1px rgba(60, 40, 10, 0.5),
     // 0 0 10px rgba(242, 211, 140, 0.8).
     table.leadMarkOutline = rgba(60, 40, 10, 0.5);

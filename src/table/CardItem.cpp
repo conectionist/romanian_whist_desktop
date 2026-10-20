@@ -46,17 +46,26 @@ void CardItem::setCardHeight(qreal height)
 
 void CardItem::setPlayed(bool isWinning, const Theme::TablePalette& palette, cardshadow::Cache* cache)
 {
-    const cardshadow::Colours cast = cardshadow::colours(palette);
+    setCast(isWinning ? cardshadow::Look::Winning : cardshadow::Look::Played, palette, cache);
+}
 
-    if(played && winning == isWinning && colours == cast && shadows == cache)
+void CardItem::setHeld(bool raised, const Theme::TablePalette& palette, cardshadow::Cache* cache)
+{
+    setCast(raised ? cardshadow::Look::Raised : cardshadow::Look::Held, palette, cache);
+}
+
+void CardItem::setCast(cardshadow::Look look, const Theme::TablePalette& palette, cardshadow::Cache* cache)
+{
+    const cardshadow::Colours wanted = cardshadow::colours(palette);
+
+    if(cast == look && colours == wanted && shadows == cache)
         return;
 
-    // The shadow lives outside the card, and the winner rises, so either changes
-    // the bounding rect as much as a resize does.
+    // The shadow lives outside the card, and the winner and a raised card rise, so
+    // any of these changes the bounding rect as much as a resize does.
     prepareGeometryChange();
-    played = true;
-    winning = isWinning;
-    colours = cast;
+    cast = look;
+    colours = wanted;
     shadows = cache;
     shadowMemo.invalidate();
     update();
@@ -88,13 +97,12 @@ QRectF CardItem::boundingRect() const
 
     const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 
-    if(!played)
+    if(!cast)
         return card;
 
-    // The shadow's whole reach, and the winner's lift, so the scene neither clips
-    // the highlight nor leaves a trail behind a card that moves.
-    return card.translated(0.0, winning ? -cardshadow::winningLift : 0.0)
-        .marginsAdded(cardshadow::reach(winning));
+    // The shadow's whole reach, and the rise, so the scene neither clips the
+    // highlight nor leaves a trail behind a card that moves.
+    return card.translated(0.0, -cardshadow::lift(*cast)).marginsAdded(cardshadow::reach(*cast));
 }
 
 void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -125,10 +133,11 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 
     // THE WINNER RISES toward its own top, which on every seat's card points at
-    // the table's centre - its shadow, glow and ring with it, as they are CSS
-    // box-shadows on the element that moves.
-    if(played && winning)
-        painter->translate(0.0, -cardshadow::winningLift);
+    // the table's centre, and so does a raised card in your hand, along its tilt -
+    // the shadow, glow and ring with them, as they are CSS box-shadows on the
+    // element that moves.
+    if(cast)
+        painter->translate(0.0, -cardshadow::lift(*cast));
 
     // ONE SNAPPED CORNER FOR THE ART AND ITS SHADOW. Each is a picture of its own,
     // and a blit rounds its own origin; laid separately at a fraction of a pixel
@@ -141,7 +150,7 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
     // Under the card: one cached picture, turned with the card by the item's
     // rotation, so the shadow falls toward the card's own bottom.
-    if(played && shadows)
+    if(cast && shadows)
     {
         const cardshadow::Picture& cast = shadow(size, dpr);
 
@@ -162,5 +171,5 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
 
 const cardshadow::Picture& CardItem::shadow(QSizeF size, qreal ratio) const
 {
-    return shadowMemo.picture(ratio, [&] { return shadows->picture(size, winning, colours, ratio); });
+    return shadowMemo.picture(ratio, [&] { return shadows->picture(size, *cast, colours, ratio); });
 }

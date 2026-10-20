@@ -625,8 +625,8 @@ TEST_CASE("A rhombus with nowhere to go is hidden", "[trick]")
 
 TEST_CASE("A played card's shadow reaches further when it wins", "[trick]")
 {
-    const QMarginsF plain = cardshadow::reach(false);
-    const QMarginsF winning = cardshadow::reach(true);
+    const QMarginsF plain = cardshadow::reach(cardshadow::Look::Played);
+    const QMarginsF winning = cardshadow::reach(cardshadow::Look::Winning);
 
     // Both fall toward the card's own bottom, so they reach furthest there.
     REQUIRE(plain.bottom() > plain.top());
@@ -645,22 +645,23 @@ TEST_CASE("Played cards share their shadow pictures", "[trick]")
 
     const QSizeF size(141.0, 205.0);
 
-    const cardshadow::Picture first = shadows.picture(size, false, cardshadow::colours(theme.table), 1.0);
+    const cardshadow::Picture first =
+        shadows.picture(size, cardshadow::Look::Played, cardshadow::colours(theme.table), 1.0);
 
     REQUIRE_FALSE(first.pixmap.isNull());
     REQUIRE(shadows.renders() == 1);
 
     // Asked again, by another card: the same picture.
-    shadows.picture(size, false, cardshadow::colours(theme.table), 1.0);
+    shadows.picture(size, cardshadow::Look::Played, cardshadow::colours(theme.table), 1.0);
     REQUIRE(shadows.renders() == 1);
 
     // The winner's is its own, and a second size is too.
-    shadows.picture(size, true, cardshadow::colours(theme.table), 1.0);
-    shadows.picture(QSizeF(125.0, 181.0), false, cardshadow::colours(theme.table), 1.0);
+    shadows.picture(size, cardshadow::Look::Winning, cardshadow::colours(theme.table), 1.0);
+    shadows.picture(QSizeF(125.0, 181.0), cardshadow::Look::Played, cardshadow::colours(theme.table), 1.0);
     REQUIRE(shadows.renders() == 3);
 
     // A new ratio starts again.
-    shadows.picture(size, false, cardshadow::colours(theme.table), 2.0);
+    shadows.picture(size, cardshadow::Look::Played, cardshadow::colours(theme.table), 2.0);
     REQUIRE(shadows.renders() == 4);
 }
 
@@ -669,11 +670,12 @@ TEST_CASE("The shadow picture reaches past the card, furthest below it", "[trick
     const Theme theme = Theme::dark();
     const QSizeF size(141.0, 205.0);
 
-    for(const bool winning : { false, true })
+    for(const cardshadow::Look look : { cardshadow::Look::Played, cardshadow::Look::Winning })
     {
+        const bool winning = look == cardshadow::Look::Winning;
         INFO("winning " << winning);
 
-        const cardshadow::Picture picture = cardshadow::render(size, winning, cardshadow::colours(theme.table), 1.0);
+        const cardshadow::Picture picture = cardshadow::render(size, look, cardshadow::colours(theme.table), 1.0);
         REQUIRE_FALSE(picture.pixmap.isNull());
 
         const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
@@ -703,7 +705,8 @@ TEST_CASE("The winner's ring has no inner edge for the felt to show through", "[
     const QSizeF size(141.0, 205.0);
     const qreal ratio = 0.78;
 
-    const cardshadow::Picture picture = cardshadow::render(size, true, cardshadow::colours(theme.table), ratio);
+    const cardshadow::Picture picture =
+        cardshadow::render(size, cardshadow::Look::Winning, cardshadow::colours(theme.table), ratio);
     const QImage image = picture.pixmap.toImage();
 
     const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
@@ -741,11 +744,12 @@ TEST_CASE("A played card's shadow lies whole pixels from the card's corner", "[t
     const qreal ratio = 0.78;
     const QPointF cardCorner(-size.width() / 2.0, -size.height() / 2.0);
 
-    for(const bool winning : { false, true })
+    for(const cardshadow::Look look : { cardshadow::Look::Played, cardshadow::Look::Winning })
     {
-        INFO("winning " << winning);
+        INFO("winning " << (look == cardshadow::Look::Winning));
 
-        const cardshadow::Picture picture = cardshadow::render(size, winning, cardshadow::colours(theme.table), ratio);
+        const cardshadow::Picture picture =
+            cardshadow::render(size, look, cardshadow::colours(theme.table), ratio);
         const QPointF steps = (picture.offset - cardCorner) * ratio;
 
         REQUIRE(steps.x() == Catch::Approx(std::round(steps.x())).margin(1e-9));
