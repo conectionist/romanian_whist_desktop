@@ -3,6 +3,7 @@
 #include "paint/DevicePixels.h"
 #include "paint/Shadows.h"
 #include "table/TableSpace.h"
+#include "table/Turn.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -66,9 +67,7 @@ void LeadMarkItem::setMark(std::optional<trickitem::Placement> place, const Them
     }
 
     setPos(place->centre);
-    // Only when it turns: setRotation() repaints even for the angle it already has.
-    if(rotation() != place->rotation)
-        setRotation(place->rotation);
+    turnTo(*this, place->rotation);
     show();
 }
 

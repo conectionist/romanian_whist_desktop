@@ -9,6 +9,7 @@
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
 #include "table/TrickItem.h"
+#include "table/Turn.h"
 
 #include <algorithm>
 
@@ -189,13 +190,7 @@ void TableScene::relayout()
         }
 
         rack->setPos(seatlayout::rackOrigin(place->angle));
-        // ONLY WHEN IT TURNS: setRotation() repaints the rack's whole area even for
-        // the angle it already has (PHASE5_REVIEW_FINDINGS.md #8), and this runs on
-        // every snapshot.
-        const qreal turn = rackitem::frameRotation(place->angle);
-
-        if(rack->rotation() != turn)
-            rack->setRotation(turn);
+        turnTo(*rack, rackitem::frameRotation(place->angle));
         rack->setRack(snapshot->seats[i], theme);
         rack->show();
     }

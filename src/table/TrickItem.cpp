@@ -4,6 +4,7 @@
 #include "table/RackItem.h"
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
+#include "table/Turn.h"
 
 trickitem::Placement trickitem::cardPlacement(unsigned int seatCount, const seatlayout::Place& place)
 {
@@ -123,10 +124,7 @@ void TrickItem::setTrick(const GameSnapshot& snapshot, const seatlayout::Places&
         const trickitem::Placement place = trickitem::cardPlacement(seatCount, **seat);
 
         item->setPos(place.centre);
-        // Only when it turns, as TableScene does for the racks: setRotation()
-        // repaints the card and its shadow even for the angle it already has.
-        if(item->rotation() != place.rotation)
-            item->setRotation(place.rotation);
+        turnTo(*item, place.rotation);
 
         // THE HIGHLIGHT IS isWinning AND IS NEVER RECOMPUTED. It is the engine's
         // own ranking of a partly played trick, filled from
