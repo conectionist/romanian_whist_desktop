@@ -137,6 +137,22 @@ inline constexpr qreal rackCardHeight = 90.0;
 // hand - which section 2.8 intends.
 inline constexpr QRectF bottomPanel(618.0, 1046.0, 300.0, 118.0);
 
+// THE CORNER PANELS (sections 2.1 and 2.9 to 2.11): the scoreboard top-left, the
+// trick panel top-right, the two buttons bottom-left. PINNED TO THE WINDOW, NOT TO
+// TABLE SPACE - each this many device-independent pixels in from its corner of
+// the viewport, whose top is already under the menu bar - and drawn at the
+// table's scale, so they grow and shrink with it. TableScene::pinHud() places
+// them; table.js fit() is where the mock-up does.
+inline constexpr qreal hudInset = 8.0;
+
+// The scoreboard and the trick panel are drawn this much larger than the table
+// (page.html's transform: scale(1.2)); the buttons at the table's own scale.
+inline constexpr qreal hudScale = 1.2;
+
+// Between the two buttons: the mock-up puts Last trick 228 right of Round history,
+// which is 214 wide.
+inline constexpr qreal buttonGap = 14.0;
+
 // The scale that fits the box, margins and all, into a viewport of this size -
 // table.js fit()'s `scale`. Zero when the viewport has no room left inside its
 // margins, which a caller reads as "leave the transform alone".
@@ -166,9 +182,8 @@ struct Placement
 // no two files can disagree about what is drawn over what.
 //
 // GAPS OF TEN, so a later phase adds its rung without renumbering the others. The
-// pinned panels arrive in phase 8. The bid strip and the modal sheets are widgets
-// over the viewport until phases 8 and 10, and so above all of these by
-// construction.
+// bid strip and the modal sheets are widgets over the viewport until phase 10,
+// and so above all of these by construction.
 //
 // The room is not here: it is the view's background, beneath every item.
 namespace z
@@ -190,6 +205,9 @@ inline constexpr qreal hand = 40.0;
 inline constexpr qreal humanPanel = 50.0;
 
 inline constexpr qreal panels = 60.0;
+
+// The corner panels, over everything on the table: in a window too narrow for
+// them they overlap a seat's panel, and they are the ones being read.
 inline constexpr qreal hud = 70.0;
 
 } // namespace z

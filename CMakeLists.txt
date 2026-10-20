@@ -115,6 +115,8 @@ qt_add_library(desktop_core STATIC
     src/table/LeadMarkItem.cpp
     src/table/HandItem.h
     src/table/HandItem.cpp
+    src/table/TableButtonItem.h
+    src/table/TableButtonItem.cpp
     src/table/TableScene.h
     src/table/TableScene.cpp
     src/table/TableView.h

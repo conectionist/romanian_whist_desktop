@@ -19,6 +19,7 @@
 class HandItem;
 class LeadMarkItem;
 class SeatItem;
+class TableButtonItem;
 class TableTopItem;
 class TrickItem;
 
@@ -104,6 +105,20 @@ public:
     // The lead rhombus, READ-ONLY and for tests in the same way.
     const LeadMarkItem* leadMarkItem() const { return leadMark; }
 
+    // PINS THE CORNER PANELS TO THE WINDOW (section 2.1): `visible` is the part of
+    // the scene the viewport shows, in table space, and `scale` the view's pixels
+    // per table unit. Each panel goes tablespace::hudInset pixels in from its
+    // corner. TableView calls this on every fit, and nothing else moves when it
+    // does - the corner panels are the scene's only items that follow the window.
+    //
+    // NOT SHOWN UNTIL THERE IS SOMEWHERE TO PIN THEM AND A GAME TO SHOW: a scene
+    // drawn without a view, or a table with no snapshot yet, has no corner panels.
+    void pinHud(const QRectF& visible, qreal scale);
+
+    // Section 2.11's two buttons. Disabled until phase 11 gives them their sheets.
+    TableButtonItem* historyButton() const { return history; }
+    TableButtonItem* lastTrickButton() const { return lastTrick; }
+
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
@@ -114,6 +129,10 @@ private:
     // together. Six at most, and reused across games rather than rebuilt, for the
     // reason in the class comment.
     void ensureSeats(std::size_t count);
+
+    // Puts the corner panels where the last pinHud() said, or hides them while
+    // there is no pin or no game. See pinHud().
+    void placeHud();
 
     Theme theme = Theme::light();
 
@@ -153,6 +172,20 @@ private:
     // The human's fan. Built for every game, and hidden in a spectator one -
     // section 14: "the bottom hand area is not drawn at all".
     HandItem* hand = nullptr;
+
+    // The corner panels (tablespace::z::hud).
+    TableButtonItem* history = nullptr;
+    TableButtonItem* lastTrick = nullptr;
+
+    // Where pinHud() last said the viewport is: none before a view has fitted the
+    // table.
+    struct Pin
+    {
+        QRectF visible;
+        qreal scale = 0.0;
+    };
+
+    std::optional<Pin> pin;
 };
 
 #endif

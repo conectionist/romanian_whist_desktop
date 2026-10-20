@@ -114,7 +114,14 @@ void TableView::fitTable()
     // THIS VIEW'S scene rect, not the scene's, which stays the fit box: the
     // viewport itself, in table space. See the constructor for why that leaves
     // the translation above as the whole of where the table is drawn.
-    setSceneRect(transform.inverted().mapRect(QRectF(QPointF(0.0, 0.0), size)));
+    const QRectF visible = transform.inverted().mapRect(QRectF(QPointF(0.0, 0.0), size));
+
+    setSceneRect(visible);
+
+    // AND THE CORNER PANELS PINNED TO IT: the only items a resize moves, because
+    // they belong to the window's corners rather than to the table (section 2.1).
+    if(TableScene* table = tableScene())
+        table->pinHud(visible, scale);
 }
 
 // THE ROOM, over the whole viewport. The fit box keeps the table's shape, so a
