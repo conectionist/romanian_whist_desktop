@@ -24,11 +24,14 @@ namespace
 // is used. It is width over height, so a height multiplied by it is a width.
 constexpr qreal cardAspect = 167.0869141 / 242.6669922;
 
-// Section 18's illegal-card treatment: 45% opacity plus a SLIGHT desaturation.
-// Slight is the operative word - the alternative section 18 rejects by name is
-// grey-on-white, which at card size is a rectangle with no rank on it.
-constexpr qreal dimmedOpacity = 0.45;
-constexpr qreal dimmedDesaturation = 0.35;
+// AN ILLEGAL CARD, DARKENED: page.html's .hcard.illegal .face, filter:
+// brightness(0.55) saturate(0.55). The table redesign's phase 7 replaced section
+// 18's 45% opacity with it, the owner's decision of 2026-10-20: the cards in a
+// hand overlap by half, and a card you can see through shows the corner of the
+// one beneath it. Opaque, the card still reads as itself, only duller - which is
+// what section 18 asked of its "slight" desaturation, against grey-on-white.
+constexpr qreal dimmedBrightness = 0.55;
+constexpr qreal dimmedSaturation = 0.55;
 
 // 32 MB of rasterized cards, in the kilobyte units the costs below are given in.
 // A table draws at most the trick, one hand and a stack of backs at any moment,
@@ -148,17 +151,21 @@ QString filePath(Card card)
     return QStringLiteral(":/cards/%1_of_%2.svg").arg(rank, suit);
 }
 
-int towardGrey(int channel, int grey)
+// One channel through CSS's saturate() (Filter Effects, feColorMatrix
+// type="saturate"): it moves toward the pixel's luminance, keeping `amount` of its
+// own distance from it. The matrix's nine weights are this, multiplied out.
+int saturated(qreal own, qreal luminance, qreal amount)
 {
-    return qRound(channel * (1.0 - dimmedDesaturation) + grey * dimmedDesaturation);
+    return std::clamp(qRound(luminance + (own - luminance) * amount), 0, 255);
 }
 
 QImage dimmed(const QImage& source)
 {
-    // NOT premultiplied. Scaling the alpha of a premultiplied pixel without
-    // scaling its colour channels to match brightens it, which is the opposite
-    // of what dimming is for.
-    QImage image = source.convertToFormat(QImage::Format_ARGB32);
+    // PREMULTIPLIED IS FINE HERE, and it is what the art comes in: both filters are
+    // linear with no constant term, so filtering a premultiplied pixel gives the
+    // premultiplied filtered pixel. The alpha is left as it is - the card stays
+    // opaque, which is the point of the change.
+    QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
 
     for(int y = 0 ; y < image.height() ; y++)
     {
@@ -167,12 +174,20 @@ QImage dimmed(const QImage& source)
         for(int x = 0 ; x < image.width() ; x++)
         {
             const QRgb pixel = line[x];
-            const int grey = qGray(pixel);
 
-            line[x] = qRgba(towardGrey(qRed(pixel), grey),
-                            towardGrey(qGreen(pixel), grey),
-                            towardGrey(qBlue(pixel), grey),
-                            qRound(qAlpha(pixel) * dimmedOpacity));
+            // brightness() first, as the filter list is applied left to right. It
+            // only scales, so nothing goes out of range before saturate() clamps.
+            const qreal red = qRed(pixel) * dimmedBrightness;
+            const qreal green = qGreen(pixel) * dimmedBrightness;
+            const qreal blue = qBlue(pixel) * dimmedBrightness;
+
+            // The matrix's luminance weights.
+            const qreal luminance = 0.213 * red + 0.715 * green + 0.072 * blue;
+
+            line[x] = qRgba(saturated(red, luminance, dimmedSaturation),
+                            saturated(green, luminance, dimmedSaturation),
+                            saturated(blue, luminance, dimmedSaturation),
+                            qAlpha(pixel));
         }
     }
 

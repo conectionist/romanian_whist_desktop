@@ -204,7 +204,7 @@ void HandItem::rebuild()
         {
             item->setFace(entries[i].card);
 
-            // 45% opacity and a desaturation, baked into the cached pixmap by
+            // Darkened and dulled, baked into the cached pixmap by
             // CardRenderer. An illegal card is still SHOWN - a hand with cards
             // missing from it is a different hand - it is just not for clicking.
             item->setDimmed(!entries[i].legal);

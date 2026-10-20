@@ -66,8 +66,8 @@ public:
     bool isPlayed() const { return played; }
     bool isWinning() const { return winning; }
 
-    // 45% opacity plus a slight desaturation, baked into the cached pixmap by
-    // CardRenderer rather than applied here, so this stays a blit.
+    // Darkened and dulled (CardRenderer::State::Dimmed), baked into the cached
+    // pixmap by CardRenderer rather than applied here, so this stays a blit.
     void setDimmed(bool dimmed);
 
     // The card itself, in table units, from the art's aspect: empty without a

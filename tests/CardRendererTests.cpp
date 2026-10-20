@@ -252,12 +252,53 @@ TEST_CASE("A dimmed card is not the same image as a lit one", "[card-renderer]")
     const QPixmap dim = renderer.face(card, size, 1.0, CardRenderer::State::Dimmed);
 
     REQUIRE(fingerprint(lit) != fingerprint(dim));
+}
 
-    // And it is dimmer rather than merely different - the treatment is 45%
-    // opacity, so the card's own body must have lost alpha. The centre of a
-    // court card is inside the card body, where a lit card is fully opaque.
-    const QImage dimImage = dim.toImage().convertToFormat(QImage::Format_ARGB32);
-    REQUIRE(qAlpha(dimImage.pixel(dimImage.width() / 2, dimImage.height() / 2)) < 255);
+// THE MOCK-UP'S TREATMENT (page.html's .hcard.illegal .face): brightness(0.55)
+// then saturate(0.55), and the card as opaque as it was. Section 18 had it at 45%
+// opacity until the redesign's phase 7, and in a hand whose cards overlap by half
+// that showed the card beneath through it. Checked where the art is flat: the
+// white of the card, and the red of a heart.
+TEST_CASE("A dimmed card is darker and duller but still opaque", "[card-renderer]")
+{
+    const CardRenderer renderer;
+    const QSize size(167, 243);
+
+    // The Two of Hearts: white round its two pips, and a pip big enough to land on.
+    const Card card(Rank::Two, Suit::Hearts);
+
+    const QImage lit = renderer.face(card, size, 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+    const QImage dim = renderer.face(card, size, 1.0, CardRenderer::State::Dimmed)
+                           .toImage().convertToFormat(QImage::Format_ARGB32);
+
+    // A point on the card's white, a quarter of the way in from its left edge and
+    // half way down, between the pips.
+    const QPoint white(size.width() / 4, size.height() / 2);
+
+    REQUIRE(lit.pixelColor(white) == QColor(Qt::white));
+
+    // White is grey already, so saturate() leaves it: 255 x 0.55 is 140.25.
+    const QColor whiteDimmed = dim.pixelColor(white);
+
+    REQUIRE(whiteDimmed.alpha() == 255);
+    REQUIRE(whiteDimmed.red() == 140);
+    REQUIRE(whiteDimmed.green() == 140);
+    REQUIRE(whiteDimmed.blue() == 140);
+
+    // The top pip's middle. A red's channels draw together: the gap between its
+    // strongest and weakest is 0.55 x 0.55 of what it was, to a level either way.
+    const QPoint pip(size.width() / 2, size.height() / 5);
+    const QColor red = lit.pixelColor(pip);
+    const QColor redDimmed = dim.pixelColor(pip);
+
+    REQUIRE(red.red() > 150);
+    REQUIRE(red.green() < 100);
+    REQUIRE(redDimmed.alpha() == 255);
+
+    const qreal spread = red.red() - red.green();
+    const qreal spreadDimmed = redDimmed.red() - redDimmed.green();
+
+    REQUIRE(spreadDimmed == Catch::Approx(spread * 0.55 * 0.55).margin(1.5));
 }
 
 TEST_CASE("A card's size comes from the art's aspect ratio", "[card-renderer]")
