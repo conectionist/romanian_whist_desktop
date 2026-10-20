@@ -315,6 +315,29 @@ TEST_CASE("The fan steps 84 apart until eight cards close it to 720", "[hand]")
     }
 }
 
+TEST_CASE("A card wider than the fan stacks the hand rather than reversing it", "[hand]")
+{
+    // (720 - 800) / 7 is a NEGATIVE step: each card would sit left of the one before
+    // it and still be drawn on top of it, and the hit test's "the last match is the
+    // topmost card" would play the card underneath. Clamped, the hand stacks.
+    const QSizeF card(800.0, 1100.0);
+
+    const auto hingeX = [&card](std::size_t slot)
+    {
+        const tablespace::Placement place = handitem::cardPlacement(8, slot, card);
+        const qreal arm = 0.8 * card.height();
+
+        return place.centre.x() - arm * std::sin(qDegreesToRadians(place.rotation));
+    };
+
+    for(std::size_t slot = 1 ; slot < 8 ; slot++)
+    {
+        INFO("slot " << slot);
+
+        REQUIRE(hingeX(slot) == Catch::Approx(hingeX(0)));
+    }
+}
+
 TEST_CASE("The slot under an overlap is the upper card, not the lower", "[hand]")
 {
     // THE CASE THIS FILE EXISTS FOR. Card i+1 covers the right part of card i, so

@@ -54,7 +54,12 @@ bool sameEntries(const std::vector<HandEntry>& left, const std::vector<HandEntry
 tablespace::Placement handitem::cardPlacement(std::size_t count, std::size_t slot, QSizeF card)
 {
     const qreal gaps = count > 1 ? static_cast<qreal>(count - 1) : 0.0;
-    const qreal step = count > 1 ? std::min(widestStep, (widestFan - card.width()) / gaps) : 0.0;
+
+    // NEVER BELOW ZERO. A card wider than the whole fan would make it negative and lay
+    // each card LEFT of the one before it while still drawing it on top - and
+    // slotAt()'s "the last card that contains the point is the topmost" would then
+    // hand a click to the card underneath. Such a card stacks the hand instead.
+    const qreal step = count > 1 ? std::max(0.0, std::min(widestStep, (widestFan - card.width()) / gaps)) : 0.0;
     const qreal span = gaps * step + card.width();
 
     // How many steps the card is from the middle of the fan: negative to the left,

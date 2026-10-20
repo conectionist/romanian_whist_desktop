@@ -88,7 +88,8 @@ public:
 
     // The cards' height, in table units: tablespace::handCardHeight on the table.
     // Their width follows from the art. The fan's steps, arc and turn are section
-    // 2.8's own numbers, so a card of another size is spaced the same.
+    // 2.8's own numbers, so a card of another size is spaced the same - up to a
+    // card as wide as the fan, which stacks them.
     void setCardHeight(qreal height);
 
     void setTheme(const Theme& theme);
