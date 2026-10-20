@@ -6,25 +6,26 @@
 #include "table/TableSpace.h"
 #include "table/Turn.h"
 
-trickitem::Placement trickitem::cardPlacement(unsigned int seatCount, const seatlayout::Place& place)
+tablespace::Placement trickitem::cardPlacement(unsigned int seatCount, const seatlayout::Place& place)
 {
     const qreal height = tablespace::playedCardHeight(seatCount);
 
     if(place.human)
     {
-        return Placement{ QPointF(tablespace::centre.x(),
-                                  tablespace::handTop - tablespace::playedInset - height / 2.0),
-                          0.0 };
+        return tablespace::Placement{ QPointF(tablespace::centre.x(),
+                                              tablespace::handTop - tablespace::playedInset - height / 2.0),
+                                      0.0 };
     }
 
     // The felt's edge, the inset, then half the card: table.js trickPos().
     const qreal radius = tablespace::feltRadius - tablespace::playedInset - height / 2.0;
 
-    return Placement{ seatlayout::onCircle(*place.angle, radius), rackitem::frameRotation(*place.angle) };
+    return tablespace::Placement{ seatlayout::onCircle(*place.angle, radius),
+                                  rackitem::frameRotation(*place.angle) };
 }
 
-std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
-                                                             unsigned int seat)
+std::optional<tablespace::Placement> trickitem::cardPlacement(unsigned int seatCount, int humanSeat,
+                                                              unsigned int seat)
 {
     const std::optional<seatlayout::Place> place = seatlayout::place(seatCount, humanSeat, seat);
 
@@ -34,17 +35,17 @@ std::optional<trickitem::Placement> trickitem::cardPlacement(unsigned int seatCo
     return cardPlacement(seatCount, *place);
 }
 
-trickitem::Placement trickitem::leadMarkPlacement(const seatlayout::Place& place)
+tablespace::Placement trickitem::leadMarkPlacement(const seatlayout::Place& place)
 {
     if(place.human)
-        return Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
+        return tablespace::Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
 
-    return Placement{ seatlayout::onCircle(*place.angle, tablespace::goldLineRadius),
-                      rackitem::frameRotation(*place.angle) };
+    return tablespace::Placement{ seatlayout::onCircle(*place.angle, tablespace::goldLineRadius),
+                                  rackitem::frameRotation(*place.angle) };
 }
 
-std::optional<trickitem::Placement> trickitem::leadMarkPlacement(unsigned int seatCount, int humanSeat,
-                                                                 unsigned int seat)
+std::optional<tablespace::Placement> trickitem::leadMarkPlacement(unsigned int seatCount, int humanSeat,
+                                                                  unsigned int seat)
 {
     const std::optional<seatlayout::Place> place = seatlayout::place(seatCount, humanSeat, seat);
 
@@ -121,7 +122,7 @@ void TrickItem::setTrick(const GameSnapshot& snapshot, const seatlayout::Places&
 
         item->setCardHeight(cardHeight);
         item->setFace(played.card);
-        const trickitem::Placement place = trickitem::cardPlacement(seatCount, **seat);
+        const tablespace::Placement place = trickitem::cardPlacement(seatCount, **seat);
 
         item->setPos(place.centre);
         turnTo(*item, place.rotation);

@@ -51,7 +51,7 @@ LeadMarkItem::LeadMarkItem(QGraphicsItem* parent)
     hide();
 }
 
-void LeadMarkItem::setMark(std::optional<trickitem::Placement> place, const Theme::TablePalette& colours)
+void LeadMarkItem::setMark(std::optional<tablespace::Placement> place, const Theme::TablePalette& colours)
 {
     if(colours != palette)
     {

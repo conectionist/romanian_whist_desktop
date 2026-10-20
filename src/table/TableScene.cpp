@@ -200,7 +200,7 @@ void TableScene::relayout()
     trick->setTrick(*snapshot, places, theme);
 
     const std::optional<unsigned int> lead = trickitem::leadSeat(*snapshot);
-    std::optional<trickitem::Placement> mark;
+    std::optional<tablespace::Placement> mark;
 
     if(lead && *lead < places.size() && places[*lead])
         mark = trickitem::leadMarkPlacement(*places[*lead]);

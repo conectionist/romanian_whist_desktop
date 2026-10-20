@@ -3,7 +3,7 @@
 
 #include "paint/PictureMemo.h"
 #include "paint/Theme.h"
-#include "table/TrickItem.h"
+#include "table/TableSpace.h"
 
 #include <QGraphicsItem>
 #include <QPixmap>
@@ -28,7 +28,7 @@ public:
     explicit LeadMarkItem(QGraphicsItem* parent = nullptr);
 
     // Where the mark goes, or none, and the table's colours for it.
-    void setMark(std::optional<trickitem::Placement> place, const Theme::TablePalette& palette);
+    void setMark(std::optional<tablespace::Placement> place, const Theme::TablePalette& palette);
 
     QRectF boundingRect() const override;
 

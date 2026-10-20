@@ -99,7 +99,7 @@ bool sameTurn(qreal a, qreal b)
 }
 
 // The played card's outline in table space: the mock-up's size, turned and placed.
-QPolygonF outlineOf(unsigned int seatCount, const trickitem::Placement& place)
+QPolygonF outlineOf(unsigned int seatCount, const tablespace::Placement& place)
 {
     const qreal height = tablespace::playedCardHeight(seatCount);
     const qreal width = seatCount <= 4 ? 141.6 : 124.8;
@@ -131,7 +131,7 @@ TEST_CASE("An opponent's card lies in front of their rack, turned to it", "[tric
 
                 INFO("seatCount " << seatCount << ", humanSeat " << humanSeat << ", seat " << seat);
 
-                const std::optional<trickitem::Placement> place =
+                const std::optional<tablespace::Placement> place =
                     trickitem::cardPlacement(seatCount, humanSeat, seat);
                 REQUIRE(place);
 
@@ -173,7 +173,7 @@ TEST_CASE("Your card lies above your hand, unturned", "[trick]")
         {
             INFO("seatCount " << seatCount << ", human " << human);
 
-            const std::optional<trickitem::Placement> place =
+            const std::optional<tablespace::Placement> place =
                 trickitem::cardPlacement(seatCount, static_cast<int>(human), human);
             REQUIRE(place);
 
@@ -194,7 +194,7 @@ TEST_CASE("A spectated seat 0's card lies in front of its rack at the bottom", "
     {
         INFO("seatCount " << seatCount);
 
-        const std::optional<trickitem::Placement> place = trickitem::cardPlacement(seatCount, -1, 0);
+        const std::optional<tablespace::Placement> place = trickitem::cardPlacement(seatCount, -1, 0);
         REQUIRE(place);
 
         const qreal radius = tablespace::feltRadius - tablespace::playedInset
@@ -316,7 +316,7 @@ TEST_CASE("Each card is placed and turned where cardPlacement() says", "[trick]"
     {
         INFO("entry " << i);
 
-        const trickitem::Placement place = *trickitem::cardPlacement(6, 2, seats[i]);
+        const tablespace::Placement place = *trickitem::cardPlacement(6, 2, seats[i]);
 
         REQUIRE(cards[i]->pos() == place.centre);
         REQUIRE(cards[i]->rotation() == place.rotation);
@@ -363,7 +363,7 @@ TEST_CASE("The winning card rises toward the table's centre", "[trick]")
         {
             INFO("seatCount " << seatCount << ", seat " << seat);
 
-            const trickitem::Placement place = *trickitem::cardPlacement(seatCount, 0, seat);
+            const tablespace::Placement place = *trickitem::cardPlacement(seatCount, 0, seat);
 
             QTransform turn;
             turn.translate(place.centre.x(), place.centre.y());
@@ -499,7 +499,7 @@ TEST_CASE("The rhombus sits on the gold circle, or between your card and your ha
         {
             INFO("seatCount " << seatCount << ", seat " << seat);
 
-            const std::optional<trickitem::Placement> mark = trickitem::leadMarkPlacement(seatCount, 0, seat);
+            const std::optional<tablespace::Placement> mark = trickitem::leadMarkPlacement(seatCount, 0, seat);
             REQUIRE(mark);
 
             const qreal rack = seatlayout::place(seatCount, 0, seat)->angle.value();
@@ -516,7 +516,7 @@ TEST_CASE("The rhombus sits on the gold circle, or between your card and your ha
         }
 
         // Yours, half way between your card and your hand.
-        const std::optional<trickitem::Placement> yours = trickitem::leadMarkPlacement(seatCount, 0, 0);
+        const std::optional<tablespace::Placement> yours = trickitem::leadMarkPlacement(seatCount, 0, 0);
         REQUIRE(yours);
         REQUIRE(yours->centre == QPointF(768.0, 820.0));
         REQUIRE(yours->rotation == 0.0);
@@ -539,7 +539,7 @@ TEST_CASE("The rhombus is drawn long along the radius", "[trick]")
         QGraphicsScene scene;
         auto* mark = new LeadMarkItem;
         scene.addItem(mark);
-        mark->setMark(trickitem::Placement{ QPointF(0.0, 0.0), rotation }, theme.table);
+        mark->setMark(tablespace::Placement{ QPointF(0.0, 0.0), rotation }, theme.table);
 
         const QRectF source(-40.0, -40.0, 80.0, 80.0);
         QImage image((source.size() * scale).toSize(), QImage::Format_ARGB32_Premultiplied);

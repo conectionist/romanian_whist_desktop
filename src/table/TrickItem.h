@@ -5,6 +5,7 @@
 #include "paint/CardShadow.h"
 #include "paint/Theme.h"
 #include "table/SeatLayout.h"
+#include "table/TableSpace.h"
 
 #include <QGraphicsObject>
 #include <QPointF>
@@ -24,14 +25,6 @@ class CardRenderer;
 namespace trickitem
 {
 
-// A card's or the lead rhombus's place in table space: its centre, and its turn in
-// DEGREES as QGraphicsItem::setRotation() takes it.
-struct Placement
-{
-    QPointF centre;
-    qreal rotation = 0.0;
-};
-
 // WHERE `seat`'S PLAYED CARD LIES.
 //
 // An opponent's - and a spectated seat 0's, which is drawn as one - is on the line
@@ -46,19 +39,20 @@ struct Placement
 //
 // From the seat's place, worked out once (seatlayout::place()); the card's size
 // is the table's, by `seatCount`.
-Placement cardPlacement(unsigned int seatCount, const seatlayout::Place& place);
+tablespace::Placement cardPlacement(unsigned int seatCount, const seatlayout::Place& place);
 
 // The same for a seat by number: none for a seat with no panel - a player count
 // section 2.5 has no row for, or a seat that is not at the table.
-std::optional<Placement> cardPlacement(unsigned int seatCount, int humanSeat, unsigned int seat);
+std::optional<tablespace::Placement> cardPlacement(unsigned int seatCount, int humanSeat, unsigned int seat);
 
 // WHERE THE LEAD RHOMBUS GOES FOR `seat`: an opponent's on the felt's gold circle
 // at its rack's angle, between the rack and the card, turned so its long axis
 // points at the rack; yours in the gap between your card and your hand, where the
 // circle is under your cards. None where cardPlacement() has none.
-Placement leadMarkPlacement(const seatlayout::Place& place);
+tablespace::Placement leadMarkPlacement(const seatlayout::Place& place);
 
-std::optional<Placement> leadMarkPlacement(unsigned int seatCount, int humanSeat, unsigned int seat);
+std::optional<tablespace::Placement> leadMarkPlacement(unsigned int seatCount, int humanSeat,
+                                                       unsigned int seat);
 
 // WHICH SEAT THE RHOMBUS MARKS, if any: only while the engine's phase is Playing,
 // and then whoever played the trick's first card - or, before it is down,
