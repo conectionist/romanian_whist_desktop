@@ -20,13 +20,14 @@ things added:
 - what its host would give it: a doctype, a charset, and two base rules (see STYLE);
 - a style sheet with the bundled fonts and no transitions;
 - a script that runs after the mock-up's own. It takes the 4-player table, stops the bots,
-  sets the game to the shot's moment and draws it. The mock-up's own rules decide which cards are legal and
-its own sort decides their order; the script checks both against the shot below.
+  sets the game to the shot's moment and draws it. The mock-up's own rules decide which
+  cards are legal and its own sort decides their order; the script checks both against
+  the shot below.
 
 NOTHING IS SAVED UNLESS THE PAGE SAYS IT SET THE SHOT UP. The script marks the page's
 <body> only at the end of a run that passed every check, and each shot is loaded once
 to read that mark before it is photographed. A check that fails, or a script that throws
-- a table.js change that renames setPlayers(), say - draws a red banner saying why, and
+(a table.js change that renames setPlayers(), say), draws a red banner saying why, and
 this stops with the same words and leaves the committed picture alone.
 
 THE FONTS ARE THE CLIENT'S OWN TTFs (resources/fonts/), as data URIs. The page loads its
