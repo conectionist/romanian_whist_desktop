@@ -165,6 +165,16 @@ private:
     // the face, which rises. Tested on the risen card alone, the strip it rose
     // from would let the cursor go, the card would drop back under it, and it
     // would rise again on the next move: a card that flickers.
+    //
+    // THE PRICE, ACCEPTED ON PURPOSE: in that strip the raised card is hit while
+    // something else is drawn there - the card beneath it, or the felt - so a
+    // click there plays the raised card, not the face under the cursor. No rule
+    // can make the two agree there without the flicker: raised, the card uncovers
+    // the strip; dropped, it covers it again. The card played is the one that is
+    // lit, the strip is the bottom 30 of a 225-high card, under your plaque for
+    // the middle cards, and players click nearer a card's middle. Not raising a
+    // card for a cursor in its bottom 30 would make them agree, at the cost of
+    // the mock-up's behaviour; PR #33's review weighed that and left it.
     std::optional<std::size_t> slotAt(QPointF position) const;
 
     const CardRenderer* renderer;
