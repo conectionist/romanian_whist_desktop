@@ -610,6 +610,30 @@ TEST_CASE("Hovering your plaque lifts no card", "[table]")
     REQUIRE(aCardIsLifted(*hand));
 }
 
+TEST_CASE("A card under a still cursor lifts when your turn comes", "[table]")
+{
+    // THROUGH THE SCENE'S OWN HOVER, as the app gets it: the cursor comes to rest on
+    // a card between turns, when nothing lifts, and has not moved when the prompt
+    // arrives. The scene sends nothing then, so the fan has to remember where the
+    // cursor is.
+    TableScene scene;
+
+    scene.setTheme(Theme::light());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
+
+    HandItem* hand = scene.handItem();
+
+    hoverAt(scene, onTheCardAlone);
+
+    REQUIRE_FALSE(aCardIsLifted(*hand));
+
+    // Your turn, as MainWindow deals it.
+    hand->setPrompt(playingThree());
+    hand->setPlayable(true);
+
+    REQUIRE(aCardIsLifted(*hand));
+}
+
 TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]")
 {
     // Four seats with you in seat 1, and two cards down: yours and the next

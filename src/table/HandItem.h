@@ -178,6 +178,11 @@ private:
     // the mock-up's behaviour; PR #33's review weighed that and left it.
     std::optional<std::size_t> slotAt(QPointF position) const;
 
+    // The slot to raise for a cursor at `position`: slotAt(), if that card can be
+    // played. None for no cursor. The one rule for a hover and for a hand that
+    // changes under a cursor that has not moved.
+    std::optional<std::size_t> liftAt(std::optional<QPointF> position) const;
+
     const CardRenderer* renderer;
 
     // The cards' shadows, shared with the played cards unless the fan was given
@@ -220,6 +225,13 @@ private:
     // The slot under the cursor, raised. Disengaged when the cursor is off the
     // fan, on a card that cannot be played, or the hand is not playable.
     std::optional<std::size_t> hovered;
+
+    // WHERE THE CURSOR LAST WAS over the fan, in this item's coordinates, and
+    // disengaged once it has left. Kept because the hand changes under a cursor
+    // that has not moved - your turn arrives, the fan is rebuilt - and the scene
+    // sends no hover for that. layOut() and setPlayable() raise the card now
+    // under it, as the mock-up's browser does.
+    std::optional<QPointF> cursor;
 };
 
 #endif

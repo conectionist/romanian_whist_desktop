@@ -198,10 +198,11 @@ void HandItem::setPlayable(bool value)
 
     playable = value;
 
-    // The lift goes with it: a hand that stops being playable while the cursor is
-    // over it must not leave a card standing proud of the fan.
-    if(!playable)
-        hovered.reset();
+    // The lift goes with it, both ways. A hand that stops being playable while the
+    // cursor is over it must not leave a card standing proud of the fan; one that
+    // becomes playable under a cursor resting on a card raises that card - your
+    // turn arriving while you wait on the card you mean to play.
+    hovered = liftAt(cursor);
 
     showLift();
 }
@@ -302,6 +303,12 @@ void HandItem::layOut()
         bounds |= item->mapRectToParent(reach);
     }
 
+    // THE CARD NOW UNDER A STILL CURSOR. A rebuild replaces every card and a new
+    // height moves them, and neither is a mouse move: without this the card under
+    // the cursor stays down until the mouse is nudged. The mock-up's browser
+    // re-applies :hover after every render(), so its card rises at once.
+    hovered = liftAt(cursor);
+
     showLift();
 }
 
@@ -339,6 +346,15 @@ std::optional<std::size_t> HandItem::slotAt(QPointF position) const
     return std::nullopt;
 }
 
+std::optional<std::size_t> HandItem::liftAt(std::optional<QPointF> position) const
+{
+    const std::optional<std::size_t> slot = position ? slotAt(*position) : std::nullopt;
+
+    // ONLY A PLAYABLE CARD LIFTS. A dimmed card rising under the cursor says it
+    // can be clicked, which is exactly what it cannot.
+    return slot && isPlayable(*slot) ? slot : std::nullopt;
+}
+
 void HandItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
 {
     const std::optional<std::size_t> slot = slotAt(event->pos());
@@ -358,12 +374,9 @@ void HandItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
 
 void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 {
-    const std::optional<std::size_t> slot = slotAt(event->pos());
+    cursor = event->pos();
 
-    // ONLY A PLAYABLE CARD LIFTS. A dimmed card rising under the cursor says it
-    // can be clicked, which is exactly what it cannot.
-    const std::optional<std::size_t> next =
-        slot && isPlayable(*slot) ? slot : std::nullopt;
+    const std::optional<std::size_t> next = liftAt(cursor);
 
     if(next == hovered)
         return;
@@ -375,6 +388,8 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 
 void HandItem::hoverLeaveEvent(QGraphicsSceneHoverEvent*)
 {
+    cursor.reset();
+
     if(!hovered)
         return;
 

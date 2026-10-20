@@ -129,6 +129,14 @@ struct Fanned
         scene.sendEvent(&item, &event);
     }
 
+    // The cursor leaving the fan.
+    void leave()
+    {
+        QGraphicsSceneHoverEvent event(QEvent::GraphicsSceneHoverLeave);
+
+        scene.sendEvent(&item, &event);
+    }
+
     std::vector<CardItem*> cards() const
     {
         return item.childItems().isEmpty() ? std::vector<CardItem*>{} : collect();
@@ -154,6 +162,11 @@ private:
 bool onCard(const CardItem& card, QPointF where)
 {
     return card.cardRect().contains(card.mapFromParent(where));
+}
+
+bool anyRaised(const std::vector<CardItem*>& cards)
+{
+    return std::any_of(cards.begin(), cards.end(), [](const CardItem* card) { return card->isRaised(); });
 }
 
 // TABLE.JS'S OWN TRANSFORM FOR A CARD, written out the way CSS builds it rather than
@@ -539,6 +552,72 @@ TEST_CASE("Only a playable card is raised", "[hand]")
     // And every card, raised or not, casts the hand's shadow.
     for(const CardItem* card : cards)
         REQUIRE(card->look() == cardshadow::Look::Held);
+}
+
+TEST_CASE("A card under a still cursor rises when the hand becomes playable", "[hand]")
+{
+    // YOUR TURN ARRIVING WHILE YOU REST ON A CARD. MainWindow arms the fan a line
+    // after setPrompt() rebuilds it, and neither is a mouse move, so the scene sends
+    // no hover: without the fan remembering the cursor, the card under it stayed
+    // down until the mouse was nudged. The mock-up's browser raises it at once.
+    Fanned fan(promptOf({ false, true, false }), false);
+
+    const std::vector<CardItem*> cards = fan.cards();
+    const QSizeF size = cards[0]->cardSize();
+
+    fan.hoverAt(cards[1]->mapToParent(QPointF(0.0, 0.0)));
+
+    REQUIRE_FALSE(anyRaised(cards));
+
+    fan.item.setPlayable(true);
+
+    REQUIRE(cards[1]->isRaised());
+
+    // An illegal card under a still cursor stays down, as under a moving one.
+    fan.item.setPlayable(false);
+    fan.hoverAt(cards[0]->mapToParent(QPointF(-size.width() / 4.0, 0.0)));
+    fan.item.setPlayable(true);
+
+    REQUIRE_FALSE(anyRaised(cards));
+}
+
+TEST_CASE("A fan rebuilt under a still cursor raises the card under it again", "[hand]")
+{
+    // A REBUILD IS NOT A MOUSE MOVE EITHER. A theme change replaces every card, and
+    // the card the cursor rests on has to rise again without waiting for the mouse.
+    Fanned fan(promptOf({ true, true, true }));
+
+    fan.hoverAt(fan.cards()[1]->mapToParent(QPointF(0.0, 0.0)));
+
+    REQUIRE(fan.cards()[1]->isRaised());
+
+    fan.item.setTheme(Theme::dark());
+
+    const std::vector<CardItem*> rebuilt = fan.cards();
+
+    REQUIRE(rebuilt.size() == 3);
+    REQUIRE(rebuilt[1]->isRaised());
+}
+
+TEST_CASE("A cursor that has left the fan raises nothing when the fan changes", "[hand]")
+{
+    // The other half of remembering the cursor: forgetting it once it has gone.
+    Fanned fan(promptOf({ true, true, true }));
+
+    fan.hoverAt(fan.cards()[1]->mapToParent(QPointF(0.0, 0.0)));
+
+    REQUIRE(fan.cards()[1]->isRaised());
+
+    fan.leave();
+
+    REQUIRE_FALSE(anyRaised(fan.cards()));
+
+    // The next turn, as MainWindow deals it.
+    fan.item.setPlayable(false);
+    fan.item.setPrompt(promptOf({ true, true, true }));
+    fan.item.setPlayable(true);
+
+    REQUIRE_FALSE(anyRaised(fan.cards()));
 }
 
 TEST_CASE("An illegal slot is not playable and a legal one is", "[hand]")
