@@ -97,8 +97,9 @@ public:
     const TableTopItem* tableTop() const { return top; }
     const CardRenderer& cardRenderer() const { return cards; }
 
-    // The played cards' shadow pictures, READ-ONLY and for tests in the same way.
-    const cardshadow::Cache& playedShadows() const { return shadowPictures; }
+    // The cards' shadow pictures - on the felt and in your hand - READ-ONLY and for
+    // tests in the same way.
+    const cardshadow::Cache& cardShadows() const { return shadowPictures; }
 
     // The lead rhombus, READ-ONLY and for tests in the same way.
     const LeadMarkItem* leadMarkItem() const { return leadMark; }
@@ -129,7 +130,8 @@ private:
     // the same way.
     rackitem::Cache rackPictures;
 
-    // The played cards' shadows, shared by all of them, and held the same way.
+    // The cards' shadows, shared by every card on the felt and in your hand, and
+    // held the same way.
     cardshadow::Cache shadowPictures;
 
     std::shared_ptr<const GameSnapshot> snapshot;

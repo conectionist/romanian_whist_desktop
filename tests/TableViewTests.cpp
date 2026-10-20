@@ -722,18 +722,18 @@ TEST_CASE("While a drag settles no rack is composed again", "[table]")
     REQUIRE(composed() > racks);
 }
 
-TEST_CASE("While a drag settles no played card's shadow is drawn again", "[table]")
+TEST_CASE("While a drag settles no card's shadow is drawn again", "[table]")
 {
     ShownTable table;
 
     table.step(1);
 
-    const std::size_t shadows = table.scene.playedShadows().renders();
+    const std::size_t shadows = table.scene.cardShadows().renders();
 
-    // The premise: fullTable() has five cards down and one of them winning, so the
-    // plain shadow and the winner's - the largest picture - were both drawn, and
-    // the count below counts something.
-    REQUIRE(shadows >= 2);
+    // The premise: fullTable() has five cards down and one of them winning, and
+    // eight in your hand, so the plain shadow, the winner's - the largest picture -
+    // and the hand's were all drawn, and the count below counts something.
+    REQUIRE(shadows >= 3);
 
     for(int step = 2 ; step <= 6 ; step++)
     {
@@ -742,13 +742,13 @@ TEST_CASE("While a drag settles no played card's shadow is drawn again", "[table
         table.step(step);
 
         REQUIRE(table.view.isSettling());
-        REQUIRE(table.scene.playedShadows().renders() == shadows);
+        REQUIRE(table.scene.cardShadows().renders() == shadows);
     }
 
     table.view.finishResize();
     table.paint();
 
-    REQUIRE(table.scene.playedShadows().renders() > shadows);
+    REQUIRE(table.scene.cardShadows().renders() > shadows);
 }
 
 TEST_CASE("While a drag settles the lead rhombus is not drawn again", "[table]")

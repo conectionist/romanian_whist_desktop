@@ -2,22 +2,40 @@
 
 #include "paint/CardRenderer.h"
 #include "table/CardItem.h"
+#include "table/Turn.h"
 
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
+#include <QtMath>
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
-// How much of a card the next one covers. Section 14 says "about 40% of their
-// width", so what is left showing is the other 60% - which is what the fan
-// steps by.
-constexpr qreal overlap = 0.40;
+// THE FAN'S SHAPE (section 2.8), table.js renderHand()'s numbers, in table units.
+//
+// The cards step this far apart, and the fan is never wider than the second: a
+// hand of eight 155-wide cards would be 743 at the full step, so it closes up to
+// 80.7. Section 14 asked for an overlap of "about 40% of their width"; the mock-up's
+// is about half.
+constexpr qreal widestStep = 84.0;
+constexpr qreal widestFan = 720.0;
 
-// How far a hovered card rises, as a fraction of its height. Enough to read as
-// picked out; boundingRect() includes it, so the raised part is still hit.
-constexpr qreal lift = 0.12;
+// Each card drops this much times the square of how many steps it is from the
+// middle, so the fan curves away toward its ends.
+constexpr qreal arc = 1.6;
+
+// Each is turned this many degrees per step from the middle, about a hinge this
+// many of its own heights below its top: CSS's transform-origin: 50% 130%.
+constexpr qreal turnStep = 1.9;
+constexpr qreal hingeDepth = 1.3;
+
+// The card centred on its own origin, as CardItem draws it.
+QRectF bodyOf(QSizeF card)
+{
+    return QRectF(-card.width() / 2.0, -card.height() / 2.0, card.width(), card.height());
+}
 
 // WHETHER TWO HANDS WOULD FAN THE SAME, which is the only question setHand()
 // asks before deciding to do nothing.
@@ -39,8 +57,34 @@ bool sameEntries(const std::vector<HandEntry>& left, const std::vector<HandEntry
 }
 }
 
-HandItem::HandItem(const CardRenderer* _renderer, QGraphicsItem* parent)
-    : QGraphicsObject(parent), renderer(_renderer)
+tablespace::Placement handitem::cardPlacement(std::size_t count, std::size_t slot, QSizeF card)
+{
+    const qreal gaps = count > 1 ? static_cast<qreal>(count - 1) : 0.0;
+    const qreal step = count > 1 ? std::min(widestStep, (widestFan - card.width()) / gaps) : 0.0;
+    const qreal span = gaps * step + card.width();
+
+    // How many steps the card is from the middle of the fan: negative to the left,
+    // and a half for each of the two middle cards of an even hand.
+    const qreal fromMiddle = static_cast<qreal>(slot) - gaps / 2.0;
+
+    const qreal left = tablespace::centre.x() - span / 2.0 + static_cast<qreal>(slot) * step;
+    const qreal top = tablespace::handTop + arc * fromMiddle * fromMiddle;
+    const qreal degrees = turnStep * fromMiddle;
+
+    // TURNED ABOUT THE HINGE, NOT THE CENTRE. CSS turns the card about a point below
+    // it, and QGraphicsItem turns an item about its origin, which is the middle of
+    // a CardItem. So the centre goes where turning about the hinge carries it - its
+    // arm's length above the hinge, swung through the same angle - and the item is
+    // turned there.
+    const qreal radians = qDegreesToRadians(degrees);
+    const qreal arm = (hingeDepth - 0.5) * card.height();
+    const QPointF hinge(left + card.width() / 2.0, top + hingeDepth * card.height());
+
+    return { hinge + QPointF(arm * std::sin(radians), -arm * std::cos(radians)), degrees };
+}
+
+HandItem::HandItem(const CardRenderer* _renderer, cardshadow::Cache* _shadows, QGraphicsItem* parent)
+    : QGraphicsObject(parent), renderer(_renderer), shadows(_shadows ? _shadows : &ownShadows)
 {
     setAcceptHoverEvents(true);
 }
@@ -155,7 +199,7 @@ void HandItem::setPlayable(bool value)
     if(!playable)
         hovered.reset();
 
-    layOut();
+    showLift();
 }
 
 std::size_t HandItem::slotCount() const
@@ -226,34 +270,44 @@ void HandItem::layOut()
 {
     prepareGeometryChange();
 
+    bounds = QRectF();
+
     if(fan.empty() || cardHeight <= 0.0)
         return;
 
     const QSizeF card = renderer->sizeForHeight(cardHeight);
+    const QRectF body = bodyOf(card);
 
-    // What each card after the first adds to the fan's width: the part of it that
-    // is not covered by its neighbour.
-    const qreal step = card.width() * (1.0 - overlap);
-
-    const qreal span = card.width() + step * static_cast<qreal>(fan.size() - 1);
-
-    // CENTRED ON THIS ITEM'S ORIGIN, which TableScene puts on the table's centre
-    // line, half a card below section 2.8's hand top. Section 14: "the fan is
-    // centred".
-    const qreal left = -span / 2.0 + card.width() / 2.0;
+    // A card at rest and risen: everywhere it can be hit, so everywhere this item
+    // has to cover for the scene to send it the event.
+    const QRectF reach = body.united(body.translated(0.0, -cardshadow::raisedLift));
 
     for(std::size_t i = 0 ; i < fan.size() ; i++)
     {
-        const bool raised = hovered && *hovered == i;
+        CardItem* item = fan[i].item;
+        const tablespace::Placement place = handitem::cardPlacement(fan.size(), i, card);
 
-        fan[i].item->setPos(left + step * static_cast<qreal>(i),
-                              raised ? -cardHeight * lift : 0.0);
+        item->setPos(place.centre);
+        turnTo(*item, place.rotation);
 
         // LATER CARDS ON TOP, which is what makes the fan read left to right -
         // and it is the same ordering slotAt() walks backwards. The two have to
         // agree or the card a player points at is not the card they get.
-        fan[i].item->setZValue(static_cast<qreal>(i));
+        item->setZValue(static_cast<qreal>(i));
+
+        bounds |= item->mapRectToParent(reach);
     }
+
+    showLift();
+}
+
+void HandItem::showLift()
+{
+    // Every card casts the hand's shadow; the one under the cursor is raised, and
+    // CardItem draws it risen and glowing. Nothing moves, so nothing here changes
+    // the fan's geometry.
+    for(std::size_t i = 0 ; i < fan.size() ; i++)
+        fan[i].item->setHeld(hovered && *hovered == i, theme.table, shadows);
 }
 
 std::optional<std::size_t> HandItem::slotAt(QPointF position) const
@@ -264,8 +318,17 @@ std::optional<std::size_t> HandItem::slotAt(QPointF position) const
     for(std::size_t i = fan.size() ; i-- > 0 ; )
     {
         const CardItem* item = fan[i].item;
+        const QRectF body = bodyOf(item->cardSize());
+        const QPointF local = item->mapFromParent(position);
 
-        if(item->boundingRect().translated(item->pos()).contains(position))
+        if(body.contains(local))
+            return i;
+
+        // AND WHERE THE RAISED CARD HAS RISEN TO - after its own resting place but
+        // before the card beneath it, as the card is drawn. The card above it, which
+        // was tested first, still wins where it overlaps the risen part: the
+        // mock-up's cards keep their order when one rises.
+        if(hovered && *hovered == i && body.translated(0.0, -cardshadow::raisedLift).contains(local))
             return i;
     }
 
@@ -303,7 +366,7 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 
     hovered = next;
 
-    layOut();
+    showLift();
 }
 
 void HandItem::hoverLeaveEvent(QGraphicsSceneHoverEvent*)
@@ -313,24 +376,15 @@ void HandItem::hoverLeaveEvent(QGraphicsSceneHoverEvent*)
 
     hovered.reset();
 
-    layOut();
+    showLift();
 }
 
 QRectF HandItem::boundingRect() const
 {
-    if(fan.empty() || cardHeight <= 0.0)
-        return QRectF();
-
-    const QSizeF card = renderer->sizeForHeight(cardHeight);
-
-    const qreal step = card.width() * (1.0 - overlap);
-    const qreal span = card.width() + step * static_cast<qreal>(fan.size() - 1);
-
-    // TALL ENOUGH FOR A LIFTED CARD. The hover raises a card above this item's
-    // origin, and a bounding rect that stopped at the unlifted top would leave
-    // the raised part outside every hit test and repaint that uses it.
-    return QRectF(-span / 2.0,
-                  -card.height() / 2.0 - cardHeight * lift,
-                  span,
-                  card.height() + cardHeight * lift);
+    // EVERY CARD, AT REST AND RISEN, turned as it is - layOut() works it out once,
+    // since the cards are where they are until the hand changes. It is what the
+    // scene tests before it sends this item a press or a hover at all, and it
+    // includes the risen part, so a raised card is hit there too. The shadows are
+    // each card's own to repaint.
+    return bounds;
 }

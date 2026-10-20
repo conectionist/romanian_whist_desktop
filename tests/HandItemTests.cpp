@@ -10,15 +10,22 @@
 #include "paint/Theme.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
+#include "table/TableSpace.h"
 
 #include <QGraphicsScene>
+#include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QImage>
 #include <QMarginsF>
 #include <QObject>
 #include <QPointF>
 #include <QString>
+#include <QTransform>
+#include <QtMath>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -26,12 +33,13 @@ using namespace romanian_whist;
 
 // The fan, and the two things about it that are not obvious.
 //
-// THE FIRST IS THE HIT TEST. The cards overlap by 40% of their width, so most of
-// the fan is covered by its neighbour - and the card a player is pointing at is
-// the LAST one whose box contains the cursor, not the first. Walking forwards
-// returns the card underneath, and every click in an overlap plays a neighbour.
-// That is the same defect PlayPrompt::handIndex exists to prevent, arriving from
-// the geometry instead of from the indexing.
+// THE FIRST IS THE HIT TEST. The cards overlap by about half, so most of the fan
+// is covered by its neighbour - and the card a player is pointing at is the LAST
+// one that contains the cursor, not the first. Walking forwards returns the card
+// underneath, and every click in an overlap plays a neighbour. That is the same
+// defect PlayPrompt::handIndex exists to prevent, arriving from the geometry
+// instead of from the indexing. Since the redesign's phase 7 every card is turned,
+// so "contains" is asked in each card's own frame.
 //
 // THE SECOND IS THAT THE FAN HAS TWO SOURCES. Between turns it is the snapshot's
 // hand and is never playable; on your turn it is the prompt, with legality that
@@ -40,7 +48,9 @@ using namespace romanian_whist;
 
 namespace
 {
-constexpr qreal kCardHeight = 100.0;
+// The table's own: section 2.8's steps and arc are fixed numbers, so at another
+// size the cards would no longer overlap the way the mock-up's do.
+constexpr qreal kCardHeight = tablespace::handCardHeight;
 
 const Card SpadesAce(Rank::Ace, Suit::Spades);
 const Card HeartsKing(Rank::King, Suit::Hearts);
@@ -109,6 +119,16 @@ struct Fanned
         scene.sendEvent(&item, &event);
     }
 
+    // The cursor moving to a point, which is how a card comes to be raised.
+    void hoverAt(QPointF where)
+    {
+        QGraphicsSceneHoverEvent event(QEvent::GraphicsSceneHoverMove);
+
+        event.setPos(where);
+
+        scene.sendEvent(&item, &event);
+    }
+
     std::vector<CardItem*> cards() const
     {
         return item.childItems().isEmpty() ? std::vector<CardItem*>{} : collect();
@@ -128,64 +148,202 @@ private:
         return found;
     }
 };
+
+// A card's own rect, centred on its origin as CardItem draws it: not
+// boundingRect(), which reaches past the card for its shadow.
+QRectF bodyOf(const CardItem& card)
+{
+    const QSizeF size = card.cardSize();
+
+    return QRectF(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
 }
 
-TEST_CASE("The fan draws one card per slot and centres them", "[hand]")
+// Whether a point in the fan's coordinates is on the card as it rests.
+bool onCard(const CardItem& card, QPointF where)
+{
+    return bodyOf(card).contains(card.mapFromParent(where));
+}
+
+// TABLE.JS'S OWN TRANSFORM FOR A CARD, written out the way CSS builds it rather than
+// the way HandItem does: the card's box at (x, y), turned about
+// transform-origin: 50% 130% - so `translate(x, y) rotate(rot)` with the origin
+// moved there and back. It maps a point measured from the card's top-left corner.
+// renderHand(): step = min(84, (720 - CW) / (n - 1)), x = 768 - total / 2 + i * step,
+// y = 850 + (i - mid)^2 * 1.6, rot = (i - mid) * 1.9deg.
+QTransform cssTransform(std::size_t count, std::size_t slot, QSizeF card)
+{
+    const qreal n = static_cast<qreal>(count);
+    const qreal i = static_cast<qreal>(slot);
+    const qreal step = count > 1 ? std::min(84.0, (720.0 - card.width()) / (n - 1.0)) : 0.0;
+    const qreal total = (n - 1.0) * step + card.width();
+    const qreal mid = (n - 1.0) / 2.0;
+
+    const QPointF box(768.0 - total / 2.0 + i * step, 850.0 + (i - mid) * (i - mid) * 1.6);
+    const QPointF origin(card.width() * 0.5, card.height() * 1.3);
+
+    QTransform css;
+    css.translate(box.x() + origin.x(), box.y() + origin.y());
+    css.rotate((i - mid) * 1.9);
+    css.translate(-origin.x(), -origin.y());
+
+    return css;
+}
+}
+
+TEST_CASE("The fan draws one card per slot where cardPlacement() puts it", "[hand]")
 {
     Fanned fan(promptOf({ true, true, true, true, true }));
 
     REQUIRE(fan.item.slotCount() == 5);
-    REQUIRE(fan.cards().size() == 5);
 
-    // CENTRED ON THE ITEM'S ORIGIN, which TableScene puts at the middle of the
-    // strip it reserved. Section 14: "the fan is centred".
-    const QRectF box = fan.item.boundingRect();
+    const std::vector<CardItem*> cards = fan.cards();
 
-    REQUIRE(box.left() < 0.0);
-    REQUIRE(box.right() > 0.0);
-    REQUIRE(std::abs(box.left() + box.right()) < 1.0);
+    REQUIRE(cards.size() == 5);
+
+    for(std::size_t i = 0 ; i < cards.size() ; i++)
+    {
+        INFO("slot " << i);
+
+        const tablespace::Placement place = handitem::cardPlacement(5, i, cards[i]->cardSize());
+
+        REQUIRE(cards[i]->pos().x() == Catch::Approx(place.centre.x()));
+        REQUIRE(cards[i]->pos().y() == Catch::Approx(place.centre.y()));
+        REQUIRE(cards[i]->rotation() == Catch::Approx(place.rotation).margin(1e-12));
+
+        // LATER CARDS ON TOP, the order slotAt() walks backwards.
+        REQUIRE(cards[i]->zValue() == static_cast<qreal>(i));
+    }
 }
 
-TEST_CASE("The cards overlap rather than sitting end to end", "[hand]")
+TEST_CASE("The fan is mirrored about the middle of the table", "[hand]")
 {
-    // Section 14: "cards overlap by about 40% of their width". The assertion is
-    // the RELATION and not the fraction - eight cards laid end to end are wider
-    // than the fan is - because the fraction is a constant the design may move
-    // and the overlap is the property that must not go away. Without it a
-    // full hand does not fit the strip at all.
+    // Section 14: "the fan is centred". Every card's mirror image across x = 768 is
+    // the card as many slots from the other end, turned the other way - for every
+    // size of hand, odd and even.
     CardRenderer renderer;
+    const QSizeF card = renderer.sizeForHeight(kCardHeight);
 
-    const qreal cardWidth = renderer.sizeForHeight(kCardHeight).width();
+    for(std::size_t count = 1 ; count <= 8 ; count++)
+    {
+        for(std::size_t i = 0 ; i < count ; i++)
+        {
+            INFO(count << " cards, slot " << i);
 
-    Fanned fan(promptOf({ true, true, true, true, true, true, true, true }));
+            const tablespace::Placement place = handitem::cardPlacement(count, i, card);
+            const tablespace::Placement mirror = handitem::cardPlacement(count, count - 1 - i, card);
 
-    REQUIRE(fan.item.boundingRect().width() < cardWidth * 8.0);
-    REQUIRE(fan.item.boundingRect().width() > cardWidth);
+            REQUIRE(place.centre.x() - tablespace::centre.x()
+                    == Catch::Approx(tablespace::centre.x() - mirror.centre.x()).margin(1e-9));
+            REQUIRE(place.centre.y() == Catch::Approx(mirror.centre.y()));
+            REQUIRE(place.rotation == Catch::Approx(-mirror.rotation).margin(1e-12));
+        }
+    }
+
+    // The middle card of an odd hand is square to the table, its top at section
+    // 2.8's 850.
+    const tablespace::Placement middle = handitem::cardPlacement(5, 2, card);
+
+    REQUIRE(middle.rotation == 0.0);
+    REQUIRE(middle.centre.x() == Catch::Approx(tablespace::centre.x()));
+    REQUIRE(middle.centre.y() - card.height() / 2.0 == Catch::Approx(tablespace::handTop));
+}
+
+TEST_CASE("Each card in the fan stands where table.js puts it", "[hand]")
+{
+    // THE HINGE, CHECKED AGAINST CSS. HandItem turns each card about its own middle
+    // and moves the middle to where turning about the hinge would have carried it;
+    // cssTransform() turns about the hinge directly, as the browser does. Every
+    // corner of every card has to land on the same point both ways.
+    for(const std::size_t count : { std::size_t(1), std::size_t(4), std::size_t(8) })
+    {
+        Fanned fan(promptOf(std::vector<bool>(count, true)));
+
+        const std::vector<CardItem*> cards = fan.cards();
+
+        REQUIRE(cards.size() == count);
+
+        for(std::size_t i = 0 ; i < count ; i++)
+        {
+            const QSizeF size = cards[i]->cardSize();
+            const QTransform css = cssTransform(count, i, size);
+
+            const std::array<QPointF, 4> corners{ QPointF(0.0, 0.0), QPointF(size.width(), 0.0),
+                                                  QPointF(size.width(), size.height()),
+                                                  QPointF(0.0, size.height()) };
+
+            for(const QPointF& corner : corners)
+            {
+                INFO(count << " cards, slot " << i << ", corner " << corner.x() << ", " << corner.y());
+
+                const QPointF ours = cards[i]->mapToParent(corner - QPointF(size.width() / 2.0,
+                                                                            size.height() / 2.0));
+                const QPointF theirs = css.map(corner);
+
+                REQUIRE(ours.x() == Catch::Approx(theirs.x()).margin(1e-6));
+                REQUIRE(ours.y() == Catch::Approx(theirs.y()).margin(1e-6));
+            }
+        }
+    }
+}
+
+TEST_CASE("The fan steps 84 apart until eight cards close it to 720", "[hand]")
+{
+    // THE OVERLAP, measured where it is set: at each card's hinge, 1.3 card heights
+    // below its top and under its middle, which the turn leaves where it was. The
+    // step is section 2.8's 84 up to seven cards, and a full hand of eight closes up
+    // so the fan is 720 wide in all. Either way a card covers part of the one
+    // before it - without that a full hand would not fit the rim.
+    CardRenderer renderer;
+    const QSizeF card = renderer.sizeForHeight(kCardHeight);
+
+    const auto hingeOf = [&card](const tablespace::Placement& place)
+    {
+        const qreal arm = 0.8 * card.height();
+        const qreal turn = qDegreesToRadians(place.rotation);
+
+        return place.centre - QPointF(arm * std::sin(turn), -arm * std::cos(turn));
+    };
+
+    for(std::size_t count = 2 ; count <= 8 ; count++)
+    {
+        INFO(count << " cards");
+
+        const qreal first = hingeOf(handitem::cardPlacement(count, 0, card)).x();
+        const qreal second = hingeOf(handitem::cardPlacement(count, 1, card)).x();
+        const qreal last = hingeOf(handitem::cardPlacement(count, count - 1, card)).x();
+
+        const qreal step = second - first;
+
+        REQUIRE(step < card.width());
+
+        if(count < 8)
+            REQUIRE(step == Catch::Approx(84.0));
+        else
+            REQUIRE(last - first + card.width() == Catch::Approx(720.0));
+    }
 }
 
 TEST_CASE("The slot under an overlap is the upper card, not the lower", "[hand]")
 {
-    // THE CASE THIS FILE EXISTS FOR. Card i+1 covers the right 40% of card i, so
-    // a point inside that strip is inside BOTH boxes - and the one the player can
-    // see, and therefore the one they mean, is i+1. A forward walk returns i.
-    CardRenderer renderer;
-    const qreal cardWidth = renderer.sizeForHeight(kCardHeight).width();
-
+    // THE CASE THIS FILE EXISTS FOR. Card i+1 covers the right part of card i, so
+    // a point inside that strip is on BOTH cards - and the one the player can see,
+    // and therefore the one they mean, is i+1. A forward walk returns i.
     Fanned fan(promptOf({ true, true, true }));
 
     const std::vector<CardItem*> cards = fan.cards();
 
     REQUIRE(cards.size() == 3);
 
-    // Just inside the left edge of the middle card, which is still over the
-    // first one.
-    const QPointF where(cards[1]->pos().x() - cardWidth / 2.0 + 2.0, 0.0);
+    // Just inside the left edge of the middle card, half way down it, which is
+    // still over the first one.
+    const QSizeF size = cards[1]->cardSize();
+    const QPointF where = cards[1]->mapToParent(QPointF(-size.width() / 2.0 + 2.0, 0.0));
 
-    // THE PREMISE, asserted rather than assumed: this point really is inside both
-    // boxes. Without that the case would pass on a fan that did not overlap at
-    // all and would be saying nothing.
-    REQUIRE(cards[0]->boundingRect().translated(cards[0]->pos()).contains(where));
-    REQUIRE(cards[1]->boundingRect().translated(cards[1]->pos()).contains(where));
+    // THE PREMISE, asserted rather than assumed: this point really is on both
+    // cards. Without that the case would pass on a fan that did not overlap at all
+    // and would be saying nothing.
+    REQUIRE(onCard(*cards[0], where));
+    REQUIRE(onCard(*cards[1], where));
 
     std::vector<std::size_t> clicked;
 
@@ -200,6 +358,131 @@ TEST_CASE("The slot under an overlap is the upper card, not the lower", "[hand]"
 
     REQUIRE(clicked.size() == 1);
     REQUIRE(clicked.front() == 1);
+}
+
+TEST_CASE("A raised card stays raised over the strip it rose from", "[hand]")
+{
+    // THE FLICKER. A card rises 30 under the cursor, so a cursor near its bottom
+    // edge is off the card once it has risen. Asked about the risen card alone, the
+    // next move finds nothing there and drops it, the move after finds it at rest
+    // and raises it again. The mock-up's browser hovers the card's resting place as
+    // well as its risen face, and so does the fan.
+    Fanned fan(promptOf({ true, true, true }));
+
+    const std::vector<CardItem*> cards = fan.cards();
+    const QSizeF size = cards[0]->cardSize();
+
+    // Near the bottom of the first card, left of where the second covers it.
+    const QPointF where = cards[0]->mapToParent(QPointF(-size.width() / 4.0, size.height() / 2.0 - 10.0));
+
+    // The premise: no other card is there, and the risen card does not reach down
+    // to it.
+    REQUIRE(onCard(*cards[0], where));
+    REQUIRE_FALSE(onCard(*cards[1], where));
+    REQUIRE_FALSE(bodyOf(*cards[0]).translated(0.0, -cardshadow::raisedLift)
+                      .contains(cards[0]->mapFromParent(where)));
+
+    fan.hoverAt(where);
+
+    REQUIRE(cards[0]->isRaised());
+
+    fan.hoverAt(where);
+
+    REQUIRE(cards[0]->isRaised());
+
+    // And a click there plays it.
+    std::vector<std::size_t> clicked;
+
+    QObject::connect(&fan.item, &HandItem::cardClicked,
+                     [&clicked](std::size_t slot){ clicked.push_back(slot); });
+
+    fan.clickAt(where);
+
+    REQUIRE(clicked == std::vector<std::size_t>{ 0 });
+}
+
+TEST_CASE("A raised card rises along its own tilt and is hit where it rose to", "[hand]")
+{
+    Fanned fan(promptOf({ true, true, true }));
+
+    const std::vector<CardItem*> cards = fan.cards();
+    const QSizeF size = cards[0]->cardSize();
+
+    // The first card of three is turned 1.9 degrees anticlockwise, so its own up
+    // leans left.
+    REQUIRE(cards[0]->rotation() == Catch::Approx(-1.9));
+
+    // Just above the card's resting top: in the strip it rises into, and on no card
+    // until it does.
+    const QPointF above = cards[0]->mapToParent(QPointF(-size.width() / 4.0, -size.height() / 2.0 - 15.0));
+
+    for(const CardItem* card : cards)
+        REQUIRE_FALSE(onCard(*card, above));
+
+    std::vector<std::size_t> clicked;
+
+    QObject::connect(&fan.item, &HandItem::cardClicked,
+                     [&clicked](std::size_t slot){ clicked.push_back(slot); });
+
+    fan.clickAt(above);
+
+    REQUIRE(clicked.empty());
+
+    // Raised from its resting place, the card covers the point, and a click there
+    // plays it.
+    fan.hoverAt(cards[0]->mapToParent(QPointF(-size.width() / 4.0, 0.0)));
+
+    REQUIRE(cards[0]->isRaised());
+
+    fan.clickAt(above);
+
+    REQUIRE(clicked == std::vector<std::size_t>{ 0 });
+
+    // THE RISE IS THE CARD'S OWN UP, turned with it: 30 along it, which leans left
+    // of straight up by the card's turn.
+    const QPointF rise = cards[0]->mapToParent(QPointF(0.0, -cardshadow::raisedLift))
+                         - cards[0]->mapToParent(QPointF(0.0, 0.0));
+    const qreal turn = qDegreesToRadians(cards[0]->rotation());
+
+    REQUIRE(rise.x() == Catch::Approx(cardshadow::raisedLift * std::sin(turn)));
+    REQUIRE(rise.y() == Catch::Approx(-cardshadow::raisedLift * std::cos(turn)));
+
+    // The card has not moved: the rise is drawn.
+    REQUIRE(cards[0]->pos().x() == Catch::Approx(handitem::cardPlacement(3, 0, size).centre.x()));
+    REQUIRE(cards[0]->pos().y() == Catch::Approx(handitem::cardPlacement(3, 0, size).centre.y()));
+}
+
+TEST_CASE("Only a playable card is raised", "[hand]")
+{
+    // A dimmed card rising under the cursor says it can be clicked, which is exactly
+    // what it cannot.
+    Fanned fan(promptOf({ false, true, false }));
+
+    const std::vector<CardItem*> cards = fan.cards();
+    const QSizeF size = cards[0]->cardSize();
+
+    const auto noneRaised = [&cards]
+    {
+        return std::none_of(cards.begin(), cards.end(), [](const CardItem* card) { return card->isRaised(); });
+    };
+
+    // The illegal first card, left of where the second covers it.
+    fan.hoverAt(cards[0]->mapToParent(QPointF(-size.width() / 4.0, 0.0)));
+
+    REQUIRE(noneRaised());
+
+    fan.hoverAt(cards[1]->mapToParent(QPointF(0.0, 0.0)));
+
+    REQUIRE(cards[1]->isRaised());
+
+    // A hand that stops being playable drops the card it had raised.
+    fan.item.setPlayable(false);
+
+    REQUIRE(noneRaised());
+
+    // And every card, raised or not, casts the hand's shadow.
+    for(const CardItem* card : cards)
+        REQUIRE(card->look() == cardshadow::Look::Held);
 }
 
 TEST_CASE("An illegal slot is not playable and a legal one is", "[hand]")
