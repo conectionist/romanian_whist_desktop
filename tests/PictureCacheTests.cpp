@@ -167,3 +167,25 @@ TEST_CASE("A null picture is never kept as current", "[picture-memo]")
     item.at(1.0);
     REQUIRE(item.calls == 2);
 }
+
+// PHASE5_REVIEW_FINDINGS.md #14: a null composed at a degenerate ratio replaced the
+// picture kept, so the next paint at the real ratio composed it all again.
+TEST_CASE("A null picture leaves the one kept alone", "[picture-memo]")
+{
+    Composer item;
+
+    item.at(1.0);
+    REQUIRE(item.at(0.0, QPixmap()).pixmap.isNull());
+
+    // Back at the ratio it was made at, the kept picture is still current.
+    REQUIRE_FALSE(item.at(1.0).pixmap.isNull());
+    REQUIRE(item.calls == 2);
+
+    // But an out-of-date picture is never handed back: after a change and a
+    // null, the next paint composes.
+    item.memo.invalidate();
+    REQUIRE(item.at(1.0, QPixmap()).pixmap.isNull());
+    item.at(1.0);
+    REQUIRE(item.calls == 4);
+    REQUIRE(item.memo.compositions() == 2);
+}

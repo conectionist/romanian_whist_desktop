@@ -280,8 +280,8 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
         const panel::Picture frame = panels->picture(size, theme.table, active, ratio);
 
         // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate
-        // transform. Null, which the memo does not keep as current, so the next real
-        // paint composes.
+        // transform. Null, which the memo neither keeps as current nor lets replace
+        // the panel it holds, so the next real paint has that one or composes.
         if(frame.pixmap.isNull())
             return {};
 

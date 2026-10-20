@@ -29,20 +29,29 @@ public:
     //
     // A NULL PICTURE IS NEVER KEPT AS CURRENT. It is returned, and the memo stays
     // out of date, so the next paint composes rather than drawing nothing for good.
+    //
+    // NOR DOES IT REPLACE THE ONE KEPT. A paint at a degenerate ratio composes
+    // nothing, and the picture already made at the ratio before it is still the
+    // right one to go back to (PHASE5_REVIEW_FINDINGS.md #14).
     template<typename Compose>
     const devicepixels::Canvas& picture(qreal ratio, Compose&& compose)
     {
+        static const devicepixels::Canvas none;
+
         const int key = devicepixels::ratioKey(ratio);
 
         if(!stale && key == ratioKey && !held.pixmap.isNull())
             return held;
 
-        held = std::forward<Compose>(compose)();
-        ratioKey = key;
-        stale = held.pixmap.isNull();
+        devicepixels::Canvas made = std::forward<Compose>(compose)();
 
-        if(!stale)
-            composed++;
+        if(made.pixmap.isNull())
+            return none;
+
+        held = std::move(made);
+        ratioKey = key;
+        stale = false;
+        composed++;
 
         return held;
     }
