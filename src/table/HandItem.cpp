@@ -81,6 +81,11 @@ HandItem::HandItem(const CardRenderer* _renderer, cardshadow::Cache* _shadows, Q
     : QGraphicsObject(parent), renderer(_renderer), shadows(_shadows ? _shadows : &ownShadows)
 {
     setAcceptHoverEvents(true);
+
+    // The cards draw themselves; this only places them and takes the cursor. Without
+    // the flag the view still calls the empty paint() for every exposed frame, and
+    // boundingRect() covers the whole fan, risen strip included.
+    setFlag(QGraphicsItem::ItemHasNoContents);
 }
 
 void HandItem::setHand(const std::vector<HandEntry>& hand)
