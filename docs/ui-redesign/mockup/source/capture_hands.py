@@ -21,8 +21,13 @@ things added:
 - a style sheet with the bundled fonts and no transitions;
 - a script that runs after the mock-up's own. It takes the 4-player table, stops the bots,
   sets the game to the shot's moment and draws it. The mock-up's own rules decide which cards are legal and
-its own sort decides their order; the script checks both against the shot below and
-draws a red banner across the picture if either disagrees.
+its own sort decides their order; the script checks both against the shot below.
+
+NOTHING IS SAVED UNLESS THE PAGE SAYS IT SET THE SHOT UP. The script marks the page's
+<body> only at the end of a run that passed every check, and each shot is loaded once
+to read that mark before it is photographed. A check that fails, or a script that throws
+- a table.js change that renames setPlayers(), say - draws a red banner saying why, and
+this stops with the same words and leaves the committed picture alone.
 
 THE FONTS ARE THE CLIENT'S OWN TTFs (resources/fonts/), as data URIs. The page loads its
 fonts from Google Fonts, which needs a network and can change under us, and Chrome will
@@ -32,8 +37,10 @@ Needs google-chrome or chromium on the PATH, and Pillow.
 """
 
 import base64
+import html
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -91,19 +98,25 @@ html, body { margin: 0; }
 '''
 
 # Runs after table.js, which has already dealt a 6-player demo game and is waiting on you.
+# In a block, so its names cannot collide with table.js's globals.
 SCRIPT = '''
 <script>
+{
+const fail = text =>
+{
+  document.body.dataset.capture = "failed";
+
+  const banner = document.createElement("div");
+  banner.id = "capture-failed";
+  banner.textContent = "capture_hands.py: " + text;
+  banner.style.cssText = "position:fixed;left:0;right:0;top:40%%;z-index:99;padding:24px;" +
+                         "background:#c00;color:#fff;font:bold 32px sans-serif;text-align:center";
+  document.body.appendChild(banner);
+};
+
 document.fonts.ready.then(() =>
 {
   const SHOT = %s;
-  const fail = text =>
-  {
-    const banner = document.createElement("div");
-    banner.textContent = "capture_hands.py: " + text;
-    banner.style.cssText = "position:fixed;left:0;right:0;top:40%%;z-index:99;padding:24px;" +
-                           "background:#c00;color:#fff;font:bold 32px sans-serif;text-align:center";
-    document.body.appendChild(banner);
-  };
 
   setPlayers(4);
   token++;   // every bot loop checks the token, so none moves again
@@ -152,7 +165,11 @@ document.fonts.ready.then(() =>
 
     document.querySelectorAll("#hand .hcard")[SHOT.raised].classList.add("raised");
   }
-});
+
+  // Every check passed and the shot is drawn: the one mark check() accepts.
+  document.body.dataset.capture = "ok";
+}).catch(error => fail("the script threw " + error));
+}
 </script>
 '''
 
@@ -220,16 +237,38 @@ def browser():
     sys.exit('capture_hands.py needs google-chrome or chromium on the PATH')
 
 
-def capture(chrome, page, png, profile):
+def run_chrome(chrome, page, profile, output):
+    # The page loaded once in headless Chrome at the pictures' size, `output` saying what
+    # to hand back. Returns what Chrome wrote to stdout.
     command = [chrome, '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
                '--no-default-browser-check', '--force-device-scale-factor=1', '--window-size=1920,1080',
-               f'--user-data-dir={profile}', '--virtual-time-budget=5000', f'--screenshot={png}', page.as_uri()]
+               f'--user-data-dir={profile}', '--virtual-time-budget=5000', output, page.as_uri()]
 
     # At the lowest priority: the machine this runs on is somebody's desktop.
     if shutil.which('nice'):
         command = ['nice', '-n', '19'] + command
 
-    subprocess.run(command, check=True, capture_output=True)
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout
+
+
+def check(chrome, page, profile, name):
+    # THE PAGE'S OWN WORD that the shot is set up, read from its DOM: the mark the script
+    # puts on <body> once every check has passed. Without it a check failed, the script
+    # threw, or it never ran at all - and Chrome photographs any of those without a word.
+    dom = run_chrome(chrome, page, profile, '--dump-dom')
+
+    body = re.search(r'<body[^>]*>', dom)
+    if body and 'data-capture="ok"' in body.group(0):
+        return
+
+    banner = re.search(r'<div id="capture-failed"[^>]*>capture_hands\.py: ([^<]*)</div>', dom)
+    reason = html.unescape(banner.group(1)) if banner else 'the page never finished setting up'
+
+    sys.exit(f"{name}: {reason}; nothing saved")
+
+
+def capture(chrome, page, png, profile):
+    run_chrome(chrome, page, profile, f'--screenshot={png}')
 
 
 def main():
@@ -244,6 +283,7 @@ def main():
             png = scratch / 'shot.png'
             page.write_text(page_for(shot, base), encoding='utf-8')
 
+            check(chrome, page, scratch / 'profile', shot['file'])
             capture(chrome, page, png, scratch / 'profile')
 
             image = Image.open(png).convert('RGB')
