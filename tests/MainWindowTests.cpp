@@ -507,8 +507,9 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // THE SECOND MOMENT AN OLD GAME'S QUEUE IS WORTHLESS, and until D1's review
     // only prepare() knew about the first. stop() joins the game thread, so
     // every frame published between the click and the join is already in this
-    // thread's queue - and it is delivered AFTER showMainMenu() has cleared the
-    // status bar, writing a dead game's round and trick over the menu page.
+    // thread's queue - and it is delivered AFTER showMainMenu(), drawing a dead
+    // game into the log and onto the table behind the menu page. (Into the status
+    // bar too, until the table redesign's phase 8 took the status bar away.)
     //
     // A WATCHED GAME, which is what puts frames in the queue at all: a seated one
     // is parked in the provider waiting for a bid and has published everything it
@@ -528,11 +529,13 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     pump(2000);
     REQUIRE(pages->currentIndex() == 1);
 
-    // Mid-game, with the bots pacing - so there is a backlog to leak.
-    REQUIRE_FALSE(window.statusBar()->currentMessage().isEmpty());
-
     QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    TableScene* scene = window.findChild<TableScene*>();
     REQUIRE(log != nullptr);
+    REQUIRE(scene != nullptr);
+
+    // Mid-game, with the bots pacing - so there is a backlog to leak.
+    REQUIRE(scene->lastSnapshot() != nullptr);
 
     QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
@@ -551,17 +554,16 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // still queued behind it; what has to be given the chance to happen is the
     // delivery.
     const int atAbandon = log->blockCount();
-    const QString cleared = window.statusBar()->currentMessage();
+    const std::shared_ptr<const GameSnapshot> drawn = scene->lastSnapshot();
 
     pump(500);
 
     REQUIRE(pages->currentIndex() == 0);
 
     // Nothing was drawn from a game that no longer exists: not a line in the
-    // log, and not a round-and-trick over the menu page's empty status bar.
+    // log, and not a frame on the table waiting behind the menu page.
     REQUIRE(log->blockCount() == atAbandon);
-    REQUIRE(window.statusBar()->currentMessage() == cleared);
-    REQUIRE(window.statusBar()->currentMessage().isEmpty());
+    REQUIRE(scene->lastSnapshot() == drawn);
 }
 
 TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
@@ -887,4 +889,29 @@ TEST_CASE("The window cannot shrink the table below a readable scale", "[main-wi
     INFO("table " << table->viewport()->width() << "x" << table->viewport()->height()
                   << ", window " << window.width() << "x" << window.height());
     REQUIRE(scale >= tablespace::minimumScale - 1e-9);
+}
+
+// THE TABLE IS THE PAGE (the table redesign's phase 8). The info strip across its
+// top, the scoreboard beside it and the prompt bar beneath it are the panels in
+// its corners now, drawn by the scene; and the status bar, which said what the
+// scoreboard and the game-over panel say, is gone, so the window is the menu bar
+// and the table, as the mock-up is.
+TEST_CASE("The table page is the table alone", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    TableView* table = window.findChild<TableView*>();
+
+    REQUIRE(pages != nullptr);
+    REQUIRE(table != nullptr);
+    REQUIRE(table->parentWidget() == pages);
+
+    REQUIRE(window.findChild<QStatusBar*>() == nullptr);
+
+    // And the pause menu's way in for the mouse, until phase 9's menu bar.
+    REQUIRE(window.findChild<QAction*>("menu") != nullptr);
 }

@@ -3,7 +3,6 @@
 
 #include "paint/Theme.h"
 #include "table/HandItem.h"
-#include "table/ScoreboardItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
@@ -26,12 +25,9 @@
 #include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
-#include <QStatusBar>
-#include <QStringList>
 #include <QResizeEvent>
 #include <QStyleHints>
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -270,7 +266,6 @@ void MainWindow::showMainMenu()
     // for the elapsed column's sake, so a dock left open shows the new game from
     // its first line, and this window goes on holding no "is the log showing"
     // state of its own to get wrong.
-    statusBar()->clearMessage();
 }
 
 void MainWindow::showTable()
@@ -585,7 +580,6 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // a game's first snapshot, so the origin has to be re-armed by whatever
     // starts a game rather than once by whatever builds the window.
     haveStarted = false;
-    haveShownStatus = false;
 
     // AND THE LOG WITH IT, for the same reason. The elapsed column only means
     // anything against the origin it was measured from, so leaving the previous
@@ -636,10 +630,6 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     tableState = TableState::Playing;
 
     showTable();
-
-    // Replaced by the first snapshot, which arrives from inside start() below -
-    // so this is on screen only for as long as the deal takes.
-    statusBar()->showMessage(tr("Dealing..."));
 
     // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one
     // optional decides three things at once and they must not be separable:
@@ -735,43 +725,6 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     // thing they click.
     scene->setSnapshot(snapshot);
     hand->setPlayable(false);
-
-    updateStatus(*snapshot);
-}
-
-void MainWindow::updateStatus(const GameSnapshot& snapshot)
-{
-    // Only when it moved. render() runs on every frame a game publishes - about
-    // 1300 of them - and the status bar says nothing new on most of those, so
-    // building the string every time would be work nobody reads. The round type
-    // is not compared: it changes only when the round does.
-    if(haveShownStatus && snapshot.roundNumber == shownRound
-                       && snapshot.trickNumber == shownTrick)
-    {
-        return;
-    }
-
-    haveShownStatus = true;
-    shownRound = snapshot.roundNumber;
-    shownTrick = snapshot.trickNumber;
-
-    // Trick 0 is a real state - dealt and bid, nothing played yet - rather than
-    // an off-by-one, so it is named rather than printed as "0/8".
-    const QString trick = snapshot.trickNumber == 0
-                              ? tr("bidding")
-                              : tr("trick %1/%2").arg(snapshot.trickNumber)
-                                                 .arg(snapshot.trickCount);
-
-    // THE ROUND TYPE COMES FROM infostrip, not from a switch of its own. This
-    // window had a third spelling of the same three words until B2b: the log's
-    // fixed ASCII, the scoreboard's, and this. Two is the right number and the
-    // comment on snapshotlog says why - one for machines, one for people - so
-    // the people-facing one is shared and the log's stays separate.
-    statusBar()->showMessage(tr("Round %1/%2 - %3 (%4)")
-                                 .arg(QString::number(snapshot.roundNumber),
-                                      QString::number(snapshot.roundCount),
-                                      trick,
-                                      infostrip::roundTypeText(snapshot.roundType)));
 }
 
 // THE GAME THREAD IS PARKED IN makeBet() FROM HERE UNTIL onBidChosen(), which is
@@ -1035,18 +988,6 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
                             QString::number(row.score)));
     }
 
-    // getWinners(), not standings.front(). A drawn game has more than one
-    // winner and the engine is what decides that; reading the first row quietly
-    // names one of them, which is a bug that shipped once already in the
-    // terminal client's 2.1.0.
-    QStringList names;
-    for(const Standing& winner : winners)
-        names << QString::fromStdString(winner.name);
-
-    statusBar()->showMessage(names.size() == 1
-                                 ? tr("%1 wins").arg(names.front())
-                                 : tr("Drawn between %1").arg(names.join(tr(", "))));
-
     // THE GAME IS OVER BUT THE TABLE STAYS UP, which is what section 16.2's
     // panel is drawn over - the final snapshot arrived before this signal did
     // (section 4.1), so what is underneath the panel is the game that ended.
@@ -1073,7 +1014,6 @@ void MainWindow::showFailure(QString what)
     trickPanel->clearPrompt();
 
     appendLine(tr("-- the game thread failed: %1 --").arg(what));
-    statusBar()->showMessage(tr("The game ended in an error: %1").arg(what));
 
     // THE PANEL'S OTHER FACE, and the reason it has one: this ending is as much
     // a dead end as the ordinary one was, and it is the ending a player is least

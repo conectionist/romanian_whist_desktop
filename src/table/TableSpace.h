@@ -54,8 +54,9 @@ inline constexpr qreal marginBottom = 8.0;
 // fixed space the view scales, so a small window used to draw it as small as it
 // liked. Decided by the owner on 2026-10-17 at 0.30, for the old plaque's larger
 // names; raised to 0.36 on 2026-10-18 when phase 4's panels made them 25. The
-// smallest window is then 945 x 659, which still leaves a 1000 x 700 one room
-// for the scoreboard. TableSpaceTests pins the nine pixels.
+// smallest window is then minimumViewport() and the menu bar above it: since
+// phase 8 the table is the whole page, with nothing beside it or below it.
+// TableSpaceTests pins the nine pixels.
 inline constexpr qreal minimumScale = 0.36;
 
 // THE TABLE (section 2.4), every circle centred on `centre`.
