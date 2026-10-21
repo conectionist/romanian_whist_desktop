@@ -2,7 +2,6 @@
 
 #include "ui/GameOverPanel.h"
 
-#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QString>
@@ -33,26 +32,21 @@ Standing standing(unsigned int seat, const std::string& name, int score, unsigne
     return Standing{ Seat{seat}, name, score, place };
 }
 
-// The labels of one row of the panel's grid, left to right: place, name, score,
-// star. Read back through the layout rather than through findChildren<QLabel*>(),
-// which would also return the title and the announcement - and would return them
-// in construction order rather than in the order they are shown.
+// The labels of one row of the panel's standings, left to right: place, name,
+// score, star. Read back through the table rather than through
+// findChildren<QLabel*>(), which would also return the title, the announcement and
+// the headings - and would return them in construction order rather than in the
+// order they are shown.
 QStringList rowTexts(const GameOverPanel& panel, int row)
 {
-    QWidget* rows = panel.findChild<QWidget*>("standings");
+    SheetTable* rows = panel.findChild<SheetTable*>("standings");
     REQUIRE(rows);
-
-    QGridLayout* grid = qobject_cast<QGridLayout*>(rows->layout());
-    REQUIRE(grid);
 
     QStringList cells;
 
     for(int column = 0 ; column < 4 ; column++)
     {
-        QLayoutItem* item = grid->itemAtPosition(row, column);
-        REQUIRE(item);
-
-        QLabel* label = qobject_cast<QLabel*>(item->widget());
+        QLabel* label = rows->cell(row, column);
         REQUIRE(label);
 
         cells << label->text();
@@ -63,10 +57,10 @@ QStringList rowTexts(const GameOverPanel& panel, int row)
 
 int rowCount(const GameOverPanel& panel)
 {
-    QWidget* rows = panel.findChild<QWidget*>("standings");
+    SheetTable* rows = panel.findChild<SheetTable*>("standings");
     REQUIRE(rows);
 
-    return rows->layout()->count() / 4;
+    return rows->rowCount();
 }
 }
 

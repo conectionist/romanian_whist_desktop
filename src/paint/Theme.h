@@ -305,6 +305,13 @@ struct ThemeColours
         QColor bidDisabledText;
         QColor bidDisabledBorder;
 
+        // THE SHEETS (section 2.13), also phase 10's: the scrim that dims the page
+        // under a sheet, and the faint gold rules of a sheet's table - one under its
+        // headings and a fainter one under each row.
+        QColor scrim;
+        QColor sheetHeadRule;
+        QColor sheetRowRule;
+
         bool operator==(const TablePalette&) const = default;
     };
 

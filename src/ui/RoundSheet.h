@@ -9,9 +9,7 @@
 #include <QStringList>
 
 QT_BEGIN_NAMESPACE
-class QGridLayout;
 class QLabel;
-class QPushButton;
 QT_END_NAMESPACE
 
 // Section 16.1's round sheet: what the round just scored was worth, per seat,
@@ -24,9 +22,15 @@ QT_END_NAMESPACE
 namespace roundsheet
 {
 
-// "Round 7 - 6 cards - Normal". The three facts that identify a round, and the
-// same three the scoreboard carries at the top of the table all round.
+// "Round 7 · 6 cards · Normal". The three facts that identify a round, and the
+// same three the scoreboard carries at the top of the table all round, between
+// the same dots.
 QString titleFor(const RoundResult& result);
+
+// THE LINE UNDER THE TITLE, the mock-up's: the trump the round was played to -
+// "Trump K♥", or "No trump" in an eight-card round - and how a round is scored,
+// for a player reading the column of scores below it.
+QString metaFor(const RoundResult& result);
 
 // SECTION 16.1's "34 -> 41", and the honest rendering of a number that means two
 // different things either side of a commit. Inside onRoundScored() the total is
@@ -35,7 +39,9 @@ QString titleFor(const RoundResult& result);
 QString arrowFor(const RoundSeatResult& seat);
 
 // The round score with its sign, which is what carries the meaning - section 18
-// allows no cue that is colour alone, and the widget colours this as well.
+// allows no cue that is colour alone, and the widget colours this as well. "+7",
+// "−1" with section 2.13's minus sign (U+2212, as wide as the plus in tabular
+// figures), and "0".
 QString roundScoreFor(const RoundSeatResult& seat);
 
 // SECTION 16.1's WARNING LINES, and the reason RoundResult exists rather than
@@ -93,25 +99,18 @@ signals:
     void continueRequested();
 
 private:
-    // Empties the grid COMPLETELY, headings included - see the body for why they
-    // are rebuilt per round rather than kept.
-    void clearRows();
-
-    void addHeadings();
-    void addRow(const RoundSeatResult& seat);
-
     QLabel* title = nullptr;
-    QWidget* rows = nullptr;
-    QGridLayout* rowLayout = nullptr;
+    QLabel* meta = nullptr;
+
+    // A row per seat, in table order, refilled per round.
+    SheetTable* rows = nullptr;
 
     // Hidden when nothing is on four, which is most rounds - and hidden rather
     // than emptied, because this sheet is rebuilt per round and is not the
     // fixed-height info strip whose B2b finding argues the other way.
     QLabel* warning = nullptr;
 
-    QPushButton* continueButton = nullptr;
-
-    int placedRows = 0;
+    SheetButton* continueButton = nullptr;
 };
 
 #endif

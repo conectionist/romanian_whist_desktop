@@ -1,20 +1,200 @@
 #ifndef OVERLAY_H
 #define OVERLAY_H
 
+#include "paint/Panel.h"
 #include "paint/Theme.h"
 
+#include <QColor>
+#include <QFont>
+#include <QPushButton>
+#include <QSize>
+#include <QString>
 #include <QWidget>
 
+#include <initializer_list>
+#include <vector>
+
 QT_BEGIN_NAMESPACE
+class QGridLayout;
 class QLabel;
+class QScrollArea;
 class QVBoxLayout;
 QT_END_NAMESPACE
+
+// THE SHEETS' LOOK, section 2.13 of docs/ui-redesign/IMPLEMENTATION_PLAN.md: the
+// table redesign's phase 10. page.html's .scrim and .sheet - a dim over the page,
+// and on it a panel 720 wide, its title in Marcellus 32, a muted line under it,
+// tables with small capitals for headings, and its buttons at the bottom right.
+//
+// IN DEVICE-INDEPENDENT PIXELS, NOT TABLE UNITS, by the owner's call of
+// 2026-10-21: the mock-up's numbers read as screen pixels, as the menu bar's are.
+// The mock-up's sheets scale with its table, which at the smallest window would
+// set their words at six pixels; a sheet is read, so it keeps its size, and in a
+// window too small for it it narrows and its body scrolls.
+namespace sheet
+{
+
+// .sheet: 720 wide, its border included; never closer than 16 to the page's edges.
+inline constexpr int width = 720;
+inline constexpr int pageMargin = 16;
+
+// .sheet's padding, inside a border of 1.
+inline constexpr int border = 1;
+inline constexpr int paddingTop = 26;
+inline constexpr int paddingX = 30;
+inline constexpr int paddingBottom = 24;
+
+// What a line of a sheet is, which says how it is set (page.html):
+enum class Role
+{
+    // h2: Marcellus 32, cream.
+    Title,
+
+    // .meta: the muted line under a title, 17.
+    Meta,
+
+    // The sheet's own words - the rules - 17, cream.
+    Body,
+
+    // .note: 15, muted.
+    Note,
+
+    // .label: 13, bold, in spaced capitals, muted.
+    Label
+};
+
+QFont fontFor(Role role);
+QColor colourFor(Role role, const Theme::TablePalette& palette);
+
+// THE TEXT AS RICH TEXT, every ♥ and ♦ in the red suit's colour: what a label that
+// can show a suit glyph is given, as textruns colours one on the table. Escaped on
+// the way, so nothing else in it is read as markup.
+QString withSuits(const QString& text, const Theme::TablePalette& palette);
+
+} // namespace sheet
+
+// .sheet .actions button: Marcellus 19 on the buttons' green, rounded 8, its
+// border the buttons' gold - or, QUIET, with no fill at all. Lit, under the cursor
+// or reached by the keyboard (:focus-visible), its border and label are
+// gold-bright.
+//
+// A QPushButton, painted, so a sheet's buttons keep everything a button does - the
+// click, Enter and Space, the default - and every test that finds one by name.
+class SheetButton : public QPushButton
+{
+    Q_OBJECT
+
+public:
+    enum class Kind
+    {
+        // The green one: what the sheet is for. Rightmost, as the mock-up's last.
+        Primary,
+
+        Quiet
+    };
+
+    SheetButton(const QString& text, Kind kind, QWidget* parent = nullptr);
+
+    Kind kind() const { return buttonKind; }
+    void setKind(Kind kind);
+
+    void setColours(const Theme::TablePalette& palette);
+
+    // Under the cursor, held down, or with the keyboard brought to it by Tab. NOT
+    // merely focused: a sheet puts the keyboard on its default button when it
+    // opens (Overlay::focusDefault()), and a browser draws no focus ring for focus
+    // a page moved there itself.
+    bool isLit() const;
+
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
+
+private:
+    Kind buttonKind;
+    Theme::TablePalette colours;
+
+    // Whether the keyboard came here by Tab, and has not left since.
+    bool tabbedTo = false;
+};
+
+// .sheet table: headings in small spaced capitals over a faint gold rule, rows of
+// 18-pixel figures that line up, each over a fainter rule.
+//
+// LABELS IN A GRID, so a test reads a cell's text as a player does and the column
+// widths are Qt's to work out; the rules are painted under them.
+class SheetTable : public QWidget
+{
+    Q_OBJECT
+
+public:
+    struct Column
+    {
+        QString heading;
+        Qt::Alignment alignment = Qt::AlignRight;
+    };
+
+    // A cell's colour: the text's own, or a score's - green for a gain and red for
+    // a loss, which reinforces the sign it carries rather than replacing it
+    // (section 18).
+    enum class Tone
+    {
+        Plain,
+        Good,
+        Bad
+    };
+
+    struct Cell
+    {
+        QString text;
+        Tone tone = Tone::Plain;
+
+        // Bold: your own row, or a winner's.
+        bool strong = false;
+    };
+
+    explicit SheetTable(QWidget* parent = nullptr);
+
+    // The columns and their headings. Empties the table.
+    void setColumns(std::vector<Column> columns);
+
+    void addRow(const std::vector<Cell>& cells);
+
+    // Every row but the headings.
+    void clearRows();
+
+    // The rows added since the last clear, not counting the headings; and one
+    // row's cell, 0 being the first row under them. READ by the sheets' tests.
+    int rowCount() const { return static_cast<int>(rows.size()); }
+    QLabel* cell(int row, int column) const;
+
+    void setColours(const Theme::TablePalette& palette);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    QLabel* addLabel(const QString& text, int row, int column, bool heading);
+    void colour(QLabel* label, Tone tone);
+
+    QGridLayout* grid = nullptr;
+    std::vector<Column> columns;
+    std::vector<QLabel*> headings;
+    std::vector<std::vector<QLabel*>> rows;
+    std::vector<std::vector<Tone>> tones;
+    Theme::TablePalette colours;
+};
 
 // WHAT EVERY SHEET OVER THE PAGE IS: the pause menu, the round sheet, the
 // game-over panel, and the menu bar's Rules and Settings. A subclass fills
 // panelLayout() and says which button the keyboard starts on; this class does
 // the rest, once, where the five used to each carry a copy (PR #35's review,
-// finding #11). Phase 10 restyles them here.
+// finding #11) - and since phase 10 it is also where they look the way section
+// 2.13 says.
 //
 // A PANEL AND NOT A QDialog, which is section 4.4's rule and which the pause
 // menu started out breaking. It was a modal QDialog first, on the reasoning that
@@ -54,10 +234,9 @@ public:
     // `parent` is the page stack, which this covers from now on.
     explicit Overlay(QWidget* parent);
 
-    // The panel's colours: the words sit on a plaque rather than on the table's
-    // green, because Theme has no colour for text on the green - textPrimary is
-    // chosen against seatPlaque. D1 found that by rendering a menu title that
-    // was dark grey on dark green.
+    // The table's palette (section 2.2), which the sheets are drawn in: their
+    // words, their buttons, and - through a dark QPalette - the controls Qt's style
+    // draws on them, Settings' slider and box.
     void setTheme(const Theme& theme);
 
     // Puts the keyboard on the button this sheet leads with, so Enter takes it.
@@ -67,26 +246,39 @@ public:
     virtual void focusDefault() = 0;
 
     // Moves the keyboard to the next (or previous) control inside this sheet,
-    // in the window's Tab order, wrapping round at either end. From outside the
-    // sheet it lands on the first (or last). False when the sheet has nothing to
-    // stop on, which leaves the keyboard where it was.
+    // in the window's Tab order, wrapping round at either end, and scrolls it into
+    // view. From outside the sheet it lands on the first (or last). False when the
+    // sheet has nothing to stop on, which leaves the keyboard where it was.
     bool focusNextInside(bool next);
 
+    // The sheet's own rect - its panel, border included - in this widget.
+    QRect sheetRect() const;
+
 protected:
-    // The plaque, centred on the page and no bigger than its contents, and the
-    // column a subclass adds its words and buttons to.
+    // The sheet's content, top to bottom, inside its padding; and the widget it
+    // is laid on.
     QWidget* panel() const { return plaque; }
     QVBoxLayout* panelLayout() const { return column; }
 
     const Theme& theme() const { return palette; }
 
-    // A sheet's title: bold, and `scale` times the label's own font - off the
-    // widget's font rather than a point size written here, so a large system
-    // font or a HiDPI display gets a title that grew with everything else.
-    static void styleTitle(QLabel* title, qreal scale);
+    // Sets `label` as a line of `role`: its font and colour, and wrapping. Kept,
+    // so a new theme sets it again.
+    void dress(QLabel* label, sheet::Role role);
 
-    // The dim, from Theme (section 18.1), under the panel.
+    // The sheet's buttons, at the bottom right, 12 apart and 20 below what is
+    // above them, in the order given: the primary one last.
+    void addActions(std::initializer_list<SheetButton*> buttons);
+
+    // Sizes the sheet to what it now holds, and centres it: called when its
+    // content changes. No wider than section 2.13's 720 or the page less its
+    // margins, and no taller than the page - past that, its body scrolls.
+    void placeSheet();
+
+    // The dim, then the panel round the sheet.
     void paintEvent(QPaintEvent* event) override;
+
+    void resizeEvent(QResizeEvent* event) override;
 
     // SWALLOWED, and not left to the default. QWidget::mousePressEvent() ignores
     // the event, which propagates to the PARENT rather than to the widgets
@@ -94,14 +286,21 @@ protected:
     // says so on purpose, and stops a press on the dim from reaching the window.
     void mousePressEvent(QMouseEvent* event) override;
 
-    // The parent's resizes, which this follows.
+    // The parent's resizes, which this follows, and the sheet's content changing
+    // size.
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-    Theme palette = Theme::light();
+    Theme palette = Theme::dark();
 
+    QScrollArea* scroll = nullptr;
     QWidget* plaque = nullptr;
     QVBoxLayout* column = nullptr;
+
+    // The panel's picture, with its drop shadow: the overlay repaints with every
+    // frame of the table under a sheet that does not hold the game, and the two
+    // blurred shadows are too dear to paint each time.
+    mutable panel::Cache chrome;
 };
 
 #endif

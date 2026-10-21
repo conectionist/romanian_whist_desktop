@@ -4,10 +4,11 @@
 
 #include <QBoxLayout>
 #include <QCoreApplication>
+#include <QFontMetricsF>
 #include <QLabel>
-#include <QPushButton>
 
 #include <algorithm>
+#include <cmath>
 
 using namespace romanian_whist;
 
@@ -136,50 +137,61 @@ RulesSheet::RulesSheet(QWidget* parent) : Overlay(parent)
 
     QLabel* title = new QLabel(QCoreApplication::translate("rulessheet", "Rules at a glance"), panel);
     title->setObjectName(QStringLiteral("rulesTitle"));
-    styleTitle(title, 1.6);
+    dress(title, sheet::Role::Title);
 
     inside->addWidget(title);
-    inside->addSpacing(12);
+    inside->addSpacing(14);
 
     // A bulleted list, as the mock-up's <ul>. Rich text for the bullets only:
     // every line is escaped on its way in, so nothing in it is read as markup.
     rules = new QLabel(panel);
     rules->setObjectName(QStringLiteral("rulesText"));
     rules->setTextFormat(Qt::RichText);
-    rules->setWordWrap(true);
+    dress(rules, sheet::Role::Body);
 
-    // max-width: 62ch in the mock-up; about this wide in the client's own font.
-    rules->setFixedWidth(560);
+    // max-width: 62ch in the mock-up - 62 of the font's zeros - so a line is as
+    // long as reads comfortably whatever the sheet's width. A maximum and not a
+    // width, so a sheet narrowed by a small window narrows the list with it.
+    rules->setMaximumWidth(static_cast<int>(
+        std::ceil(62.0 * QFontMetricsF(rules->font()).horizontalAdvance(QLatin1Char('0')))));
 
-    inside->addWidget(rules);
-    inside->addSpacing(18);
+    // IN A ROW WITH A STRETCH AFTER IT, not straight in the column. A column asks
+    // a label how tall it is at the column's whole width, past the label's
+    // maximum, and so under-counts the lines it wraps to; a row hands it the
+    // width it will really have, and asks at that.
+    QHBoxLayout* row = new QHBoxLayout;
+    row->setContentsMargins(0, 0, 0, 0);
+    row->addWidget(rules, 1);
+    row->addStretch(0);
 
-    closeButton = new QPushButton(QCoreApplication::translate("rulessheet", "Close"), panel);
+    inside->addLayout(row);
+
+    closeButton = new SheetButton(QCoreApplication::translate("rulessheet", "Close"),
+                                  SheetButton::Kind::Primary, panel);
     closeButton->setObjectName(QStringLiteral("rulesClose"));
     closeButton->setDefault(true);
-    closeButton->setMinimumWidth(140);
-    closeButton->setMinimumHeight(34);
 
     // Bottom-right, where the mock-up's sheets keep their actions.
-    QHBoxLayout* actions = new QHBoxLayout;
-    actions->addStretch(1);
-    actions->addWidget(closeButton);
-    inside->addLayout(actions);
+    addActions({ closeButton });
 
     connect(closeButton, &QPushButton::clicked, this, &RulesSheet::closeRequested);
 }
 
 void RulesSheet::showRules(const newgame::Config& config)
 {
-    QString list = QStringLiteral("<ul style=\"margin-left: 0px; -qt-list-indent: 1;\">");
+    // .sheet ul: lines 1.5 tall. Qt's list indent is the document's, which leaves
+    // the bullets where Qt puts them rather than the mock-up's 20 in.
+    QString list = QStringLiteral("<ul style=\"margin-left: 0px; margin-top: 0px; -qt-list-indent: 1;\">");
 
     for(const QString& line : rulessheet::linesFor(config))
-        list += QStringLiteral("<li style=\"margin-bottom: 6px;\">") + line.toHtmlEscaped() +
+        list += QStringLiteral("<li style=\"line-height: 150%;\">") + line.toHtmlEscaped() +
                 QStringLiteral("</li>");
 
     list += QStringLiteral("</ul>");
 
     rules->setText(list);
+
+    placeSheet();
 }
 
 void RulesSheet::focusDefault()

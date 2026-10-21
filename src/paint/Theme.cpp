@@ -269,6 +269,12 @@ Theme::TablePalette tablePalette()
     table.bidDisabledText = QColor(0x6D, 0x60, 0x4D);
     table.bidDisabledBorder = QColor(0x4D, 0x3D, 0x28);
 
+    // Section 2.13, from page.html's .scrim (background rgba(8, 5, 3, 0.62)) and
+    // .sheet th / td (border-bottom 1px rgba(201, 164, 92, 0.3) and 0.1).
+    table.scrim = rgba(8, 5, 3, 0.62);
+    table.sheetHeadRule = rgba(201, 164, 92, 0.3);
+    table.sheetRowRule = rgba(201, 164, 92, 0.1);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

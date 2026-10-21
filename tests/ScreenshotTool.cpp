@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "MainWindow.h"
+#include "TableFixtures.h"
 #include "WindowDriving.h"
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
@@ -11,7 +12,12 @@
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 #include "paint/Theme.h"
+#include "ui/GameOverPanel.h"
 #include "ui/NewGameDialog.h"
+#include "ui/PauseOverlay.h"
+#include "ui/RoundSheet.h"
+#include "ui/RulesSheet.h"
+#include "ui/SettingsSheet.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -31,11 +37,13 @@
 #include <QTimer>
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Screenshots of the real window, for comparing the client against the table
@@ -675,5 +683,138 @@ TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
             for(std::size_t i = 0 ; i < shot.hand.size() ; i++)
                 CHECK(hand->isPlayable(i) == shot.legal[i]);
         }
+    }
+}
+
+// ---- the sheets, for the redesign's phase 10 ----
+//
+// sheet-pause.png, sheet-round.png, sheet-game-over.png, sheet-rules.png and
+// sheet-settings.png: each of the five sheets over a table, on a page of 1920 x
+// 1034 - the window less its menu bar, as table-empty.png is. The mock-up has no
+// pictures of its sheets, so these are looked at as they are.
+//
+// A FIXTURE TABLE, NOT A GAME: a round sheet that waits and a game's end are a
+// whole game away, and what is being looked at is the sheet, not the moment. The
+// round has one seat on a streak of four, so the warning line shows, and the game
+// ends in a tie, so two rows are starred.
+namespace
+{
+
+const char* const sheetNames[] = { "Player", "Ana", "Bogdan", "Cristina", "Dan", "Elena" };
+
+GameSnapshot sheetTable()
+{
+    GameSnapshot snapshot = fullTable();
+
+    for(std::size_t i = 0 ; i < snapshot.seats.size() ; i++)
+        snapshot.seats[i].name = sheetNames[i];
+
+    return snapshot;
+}
+
+RoundResult sheetRound()
+{
+    RoundResult result;
+    result.roundNumber = 10;
+    result.roundCount = 32;
+    result.trickCount = 5;
+    result.roundType = romanian_whist::RoundType::Normal;
+    result.hasTrump = true;
+    result.trump = romanian_whist::Card(romanian_whist::Rank::King, romanian_whist::Suit::Hearts);
+    result.nextRoundCountsForStreaks = true;
+
+    const int bets[] = { 1, 2, 0, 1, 2, 0 };
+    const int taken[] = { 1, 1, 0, 2, 1, 0 };
+    const int totals[] = { 34, 41, 28, 19, 37, 30 };
+
+    for(std::size_t i = 0 ; i < 6 ; i++)
+    {
+        RoundSeatResult seat;
+        seat.name = sheetNames[i];
+        seat.seatIndex = static_cast<unsigned int>(i);
+        seat.isHuman = i == 0;
+        seat.hasBet = true;
+        seat.bet = static_cast<unsigned int>(bets[i]);
+        seat.tricksWon = static_cast<unsigned int>(taken[i]);
+        seat.roundScore = bets[i] == taken[i] ? 5 + bets[i] : -std::abs(bets[i] - taken[i]);
+        seat.totalScore = totals[i];
+        seat.winStreak = i == 2 ? 4 : 0;
+        seat.lossStreak = i == 3 ? 2 : 0;
+        result.seats.push_back(seat);
+    }
+
+    return result;
+}
+
+}
+
+TEST_CASE("Screenshots of the sheets", "[.screenshot]")
+{
+    const QString dir = shotsDirectory();
+    REQUIRE(QDir().mkpath(dir));
+
+    QWidget page;
+    page.resize(1920, 1034);
+
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(sheetTable()));
+
+    TableView view(&scene, &page);
+    view.setGeometry(page.rect());
+
+    PauseOverlay* pause = new PauseOverlay(&page);
+
+    RoundSheet* round = new RoundSheet(&page);
+    round->showResult(sheetRound());
+
+    GameOverPanel* over = new GameOverPanel(&page);
+    std::vector<romanian_whist::Standing> standings;
+    const int finals[] = { 63, 63, 51, 47, 40, 22 };
+    const unsigned int places[] = { 1, 1, 3, 4, 5, 6 };
+    const std::size_t order[] = { 1, 4, 0, 5, 2, 3 };
+
+    for(std::size_t i = 0 ; i < 6 ; i++)
+        standings.push_back({ romanian_whist::Seat{ static_cast<unsigned int>(order[i]) },
+                              sheetNames[order[i]], finals[i], places[i] });
+
+    over->showResult(standings, { standings[0], standings[1] });
+
+    RulesSheet* rules = new RulesSheet(&page);
+    rules->showRules(shotConfig(6));
+
+    SettingsSheet* settings = new SettingsSheet(&page);
+    settings->setValues(newgame::DefaultSpeed, true);
+
+    const std::vector<std::pair<const char*, Overlay*>> shots = {
+        { "sheet-pause.png", pause },
+        { "sheet-round.png", round },
+        { "sheet-game-over.png", over },
+        { "sheet-rules.png", rules },
+        { "sheet-settings.png", settings }
+    };
+
+    for(const auto& [file, sheet] : shots)
+        sheet->hide();
+
+    page.show();
+    pump(200);
+
+    for(const auto& [file, sheet] : shots)
+    {
+        sheet->setTheme(Theme::dark());
+        sheet->show();
+        sheet->raise();
+        pump(100);
+
+        const QPixmap picture = page.grab();
+        const QString path = QDir(dir).filePath(QString::fromUtf8(file));
+        REQUIRE(picture.save(path));
+
+        std::cout << path.toStdString() << '\n';
+
+        CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1034));
+
+        sheet->hide();
     }
 }

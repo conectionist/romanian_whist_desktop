@@ -88,15 +88,11 @@ struct Styles
 };
 
 // The two fonts spaced by `em` of their size and set in capitals, as .label and
-// th are: CSS's letter-spacing is a fixed amount after every letter, which is
-// QFont::AbsoluteSpacing.
+// th are (fonts::capitals()).
 void capitalsSpaced(textruns::Style& style, qreal em)
 {
     for(QFont* font : { &style.plain, &style.strong })
-    {
-        font->setCapitalization(QFont::AllUppercase);
-        font->setLetterSpacing(QFont::AbsoluteSpacing, em * font->pixelSize());
-    }
+        *font = fonts::capitals(*font, em);
 }
 
 Styles stylesFor(const Theme::TablePalette& palette)
@@ -118,13 +114,8 @@ Styles stylesFor(const Theme::TablePalette& palette)
     capitalsSpaced(styles.head, headSpacing);
 
     // TABULAR FIGURES (section 18), so a 1 and a 0 occupy the same box and a
-    // column of scores lines up on its own. GUARDED, because CMakeLists.txt
-    // declares a floor of 6.5 and QFont::Tag arrived in 6.7: unguarded, it fails to
-    // compile there, rather than degrading to proportional digits.
-    QFont cell = fonts::body();
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    cell.setFeature(QFont::Tag("tnum"), 1);
-#endif
+    // column of scores lines up on its own.
+    const QFont cell = fonts::tabular(fonts::body());
 
     styles.cell = hudtext::style(cell, cellSize, palette.cream, palette);
 
