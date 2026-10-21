@@ -75,6 +75,13 @@ QFont labelFont();
 // finding #15).
 QString labelOf(const QString& text);
 
+// The same text with its mnemonic marks dropped but "&&" kept - the form an
+// action's iconText() hands a button. A button must never be given a text with
+// a mnemonic in it: QAbstractButton::setText() registers the mnemonic as a
+// shortcut of its own, and View's Alt+V would then be claimed twice - by the
+// button and by the window's QShortcut - so that neither fires.
+QString withoutMnemonic(const QString& text);
+
 // What colour an item's icon and label take. .btn: the icon gold and the label
 // cream; both gold-bright under the cursor or the keyboard ("lit"); and, as the
 // corner buttons are, both muted when the item can't be used.

@@ -8,6 +8,7 @@
 #include <QAction>
 #include <QFontMetricsF>
 #include <QImage>
+#include <QKeySequence>
 #include <QMainWindow>
 #include <QMenu>
 #include <QPixmap>
@@ -140,6 +141,31 @@ TEST_CASE("A label reads mnemonics the way Qt does", "[menu-bar]")
     REQUIRE(menubar::labelOf(QStringLiteral("&&&A")) == QStringLiteral("&A"));
     REQUIRE(menubar::labelOf(QStringLiteral("Trailing&")) == QStringLiteral("Trailing"));
     REQUIRE(menubar::labelOf(QString()).isEmpty());
+}
+
+TEST_CASE("View's button claims no mnemonic of its own", "[menu-bar]")
+{
+    // A button registers any mnemonic in its text as a shortcut of its own
+    // (QAbstractButton::setText()). Given View's title as it comes, "&View", the
+    // button claimed Alt+V beside the window's QShortcut, and with two claims
+    // Qt fires neither: the View menu stopped opening from the keyboard. Found
+    // in the app while checking the fix for review finding #15.
+    REQUIRE(menubar::withoutMnemonic(QStringLiteral("&View")) == QStringLiteral("View"));
+    REQUIRE(menubar::withoutMnemonic(QStringLiteral("&Vedere && jurnal")) == QStringLiteral("Vedere && jurnal"));
+    REQUIRE(menubar::withoutMnemonic(QStringLiteral("Exit")) == QStringLiteral("Exit"));
+
+    Fixture fixture;
+    MenuBarButton* view = fixture.button("menuView");
+    REQUIRE(view != nullptr);
+
+    REQUIRE(QKeySequence::mnemonic(view->text()).isEmpty());
+    REQUIRE(view->label() == QStringLiteral("View"));
+
+    for(MenuBarButton* item : fixture.bar->buttons())
+    {
+        INFO(item->objectName().toStdString());
+        REQUIRE(QKeySequence::mnemonic(item->text()).isEmpty());
+    }
 }
 
 TEST_CASE("An ampersand in a label is drawn and sized as one", "[menu-bar]")

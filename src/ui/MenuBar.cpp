@@ -59,6 +59,30 @@ QString menubar::labelOf(const QString& text)
     return label;
 }
 
+QString menubar::withoutMnemonic(const QString& text)
+{
+    QString plain;
+    plain.reserve(text.size());
+
+    for(qsizetype i = 0 ; i < text.size() ; i++)
+    {
+        if(text.at(i) != QLatin1Char('&'))
+        {
+            plain += text.at(i);
+            continue;
+        }
+
+        // "&&" stays as it is; a lone '&' goes.
+        if(i + 1 < text.size() && text.at(i + 1) == QLatin1Char('&'))
+        {
+            plain += QStringLiteral("&&");
+            i++;
+        }
+    }
+
+    return plain;
+}
+
 menubar::Colours menubar::coloursFor(const Theme::TablePalette& palette, bool enabled, bool lit)
 {
     if(!enabled)
@@ -226,9 +250,9 @@ MenuBar::MenuBar(const Items& given, QWidget* window) : QWidget(window)
 
     viewButton = new MenuBarButton(std::nullopt, this);
     viewButton->setObjectName(QStringLiteral("menuView"));
-    // The title as it comes, '&' and all: label() reads it, as it reads an
-    // action's text.
-    viewButton->setText(given.view ? given.view->title() : QString());
+    // In the form an action's text reaches its button: label() reads it the same
+    // way, and it carries no mnemonic to claim Alt+V (see withoutMnemonic()).
+    viewButton->setText(given.view ? menubar::withoutMnemonic(given.view->title()) : QString());
     viewButton->setMenu(given.view);
     viewButton->setPopupMode(QToolButton::InstantPopup);
     items.push_back(viewButton);
