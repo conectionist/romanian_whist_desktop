@@ -846,14 +846,12 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     trickPanel->clearPrompt();
 
     // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
-    // lives on. Unreachable today - every path here comes from the menu page,
-    // where no game is running - and one line against a menu left standing over
-    // a game that has just been dealt.
+    // lives on. Reachable since phase 9: the menu bar's New Game stays live
+    // while the pause menu is up, so a game can be dealt from under it.
     pauseOverlay->hide();
 
-    // AND THE PANEL THE LAST GAME ENDED ON, which is not unreachable at all: it
-    // is where Play again is pressed, and it is still up while the setup dialog
-    // it opens is answered.
+    // AND THE PANEL THE LAST GAME ENDED ON. showNewGameDialog() takes it down
+    // while the dialog is up; this keeps it down for the game the dialog dealt.
     gameOverPanel->hide();
 
     // AND THE SHEET, with its hold - a game abandoned from a round sheet would
