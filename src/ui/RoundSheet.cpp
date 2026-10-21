@@ -56,8 +56,8 @@ QString roundsheet::arrowFor(const RoundSeatResult& seat)
     // them here is what makes the arrow show a before and an after rather than
     // one number twice.
     return QCoreApplication::translate("roundsheet", "%1 \xE2\x86\x92 %2")
-        .arg(QString::number(seat.totalScore),
-             QString::number(seat.totalScore + seat.roundScore));
+        .arg(sheet::number(seat.totalScore),
+             sheet::number(seat.totalScore + seat.roundScore));
 }
 
 QString roundsheet::roundScoreFor(const RoundSeatResult& seat)
@@ -70,8 +70,9 @@ QString roundsheet::roundScoreFor(const RoundSeatResult& seat)
     if(seat.roundScore > 0)
         return QStringLiteral("+%1").arg(seat.roundScore);
 
+    // The minus sign the Total column writes too (sheet::number()).
     if(seat.roundScore < 0)
-        return QStringLiteral("\u2212%1").arg(-seat.roundScore);
+        return sheet::number(seat.roundScore);
 
     return QStringLiteral("0");
 }

@@ -71,6 +71,13 @@ QColor colourFor(Role role, const Theme::TablePalette& palette);
 // the way, so nothing else in it is read as markup.
 QString withSuits(const QString& text, const Theme::TablePalette& palette);
 
+// A WHOLE NUMBER AS A SHEET'S TABLE WRITES IT: a negative one with section 2.13's
+// minus sign, U+2212, which is as wide as a digit in tabular figures - not
+// QString::number()'s hyphen, which is narrower, so one column of a sheet would
+// otherwise carry two different minus signs (PR #36's review, finding #6). No plus:
+// a sign that carries meaning is the caller's to add (roundsheet::roundScoreFor()).
+QString number(int value);
+
 } // namespace sheet
 
 // .sheet .actions button: Marcellus 19 on the buttons' green, rounded 8, its

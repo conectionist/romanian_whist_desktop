@@ -189,6 +189,6 @@ void GameOverPanel::addRow(const Standing& standing, bool isWinner)
 
     rows->addRow({ { tr("%1.").arg(standing.place), SheetTable::Tone::Plain, isWinner },
                    { QString::fromStdString(standing.name), SheetTable::Tone::Plain, isWinner },
-                   { QString::number(standing.score), SheetTable::Tone::Plain, isWinner },
+                   { sheet::number(standing.score), SheetTable::Tone::Plain, isWinner },
                    { star, SheetTable::Tone::Plain, isWinner } });
 }

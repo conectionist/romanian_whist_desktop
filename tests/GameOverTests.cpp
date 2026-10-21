@@ -170,6 +170,20 @@ TEST_CASE("Every winner is starred, from getWinners()", "[game-over]")
     REQUIRE(rowTexts(panel, 1).at(3) == QString::fromUtf8("★"));
 }
 
+TEST_CASE("A negative standing takes the sheets' minus sign", "[game-over]")
+{
+    // PR #36's review, finding #6: the round sheet's figures write U+2212, as wide
+    // as a digit in tabular figures, and the standings are the same kind of table.
+    const std::vector<Standing> standings{ standing(0, "Ana", 7, 1),
+                                           standing(1, "Bogdan", -12, 2) };
+
+    GameOverPanel panel;
+    panel.showResult(standings, { standings[0] });
+
+    REQUIRE(rowTexts(panel, 0).at(2) == QStringLiteral("7"));
+    REQUIRE(rowTexts(panel, 1).at(2) == QStringLiteral("\u221212"));
+}
+
 TEST_CASE("A second game over replaces the first one's table", "[game-over]")
 {
     // The panel outlives every game in it - it is a child of the stack, built

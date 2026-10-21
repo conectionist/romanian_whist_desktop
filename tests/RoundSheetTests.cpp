@@ -114,6 +114,15 @@ TEST_CASE("The round score carries its own sign", "[round-sheet]")
     REQUIRE(roundsheet::roundScoreFor(seatResult("Ana", 0, 0)) == QStringLiteral("0"));
 }
 
+TEST_CASE("A negative total takes the round column's minus sign", "[round-sheet]")
+{
+    // PR #36's review, finding #6. The Round column wrote U+2212 and the Total
+    // column a hyphen, so the two minus signs of one sheet differed in glyph and
+    // width beside each other.
+    REQUIRE(roundsheet::arrowFor(seatResult("Ana", 5, -3)) == QStringLiteral("\u22123 \u2192 2"));
+    REQUIRE(roundsheet::arrowFor(seatResult("Ana", -4, 1)) == QStringLiteral("1 \u2192 \u22123"));
+}
+
 TEST_CASE("The line under the title names the trump or says there is none", "[round-sheet]")
 {
     // The mock-up's .meta line: the trump the round was played to, and how it was

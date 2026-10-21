@@ -192,6 +192,15 @@ QString sheet::withSuits(const QString& text, const Theme::TablePalette& palette
     return rich;
 }
 
+QString sheet::number(int value)
+{
+    // Through a long long, so the most negative int has a magnitude to print.
+    if(value < 0)
+        return QStringLiteral("\u2212%1").arg(-static_cast<long long>(value));
+
+    return QString::number(value);
+}
+
 // ---- SheetButton ----
 
 SheetButton::SheetButton(const QString& text, Kind kind, QWidget* parent)
