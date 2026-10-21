@@ -15,6 +15,7 @@
 
 #include <QCoreApplication>
 #include <QFontMetricsF>
+#include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
@@ -163,6 +164,50 @@ TEST_CASE("A disabled button takes no click and does not light up", "[hud]")
     hoverAt(lone.scene, lone.middle());
     pressAndRelease(lone.scene, lone.middle(), lone.middle());
 
+    REQUIRE_FALSE(lone.button->isHovered());
+    REQUIRE(lone.clicks == 0);
+}
+
+// NOR DOES ANYTHING UNDER IT: the button is drawn over the table, so a press or a
+// hover that went through it would reach a seat or a card in your hand.
+TEST_CASE("A disabled button keeps the cursor and the click from what lies beneath", "[hud]")
+{
+    // What lies beneath: something that takes both, and counts them.
+    struct Beneath : QGraphicsRectItem
+    {
+        int presses = 0;
+        int hovers = 0;
+
+        explicit Beneath(const QRectF& rect) : QGraphicsRectItem(rect)
+        {
+            setAcceptHoverEvents(true);
+            setAcceptedMouseButtons(Qt::LeftButton);
+        }
+
+        void mousePressEvent(QGraphicsSceneMouseEvent* event) override
+        {
+            presses++;
+            event->accept();
+        }
+
+        void hoverEnterEvent(QGraphicsSceneHoverEvent*) override { hovers++; }
+        void hoverMoveEvent(QGraphicsSceneHoverEvent*) override { hovers++; }
+    };
+
+    LoneButton lone;
+
+    Beneath* beneath = new Beneath(QRectF(QPointF(), lone.button->size()));
+    beneath->setZValue(lone.button->zValue() - 1.0);
+    lone.scene.addItem(beneath);
+
+    // Enabled, then disabled, as TableScene's are: the switch is what lost them.
+    lone.button->setEnabled(false);
+
+    hoverAt(lone.scene, lone.middle());
+    pressAndRelease(lone.scene, lone.middle(), lone.middle());
+
+    REQUIRE(beneath->presses == 0);
+    REQUIRE(beneath->hovers == 0);
     REQUIRE_FALSE(lone.button->isHovered());
     REQUIRE(lone.clicks == 0);
 }

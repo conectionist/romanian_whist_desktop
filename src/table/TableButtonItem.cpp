@@ -103,11 +103,14 @@ QVariant TableButtonItem::itemChange(GraphicsItemChange change, const QVariant& 
 {
     if(change == ItemEnabledHasChanged)
     {
-        // A disabled button takes neither the cursor nor a click, and shows it: a
-        // control that looks live and does nothing is a defect of its own.
-        setAcceptHoverEvents(value.toBool());
-        setAcceptedMouseButtons(value.toBool() ? Qt::LeftButton : Qt::NoButton);
-
+        // A disabled button neither lights up nor clicks, and shows it: a control
+        // that looks live and does nothing is a defect of its own.
+        //
+        // BUT IT STILL TAKES THE CURSOR AND THE PRESS, which Qt then discards: it is
+        // drawn over the table, and a press or a hover that went through it would
+        // land on whatever is beneath - a seat, or a card in your hand - as it
+        // would through no panel on the table. So its hover and its button are left
+        // as the constructor set them.
         if(!value.toBool())
             hovered = false;
 
