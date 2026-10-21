@@ -147,7 +147,8 @@ private slots:
     // menu bar may replace a game still running (prepare() stops and joins it).
     //
     // A RUNNING GAME IS HELD WHILE THE DIALOG IS UP, by the owner's call of
-    // 2026-10-21, and runs on if the dialog is cancelled.
+    // 2026-10-21, and runs on if the dialog is cancelled. A finished game's
+    // standings come down while it is up, and go back if it is cancelled.
     void showNewGameDialog();
 
     // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
@@ -261,8 +262,9 @@ private:
     Overlay* activeOverlay() const;
 
     // Raises section 16.2's panel over the table it was filled from. The three
-    // callers are the two endings - onGameOver() and showFailure() - and a Play
-    // again the player then cancelled, which must put back what it took down.
+    // callers are the two endings - onGameOver() and showFailure() - and a New
+    // Game dialog the player then cancelled, which must put back what it took
+    // down.
     //
     // FILLS NOTHING. The panel keeps its face between a hide and a show, so this
     // is show, raise and focus - the same three the pause menu does.

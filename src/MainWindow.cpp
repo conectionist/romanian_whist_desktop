@@ -254,32 +254,16 @@ void MainWindow::buildTable()
     // requested, and this game was not stopped, it finished.
     connect(gameOverPanel, &GameOverPanel::mainMenuRequested, this, &MainWindow::abandonToMenu);
 
-    connect(gameOverPanel, &GameOverPanel::playAgainRequested, this, [this]
-    {
-        // HIDDEN FIRST, because what follows opens a modal dialog and this panel
-        // would otherwise stand over the table behind it for as long as the
-        // player takes to answer.
-        gameOverPanel->hide();
-
-        // SECTION 16.2's "play again reopens the setup dialog pre-filled with
-        // the same settings" - which is exactly what this slot already does,
-        // from lastConfig. It is section 4.3's ordering from the top: stop(),
-        // join, prepare(), start(), with a freshly built GameSetup.
-        //
-        // The dialog's exec() runs BEFORE startGame(), so the trap that function
-        // records - no modal event loop between prepare() and start() - holds
-        // here as it does from the menu page.
-        showNewGameDialog();
-
-        // AND BACK UP IF THE PLAYER CANCELLED IT, which is the dead end this
-        // whole panel exists to remove, walked into from the other side: a
-        // dismissed dialog leaves a finished game on the table, and hiding the
-        // panel on the way in would have left nothing to press. startGame() is
-        // what moves the state on, so this reads the state rather than the
-        // dialog's answer.
-        if(tableState == TableState::Finished)
-            showGameOverPanel();
-    });
+    // SECTION 16.2's "play again reopens the setup dialog pre-filled with the
+    // same settings" - which is exactly what showNewGameDialog() does, from
+    // lastConfig, taking this panel down while it is open and putting it back
+    // if it is cancelled. It is section 4.3's ordering from the top: stop(),
+    // join, prepare(), start(), with a freshly built GameSetup.
+    //
+    // The dialog's exec() runs BEFORE startGame(), so the trap that function
+    // records - no modal event loop between prepare() and start() - holds here
+    // as it does from the menu page.
+    connect(gameOverPanel, &GameOverPanel::playAgainRequested, this, &MainWindow::showNewGameDialog);
 }
 
 void MainWindow::showMainMenu()
@@ -312,6 +296,12 @@ void MainWindow::showNewGameDialog()
     // QSettings, which is section 20 and phase E.
     NewGameDialog dialog(lastConfig, this);
 
+    // THE STANDINGS COME DOWN WHILE IT IS UP, from Play again, the menu bar's
+    // New Game and Alt+N alike. Left up, the panel stands over the table behind
+    // the dialog for as long as the player takes to answer - which only Play
+    // again used to see to (PR #35's review, finding #7).
+    gameOverPanel->hide();
+
     // A RUNNING GAME WAITS FOR THE ANSWER, which the menu bar's New Game made
     // possible: before the redesign's phase 9 the dialog opened only over the
     // menu page or a game that had ended. Cancelled, the game runs on from where
@@ -325,6 +315,14 @@ void MainWindow::showNewGameDialog()
 
     if(!accepted)
     {
+        // AND BACK UP IF THE PLAYER CANCELLED IT, which is the dead end that
+        // panel exists to remove, walked into from the other side: a dismissed
+        // dialog leaves a finished game on the table, and hiding the panel on
+        // the way in would have left nothing to press. startGame() is what
+        // moves the state on, so this reads the state rather than the answer.
+        if(tableState == TableState::Finished)
+            showGameOverPanel();
+
         applyHold();
         restoreFocus();
         return;

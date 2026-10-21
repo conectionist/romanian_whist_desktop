@@ -953,6 +953,50 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     REQUIRE_FALSE(panel->isVisible());
 }
 
+TEST_CASE("New Game over a finished game takes the standings down while it is open", "[main-window]")
+{
+    // PR #35's review, finding #7. Play again hid the game-over panel before
+    // opening the setup dialog, and put it back if the dialog was cancelled.
+    // New Game from the menu bar, and Alt+N, opened the dialog with the panel
+    // still standing behind it.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    QAction* newGameItem = window.findChild<QAction*>("newGameAction");
+    REQUIRE(panel != nullptr);
+    REQUIRE(newGameItem != nullptr);
+
+    answerModalShortWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+
+    // Looked at while the dialog is up, then cancelled.
+    bool sawDialog = false;
+    bool panelUnderDialog = true;
+    QTimer::singleShot(300, [&sawDialog, &panelUnderDialog, panel]
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+        {
+            sawDialog = true;
+            panelUnderDialog = panel->isVisible();
+            dialog->reject();
+        }
+    });
+
+    newGameItem->trigger();
+    pump(200);
+
+    REQUIRE(sawDialog);
+    REQUIRE_FALSE(panelUnderDialog);
+
+    // Cancelled on a finished game: the panel is back, as the way on.
+    REQUIRE(panel->isVisible());
+    REQUIRE(window.focusWidget() == panel->findChild<QPushButton*>("playAgain"));
+}
+
 TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
 {
     // SECTION 16.1's SHEET, and the hold that makes its Continue button mean
