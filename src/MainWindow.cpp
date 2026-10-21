@@ -15,6 +15,7 @@
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
 #include "ui/RulesSheet.h"
+#include "ui/SettingsSheet.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/GameEngine.h>
@@ -50,6 +51,19 @@ namespace
 // a client that dropped humanSeat entirely would have looked correct at 0. The
 // dialog seats the human at 0 now - the terminal does the same - and the
 // property that index was standing in for is a test in NewGameTests instead.
+
+// THE DELAYS A CONFIG ASKS FOR, the slider's and the round wait together. Two
+// callers now: a game being dealt, and Settings changing the game in play.
+//
+// ON THE Pacing RATHER THAN ONLY ON THE WINDOW, because the bridge is what has to
+// hold the game - see Pacing::waitAfterEachRound. pacingFor() stays a pure
+// mapping of the slider, which is what its own tests assert.
+Pacing pacingOf(const newgame::Config& config)
+{
+    Pacing pacing = newgame::pacingFor(config.botSpeed);
+    pacing.waitAfterEachRound = config.waitAfterEachRound;
+    return pacing;
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -225,6 +239,13 @@ void MainWindow::buildTable()
 
     connect(rulesSheet, &RulesSheet::closeRequested, this, &MainWindow::hideMenuSheets);
 
+    settingsSheet = new SettingsSheet(pages);
+    settingsSheet->setTheme(theme);
+    settingsSheet->hide();
+
+    connect(settingsSheet, &SettingsSheet::settingsChanged, this, &MainWindow::applySettings);
+    connect(settingsSheet, &SettingsSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
     // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
     // for a game that has already ended: stop() is idempotent, and a game that
     // reached gameOver emits no gameStopped for the returningToMenu latch to
@@ -319,15 +340,9 @@ void MainWindow::showNewGameDialog()
     // the game being dealt.
     waitAfterEachRound = lastConfig.waitAfterEachRound;
 
-    // ON THE Pacing RATHER THAN ONLY HERE, because the bridge is what has to
-    // hold the game - see Pacing::waitAfterEachRound. pacingFor() stays a pure
-    // mapping of the slider, which is what its own tests assert.
-    Pacing pacing = newgame::pacingFor(lastConfig.botSpeed);
-    pacing.waitAfterEachRound = lastConfig.waitAfterEachRound;
-
     startGame(newgame::buildDeal(lastConfig),
               newgame::humanSeatOf(lastConfig),
-              pacing);
+              pacingOf(lastConfig));
 }
 
 bool MainWindow::canPause() const
@@ -451,12 +466,47 @@ void MainWindow::showRules()
     rulesSheet->focusClose();
 }
 
+void MainWindow::showSettings()
+{
+    hideMenuSheets();
+
+    settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound);
+
+    settingsSheet->setGeometry(pages->rect());
+    settingsSheet->show();
+    settingsSheet->raise();
+
+    // Held as Rules holds it. The pace changes the moment the slider moves, so the
+    // bots take it up as soon as the sheet is closed.
+    sheetHolding = tableState == TableState::Playing;
+    applyHold();
+
+    settingsSheet->focusDone();
+}
+
+void MainWindow::applySettings(int botSpeed, bool wait)
+{
+    // FOR THE NEXT GAME, whatever is on screen: New Game opens on lastConfig.
+    lastConfig.botSpeed = botSpeed;
+    lastConfig.waitAfterEachRound = wait;
+
+    if(tableState != TableState::Playing)
+        return;
+
+    // AND FOR THIS ONE. The window's copy of the wait and the bridge's are set
+    // together, here and on the GUI thread, before the next round is scored -
+    // see onRoundScored() for why either order of the two is safe.
+    waitAfterEachRound = wait;
+    controller.setPacing(pacingOf(lastConfig));
+}
+
 void MainWindow::hideMenuSheets()
 {
     if(!openMenuSheet() && !sheetHolding)
         return;
 
     rulesSheet->hide();
+    settingsSheet->hide();
 
     sheetHolding = false;
     applyHold();
@@ -468,6 +518,9 @@ QWidget* MainWindow::openMenuSheet() const
 {
     if(rulesSheet && rulesSheet->isVisible())
         return rulesSheet;
+
+    if(settingsSheet && settingsSheet->isVisible())
+        return settingsSheet;
 
     return nullptr;
 }
@@ -544,6 +597,12 @@ void MainWindow::restoreFocus()
         return;
     }
 
+    if(settingsSheet && settingsSheet->isVisible())
+    {
+        settingsSheet->focusDone();
+        return;
+    }
+
     // THEN THE REST, TOP FIRST. The pause menu hides any round sheet on its way up, and a game
     // that has ended has neither a sheet holding it nor a strip waiting, so at
     // most one of these is ever the answer - the order only says which wins if a
@@ -598,6 +657,7 @@ void MainWindow::abandonToMenu()
 
     // And the menu bar's sheets, which can stand over the game-over panel.
     rulesSheet->hide();
+    settingsSheet->hide();
     sheetHolding = false;
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
@@ -646,6 +706,9 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 
     if(rulesSheet && rulesSheet->isVisible())
         rulesSheet->setGeometry(pages->rect());
+
+    if(settingsSheet && settingsSheet->isVisible())
+        settingsSheet->setGeometry(pages->rect());
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -692,15 +755,14 @@ void MainWindow::buildMenuBar()
     newGameAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_N));
     connect(newGameAction, &QAction::triggered, this, &MainWindow::showNewGameDialog);
 
-    // NOT YET: the redesign's phase 9 builds the sheet this opens after the bar,
-    // and an item that looks live and does nothing is its own defect.
+    // Both live on every page. Settings changes the game in play and the next
+    // one; Rules gives the rules for the game on the table, or on the menu page
+    // for the one New Game will offer.
     settingsAction = new QAction(tr("Settings"), this);
     settingsAction->setObjectName(QStringLiteral("settingsAction"));
     settingsAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_S));
-    settingsAction->setEnabled(false);
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::showSettings);
 
-    // Live on every page: the rules for the game on the table, or on the menu
-    // page for the one New Game will offer.
     rulesAction = new QAction(tr("Rules"), this);
     rulesAction->setObjectName(QStringLiteral("rulesAction"));
     rulesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_R));
@@ -811,6 +873,7 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
 
     // AND THE MENU BAR'S SHEETS, which can be up over a game New Game replaces.
     rulesSheet->hide();
+    settingsSheet->hide();
     sheetHolding = false;
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
@@ -1156,6 +1219,14 @@ void MainWindow::onRoundScored(RoundResult result)
     // set. The applyHold() below therefore re-asserts a hold that is already
     // taken, which is idempotent, and matters only when a pause menu is up at
     // the same time.
+    //
+    // SETTINGS CAN CHANGE THE WAIT MID-GAME since the redesign's phase 9, so the
+    // window's copy and the bridge's can cross a round being scored, and either
+    // way round is harmless. Turned on just after the bridge read it: the hold
+    // set here lands at the game's pace(), mid-dwell, and the sheet waits for
+    // Continue all the same. Turned off just after the bridge took its hold: the
+    // applyHold() here releases it, and the sheet goes at the next frame, as an
+    // unwaited one does.
     roundSheetHolding = waitAfterEachRound;
     updatePauseAction();
     applyHold();

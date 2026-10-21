@@ -154,6 +154,8 @@ qt_add_library(desktop_core STATIC
     src/ui/RoundSheet.cpp
     src/ui/RulesSheet.h
     src/ui/RulesSheet.cpp
+    src/ui/SettingsSheet.h
+    src/ui/SettingsSheet.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares

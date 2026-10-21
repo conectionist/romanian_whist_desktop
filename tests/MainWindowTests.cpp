@@ -13,6 +13,7 @@
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
 #include "ui/RulesSheet.h"
+#include "ui/SettingsSheet.h"
 
 #include <QAction>
 #include <QApplication>
@@ -1216,4 +1217,114 @@ TEST_CASE("Rules opens on the menu page for the game New Game offers", "[main-wi
     rules->findChild<QPushButton*>("rulesClose")->click();
     REQUIRE_FALSE(rules->isVisible());
     REQUIRE(pages->currentIndex() == 0);
+}
+
+// THE MENU BAR'S SETTINGS (the redesign's phase 9, Q4): with no game it sets what
+// the next New Game opens on.
+TEST_CASE("Settings on the menu page sets the next game's pace", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    QAction* settingsItem = window.findChild<QAction*>("settingsAction");
+    REQUIRE(settings != nullptr);
+    REQUIRE(settingsItem != nullptr);
+    REQUIRE(settingsItem->isEnabled());
+
+    settingsItem->trigger();
+    REQUIRE(settings->isVisible());
+
+    QSlider* speed = settings->findChild<QSlider*>("settingsSpeed");
+    QCheckBox* wait = settings->findChild<QCheckBox*>("settingsWait");
+    REQUIRE(speed != nullptr);
+    REQUIRE(wait != nullptr);
+
+    // Opened on the dialog's defaults, which are the game New Game would deal.
+    REQUIRE(speed->value() == newgame::DefaultSpeed);
+    REQUIRE_FALSE(wait->isChecked());
+
+    speed->setValue(newgame::FastestSpeed);
+    wait->setChecked(true);
+
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    REQUIRE_FALSE(settings->isVisible());
+
+    // Read from inside the dialog's own event loop, then cancelled.
+    int dialogSpeed = -1;
+    bool dialogWait = false;
+
+    QTimer::singleShot(300, [&]
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QSlider* slider = dialog->findChild<QSlider*>("speed"))
+            dialogSpeed = slider->value();
+
+        if(QCheckBox* box = dialog->findChild<QCheckBox*>("waitEachRound"))
+            dialogWait = box->isChecked();
+
+        dialog->reject();
+    });
+
+    window.findChild<QAction*>("newGameAction")->trigger();
+
+    REQUIRE(dialogSpeed == newgame::FastestSpeed);
+    REQUIRE(dialogWait);
+}
+
+// AND OVER A GAME IN PLAY IT CHANGES THAT GAME: a watched game dealt at the
+// slowest pace, sped to the fastest from Settings, reaches its end inside a
+// deadline the slowest pace could not meet. Two bots over 18 rounds at the
+// slowest take about four minutes - a 500 ms beat a card and 2.4 s a trick - and
+// at the fastest a second or two.
+TEST_CASE("Settings speeds up the game in play", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    REQUIRE(panel != nullptr);
+    REQUIRE(settings != nullptr);
+
+    QTimer::singleShot(300, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QRadioButton* watch = dialog->findChild<QRadioButton*>("watching"))
+            watch->setChecked(true);
+
+        if(QSpinBox* opponents = dialog->findChild<QSpinBox*>("opponents"))
+            opponents->setValue(2);
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::SlowestSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+
+    window.findChild<QAction*>("newGameAction")->trigger();
+    pump(1000);
+
+    REQUIRE_FALSE(panel->isVisible());
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    REQUIRE(settings->isVisible());
+
+    QSlider* speed = settings->findChild<QSlider*>("settingsSpeed");
+    REQUIRE(speed->value() == newgame::SlowestSpeed);
+
+    speed->setValue(newgame::FastestSpeed);
+    settings->findChild<QPushButton*>("settingsDone")->click();
+
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
 }

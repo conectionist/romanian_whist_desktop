@@ -38,6 +38,7 @@ class MenuBar;
 class PauseOverlay;
 class RoundSheet;
 class RulesSheet;
+class SettingsSheet;
 class TableScene;
 class TableView;
 class TrickPanelItem;
@@ -155,6 +156,14 @@ private slots:
     // The menu bar's Rules: the sheet for the game lastConfig deals, over
     // whatever is showing, holding a running game while it is up.
     void showRules();
+
+    // The menu bar's Settings, the same way, opened on lastConfig's pace.
+    void showSettings();
+
+    // A control on the Settings sheet moved. Written into lastConfig, which the
+    // next New Game opens on, and - live, by the owner's call of 2026-10-21 -
+    // into the game in play.
+    void applySettings(int botSpeed, bool waitAfterEachRound);
 
     // Closes Rules or Settings, whichever is up, releasing its hold and giving
     // the keyboard back to what is beneath.
@@ -306,8 +315,9 @@ private:
     // Section 16.1's sheet, raised over the round it reports.
     RoundSheet* roundSheet = nullptr;
 
-    // The menu bar's Rules, the same arrangement again.
+    // The menu bar's Rules and Settings, the same arrangement again.
     RulesSheet* rulesSheet = nullptr;
+    SettingsSheet* settingsSheet = nullptr;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this
@@ -342,6 +352,9 @@ private:
     // 16.2's "play again reopens the setup dialog pre-filled with the same
     // settings". In memory rather than in QSettings, which is section 20 and
     // phase E.
+    //
+    // AND THE PACE SETTINGS HAS SET SINCE: its bot speed and round wait are
+    // written here as they change, so the next game opens on them.
     newgame::Config lastConfig = newgame::defaults();
 
     // Holds the .ui's log widget from buildLogDock() onward.
