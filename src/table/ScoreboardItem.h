@@ -193,9 +193,9 @@ class ScoreboardItem : public QGraphicsObject
     Q_OBJECT
 
 public:
-    // `cards` draws the trump and `panels` is the chrome cache every panel on the
-    // table shares, both owned by TableScene, which outlives this. A null `panels`
-    // gives the item one of its own.
+    // `cards` draws the trump and `panels` is the corner panels' chrome cache, both
+    // owned by TableScene, which outlives this. A null `panels` gives the item one
+    // of its own.
     ScoreboardItem(const CardRenderer* cards, panel::Cache* panels, QGraphicsItem* parent = nullptr);
 
     // Everything this draws, from one snapshot.
@@ -240,6 +240,10 @@ private:
     Theme theme = Theme::dark();
     scoreboard::Shown showing;
     QSizeF panelSize;
+
+    // columnsFor()'s for `showing`, worked out once when it changed and painted
+    // from, rather than measured again on every composition.
+    scoreboard::Columns columns;
 
     mutable PictureMemo memo;
 };

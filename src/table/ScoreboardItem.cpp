@@ -169,12 +169,14 @@ struct Canvas
 };
 
 // Lays the panel out from its top-left, painting as it goes if there is a painter,
-// and returns its height.
-qreal layOut(const scoreboard::Shown& shown, const Styles& styles, const Canvas& canvas)
+// and returns its height. `columns` are columnsFor()'s for the rows, worked out
+// once for a change and handed to both walks, the one that sizes the panel and
+// the one that paints it: each measures every name (PR 34's review, finding #13).
+qreal layOut(const scoreboard::Shown& shown, const scoreboard::Columns& columns, const Styles& styles,
+             const Canvas& canvas)
 {
     QPainter* painter = canvas.painter;
 
-    const scoreboard::Columns columns = scoreboard::columnsFor(shown.rows);
     const qreal left = borderWidth + paddingX;
     const qreal width = columns.sum();
 
@@ -640,7 +642,11 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
 
     // Columns narrower than the tension at its widest: the room over shared in
     // proportion, as the browser shares out a table's.
-    const qreal least = widestTension(styles.tension);
+    //
+    // MEASURED ONCE A RUN: four sentences at their widest numbers, which change
+    // with neither the game nor the theme. The translation that words them is
+    // installed in main(), before there is a table to draw.
+    static const qreal least = widestTension(styles.tension);
     const qreal sum = widest.sum();
 
     if(sum >= least)
@@ -652,11 +658,22 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
              widest.points * share, widest.run * share };
 }
 
+namespace
+{
+
+// sizeFor() for columns already worked out.
+QSizeF sizeWith(const scoreboard::Shown& shown, const scoreboard::Columns& columns, const CardRenderer& cards)
+{
+    const qreal height = layOut(shown, columns, measuring(), Canvas{ nullptr, nullptr, &cards, 1.0 });
+
+    return QSizeF(columns.sum() + 2.0 * (borderWidth + paddingX), height);
+}
+
+}
+
 QSizeF scoreboard::sizeFor(const Shown& shown, const CardRenderer& cards)
 {
-    const qreal height = layOut(shown, measuring(), Canvas{ nullptr, nullptr, &cards, 1.0 });
-
-    return QSizeF(columnsFor(shown.rows).sum() + 2.0 * (borderWidth + paddingX), height);
+    return sizeWith(shown, columnsFor(shown.rows), cards);
 }
 
 // ---- the item ----
@@ -678,7 +695,8 @@ void ScoreboardItem::setSnapshot(const GameSnapshot& snapshot, const Theme& pale
 
     theme = palette;
 
-    const QSizeF size = cards ? scoreboard::sizeFor(now, *cards) : QSizeF();
+    scoreboard::Columns laid = scoreboard::columnsFor(now.rows);
+    const QSizeF size = cards ? sizeWith(now, laid, *cards) : QSizeF();
 
     if(size != panelSize)
     {
@@ -687,6 +705,7 @@ void ScoreboardItem::setSnapshot(const GameSnapshot& snapshot, const Theme& pale
     }
 
     showing = std::move(now);
+    columns = laid;
     memo.invalidate();
     update();
 }
@@ -757,5 +776,5 @@ const panel::Picture& ScoreboardItem::picture(qreal ratio) const
 
 void ScoreboardItem::paintContent(QPainter& painter, qreal ratio) const
 {
-    layOut(showing, stylesFor(theme.table), Canvas{ &painter, &theme.table, cards, ratio });
+    layOut(showing, columns, stylesFor(theme.table), Canvas{ &painter, &theme.table, cards, ratio });
 }
