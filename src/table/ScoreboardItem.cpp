@@ -395,8 +395,12 @@ namespace
 enum class Tension { SoFar, Over, Under, Even };
 
 // One of them with its numbers in, the bid total bold. `difference` is the "by" of
-// Over and Under, and unused by the others.
-textruns::Line tensionText(Tension form, unsigned int bids, unsigned int tricks, unsigned int difference)
+// Over and Under, and unused by the others; `oneTrick` picks the singular.
+//
+// THE NUMBERS AS TEXT, so widestTension() can write them in the font's widest
+// digit - which is not a number it could pass.
+textruns::Line tensionText(Tension form, const QString& bids, const QString& tricks,
+                           const QString& difference, bool oneTrick)
 {
     QString sentence;
 
@@ -404,27 +408,27 @@ textruns::Line tensionText(Tension form, unsigned int bids, unsigned int tricks,
     switch(form)
     {
     case Tension::SoFar:
-        sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 trick")
-                               : QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 tricks");
-        difference = 0;
+        sentence = oneTrick ? QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 trick")
+                            : QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 tricks");
         break;
 
     case Tension::Over:
-        sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick: over by %3")
-                               : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: over by %3");
+        sentence = oneTrick ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick: over by %3")
+                            : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: over by %3");
         break;
 
     case Tension::Under:
-        sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick: under by %3")
-                               : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: under by %3");
+        sentence = oneTrick ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick: under by %3")
+                            : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: under by %3");
         break;
 
     case Tension::Even:
-        sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick")
-                               : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks");
-        difference = 0;
+        sentence = oneTrick ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick")
+                            : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks");
         break;
     }
+
+    const bool by = form == Tension::Over || form == Tension::Under;
 
     // THE BID TOTAL IS THE BOLD PART, so it is cut out of the sentence rather than
     // substituted into it: %1 is swapped for a character no translation contains,
@@ -437,8 +441,7 @@ textruns::Line tensionText(Tension form, unsigned int bids, unsigned int tricks,
     // %2 and %3, one pass: arg() fills the lowest marker still standing first. A
     // sentence without %3 leaves the second argument unused, and arg() asks for
     // none.
-    sentence = difference > 0 ? sentence.arg(QString::number(tricks), QString::number(difference))
-                              : sentence.arg(QString::number(tricks));
+    sentence = by ? sentence.arg(tricks, difference) : sentence.arg(tricks);
 
     const qsizetype at = sentence.indexOf(cut);
 
@@ -450,7 +453,7 @@ textruns::Line tensionText(Tension form, unsigned int bids, unsigned int tricks,
     if(at > 0)
         line.push_back({ sentence.left(at) });
 
-    line.push_back({ QString::number(bids), textruns::Emphasis::Strong });
+    line.push_back({ bids, textruns::Emphasis::Strong });
 
     if(at + 1 < sentence.size())
         line.push_back({ sentence.mid(at + 1) });
@@ -458,17 +461,44 @@ textruns::Line tensionText(Tension form, unsigned int bids, unsigned int tricks,
     return line;
 }
 
+// The widest of the ten digits in `font`.
+QChar widestDigit(const QFont& font)
+{
+    const QFontMetricsF metrics(font);
+    QChar widest(u'0');
+
+    for(char16_t digit = u'1' ; digit <= u'9' ; digit++)
+    {
+        if(metrics.horizontalAdvance(QChar(digit)) > metrics.horizontalAdvance(widest))
+            widest = QChar(digit);
+    }
+
+    return widest;
+}
+
 // THE TENSION AT ITS WIDEST, which the content is never narrower than: so the line
 // never wraps, and the panel changes neither its height as the bids come in nor
-// its width as they change. Its numbers at the widest a game can make them: up to
-// six seats bidding up to eight each, so a total of two digits and over by as
-// many; and at most eight tricks, so one digit for the tricks and for under.
+// its width as they change. Its numbers as long as a game can make them - up to six
+// seats bidding up to eight each, so a total of two digits and over by as many; at
+// most eight tricks, so one digit for the tricks, and for a total under them and
+// the "by" - and every digit the font's widest.
+//
+// THE WIDEST DIGIT, NOT AN 8. The tension's figures are proportional, and in
+// Alegreya Sans a 0 and a 4 are wider than an 8: measured with 8s, the widest
+// sentence fell a unit short of "Bids total 24 for 4 tricks: over by 20", which
+// wrapped (PR 34's review, after its fixes). The bid total is bold, so its digit is
+// the strong font's.
 qreal widestTension(const textruns::Style& style)
 {
-    return std::max({ textruns::width(tensionText(Tension::SoFar, 88, 8, 0), style),
-                      textruns::width(tensionText(Tension::Over, 88, 8, 88), style),
-                      textruns::width(tensionText(Tension::Under, 8, 8, 8), style),
-                      textruns::width(tensionText(Tension::Even, 8, 8, 0), style) });
+    const QString one(1, widestDigit(style.plain));
+    const QString two(2, widestDigit(style.plain));
+    const QString boldOne(1, widestDigit(style.strong));
+    const QString boldTwo(2, widestDigit(style.strong));
+
+    return std::max({ textruns::width(tensionText(Tension::SoFar, boldTwo, one, QString(), false), style),
+                      textruns::width(tensionText(Tension::Over, boldTwo, one, two, false), style),
+                      textruns::width(tensionText(Tension::Under, boldOne, one, one, false), style),
+                      textruns::width(tensionText(Tension::Even, boldOne, one, QString(), false), style) });
 }
 
 }
@@ -481,16 +511,22 @@ textruns::Line scoreboard::tensionFor(const GameSnapshot& snapshot)
     // Over or under once every bid is in. The forbidden bid means the total never
     // equals the tricks once the last bid is made, but the sentence says nothing
     // wrong if it ever does.
+    const auto text = [tricks](Tension form, unsigned int total, unsigned int difference)
+    {
+        return tensionText(form, QString::number(total), QString::number(tricks),
+                           QString::number(difference), tricks == 1);
+    };
+
     if(snapshot.betsPlaced < snapshot.seats.size())
-        return tensionText(Tension::SoFar, bids, tricks, 0);
+        return text(Tension::SoFar, bids, 0);
 
     if(bids > tricks)
-        return tensionText(Tension::Over, bids, tricks, bids - tricks);
+        return text(Tension::Over, bids, bids - tricks);
 
     if(bids < tricks)
-        return tensionText(Tension::Under, bids, tricks, tricks - bids);
+        return text(Tension::Under, bids, tricks - bids);
 
-    return tensionText(Tension::Even, bids, tricks, 0);
+    return text(Tension::Even, bids, 0);
 }
 
 std::vector<scoreboard::Row> scoreboard::rowsFor(const GameSnapshot& snapshot)

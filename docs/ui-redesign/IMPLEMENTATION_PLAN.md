@@ -385,7 +385,9 @@ to bottom:
      digits for a run, which the engine keeps counting past the fifth round), so the columns hold
      still as play moves.
      The panel is never narrower than the bid tension at its widest, so that line never wraps;
-     and never wider than 236, past which the names are elided. *(Phase 8.)*
+     and never wider than 236, past which the names are elided. "Widest" is measured with the
+     font's widest digit: the tension's figures are proportional, and in Alegreya Sans a 0 and a
+     4 are wider than an 8. *(Phase 8.)*
 5. A faint divider, then the **trump section stacked and centred**: "TRUMP" (19.8, bold uppercase,
    letter-spaced 0.24em, muted); the trump card at **154.9 table units wide** (same as a hand card,
    radius 10, shadow); the suit name, Marcellus 19.8, e.g. "♣ Clubs" (♥/♦ glyph in red suit
@@ -1222,7 +1224,7 @@ Done when: the whole page matches `screenshots/table-6-players.jpg` except the m
 **Outcome:**
 
 - **The count is 459 tests** (418 + 41), passing on the `default`, `release` and `clang` presets
-  with Qt 6.11.2 and building without a warning.
+  with Qt 6.11.2 and building without a warning. **PR 34's review brought it to 467.**
   - **Retired, with the widgets they measured:**
     - the info strip's "same height with and without a trump";
     - the old scoreboard's "sized for the weight it draws in";

@@ -507,6 +507,50 @@ TEST_CASE("The panel keeps its height as the bids come in", "[scoreboard]")
     REQUIRE(heightFor(4, 32) == bidding);
 }
 
+// AND AT EVERY TOTAL A GAME CAN REACH, not only the four above. The tension's
+// figures are proportional, so which number is widest is the font's to say: in
+// Alegreya Sans a 0 and a 4 are wider than an 8, and the widest sentence measured
+// with 8s fell a unit short of "Bids total 24 for 4 tricks: over by 20" (PR 34's
+// review, after its fixes). Six seats, so the totals run as high as they go.
+TEST_CASE("No total a game can reach wraps the tension", "[scoreboard]")
+{
+    const CardRenderer cards;
+
+    const auto heightFor = [&cards](unsigned int placed, unsigned int sum, unsigned int tricks)
+    {
+        GameSnapshot snapshot = roundOf(5, 24, tricks);
+
+        snapshot.seats.push_back(seatWith("A", 5));
+        snapshot.seats.push_back(seatWith("A", 6));
+        snapshot.betsPlaced = placed;
+        snapshot.betSum = sum;
+
+        // Names as short as they come, so the panel is no wider than the tension
+        // at its widest.
+        for(SeatView& seat : snapshot.seats)
+            seat.name = "A";
+
+        return scoreboard::sizeFor(scoreboard::shownFor(snapshot), cards).height();
+    };
+
+    const qreal bidding = heightFor(2, 3, 6);
+
+    for(unsigned int tricks = 1 ; tricks <= 8 ; tricks++)
+    {
+        for(unsigned int sum = 0 ; sum <= 6 * tricks ; sum++)
+        {
+            INFO(sum << " bid for " << tricks << " tricks");
+
+            // While the last seat has still to bid, five seats' worth at most.
+            if(sum <= 5 * tricks)
+                REQUIRE(heightFor(5, sum, tricks) == bidding);
+
+            // Every bid in: over, under, or even.
+            REQUIRE(heightFor(6, sum, tricks) == bidding);
+        }
+    }
+}
+
 TEST_CASE("The columns hold still as the turn and the scores move", "[scoreboard]")
 {
     // Measured from the names as though each carried the turn's mark, and the
