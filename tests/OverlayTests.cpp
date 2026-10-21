@@ -402,6 +402,19 @@ TEST_CASE("A sheet table rules its headings and every row", "[overlay]")
     REQUIRE(table.cell(0, 0) == nullptr);
 }
 
+TEST_CASE("A sheet table shows a name as typed, markup and all", "[overlay]")
+{
+    // PR #36's review, finding #5. A QLabel's default AutoText reads a string that
+    // looks like markup as rich text, so a player who named themselves <b>Dan</b>
+    // in the setup dialog showed in bold - or <img src=x>, as a broken picture.
+    SheetTable table;
+    table.setColumns({ { QStringLiteral("Player"), Qt::AlignLeft }, { QStringLiteral("Total") } });
+    table.addRow({ { QStringLiteral("<b>Dan</b>") }, { QStringLiteral("41") } });
+
+    REQUIRE(table.cell(0, 0)->textFormat() == Qt::PlainText);
+    REQUIRE(table.cell(0, 0)->text() == QStringLiteral("<b>Dan</b>"));
+}
+
 TEST_CASE("A press on an overlay goes no further", "[overlay]")
 {
     QWidget page;

@@ -403,6 +403,12 @@ QLabel* SheetTable::addLabel(const QString& text, int row, int column, bool head
 {
     QLabel* label = new QLabel(text, this);
 
+    // PLAIN, because a cell holds a player's name as they typed it, and Qt's
+    // AutoText would read "<b>Dan</b>" as markup (PR #36's review, finding #5). A
+    // sheet that wants rich text asks for it on its own label, as the round
+    // sheet's line and the rules do.
+    label->setTextFormat(Qt::PlainText);
+
     const Qt::Alignment across = columns[static_cast<std::size_t>(column)].alignment
                                & Qt::AlignHorizontal_Mask;
 
