@@ -4,6 +4,7 @@
 #include <QEvent>
 #include <QFont>
 #include <QLabel>
+#include <QList>
 #include <QMouseEvent>
 #include <QPainter>
 
@@ -48,6 +49,38 @@ void Overlay::setTheme(const Theme& theme)
     plaque->setPalette(scheme);
 
     update();
+}
+
+bool Overlay::focusNextInside(bool next)
+{
+    // The controls a Tab can stop on, in the window's own Tab order: the chain
+    // is a loop through the whole window, so it comes back round to this.
+    QList<QWidget*> stops;
+
+    for(QWidget* widget = nextInFocusChain() ; widget != this ; widget = widget->nextInFocusChain())
+    {
+        if(isAncestorOf(widget) && widget->isVisible() && widget->isEnabled() &&
+           (widget->focusPolicy() & Qt::TabFocus) == Qt::TabFocus)
+        {
+            stops.append(widget);
+        }
+    }
+
+    if(stops.isEmpty())
+        return false;
+
+    // window()->focusWidget() rather than QApplication::focusWidget(), which is
+    // null whenever the window is not the active one.
+    const qsizetype at = stops.indexOf(window()->focusWidget());
+    const qsizetype count = stops.size();
+
+    qsizetype to = next ? 0 : count - 1;
+
+    if(at >= 0)
+        to = (at + (next ? 1 : count - 1)) % count;
+
+    stops[to]->setFocus(next ? Qt::TabFocusReason : Qt::BacktabFocusReason);
+    return true;
 }
 
 void Overlay::styleTitle(QLabel* title, qreal scale)

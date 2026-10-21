@@ -624,6 +624,39 @@ void MainWindow::restoreFocus()
         bidStrip->setFocus();
 }
 
+Overlay* MainWindow::activeOverlay() const
+{
+    if(rulesSheet && rulesSheet->isVisible())
+        return rulesSheet;
+
+    if(settingsSheet && settingsSheet->isVisible())
+        return settingsSheet;
+
+    if(pauseOverlay && pauseOverlay->isVisible())
+        return pauseOverlay;
+
+    if(gameOverPanel && gameOverPanel->isVisible())
+        return gameOverPanel;
+
+    if(roundSheet && roundSheet->isVisible() && roundSheetHolding)
+        return roundSheet;
+
+    return nullptr;
+}
+
+bool MainWindow::focusNextPrevChild(bool next)
+{
+    // Handled even when the sheet has nothing to stop on: the keyboard stays
+    // put rather than leaving for what is under the dim.
+    if(Overlay* sheet = activeOverlay())
+    {
+        sheet->focusNextInside(next);
+        return true;
+    }
+
+    return QMainWindow::focusNextPrevChild(next);
+}
+
 void MainWindow::showGameOverPanel()
 {
     gameOverPanel->show();

@@ -120,3 +120,54 @@ TEST_CASE("An overlay covers its parent at every size", "[overlay]")
     sheet.show();
     REQUIRE(sheet.geometry() == page->rect());
 }
+
+TEST_CASE("Tab inside an overlay wraps round and skips what it cannot stop on", "[overlay]")
+{
+    // PR #35's review, finding #4: Tab must not leave a sheet for what is under
+    // its dim. The window hands Tab to focusNextInside() for the sheet on top.
+    QWidget window;
+    window.resize(400, 300);
+
+    // Something outside the sheet, where the keyboard starts.
+    QPushButton* outside = new QPushButton(QStringLiteral("Outside"), &window);
+
+    TestSheet sheet(&window);
+    QPushButton* second = new QPushButton(QStringLiteral("Second"), sheet.plaque());
+    QPushButton* off = new QPushButton(QStringLiteral("Disabled"), sheet.plaque());
+    QPushButton* gone = new QPushButton(QStringLiteral("Hidden"), sheet.plaque());
+    QPushButton* third = new QPushButton(QStringLiteral("Third"), sheet.plaque());
+
+    for(QPushButton* button : { second, off, gone, third })
+        sheet.plaque()->layout()->addWidget(button);
+
+    off->setEnabled(false);
+
+    window.show();
+    gone->hide();
+
+    outside->setFocus();
+    REQUIRE(window.focusWidget() == outside);
+
+    // From outside, forward lands on the first stop.
+    REQUIRE(sheet.focusNextInside(true));
+    REQUIRE(window.focusWidget() == sheet.button);
+
+    REQUIRE(sheet.focusNextInside(true));
+    REQUIRE(window.focusWidget() == second);
+
+    // The disabled and the hidden button are passed over.
+    REQUIRE(sheet.focusNextInside(true));
+    REQUIRE(window.focusWidget() == third);
+
+    // And round again, both ways.
+    REQUIRE(sheet.focusNextInside(true));
+    REQUIRE(window.focusWidget() == sheet.button);
+
+    REQUIRE(sheet.focusNextInside(false));
+    REQUIRE(window.focusWidget() == third);
+
+    // From outside, backward lands on the last.
+    outside->setFocus();
+    REQUIRE(sheet.focusNextInside(false));
+    REQUIRE(window.focusWidget() == third);
+}

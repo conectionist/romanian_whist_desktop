@@ -35,6 +35,7 @@ class GameOverPanel;
 class HandItem;
 class MainMenuPage;
 class MenuBar;
+class Overlay;
 class PauseOverlay;
 class RoundSheet;
 class RulesSheet;
@@ -87,6 +88,12 @@ protected:
     // Closing the window is what ends the game. Sets `closing` first, then
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
+
+    // TAB STAYS INSIDE THE SHEET ON TOP (PR #35's review, finding #4). Every
+    // widget's Tab comes up to here unless something below takes it, so this
+    // also catches Tab from the menu bar and the log. The bar is still reached
+    // by its Alt shortcuts.
+    bool focusNextPrevChild(bool next) override;
 
 
 private slots:
@@ -236,6 +243,11 @@ private:
     // takes focus when it is raised, and hiding what took it from them does not
     // give it back - which looks finished, because the mouse still works.
     void restoreFocus();
+
+    // THE SHEET THE KEYBOARD BELONGS TO, top first: Rules or Settings, the
+    // pause menu, the game-over panel, or a round sheet that is holding the
+    // game. Null when none is up - an unwaited round sheet asks for nothing.
+    Overlay* activeOverlay() const;
 
     // Raises section 16.2's panel over the table it was filled from. The three
     // callers are the two endings - onGameOver() and showFailure() - and a Play

@@ -41,6 +41,11 @@ QT_END_NAMESPACE
 // a sheet kept its old size when the log came or went: too tall and off-centre,
 // or short of the bottom, leaving the hand uncovered and clickable under a sheet
 // that was holding the game (PR #35's review, finding #2).
+//
+// AND TAB STAYS INSIDE IT, through focusNextInside(), which the window calls
+// for the sheet on top. Tab walking out through the menu bar reached the bid
+// strip under the dim, and Space then bid while the sheet held the game
+// (finding #4).
 class Overlay : public QWidget
 {
     Q_OBJECT
@@ -60,6 +65,12 @@ public:
     // showEvent(): focus taken during a show is easy to lose to whatever is
     // shown next.
     virtual void focusDefault() = 0;
+
+    // Moves the keyboard to the next (or previous) control inside this sheet,
+    // in the window's Tab order, wrapping round at either end. From outside the
+    // sheet it lands on the first (or last). False when the sheet has nothing to
+    // stop on, which leaves the keyboard where it was.
+    bool focusNextInside(bool next);
 
 protected:
     // The plaque, centred on the page and no bigger than its contents, and the

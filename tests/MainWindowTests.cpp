@@ -639,6 +639,84 @@ TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
     REQUIRE(window.focusWidget() == bidStrip);
 }
 
+TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
+{
+    // PR #35's review, finding #4. Tab walked out of a sheet through the menu
+    // bar and on to the bid strip's buttons under the dim, and Space then bid
+    // while the sheet was holding the game - with a bot's bid following at once,
+    // because nothing paces after your own move. Measured in the app: two bids
+    // made under Rules.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    // The dialog's defaults are a played game, so this accepts them unchanged.
+    QTimer::singleShot(300, []
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+            dialog->done(QDialog::Accepted);
+    });
+
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    REQUIRE(bidStrip != nullptr);
+    REQUIRE(log != nullptr);
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    const int lines = log->blockCount();
+
+    // Twelve steps each way, from wherever the keyboard is. focusWidget() rather
+    // than hasFocus(), for the reason the resume case above gives.
+    const auto tabAround = [&window](QWidget* sheet)
+    {
+        for(int step = 0 ; step < 24 ; step++)
+        {
+            const bool forward = step < 12;
+            QKeyEvent tab(QEvent::KeyPress, forward ? Qt::Key_Tab : Qt::Key_Backtab,
+                          forward ? Qt::NoModifier : Qt::ShiftModifier);
+
+            QWidget* from = window.focusWidget();
+            REQUIRE(from != nullptr);
+            QCoreApplication::sendEvent(from, &tab);
+
+            INFO("step " << step << ", on " << window.focusWidget()->objectName().toStdString());
+            REQUIRE(sheet->isAncestorOf(window.focusWidget()));
+        }
+    };
+
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    REQUIRE(rules->isVisible());
+    tabAround(rules);
+    QCoreApplication::sendEvent(&window, &escape);
+    REQUIRE_FALSE(rules->isVisible());
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    REQUIRE(settings->isVisible());
+    tabAround(settings);
+    QCoreApplication::sendEvent(&window, &escape);
+    REQUIRE_FALSE(settings->isVisible());
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    REQUIRE(pause->isVisible());
+    tabAround(pause);
+    pause->findChild<QPushButton*>("resume")->click();
+    pump(100);
+
+    // Nothing was bid underneath, and the strip has the keyboard back.
+    REQUIRE(bidStrip->isVisible());
+    REQUIRE(log->blockCount() == lines);
+    REQUIRE(window.focusWidget() == bidStrip);
+}
+
 TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
 {
     // QDockWidget::hide() UNCHECKS ITS OWN toggleViewAction(), and that two-way
