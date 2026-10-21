@@ -473,6 +473,26 @@ chosen in `NewGameDialog`).
   `PauseOverlay` keep their mechanics (they are panels, not dialogs, per section 4.4) and take this
   look.
 
+> **AMENDED IN PHASE 10, by the owner's calls of 2026-10-21.**
+>
+> - **The bid strip is a painted scene item, `BidStripItem`, not a restyled widget.** It is built
+>   as the corner panels are (section 3's phase 8 amendment): one cached picture at the pixels it
+>   lands on, at `tablespace::z::bidStrip`, above the corner panels. Its digit keys are read on the
+>   window, as the hand's are, through `bidstrip::answerKey()`. Tab and Space on a single bid went
+>   with the buttons; a digit reaches every bid, since a hand holds at most 8 cards. "Keep
+>   `BidStrip`'s tests" above held for what they asserted, not for the widget they reached it
+>   through.
+> - **The note is never empty.** Without a forbidden bid it is the mock-up's other sentence, "2 bid
+>   so far, totalling 3 of 6 tricks.", read off the snapshot the engine publishes as it asks for
+>   your bid.
+> - **The sheets keep a fixed size**: the numbers above read as device-independent pixels, as the
+>   menu bar's are (section 2.12). The mock-up's sheets are children of its stage and scale with its
+>   table, which at the client's smallest window would set their words at six pixels. In a window
+>   too small for one, a sheet narrows to the page less 16 each side and its body scrolls (the
+>   mock-up's `max-height` and `overflow: auto`).
+> - **The scrim covers the whole page**, under the menu bar. The mock-up's covers its 1536 × 1024
+>   stage only, and left the top and bottom seats' panels and the corner panels undimmed.
+
 ---
 
 ## 3. How the mock-up maps onto the client
@@ -489,7 +509,7 @@ chosen in `NewGameDialog`).
 | Current-trick panel | `PromptBar` (bottom) | Pinned top-right panel (phase 8) |
 | Round history / Last trick buttons | Nothing | New (phases 8 and 11) |
 | Menu bar | `QMenuBar` with a View menu; main-menu page and pause menu | A bar of our own as the menu widget, new top-level actions (phase 9) |
-| Bid strip in the felt | `BidStrip` overlay above `TableScene::overlayBottom()` | Restyle, reposition (phase 10) |
+| Bid strip in the felt | `BidStrip` overlay above `TableScene::overlayBottom()` | A painted scene item on the felt, `BidStripItem` (phase 10; section 2.13's amendment) |
 
 **Recommended structure for the pinned panels.** Keep them as `QWidget`s (so their existing pure
 functions and tests survive) but host them **in the scene through `QGraphicsProxyWidget`**, so they
@@ -1520,7 +1540,7 @@ Done when: the menu bar matches the mock-up and every item works.
     somewhere on purpose (`restoreFocus()`). **But only if the sheet had it:** a fallback on every
     hide takes the keyboard from wherever the player put it.
 
-### Phase 10: bid strip and sheets
+### Phase 10: bid strip and sheets ✅ COMPLETE
 
 Files: `src/ui/BidStrip.*`, `src/ui/Overlay.*` (added by phase 9's review; the shared look of
 the five sheets), `src/ui/RoundSheet.*`, `src/ui/GameOverPanel.*`,
@@ -1534,6 +1554,113 @@ the five sheets), `src/ui/RoundSheet.*`, `src/ui/GameOverPanel.*`,
    geometry.
 
 Done when: `screenshots/bidding.jpg` is matched and the end-of-round sheet reads in the new style.
+
+**Outcome:**
+
+- **The count is 521 tests** (511 + 10), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. Commit by commit:
+  - **The bid strip, 511 → 515.** `BidStripTests` went from 14 cases to 22. Four placement cases
+    were retired with what they measured: `TableSceneTests`' two `overlayBottom()` cases, and
+    `TableViewTests`' squeezed-strip and clear-of-your-hand cases. Their intent now lives in
+    `BidStripTests`' "The strip lies on the felt clear of your hand and your panel".
+  - **The sheets, 515 → 522**: five new `OverlayTests` cases and two `RoundSheetTests` cases.
+  - **The menu page, 522 → 524**: `MainMenuPageTests`' two.
+  - **The old palette, 524 → 519**: six `ThemeTests` cases retired with the colours they held, and
+    one rewritten onto the table's `good` and `bad`.
+  - **Two fixes the running app found, 519 → 521**: see the first two pitfalls below. Each new
+    case failed on the code before its fix.
+  - **Rewritten, keeping their intent:**
+    - the strip's four widget cases, now against the item and clicked through the scene;
+    - its three keyboard cases, now on `bidstrip::answerKey()`;
+    - the four `MainWindowTests` cases that bid. "Resuming gives the keyboard back to the bid
+      strip" became "…to the table and its digits bid", which presses the 0 it is about;
+    - `OverlayTests`' dim and plaque cases;
+    - `RoundSheetTests`' sign case, which now expects U+2212;
+    - `GameOverTests`' row helpers, which now read past the headings.
+- **Three decisions by the owner, 2026-10-21** (section 2.13's amendment):
+  - **The bid strip is a painted scene item**, `BidStripItem`, not a restyled widget.
+  - **The sheets keep a fixed size**, the mock-up's numbers read as device-independent pixels.
+  - **The main-menu page is restyled now**, the plan's optional step 3.
+- **The bidding shot matches the mock-up.** In `bidding.png` the strip's top and left edges land on
+  `bidding.jpg`'s pixels (y 544, x 699). Its bottom edge is 2–3 px lower, from Qt's line heights for
+  Marcellus and Alegreya Sans, as phase 8 saw on the scoreboard. The note says "0 of 1 trick" where
+  the mock-up says "tricks". Every other shot is pixel-identical to phase 9's, but for the logo's
+  known band in `table-3-players.png`.
+- **Where the build departed from the plan, and why:**
+  - **The bid strip is in the scene.** `TableScene::overlayBottom()` and `TableView`'s bottom
+    overlay are gone with the widget they placed. Its digit keys are read on the window, through
+    the strip's own pure rule, `bidstrip::answerKey()`.
+  - **The strip's note is never empty.** Without a forbidden bid it is the mock-up's "2 bid so far,
+    totalling 3 of 6 tricks.", read off the snapshot `GameBridge::onBetRequested()` publishes before
+    the prompt.
+  - **The round sheet settled its words**, as phase 8 left it to:
+    - the title "Round 7 · 6 cards · Normal";
+    - the mock-up's meta line, "Trump K♥ · exact bid scores 5 + bid, a miss loses the
+      difference";
+    - PLAYER / BID / TAKEN / ROUND / TOTAL under its own translation context;
+    - a missing bid as an en dash.
+  - **The game-over panel's announcement** moved up into the meta line's place, over PLACE / PLAYER
+    / TOTAL. The pause sheet is a title and its two buttons, the green Resume on the right.
+  - **The scrim covers the whole page.** The mock-up's covers its stage only.
+  - **The Rules list keeps Qt's own indent**, the document's, not the mock-up's 20.
+  - **No `[.timing]` run.** The owner did not ask for one, and the strip shows only while you bid,
+    which `ResizeTiming`'s full table does not.
+- **What later phases take from here:**
+  - **Phase 11's two sheets** are `Overlay`s like the five.
+    - Build them with `dress()` (title, meta, body, note, label), `addActions()` (primary last,
+      `SheetButton::Kind::Quiet` for the rest) and `placeSheet()` after filling them.
+    - The history is a `SheetTable`: `setColumns()`, `addRow()` with `Tone::Good` / `Bad` and
+      `strong`, and `clearRows()`. A sheet taller than the page scrolls, and Tab scrolls the
+      control it reaches into view.
+    - Open them through `MainWindow::menuSheets` and `showMenuSheet()`.
+  - **The round sheet's quiet [Round history]** goes before Continue:
+    `addActions({ history, continueButton })`.
+  - **A suit glyph in a sheet's label:** `sheet::withSuits()` makes rich text with ♥ and ♦ in the
+    red suit's colour.
+  - **The strip:** `TableScene::bidStripItem()`, at `tablespace::z::bidStrip`. Its geometry is
+    `bidstrip::sizeFor()`, `buttonRect()` and `bidAt()`. Phase 12's "Bids 2" bubble and any
+    keyboard focus ring for bids start there.
+  - **The cursor:** `TableScene::cursorPosition()` is where the cursor last was over a view, for
+    anything shown under a cursor that has not moved.
+  - **Fonts:** `fonts::capitals()` and `fonts::tabular()`, shared by the scoreboard and the
+    sheets.
+  - **The logo and the buttons' face:** `tabletop::paintLogo()` / `logoBounds()` and
+    `tablebutton::paintFace()` / `coloursFor()` draw them anywhere.
+  - **The old palette is down to `tableSurface` and `textPrimary`,** which only the Card art
+    window reads.
+- **Checked in the running app**, on a nested Xephyr screen driven by xdotool, before the PR:
+  - a bid lights under the cursor;
+  - a 0 typed on the table bids;
+  - Rules opens from the bar and Settings from Alt+S;
+  - Esc pauses, and the pause sheet's Tab stays inside it.
+
+  It found what no offscreen test had: Rules opened as a sliver with a scroll bar, and Tab lit
+  nothing on a sheet with one button.
+- **Pitfalls:**
+  - **A nested layout keeps the height it last measured.** A label's new text invalidates the
+    layout it sits in and those above it, not a row inside the column. The window lays Rules out
+    empty at start-up, so its list's row went on answering with one line's height when the rules
+    arrived. The offscreen tests filled their sheets before the event loop first measured them,
+    and passed. `Overlay::placeSheet()` now invalidates every layout in the sheet before it
+    measures, and "A sheet filled after it was laid out is sized to what it then holds" does it
+    in the window's order (it failed, 358 px short, before the fix).
+  - **Qt sends no focus event to the widget that already has the keyboard**, so a Tab that lands
+    back on a sheet's only button left it unlit. `Overlay::focusNextInside()` lets the keyboard go
+    and takes it again.
+  - **A box layout asks a widget its height at the column's whole width, past the widget's
+    maximum** (`QWidgetItem::heightForWidth()`), and so under-counts a capped label's wrapped
+    lines. Put the label in a row with a stretch after it, which hands it its real width.
+  - **`QScrollArea::setWidget()` turns the widget's background on.** Turn it off again for
+    anything painted behind.
+  - **A `GraphicsSceneLeave` naming no widget crashes the scene**, which reads the view through
+    the viewport the event names. Send it with one.
+  - **Fusion draws a control's outline in `QPalette::Window`, darkened.** A dark Window left
+    Settings' checkbox with no visible box; the sheets set Window to the panel's border colour.
+  - **A layout nested in another takes its parent's spacing**, which in a sheet's column is none.
+  - **The offscreen platform's cursor sits at the screen's origin**, so a widget at (0, 0) is
+    under the mouse in a test.
+  - **A colour at a tenth of full alpha, read back from a premultiplied image,** is good to a
+    few levels per channel only.
 
 ### Phase 11: round history and last trick
 
@@ -1561,9 +1688,10 @@ Done when: both buttons open working sheets.
 3. Window sizes: 1920×1080, 2560×1440, 1920×1200, 1440×900. Nothing overlaps; the table stays round.
 4. Translations: build the `update_translations` target that `qt_add_translations()` in
    `CMakeLists.txt` creates, so every new `tr()` string reaches `i18n/romanian_whist_desktop_ro_RO.ts`.
-5. Documentation: amend `docs/QT_CLIENT_PLAN_proposal1.md` sections 12, 14, 17 and 18 where this
-   redesign changes what they describe (the file already uses "AMENDED" boxes for this), and note
-   here which open questions were decided and how.
+5. Documentation: amend `docs/QT_CLIENT_PLAN_proposal1.md` sections 12, 14, 15.1, 17 and 18 where
+   this redesign changes what they describe (the file already uses "AMENDED" boxes for this), and
+   note here which open questions were decided and how. Section 15.1 since phase 10: the strip is on
+   the felt, and its digits are read on the window.
 
 Done when: side-by-side screenshots of the client and `screenshots/` match closely at 1920×1080 for
 3 to 6 players and for bidding.
