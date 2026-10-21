@@ -4,8 +4,10 @@
 #include "ui/SettingsSheet.h"
 
 #include <QCheckBox>
+#include <QLabel>
 #include <QPushButton>
 #include <QSlider>
+#include <QStringList>
 
 #include <vector>
 
@@ -80,4 +82,46 @@ TEST_CASE("Each change to Settings is announced at once", "[settings]")
     sheet.findChild<QPushButton*>(QStringLiteral("settingsDone"))->click();
     REQUIRE(closed == 1);
     REQUIRE(announced.size() == 2);
+}
+
+TEST_CASE("Settings and the setup dialog build the same pace controls", "[settings]")
+{
+    // PR #35's review, finding #12: the two were copies, free to drift apart.
+    // Both now come from newgame::buildSpeedRow() and buildWaitCheckBox().
+    SettingsSheet sheet;
+    NewGameDialog dialog(newgame::defaults());
+
+    QSlider* sheetSpeed = sheet.findChild<QSlider*>(QStringLiteral("settingsSpeed"));
+    QSlider* dialogSpeed = dialog.findChild<QSlider*>(QStringLiteral("speed"));
+    REQUIRE(sheetSpeed != nullptr);
+    REQUIRE(dialogSpeed != nullptr);
+
+    REQUIRE(sheetSpeed->minimum() == dialogSpeed->minimum());
+    REQUIRE(sheetSpeed->maximum() == dialogSpeed->maximum());
+    REQUIRE(sheetSpeed->pageStep() == dialogSpeed->pageStep());
+    REQUIRE(sheetSpeed->tickPosition() == dialogSpeed->tickPosition());
+
+    // The words either side of the slider, in both.
+    const auto labels = [](const QWidget& owner)
+    {
+        QStringList texts;
+
+        for(const QLabel* label : owner.findChildren<QLabel*>())
+            texts << label->text();
+
+        return texts;
+    };
+
+    for(const QString& word : { QStringLiteral("Bot speed"), QStringLiteral("Slow"), QStringLiteral("Instant") })
+    {
+        INFO(word.toStdString());
+        REQUIRE(labels(sheet).contains(word));
+        REQUIRE(labels(dialog).contains(word));
+    }
+
+    QCheckBox* sheetWait = sheet.findChild<QCheckBox*>(QStringLiteral("settingsWait"));
+    QCheckBox* dialogWait = dialog.findChild<QCheckBox*>(QStringLiteral("waitEachRound"));
+    REQUIRE(sheetWait != nullptr);
+    REQUIRE(dialogWait != nullptr);
+    REQUIRE(sheetWait->text() == dialogWait->text());
 }

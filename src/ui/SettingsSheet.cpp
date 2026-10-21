@@ -25,30 +25,20 @@ SettingsSheet::SettingsSheet(QWidget* parent) : Overlay(parent)
     inside->addWidget(meta);
     inside->addSpacing(18);
 
-    // THE SETUP DIALOG'S SLIDER, the same five positions under the same words, so
-    // a player who has set it in one place recognises it in the other - and the
-    // same newgame::pacingFor() turns it into delays.
-    speed = new QSlider(Qt::Horizontal, panel);
+    // THE SETUP DIALOG'S SLIDER, built by the same function, so a player who has
+    // set it in one place recognises it in the other.
+    const newgame::SpeedRow speedRow = newgame::buildSpeedRow(panel, 12);
+    speed = speedRow.slider;
     speed->setObjectName(QStringLiteral("settingsSpeed"));
-    speed->setRange(newgame::SlowestSpeed, newgame::FastestSpeed);
-    speed->setPageStep(1);
-    speed->setTickPosition(QSlider::TicksBelow);
     speed->setMinimumWidth(240);
-
-    QHBoxLayout* speedRow = new QHBoxLayout;
-    speedRow->addWidget(new QLabel(tr("Bot speed"), panel));
-    speedRow->addSpacing(12);
-    speedRow->addWidget(new QLabel(tr("Slow"), panel));
-    speedRow->addWidget(speed, 1);
-    speedRow->addWidget(new QLabel(tr("Instant"), panel));
-    inside->addLayout(speedRow);
+    inside->addLayout(speedRow.row);
 
     inside->addSpacing(10);
 
     // The round sheet's wait, which a player may want to turn on mid-game to read
     // a round, or off once they no longer need to. It takes effect when the next
     // round is scored; a sheet already up keeps the wait it opened with.
-    waitEachRound = new QCheckBox(tr("Wait for me after each round"), panel);
+    waitEachRound = newgame::buildWaitCheckBox(panel);
     waitEachRound->setObjectName(QStringLiteral("settingsWait"));
     inside->addWidget(waitEachRound);
 

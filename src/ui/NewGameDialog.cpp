@@ -634,6 +634,33 @@ QString newgame::tooltipFor(BotLevel level)
 
 // ---- the widget ----
 
+newgame::SpeedRow newgame::buildSpeedRow(QWidget* parent, int labelGap)
+{
+    SpeedRow built;
+
+    built.slider = new QSlider(Qt::Horizontal, parent);
+    built.slider->setRange(SlowestSpeed, FastestSpeed);
+    built.slider->setPageStep(1);
+    built.slider->setTickPosition(QSlider::TicksBelow);
+
+    built.row = new QHBoxLayout;
+    built.row->addWidget(new QLabel(QCoreApplication::translate("newgame", "Bot speed"), parent));
+
+    if(labelGap > 0)
+        built.row->addSpacing(labelGap);
+
+    built.row->addWidget(new QLabel(QCoreApplication::translate("newgame", "Slow"), parent));
+    built.row->addWidget(built.slider, 1);
+    built.row->addWidget(new QLabel(QCoreApplication::translate("newgame", "Instant"), parent));
+
+    return built;
+}
+
+QCheckBox* newgame::buildWaitCheckBox(QWidget* parent)
+{
+    return new QCheckBox(QCoreApplication::translate("newgame", "Wait for me after each round"), parent);
+}
+
 NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     : QDialog(parent), current(_initial), initial(_initial)
 {
@@ -742,18 +769,10 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // tricks", which is phase E's: it turns pace() into a wait on a button
     // rather than on a duration, and that is the machinery D1 built one caller
     // of and no more. A disabled checkbox would be a promise, so there is none.
-    speed = new QSlider(Qt::Horizontal, this);
+    const newgame::SpeedRow speedRow = newgame::buildSpeedRow(this);
+    speed = speedRow.slider;
     speed->setObjectName("speed");
-    speed->setRange(newgame::SlowestSpeed, newgame::FastestSpeed);
-    speed->setPageStep(1);
-    speed->setTickPosition(QSlider::TicksBelow);
-
-    QHBoxLayout* speedRow = new QHBoxLayout;
-    speedRow->addWidget(new QLabel(tr("Bot speed"), this));
-    speedRow->addWidget(new QLabel(tr("Slow"), this));
-    speedRow->addWidget(speed, 1);
-    speedRow->addWidget(new QLabel(tr("Instant"), this));
-    stack->addLayout(speedRow);
+    stack->addLayout(speedRow.row);
 
     // SECTION 16.1's SHEET, held or not. Its button says Continue in every round
     // rather than "Deal round 8", because on the final round there is nothing
@@ -763,7 +782,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // stating rather than fixing: at Instant the trick dwell is zero, so with
     // this unticked the sheet flashes and is gone. That is what Instant means,
     // and a player who wants to read the sheet has this box.
-    waitEachRound = new QCheckBox(tr("Wait for me after each round"), this);
+    waitEachRound = newgame::buildWaitCheckBox(this);
     waitEachRound->setObjectName("waitEachRound");
     stack->addWidget(waitEachRound);
 

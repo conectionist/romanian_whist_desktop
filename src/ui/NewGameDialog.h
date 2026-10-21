@@ -22,12 +22,14 @@ class QButtonGroup;
 class QCheckBox;
 class QComboBox;
 class QFormLayout;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QRadioButton;
 class QSlider;
 class QSpinBox;
+class QWidget;
 QT_END_NAMESPACE
 
 // Section 13's setup dialog: one modal screen rather than a wizard, because a
@@ -294,12 +296,32 @@ GameDeal buildDeal(const Config& config);
 QString nameOf(BotLevel level);
 QString tooltipFor(BotLevel level);
 
+// THE PACE CONTROLS, built here for the setup dialog and the menu bar's Settings
+// alike, so that a player who has set them in one place finds the same control
+// in the other - the same five positions under the same words, and the same
+// newgame::pacingFor() turning them into delays. Each caller names them and
+// lays them out (PR #35's review, finding #12).
+//
+// The slider and its row: "Bot speed", "Slow", the slider, "Instant".
+// `labelGap` is extra room after "Bot speed".
+struct SpeedRow
+{
+    QHBoxLayout* row = nullptr;
+    QSlider* slider = nullptr;
+};
+
+SpeedRow buildSpeedRow(QWidget* parent, int labelGap = 0);
+
+// "Wait for me after each round": section 16.1's round sheet, held or not.
+QCheckBox* buildWaitCheckBox(QWidget* parent);
+
 } // namespace newgame
 
-// The widget. Built in code rather than in a .ui, for the reason
-// MainWindow::buildViewMenu() gives about its actions and one more that is
-// specific to this dialog: the opponent rows APPEAR AND DISAPPEAR WITH THE
-// COUNT, so half of it does not exist until it is asked for.
+// The widget. Built in code rather than in a .ui, for two reasons. Every control
+// needs a connection or a read-back here either way, and a designer file reached
+// only from here would split the dialog across two files for nothing. And the
+// opponent rows APPEAR AND DISAPPEAR WITH THE COUNT, so half of it does not
+// exist until it is asked for.
 class NewGameDialog : public QDialog
 {
     Q_OBJECT
