@@ -95,8 +95,9 @@ namespace scoreboard
 {
 
 // page.html's .score is 236 wide in its own units, which are drawn at
-// tablespace::hudScale times the table's. The RUN column widens it (see
-// columnsFor()).
+// tablespace::hudScale times the table's. Here it is the widest the panel grows:
+// it is as wide as its columns (see columnsFor()), and names that would take it
+// past this are elided.
 inline constexpr qreal mockupWidth = 236.0;
 
 // The first two lines: "Round 11 of 30", then "6 cards dealt · Normal".
@@ -217,15 +218,17 @@ Shown shownFor(const GameSnapshot& snapshot);
 // layout. That is what puts the mock-up's BID a little right of the middle and
 // gives TAKEN the most air.
 //
-// THE RUN COLUMN WIDENS THE PANEL rather than squeezing the others: the mock-up's
-// four columns keep the room they have in its 236, and the panel grows by RUN's
-// width at the same proportion. The cells measured are the names - each as though
-// it carried the turn's "▸", which moves round the table - and for the numbers
-// their widest value: so the columns do not shift as the turn and the scores
-// move, and change only between games, with the names.
+// THE PANEL IS AS WIDE AS ITS COLUMNS (the owner's call, 2026-10-20), not the
+// mock-up's fixed 236 shared out: each column its widest content, and a gap before
+// each number column. The cells measured are the names - each as though it
+// carried the turn's "▸", which moves round the table - and for the numbers their
+// widest value: so the columns do not shift as the turn and the scores move, and
+// change only between games, with the names.
 //
-// A table whose names do not fit gives every number column exactly its widest
-// content, and the names what is left, elided.
+// Never narrower than the bid tension at its widest, so that line never wraps:
+// columns that would be share the room over in proportion. Names that would take
+// the panel past the mock-up's 236 are what gives way: every number column keeps
+// its widest content, and the names get what is left, elided.
 struct Columns
 {
     qreal player = 0.0;

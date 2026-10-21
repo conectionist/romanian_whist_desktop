@@ -26,8 +26,8 @@ constexpr qreal borderWidth = 1.0;
 constexpr qreal paddingX = 14.0;
 constexpr qreal paddingY = 12.0;
 
-// The content's width in the mock-up's 236: what its four columns share.
-constexpr qreal mockupContent = scoreboard::mockupWidth - 2.0 * (borderWidth + paddingX);
+// The widest the content grows: the mock-up's 236, less its border and padding.
+constexpr qreal widestContent = scoreboard::mockupWidth - 2.0 * (borderWidth + paddingX);
 
 // .round: Marcellus 22. .sub: 15, 1 under it.
 constexpr qreal roundSize = 22.0;
@@ -48,6 +48,12 @@ constexpr qreal headPadding = 4.0;
 constexpr qreal ruleWidth = 1.0;
 constexpr qreal cellSize = 17.0;
 constexpr qreal cellPadding = 3.0;
+
+// THE ROOM BEFORE EACH NUMBER COLUMN. The mock-up has none to copy: its table is
+// the panel's fixed width, and the browser shares out whatever its columns leave.
+// The panel is as wide as its columns instead (the owner's call, 2026-10-20), so
+// the room between them is set here.
+constexpr qreal columnGap = 12.0;
 
 // .divider: 1 tall, 8 either side.
 constexpr qreal dividerGap = 8.0;
@@ -468,39 +474,42 @@ scoreboard::Header scoreboard::headerFor(const GameSnapshot& snapshot)
              infostrip::isCalledOut(snapshot.roundType) };
 }
 
-textruns::Line scoreboard::tensionFor(const GameSnapshot& snapshot)
+namespace
 {
-    const unsigned int tricks = snapshot.trickCount;
-    const unsigned int bids = snapshot.betSum;
 
+// The tension's four sentences: while the bids come in, then over, under or even.
+enum class Tension { SoFar, Over, Under, Even };
+
+// One of them with its numbers in, the bid total bold. `difference` is the "by" of
+// Over and Under, and unused by the others.
+textruns::Line tensionText(Tension form, unsigned int bids, unsigned int tricks, unsigned int difference)
+{
     QString sentence;
-    unsigned int difference = 0;
 
-    // Singular or plural on the trick count, for cardsText()'s reason; and over or
-    // under once every bid is in. The forbidden bid means the total never equals
-    // the tricks once the last bid is made, but the sentence says nothing wrong if
-    // it ever does.
-    if(snapshot.betsPlaced < snapshot.seats.size())
+    // Singular or plural on the trick count, for cardsText()'s reason.
+    switch(form)
     {
+    case Tension::SoFar:
         sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 trick")
                                : QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 tricks");
-    }
-    else if(bids > tricks)
-    {
-        difference = bids - tricks;
+        difference = 0;
+        break;
+
+    case Tension::Over:
         sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick: over by %3")
                                : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: over by %3");
-    }
-    else if(bids < tricks)
-    {
-        difference = tricks - bids;
+        break;
+
+    case Tension::Under:
         sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick: under by %3")
                                : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: under by %3");
-    }
-    else
-    {
+        break;
+
+    case Tension::Even:
         sentence = tricks == 1 ? QCoreApplication::translate("scoreboard", "Bids total %1 for %2 trick")
                                : QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks");
+        difference = 0;
+        break;
     }
 
     // THE BID TOTAL IS THE BOLD PART, so it is cut out of the sentence rather than
@@ -533,6 +542,41 @@ textruns::Line scoreboard::tensionFor(const GameSnapshot& snapshot)
         line.push_back({ sentence.mid(at + 1) });
 
     return line;
+}
+
+// THE TENSION AT ITS WIDEST, which the content is never narrower than: so the line
+// never wraps, and the panel changes neither its height as the bids come in nor
+// its width as they change. Its numbers at the widest a game can make them: up to
+// six seats bidding up to eight each, so a total of two digits and over by as
+// many; and at most eight tricks, so one digit for the tricks and for under.
+qreal widestTension(const textruns::Style& style)
+{
+    return std::max({ textruns::width(tensionText(Tension::SoFar, 88, 8, 0), style),
+                      textruns::width(tensionText(Tension::Over, 88, 8, 88), style),
+                      textruns::width(tensionText(Tension::Under, 8, 8, 8), style),
+                      textruns::width(tensionText(Tension::Even, 8, 8, 0), style) });
+}
+
+}
+
+textruns::Line scoreboard::tensionFor(const GameSnapshot& snapshot)
+{
+    const unsigned int tricks = snapshot.trickCount;
+    const unsigned int bids = snapshot.betSum;
+
+    // Over or under once every bid is in. The forbidden bid means the total never
+    // equals the tricks once the last bid is made, but the sentence says nothing
+    // wrong if it ever does.
+    if(snapshot.betsPlaced < snapshot.seats.size())
+        return tensionText(Tension::SoFar, bids, tricks, 0);
+
+    if(bids > tricks)
+        return tensionText(Tension::Over, bids, tricks, bids - tricks);
+
+    if(bids < tricks)
+        return tensionText(Tension::Under, bids, tricks, tricks - bids);
+
+    return tensionText(Tension::Even, bids, tricks, 0);
 }
 
 std::vector<scoreboard::Row> scoreboard::rowsFor(const GameSnapshot& snapshot)
@@ -596,14 +640,16 @@ QString scoreboard::headingPlayer()
     return QCoreApplication::translate("scoreboard", "Player");
 }
 
+// ONE LETTER EACH, so the panel is no wider than its numbers need (the owner's
+// call, 2026-10-20).
 QString scoreboard::headingBid()
 {
-    return QCoreApplication::translate("scoreboard", "Bid");
+    return QCoreApplication::translate("scoreboard", "B");
 }
 
 QString scoreboard::headingTaken()
 {
-    return QCoreApplication::translate("scoreboard", "Taken");
+    return QCoreApplication::translate("scoreboard", "T");
 }
 
 QString scoreboard::headingPoints()
@@ -660,19 +706,31 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
         widest.run = std::max(widest.run, cell(row.run));
     }
 
-    const qreal four = widest.player + widest.bid + widest.taken + widest.points;
+    // The gap on each number column's left: they are right-aligned, so that is the
+    // room between it and the column before.
+    for(qreal* number : { &widest.bid, &widest.taken, &widest.points, &widest.run })
+        *number += columnGap;
 
     // Names too long for the mock-up's width: the numbers at their widest, and the
     // names what is left of it.
-    if(four >= mockupContent)
+    const qreal numbers = widest.bid + widest.taken + widest.points + widest.run;
+
+    if(widest.player + numbers >= widestContent)
     {
         Columns columns = widest;
-        columns.player = std::max(0.0, mockupContent - (widest.bid + widest.taken + widest.points));
+        columns.player = std::max(0.0, widestContent - numbers);
         return columns;
     }
 
-    // The room over shared in proportion, the RUN column's share included.
-    const qreal share = mockupContent / four;
+    // Columns narrower than the tension at its widest: the room over shared in
+    // proportion, as the browser shares out a table's.
+    const qreal least = widestTension(styles.tension);
+    const qreal sum = widest.sum();
+
+    if(sum >= least)
+        return widest;
+
+    const qreal share = least / sum;
 
     return { widest.player * share, widest.bid * share, widest.taken * share,
              widest.points * share, widest.run * share };

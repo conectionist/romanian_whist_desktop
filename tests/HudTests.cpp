@@ -340,7 +340,10 @@ TEST_CASE("The scoreboard stays eight pixels in from the top-left corner", "[hud
 // corners more room beside the table.
 TEST_CASE("The corner panels sit inside the window and clear of every seat", "[hud]")
 {
-    const QSize windows[] = { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900) };
+    // 4:3 and 5:4 since the scoreboard became as wide as its columns: narrower
+    // than about 3:2, the mock-up's 236 reached the top-left seat.
+    const QSize windows[] = { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900),
+                              QSize(1024, 768), QSize(1280, 1024) };
 
     for(unsigned int seats = 3 ; seats <= 6 ; seats++)
     {

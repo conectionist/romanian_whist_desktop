@@ -353,7 +353,7 @@ cache behaviour; it is already a single seam for exactly this.
 `page.html` `.score`, `table.js` `renderScore()`. Merges today's `InfoStrip` into the scoreboard.
 Screenshot: any `table-*.jpg`.
 
-Panel, width 236 (plus the RUN column, below), padding 12/14, **drawn at 1.2× the table scale**,
+Panel, as wide as its columns (at most 236, below), padding 12/14, **drawn at 1.2× the table scale**,
 pinned 8 from the window's left edge and 8 below the menu bar, growing right and down. Content, top
 to bottom:
 
@@ -364,7 +364,7 @@ to bottom:
    "Bids so far: **3** of 6 tricks" while bidding; then "Bids total **7** for 6 tricks: over by 1" or
    "… under by 1". `betsPlaced` and `betSum` are already on the snapshot. "1 trick" in the
    singular. *(Phase 8.)*
-4. A table, rows in **bid order** (`SeatView::bidOrder`): header PLAYER / BID / TAKEN / PTS in
+4. A table, rows in **bid order** (`SeatView::bidOrder`): header PLAYER / B / T / PTS in
    12 px bold uppercase muted letter-spaced 0.1em with a faint rule under it; rows 17 px, numbers
    right-aligned in tabular figures; "–" for a bid not yet made and for "taken" during bidding.
    The row of whoever is to move is gold-bright with a "▸".
@@ -373,11 +373,13 @@ to bottom:
    - **A fifth column, RUN** (the owner's call, 2026-10-20; see Q3): a seat's streak as green
      **W2** for two exact bids running, or red **L3** for three misses, and blank for neither.
      The letter carries which, so colour is not the only cue.
-   - **The RUN column widens the panel** instead of squeezing the others: the four columns keep
-     their room in the mock-up's 236. The columns are laid out as the browser lays out the
-     mock-up's table: each as wide as its widest content, with the spare room shared in
-     proportion to that. Names are measured as though each carried the "▸", and the numbers at
-     their widest values, so the columns hold still as play moves. *(Phase 8.)*
+   - **The panel is as wide as its columns**, not the mock-up's fixed 236 shared out (the owner's
+     call, 2026-10-20, so the scoreboard clears the top-left seat in windows narrower than about
+     3:2): each column as wide as its widest content, with a gap of 12 before each number column.
+     The headings BID and TAKEN are **B** and **T**. Names are measured as though each carried
+     the "▸", and the numbers at their widest values, so the columns hold still as play moves.
+     The panel is never narrower than the bid tension at its widest, so that line never wraps;
+     and never wider than 236, past which the names are elided. *(Phase 8.)*
 5. A faint divider, then the **trump section stacked and centred**: "TRUMP" (19.8, bold uppercase,
    letter-spaced 0.24em, muted); the trump card at **154.9 table units wide** (same as a hand card,
    radius 10, shadow); the suit name, Marcellus 19.8, e.g. "♣ Clubs" (♥/♦ glyph in red suit

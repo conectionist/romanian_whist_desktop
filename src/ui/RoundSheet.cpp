@@ -233,7 +233,7 @@ void RoundSheet::addHeadings()
     };
 
     heading(QCoreApplication::translate("roundsheet", "Name"), 0, Qt::AlignLeft);
-    heading(scoreboard::headingBid(), 1, Qt::AlignRight);
+    heading(QCoreApplication::translate("scoreboard", "Bid"), 1, Qt::AlignRight);
     heading(QCoreApplication::translate("scoreboard", "Won"), 2, Qt::AlignRight);
     heading(QCoreApplication::translate("scoreboard", "Round"), 3, Qt::AlignRight);
     heading(QCoreApplication::translate("scoreboard", "Total"), 4, Qt::AlignRight);

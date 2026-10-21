@@ -445,24 +445,65 @@ TEST_CASE("The trump is named under its card with its glyph", "[scoreboard]")
 
 // ---- the columns ----
 
-// THE MOCK-UP'S 236, plus the RUN column. The owner's call of 2026-10-20: the run
-// widens the panel, so the names keep the room they have in the mock-up.
-TEST_CASE("The run widens the panel and leaves the names their room", "[scoreboard]")
+// AS WIDE AS ITS COLUMNS, not the mock-up's 236 shared out: the owner's call of
+// 2026-10-20, so the panel clears the top-left seat in a narrow window.
+TEST_CASE("The panel is as wide as its columns", "[scoreboard]")
 {
-    const std::vector<scoreboard::Row> rows = scoreboard::rowsFor(fourSeats());
-    const scoreboard::Columns columns = scoreboard::columnsFor(rows);
+    const scoreboard::Columns columns = scoreboard::columnsFor(scoreboard::rowsFor(fourSeats()));
 
-    // The four columns fill the mock-up's content exactly - 236 less its border and
-    // padding - and the run is on top of it.
-    const qreal four = columns.player + columns.bid + columns.taken + columns.points;
-
-    REQUIRE(std::abs(four - (scoreboard::mockupWidth - 30.0)) < 1e-6);
     REQUIRE(columns.run > 0.0);
 
     const CardRenderer cards;
     const QSizeF size = scoreboard::sizeFor(scoreboard::shownFor(fourSeats()), cards);
 
-    REQUIRE(std::abs(size.width() - (scoreboard::mockupWidth + columns.run)) < 1e-6);
+    // The columns, and the border and padding round them - narrower than the
+    // mock-up, for names this short.
+    REQUIRE(std::abs(size.width() - (columns.sum() + 30.0)) < 1e-6);
+    REQUIRE(size.width() < scoreboard::mockupWidth);
+}
+
+TEST_CASE("A longer name widens the panel, up to the mock-up's width", "[scoreboard]")
+{
+    const auto widthWith = [](const char* name)
+    {
+        GameSnapshot snapshot = fourSeats();
+        snapshot.seats[2].name = name;
+
+        return scoreboard::columnsFor(scoreboard::rowsFor(snapshot)).sum() + 30.0;
+    };
+
+    const qreal shorter = widthWith("Cris");
+    const qreal longer = widthWith("Alexandru");
+    const qreal tooLong = widthWith("Alexandrina-Maria Constantinescu");
+
+    REQUIRE(longer > shorter);
+    REQUIRE(std::abs(tooLong - scoreboard::mockupWidth) < 1e-6);
+}
+
+// THE TENSION AT ITS WIDEST SETS THE LEAST WIDTH: with names as short as they come
+// the columns are narrower than its longest sentence, which would otherwise wrap
+// as the bids came in and push everything under it down a line.
+TEST_CASE("The panel keeps its height as the bids come in", "[scoreboard]")
+{
+    const CardRenderer cards;
+
+    const auto heightFor = [&cards](unsigned int placed, unsigned int sum)
+    {
+        GameSnapshot snapshot = bidsIn(placed, sum, 8);
+
+        for(SeatView& seat : snapshot.seats)
+            seat.name = "A";
+
+        return scoreboard::sizeFor(scoreboard::shownFor(snapshot), cards).height();
+    };
+
+    // So far, then even, under by all eight, and over by as much as four seats
+    // can bid.
+    const qreal bidding = heightFor(2, 3);
+
+    REQUIRE(heightFor(4, 8) == bidding);
+    REQUIRE(heightFor(4, 0) == bidding);
+    REQUIRE(heightFor(4, 32) == bidding);
 }
 
 TEST_CASE("The columns hold still as the turn and the scores move", "[scoreboard]")
@@ -496,8 +537,7 @@ TEST_CASE("Names too long for the panel are what gives way", "[scoreboard]")
 
     REQUIRE(longer.player > 0.0);
     REQUIRE(longer.bid <= plain.bid);
-    REQUIRE(std::abs(longer.player + longer.bid + longer.taken + longer.points
-                     - (scoreboard::mockupWidth - 30.0)) < 1e-6);
+    REQUIRE(std::abs(longer.sum() - (scoreboard::mockupWidth - 30.0)) < 1e-6);
 }
 
 TEST_CASE("The panel is taller with the trump's card than without it", "[scoreboard]")
