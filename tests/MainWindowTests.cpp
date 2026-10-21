@@ -8,9 +8,12 @@
 #include "table/TableView.h"
 #include "ui/BidStrip.h"
 #include "ui/GameOverPanel.h"
+#include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
+#include "ui/RulesSheet.h"
+#include "ui/SettingsSheet.h"
 
 #include <QAction>
 #include <QApplication>
@@ -18,6 +21,7 @@
 #include <QDialog>
 #include <QDockWidget>
 #include <QLabel>
+#include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -27,6 +31,8 @@
 #include <QStatusBar>
 #include <QString>
 #include <QTimer>
+
+#include <string>
 
 // D1's flow, driven through the real window: menu, deal, pause, resume, abandon,
 // and a second game. Constructible because TestApp is a QApplication on the
@@ -120,7 +126,7 @@ void answerModalShortWatchedGame(int afterMs)
 // dialog's defaults are already a seated game, so this leaves the radio alone
 // and moves only the slider - where pacingFor() scales every beat by zero.
 //
-// THE SPEED IS NOT A CONVENIENCE HERE. With a human seated botBeat() picks 700ms
+// THE SPEED IS NOT A CONVENIENCE HERE. With a human seated GameBridge::delayOf() picks 700ms
 // rather than the spectator's 250 (section 4.1's split), so three bots bidding
 // is some two seconds of a test waiting for nothing before the human is asked
 // for a card.
@@ -192,11 +198,11 @@ TEST_CASE("The client opens on the menu with no game running", "[main-window]")
     REQUIRE(window.findChild<QPushButton*>("newGame") != nullptr);
     REQUIRE(window.findChild<QPushButton*>("quit") != nullptr);
 
-    // NOTHING TO PAUSE, and the Menu item says so rather than doing nothing when
+    // NOTHING TO PAUSE, and Exit says so rather than doing nothing when
     // clicked (PR 34's review, finding #4).
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
-    REQUIRE_FALSE(menu->isEnabled());
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
+    REQUIRE_FALSE(exitItem->isEnabled());
 }
 
 TEST_CASE("Esc on the menu page does nothing", "[main-window]")
@@ -222,7 +228,7 @@ TEST_CASE("Esc on the menu page does nothing", "[main-window]")
     SUCCEED("Esc with no game did not open a dialog");
 }
 
-TEST_CASE("A game paused from the Menu item stops, and resumes", "[main-window]")
+TEST_CASE("A game paused from Exit stops, and resumes", "[main-window]")
 {
     MainWindow window;
     window.resize(1000, 700);
@@ -240,16 +246,16 @@ TEST_CASE("A game paused from the Menu item stops, and resumes", "[main-window]"
 
     REQUIRE(log->blockCount() > 1);
 
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
-    REQUIRE(menu->isEnabled());
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
+    REQUIRE(exitItem->isEnabled());
 
     // MEASURED ACROSS THE MIDDLE OF THE PAUSE, not from the click. The pause
     // lands at the next pace(), so a frame or two still arrives after the button
     // - what it claims is that the game is stopped THEREAFTER. The gap sampled
     // is 1.8s of a 250ms spectator beat, which is seven frames that must not
     // appear.
-    menu->trigger();
+    exitItem->trigger();
 
     PauseOverlay* overlay = window.findChild<PauseOverlay*>();
     REQUIRE(overlay != nullptr);
@@ -300,7 +306,7 @@ TEST_CASE("The window can be closed while the game is paused", "[main-window]")
     window.findChild<QPushButton*>("newGame")->click();
     pump(2000);
 
-    window.findChild<QAction*>("menu")->trigger();
+    window.findChild<QAction*>("exitAction")->trigger();
     pump(200);
 
     REQUIRE(window.findChild<PauseOverlay*>()->isVisible());
@@ -405,10 +411,10 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     pump(2000);
     REQUIRE(pages->currentIndex() == 1);
 
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
 
-    menu->trigger();
+    exitItem->trigger();
     pump(100);
 
     QPushButton* mainMenu = window.findChild<QPushButton*>("mainMenu");
@@ -419,7 +425,7 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
-    REQUIRE_FALSE(menu->isEnabled());
+    REQUIRE_FALSE(exitItem->isEnabled());
 }
 
 TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main-window]")
@@ -447,7 +453,7 @@ TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main
     const int gameOne = log->blockCount();
     REQUIRE(gameOne > 1);
 
-    window.findChild<QAction*>("menu")->trigger();
+    window.findChild<QAction*>("exitAction")->trigger();
     pump(100);
     window.findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -545,8 +551,8 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // Mid-game, with the bots pacing - so there is a backlog to leak.
     REQUIRE(scene->lastSnapshot() != nullptr);
 
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
 
     // BOTH CLICKS IN ONE TURN OF THE EVENT LOOP, and that is the whole setup:
     // pausing parks the game thread at the next pace(), and a pump between the
@@ -554,7 +560,7 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // to leak. A player clicking Main menu straight after Menu is the ordinary
     // case, not a contrived one - the queue is only ever drained by the window
     // going idle.
-    menu->trigger();
+    exitItem->trigger();
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
 
     // THE PUMP IS THE MEASUREMENT. Everything the abandon does is synchronous,
@@ -576,7 +582,7 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
 
 TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
 {
-    // THE PAUSE TAKES FOCUS AND NOTHING GIVES IT BACK. focusResume() puts the
+    // THE PAUSE TAKES FOCUS AND NOTHING GIVES IT BACK. focusDefault() puts the
     // keyboard on the Resume button so that Enter resumes; hiding that button
     // does not return it, so a pause taken while the strip was up left its digit
     // keys dead afterwards - with the buttons still working, which is exactly
@@ -619,10 +625,10 @@ TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
     // would deliver a key press to.
     REQUIRE(window.focusWidget() == bidStrip);
 
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
 
-    menu->trigger();
+    exitItem->trigger();
     pump(100);
     REQUIRE(window.focusWidget() != bidStrip);
 
@@ -633,6 +639,160 @@ TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
     // digits belong to.
     REQUIRE(bidStrip->isVisible());
     REQUIRE(window.focusWidget() == bidStrip);
+}
+
+TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
+{
+    // PR #35's review, finding #4. Tab walked out of a sheet through the menu
+    // bar and on to the bid strip's buttons under the dim, and Space then bid
+    // while the sheet was holding the game - with a bot's bid following at once,
+    // because nothing paces after your own move. Measured in the app: two bids
+    // made under Rules.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    // The dialog's defaults are a played game, so this accepts them unchanged.
+    QTimer::singleShot(300, []
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+            dialog->done(QDialog::Accepted);
+    });
+
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    REQUIRE(bidStrip != nullptr);
+    REQUIRE(log != nullptr);
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    const int lines = log->blockCount();
+
+    // Twelve steps each way, from wherever the keyboard is. focusWidget() rather
+    // than hasFocus(), for the reason the resume case above gives.
+    const auto tabAround = [&window](QWidget* sheet)
+    {
+        for(int step = 0 ; step < 24 ; step++)
+        {
+            const bool forward = step < 12;
+            QKeyEvent tab(QEvent::KeyPress, forward ? Qt::Key_Tab : Qt::Key_Backtab,
+                          forward ? Qt::NoModifier : Qt::ShiftModifier);
+
+            QWidget* from = window.focusWidget();
+            REQUIRE(from != nullptr);
+            QCoreApplication::sendEvent(from, &tab);
+
+            INFO("step " << step << ", on " << window.focusWidget()->objectName().toStdString());
+            REQUIRE(sheet->isAncestorOf(window.focusWidget()));
+        }
+    };
+
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    REQUIRE(rules->isVisible());
+    tabAround(rules);
+    QCoreApplication::sendEvent(&window, &escape);
+    REQUIRE_FALSE(rules->isVisible());
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    REQUIRE(settings->isVisible());
+    tabAround(settings);
+    QCoreApplication::sendEvent(&window, &escape);
+    REQUIRE_FALSE(settings->isVisible());
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    REQUIRE(pause->isVisible());
+    tabAround(pause);
+    pause->findChild<QPushButton*>("resume")->click();
+    pump(100);
+
+    // Nothing was bid underneath, and the strip has the keyboard back.
+    REQUIRE(bidStrip->isVisible());
+    REQUIRE(log->blockCount() == lines);
+    REQUIRE(window.focusWidget() == bidStrip);
+}
+
+TEST_CASE("Closing a sheet gives the keyboard to the page and not the menu bar", "[main-window]")
+{
+    // PR #35's review, finding #3. With no bid strip to go back to,
+    // restoreFocus() gave the keyboard to nothing, so hiding the sheet's button
+    // let Qt hand it to the next widget in the window's Tab order: the menu
+    // bar's New Game, made last. In the app it showed as hovered with the mouse
+    // far away, and Space opened the setup dialog over the game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    TableView* table = window.findChild<TableView*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    REQUIRE(table != nullptr);
+    REQUIRE(newGame != nullptr);
+
+    // focusWidget(), for the reason "Resuming gives the keyboard back to the bid
+    // strip" gives.
+    const auto keyboardOn = [&window](QWidget* expected)
+    {
+        pump(50);
+
+        QWidget* focus = window.focusWidget();
+        INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+        REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+        REQUIRE(focus == expected);
+    };
+
+    // On the menu page: back to its New Game.
+    window.findChild<QAction*>("rulesAction")->trigger();
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    keyboardOn(newGame);
+
+    answerModalWatching(300);
+    newGame->click();
+    pump(2000);
+
+    // On a watched game: to the table, whichever way the sheet went.
+    window.findChild<QAction*>("rulesAction")->trigger();
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    keyboardOn(table);
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    keyboardOn(table);
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    pause->findChild<QPushButton*>("resume")->click();
+    keyboardOn(table);
+
+    // And Space there opens nothing. Armed to close a dialog that does open,
+    // so a failure is an assertion rather than a test stuck in exec().
+    bool dialogOpened = false;
+    QTimer::singleShot(300, [&dialogOpened]
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+        {
+            dialogOpened = true;
+            dialog->reject();
+        }
+    });
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+    QCoreApplication::sendEvent(window.focusWidget(), &press);
+    QCoreApplication::sendEvent(window.focusWidget(), &release);
+    pump(500);
+
+    REQUIRE_FALSE(dialogOpened);
 }
 
 TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
@@ -653,6 +813,11 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     QAction* logAction = logDock->toggleViewAction();
     REQUIRE_FALSE(logAction->isChecked());
 
+    // At the bottom, and only there: docked at the top it lay under the menu
+    // bar's shadow (PR #35's review, finding #14).
+    REQUIRE(window.dockWidgetArea(logDock) == Qt::BottomDockWidgetArea);
+    REQUIRE(logDock->allowedAreas() == Qt::BottomDockWidgetArea);
+
     QPushButton* newGame = window.findChild<QPushButton*>("newGame");
     REQUIRE(newGame != nullptr);
 
@@ -664,9 +829,9 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     logAction->trigger();
     REQUIRE(logDock->isVisible());
 
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
-    menu->trigger();
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
+    exitItem->trigger();
     pump(100);
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -675,6 +840,51 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     // action is Qt's own.
     REQUIRE(logAction->isChecked());
     REQUIRE(logDock->isVisible());
+}
+
+TEST_CASE("A sheet still covers the page when the log comes and goes", "[main-window]")
+{
+    // PR #35's review, finding #2. View stays usable over a sheet, and showing
+    // or hiding the log changes the page's height. A sheet sized only on the
+    // window's resizes was left at the old size: with the log hidden it stopped
+    // short of the bottom, and the hand under it took a click while the sheet
+    // was holding the game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    QDockWidget* logDock = window.findChild<QDockWidget*>("logDock");
+    REQUIRE(pages != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(logDock != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+    REQUIRE(rules->isVisible());
+    REQUIRE(rules->geometry() == pages->rect());
+
+    QAction* logAction = logDock->toggleViewAction();
+    const QRect before = pages->rect();
+
+    // The log shown: the page gets shorter.
+    logAction->trigger();
+    pump(200);
+    REQUIRE(logDock->isVisible());
+    REQUIRE(pages->height() < before.height());
+    REQUIRE(rules->geometry() == pages->rect());
+
+    // And hidden again: taller.
+    logAction->trigger();
+    pump(200);
+    REQUIRE_FALSE(logDock->isVisible());
+    REQUIRE(pages->rect() == before);
+    REQUIRE(rules->geometry() == pages->rect());
 }
 
 TEST_CASE("A finished game has a way back to the menu", "[main-window]")
@@ -727,10 +937,10 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     // Resume raised over a finished game would promise a game that has ended -
     // which is what the state this panel reads is for.
     window.findChild<PauseOverlay*>()->hide();
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
-    REQUIRE_FALSE(menu->isEnabled());
-    menu->trigger();
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
+    REQUIRE_FALSE(exitItem->isEnabled());
+    exitItem->trigger();
     pump(100);
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
 
@@ -746,6 +956,50 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
     REQUIRE_FALSE(panel->isVisible());
+}
+
+TEST_CASE("New Game over a finished game takes the standings down while it is open", "[main-window]")
+{
+    // PR #35's review, finding #7. Play again hid the game-over panel before
+    // opening the setup dialog, and put it back if the dialog was cancelled.
+    // New Game from the menu bar, and Alt+N, opened the dialog with the panel
+    // still standing behind it.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    QAction* newGameItem = window.findChild<QAction*>("newGameAction");
+    REQUIRE(panel != nullptr);
+    REQUIRE(newGameItem != nullptr);
+
+    answerModalShortWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+
+    // Looked at while the dialog is up, then cancelled.
+    bool sawDialog = false;
+    bool panelUnderDialog = true;
+    QTimer::singleShot(300, [&sawDialog, &panelUnderDialog, panel]
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+        {
+            sawDialog = true;
+            panelUnderDialog = panel->isVisible();
+            dialog->reject();
+        }
+    });
+
+    newGameItem->trigger();
+    pump(200);
+
+    REQUIRE(sawDialog);
+    REQUIRE_FALSE(panelUnderDialog);
+
+    // Cancelled on a finished game: the panel is back, as the way on.
+    REQUIRE(panel->isVisible());
+    REQUIRE(window.focusWidget() == panel->findChild<QPushButton*>("playAgain"));
 }
 
 TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
@@ -778,17 +1032,17 @@ TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
     REQUIRE(log->blockCount() == atSheet);
     REQUIRE(sheet->isVisible());
 
-    // The sheet has the way on, so the Menu item is greyed while it holds.
-    QAction* menu = window.findChild<QAction*>("menu");
-    REQUIRE(menu != nullptr);
-    REQUIRE_FALSE(menu->isEnabled());
+    // The sheet has the way on, so Exit is greyed while it holds.
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem != nullptr);
+    REQUIRE_FALSE(exitItem->isEnabled());
 
     QPushButton* continueButton = window.findChild<QPushButton*>("continueRound");
     REQUIRE(continueButton != nullptr);
     continueButton->click();
 
     REQUIRE_FALSE(sheet->isVisible());
-    REQUIRE(menu->isEnabled());
+    REQUIRE(exitItem->isEnabled());
     REQUIRE(pumpUntil(10000, [&]{ return log->blockCount() > atSheet; }));
 }
 
@@ -857,7 +1111,7 @@ TEST_CASE("The pause menu and the round sheet do not release each other",
     // anyone asks (PR 34's review, #4). It is not triggered here. Qt drops the
     // trigger of a disabled action before it reaches the window, so the refusal
     // would pass whatever setPauseMenuVisible() did; Esc above is what reaches it.
-    REQUIRE_FALSE(window.findChild<QAction*>("menu")->isEnabled());
+    REQUIRE_FALSE(window.findChild<QAction*>("exitAction")->isEnabled());
 
     // THE GAME IS STILL HELD after both attempts, which is what the hazard is
     // actually about: a menu that had opened and closed would have cleared the
@@ -926,6 +1180,532 @@ TEST_CASE("The table page is the table alone", "[main-window]")
 
     REQUIRE(window.findChild<QStatusBar*>() == nullptr);
 
-    // And the pause menu's way in for the mouse, until phase 9's menu bar.
-    REQUIRE(window.findChild<QAction*>("menu") != nullptr);
+    // AND THE BAR ABOVE IT IS SECTION 2.12's, not Qt's (the redesign's phase 9):
+    // the window's menu widget, with no QMenuBar left anywhere - menuBar() would
+    // have made one, and installing it deletes ours.
+    MenuBar* bar = window.findChild<MenuBar*>();
+    REQUIRE(bar != nullptr);
+    REQUIRE(window.menuWidget() == bar);
+    REQUIRE(window.findChild<QMenuBar*>() == nullptr);
+
+    // Its Exit is the pause menu's way in for the mouse.
+    REQUIRE(window.findChild<QAction*>("exitAction") != nullptr);
+}
+
+// THE MENU BAR'S NEW GAME, over a game still running (the redesign's phase 9).
+// Before it, the setup dialog opened only over the menu page or a game that had
+// ended, so this is the first path on which prepare() stops a game in full flight
+// from the window - and its gameStopped must not reach onGameStopped() and close
+// the window, which is what prepare()'s purge is there to prevent.
+TEST_CASE("New Game from the menu bar replaces a running game", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QAction* newGameItem = window.findChild<QAction*>("newGameAction");
+    REQUIRE(log != nullptr);
+    REQUIRE(pages != nullptr);
+    REQUIRE(newGameItem != nullptr);
+
+    // Live on the menu page as well, where it is the page's own button again.
+    REQUIRE(newGameItem->isEnabled());
+
+    answerModalWatching(300);
+    newGameItem->trigger();
+    pump(2000);
+
+    REQUIRE(pages->currentIndex() == 1);
+    const int gameOne = log->blockCount();
+    REQUIRE(gameOne > 1);
+
+    // ---- game two, dealt over game one ----
+    //
+    // trigger() returns once the dialog is answered and startGame() has run, and
+    // before any frame of game two has been delivered: so the log is empty here
+    // only if game one was replaced rather than left running beside it.
+    answerModalWatching(300);
+    newGameItem->trigger();
+
+    REQUIRE(log->blockCount() == 1);
+    REQUIRE(log->toPlainText().isEmpty());
+
+    pump(2000);
+
+    REQUIRE(window.isVisible());
+    REQUIRE(pages->currentIndex() == 1);
+    REQUIRE(log->blockCount() > 1);
+    REQUIRE(window.findChild<QAction*>("exitAction")->isEnabled());
+}
+
+// The owner's call of 2026-10-21: the bots wait while the setup dialog is open
+// over a running game, and play on if it is cancelled. Measured as the pause case
+// measures its hold - the log stops appending, then starts again.
+TEST_CASE("A cancelled New Game holds the game while open and leaves it running", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    QAction* newGameItem = window.findChild<QAction*>("newGameAction");
+    REQUIRE(log != nullptr);
+    REQUIRE(newGameItem != nullptr);
+
+    answerModalWatching(300);
+    newGameItem->trigger();
+    pump(2000);
+
+    const int before = log->blockCount();
+    REQUIRE(before > 1);
+
+    // INSIDE THE DIALOG'S OWN EVENT LOOP, which is the only place a test can look
+    // while it is open. Sampled across the middle of the hold, as the pause case
+    // does: the hold lands at the next pace(), so a frame may still arrive just
+    // after the dialog opens. 1.8 s of a 250 ms spectator beat is seven frames
+    // that must not appear.
+    int settled = 0;
+    int held = 0;
+    bool wasOpen = false;
+
+    QTimer::singleShot(600, [&]{ settled = log->blockCount(); });
+
+    QTimer::singleShot(2400, [&]
+    {
+        held = log->blockCount();
+
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        wasOpen = dialog != nullptr;
+
+        if(dialog)
+            dialog->reject();
+    });
+
+    newGameItem->trigger();
+
+    INFO("settled " << settled << ", held " << held);
+    REQUIRE(wasOpen);
+    REQUIRE(settled >= before);
+    REQUIRE(held == settled);
+
+    // Cancelled, the same game runs on: nothing cleared the log, and it grows.
+    pump(2000);
+    REQUIRE(log->blockCount() > held);
+    REQUIRE(window.isVisible());
+}
+
+// THE MENU BAR'S RULES (the redesign's phase 9): over a running game it holds the
+// game, as the pause menu does (the owner's call, 2026-10-21), and Esc closes it -
+// the sheet first, before the pause menu Esc otherwise toggles.
+TEST_CASE("Rules holds a watched game and Esc closes it", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    QAction* rulesItem = window.findChild<QAction*>("rulesAction");
+    REQUIRE(log != nullptr);
+    REQUIRE(pages != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(pause != nullptr);
+    REQUIRE(rulesItem != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+    REQUIRE(log->blockCount() > 1);
+
+    REQUIRE(rulesItem->isEnabled());
+    rulesItem->trigger();
+
+    REQUIRE(rules->isVisible());
+    REQUIRE(rules->geometry() == pages->rect());
+
+    // Across the middle of the hold, as the pause case measures it.
+    pump(600);
+    const int settled = log->blockCount();
+    pump(1800);
+    const int held = log->blockCount();
+
+    INFO("settled " << settled << ", held " << held);
+    REQUIRE(held == settled);
+
+    // Esc closes the sheet, and does not open the pause menu on the way.
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+
+    REQUIRE_FALSE(rules->isVisible());
+    REQUIRE_FALSE(pause->isVisible());
+
+    // And the game runs on.
+    pump(2000);
+    REQUIRE(log->blockCount() > held);
+}
+
+TEST_CASE("Moving between Rules and Settings never lets the game go", "[main-window]")
+{
+    // PR #35's review, finding #1. Opening one of the bar's sheets over the
+    // other - or the same one again - closed the first through hideMenuSheets(),
+    // which released the game before the new sheet held it. The game thread,
+    // parked in pace(), woke into that gap and played on: in the app, 40 presses
+    // of Alt+S under Settings let a watched game run a round and a half.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    QAction* rulesItem = window.findChild<QAction*>("rulesAction");
+    QAction* settingsItem = window.findChild<QAction*>("settingsAction");
+    REQUIRE(log != nullptr);
+    REQUIRE(rulesItem != nullptr);
+    REQUIRE(settingsItem != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+    REQUIRE(log->blockCount() > 1);
+
+    settingsItem->trigger();
+
+    // Held, as the pause case measures it.
+    pump(600);
+    const int settled = log->blockCount();
+
+    // Settings again, then Rules twice, and round: each sheet over itself and
+    // over the other.
+    for(int press = 0 ; press < 40 ; press++)
+    {
+        (press % 4 < 2 ? settingsItem : rulesItem)->trigger();
+        pump(30);
+    }
+
+    pump(600);
+
+    INFO("settled " << settled << ", after the switching " << log->blockCount());
+    REQUIRE(log->blockCount() == settled);
+}
+
+TEST_CASE("Exit over Rules raises the pause menu in its place", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    REQUIRE(log != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(pause != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+    REQUIRE(rules->isVisible());
+
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem->isEnabled());
+    exitItem->trigger();
+
+    REQUIRE(pause->isVisible());
+    REQUIRE_FALSE(rules->isVisible());
+
+    // STILL HELD, by the pause now: the sheet's hold went only once the pause
+    // menu's was taken.
+    pump(600);
+    const int settled = log->blockCount();
+    pump(1800);
+    REQUIRE(log->blockCount() == settled);
+}
+
+// The digit keys are read on the window, so the sheet covering the fan is not
+// what keeps them off it: the guard in keyPressEvent() is.
+TEST_CASE("No card is played from the keyboard under Rules", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    answerModalFastSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    REQUIRE(bidStrip != nullptr);
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    // 0 is always legal for the opener, which seat 0 is.
+    QPushButton* zero = bidButton(*bidStrip, 0u);
+    REQUIRE(zero != nullptr);
+    zero->click();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+    REQUIRE(pumpUntil(10000, [scene]{ return scene->handItem()->isPlayable(0); }));
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    REQUIRE(rules->isVisible());
+
+    QKeyEvent one(QEvent::KeyPress, Qt::Key_1, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &one);
+    pump(200);
+
+    // Still waiting on the card: the 1 under the sheet played nothing.
+    REQUIRE(scene->handItem()->isPlayable(0));
+
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+    REQUIRE_FALSE(rules->isVisible());
+
+    // With the sheet gone the same key plays it.
+    QCoreApplication::sendEvent(&window, &one);
+    pump(200);
+    REQUIRE_FALSE(scene->handItem()->isPlayable(0));
+}
+
+TEST_CASE("Rules opens on the menu page for the game New Game offers", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    QAction* rulesItem = window.findChild<QAction*>("rulesAction");
+    REQUIRE(pages != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(rulesItem != nullptr);
+
+    // Live with no game, unlike Exit.
+    REQUIRE(rulesItem->isEnabled());
+    REQUIRE_FALSE(window.findChild<QAction*>("exitAction")->isEnabled());
+
+    rulesItem->trigger();
+    REQUIRE(rules->isVisible());
+    REQUIRE(pages->currentIndex() == 0);
+
+    // The dialog's defaults are the game it would deal.
+    QLabel* text = rules->findChild<QLabel*>("rulesText");
+    REQUIRE(text != nullptr);
+
+    const QString first = rulessheet::linesFor(newgame::defaults()).front();
+    REQUIRE(text->text().contains(first.toHtmlEscaped()));
+
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    REQUIRE_FALSE(rules->isVisible());
+    REQUIRE(pages->currentIndex() == 0);
+}
+
+// THE MENU BAR'S SETTINGS (the redesign's phase 9, Q4): with no game it sets what
+// the next New Game opens on.
+TEST_CASE("Settings on the menu page sets the next game's pace", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    QAction* settingsItem = window.findChild<QAction*>("settingsAction");
+    REQUIRE(settings != nullptr);
+    REQUIRE(settingsItem != nullptr);
+    REQUIRE(settingsItem->isEnabled());
+
+    settingsItem->trigger();
+    REQUIRE(settings->isVisible());
+
+    QSlider* speed = settings->findChild<QSlider*>("settingsSpeed");
+    QCheckBox* wait = settings->findChild<QCheckBox*>("settingsWait");
+    REQUIRE(speed != nullptr);
+    REQUIRE(wait != nullptr);
+
+    // Opened on the dialog's defaults, which are the game New Game would deal.
+    REQUIRE(speed->value() == newgame::DefaultSpeed);
+    REQUIRE_FALSE(wait->isChecked());
+
+    speed->setValue(newgame::FastestSpeed);
+    wait->setChecked(true);
+
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    REQUIRE_FALSE(settings->isVisible());
+
+    // Read from inside the dialog's own event loop, then cancelled.
+    int dialogSpeed = -1;
+    bool dialogWait = false;
+
+    QTimer::singleShot(300, [&]
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QSlider* slider = dialog->findChild<QSlider*>("speed"))
+            dialogSpeed = slider->value();
+
+        if(QCheckBox* box = dialog->findChild<QCheckBox*>("waitEachRound"))
+            dialogWait = box->isChecked();
+
+        dialog->reject();
+    });
+
+    window.findChild<QAction*>("newGameAction")->trigger();
+
+    REQUIRE(dialogSpeed == newgame::FastestSpeed);
+    REQUIRE(dialogWait);
+}
+
+// AND OVER A GAME IN PLAY IT CHANGES THAT GAME: a watched game dealt at the
+// slowest pace, sped to the fastest from Settings, reaches its end inside a
+// deadline the slowest pace could not meet. Two bots over 18 rounds at the
+// slowest take about four minutes - a 500 ms beat a card and 2.4 s a trick - and
+// at the fastest a second or two.
+TEST_CASE("Settings speeds up the game in play", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    REQUIRE(panel != nullptr);
+    REQUIRE(settings != nullptr);
+
+    QTimer::singleShot(300, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QRadioButton* watch = dialog->findChild<QRadioButton*>("watching"))
+            watch->setChecked(true);
+
+        if(QSpinBox* opponents = dialog->findChild<QSpinBox*>("opponents"))
+            opponents->setValue(2);
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::SlowestSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+
+    window.findChild<QAction*>("newGameAction")->trigger();
+    pump(1000);
+
+    REQUIRE_FALSE(panel->isVisible());
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    REQUIRE(settings->isVisible());
+
+    QSlider* speed = settings->findChild<QSlider*>("settingsSpeed");
+    REQUIRE(speed->value() == newgame::SlowestSpeed);
+
+    speed->setValue(newgame::FastestSpeed);
+    settings->findChild<QPushButton*>("settingsDone")->click();
+
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+}
+
+// THE OTHER SIDE OF "Closing a sheet gives the keyboard to the page": only what
+// had the keyboard gives it back. A round sheet that does not wait for you never
+// takes it, and goes by itself once a round, so when it goes the keyboard stays
+// where you put it - here the log, which #3's fix took it from every round.
+TEST_CASE("A round sheet that goes by itself leaves the keyboard where it was", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    QDockWidget* logDock = window.findChild<QDockWidget*>("logDock");
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    RoundSheet* sheet = window.findChild<RoundSheet*>();
+    REQUIRE(logDock != nullptr);
+    REQUIRE(log != nullptr);
+    REQUIRE(sheet != nullptr);
+
+    logDock->show();
+    log->setFocus();
+    pump(100);
+    REQUIRE(window.focusWidget() == log);
+
+    // Round 1's sheet, up for the dwell and gone at the next frame.
+    REQUIRE(pumpUntil(20000, [sheet]{ return sheet->isVisible(); }));
+    REQUIRE(pumpUntil(20000, [sheet]{ return !sheet->isVisible(); }));
+    pump(50);
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->metaObject()->className() : "nothing"));
+    REQUIRE(focus == log);
+}
+
+// AND A NEW GAME DEALT FROM THE STANDINGS: Play again's button had the keyboard,
+// and the panel goes down while the setup dialog is up, which hands it to the
+// next widget in the Tab order - the menu bar's New Game, lit as though hovered,
+// where Space opens the dialog again. The new game starts with it on the table.
+TEST_CASE("Play again leaves the keyboard on the table and not the menu bar", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    TableView* table = window.findChild<TableView*>();
+    REQUIRE(panel != nullptr);
+    REQUIRE(table != nullptr);
+
+    answerModalShortWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+
+    QPushButton* playAgain = panel->findChild<QPushButton*>("playAgain");
+    REQUIRE(playAgain != nullptr);
+    playAgain->setFocus();
+    pump(50);
+
+    // At the default pace, so the new game is still in its first round when this
+    // looks: the dialog opens on the last game's, where every beat is zero.
+    QTimer::singleShot(300, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::DefaultSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+
+    playAgain->click();
+    pump(200);
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+    REQUIRE_FALSE(panel->isVisible());
+    REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+    REQUIRE(focus == table);
 }

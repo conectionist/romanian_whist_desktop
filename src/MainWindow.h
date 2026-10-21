@@ -34,8 +34,12 @@ class CardArtWindow;
 class GameOverPanel;
 class HandItem;
 class MainMenuPage;
+class MenuBar;
+class Overlay;
 class PauseOverlay;
 class RoundSheet;
+class RulesSheet;
+class SettingsSheet;
 class TableScene;
 class TableView;
 class TrickPanelItem;
@@ -85,8 +89,12 @@ protected:
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
 
-    // Keeps the overlays over the whole page - see the body.
-    void resizeEvent(QResizeEvent* event) override;
+    // TAB STAYS INSIDE THE SHEET ON TOP (PR #35's review, finding #4). Every
+    // widget's Tab comes up to here unless something below takes it, so this
+    // also catches Tab from the menu bar and the log. The bar is still reached
+    // by its Alt shortcuts.
+    bool focusNextPrevChild(bool next) override;
+
 
 private slots:
     void render(std::shared_ptr<const GameSnapshot> snapshot);
@@ -132,18 +140,40 @@ private slots:
     // prompt cached by onBetRequested().
     void onBidChosen(unsigned int bet);
 
-    // Section 13's dialog, opened from the main menu. Builds a GameSetup from
-    // what it was told and starts a game on it - which for the second and every
-    // later game is section 4.3's ordering run again from the top.
+    // Section 13's dialog, opened from the main menu, from the menu bar's New
+    // Game, or from the game-over panel's Play again. Builds a GameSetup from what
+    // it was told and starts a game on it - which for the second and every later
+    // game is section 4.3's ordering run again from the top, and which from the
+    // menu bar may replace a game still running (prepare() stops and joins it).
+    //
+    // A RUNNING GAME IS HELD WHILE THE DIALOG IS UP, by the owner's call of
+    // 2026-10-21, and runs on if the dialog is cancelled. A finished game's
+    // standings come down while it is up, and go back if it is cancelled.
     void showNewGameDialog();
 
     // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
-    // its own slot because that is what the menu bar's Menu item connects to.
+    // its own slot because that is what the menu bar's Exit connects to.
     void showPauseMenu();
 
     // Abandons the running game and returns to the main menu. The second stop
     // this window produces, and the reason `returningToMenu` exists.
     void abandonToMenu();
+
+    // The menu bar's Rules: the sheet for the game lastConfig deals, over
+    // whatever is showing, holding a running game while it is up.
+    void showRules();
+
+    // The menu bar's Settings, the same way, opened on lastConfig's pace.
+    void showSettings();
+
+    // A control on the Settings sheet moved. Written into lastConfig, which the
+    // next New Game opens on, and - live, by the owner's call of 2026-10-21 -
+    // into the game in play.
+    void applySettings(int botSpeed, bool waitAfterEachRound);
+
+    // Closes the menu sheet that is up, releasing its hold and giving the
+    // keyboard back to what is beneath.
+    void hideMenuSheets();
 
 private:
     void appendLine(const QString& line);
@@ -158,9 +188,13 @@ private:
     // action that empties the window is not a diagnostic.
     void buildLogDock();
 
-    // Builds the menu bar: the temporary Menu item and the View menu. Must run
-    // AFTER buildLogDock(), which owns an action this adds.
-    void buildViewMenu();
+    // Builds section 2.12's menu bar - New Game, Settings, Rules, View and Exit -
+    // and installs it with setMenuWidget(). Must run AFTER buildLogDock(), which
+    // owns an action this adds to View.
+    //
+    // NEVER CALL menuBar() AFTER IT. QMainWindow::menuBar() makes a QMenuBar when
+    // the menu widget is not one, and installing that deletes this bar.
+    void buildMenuBar();
 
     // Shows the card-art window, creating it the first time. Parented to this
     // window with Qt::Window, so it is a top-level window that still dies with
@@ -184,8 +218,8 @@ private:
     void setPauseMenuVisible(bool visible);
 
     // WHETHER THE PAUSE MENU MAY GO UP NOW: a game playing, and no round sheet
-    // holding it. What setPauseMenuVisible() refuses on, and what the Menu item
-    // is greyed by (updatePauseAction()).
+    // holding it. What setPauseMenuVisible() refuses on, and what Exit is greyed
+    // by (updatePauseAction()).
     bool canPause() const;
     void updatePauseAction();
 
@@ -198,12 +232,51 @@ private:
     void showRoundSheet(const RoundResult& result);
     void hideRoundSheet();
 
+    // THE MENU BAR'S SHEET THAT IS UP, one of menuSheets, or null. They open
+    // over everything else and close back to it, as the mock-up's do, so
+    // whatever raises itself while one is up puts it back on top
+    // (keepMenuSheetOnTop()).
+    Overlay* openMenuSheet() const;
+    void keepMenuSheetOnTop();
+
+    // Shows one of menuSheets over everything else, in place of any other, and
+    // holds a game in play while it is up. Opening one over another, or over
+    // itself, never lets the game go in between - see the body.
+    void showMenuSheet(Overlay* sheet);
+
+    // Hides every menu sheet and drops their hold, WITHOUT releasing the game:
+    // the caller decides that - hideMenuSheets() by applyHold(), a stop by
+    // ending the game.
+    void dropMenuSheets();
+
+    // GIVES THE KEYBOARD TO WHATEVER IS NOW ON TOP, after something over it went:
+    // the sheet on top (activeOverlay()), the bid strip and its digit keys, or
+    // else the page itself - the table, or the menu page's New Game. Each takes
+    // focus when it is raised, and hiding what took it from them does not give
+    // it back - which looks finished, because the mouse still works.
+    //
+    // THE PAGE ONLY IF `hadKeyboard`: if what went had the keyboard. A round
+    // sheet that does not wait never takes it, and goes by itself every round;
+    // falling back to the table then took the keyboard from wherever the player
+    // had put it, the log for one, once a round. Read it with holdsKeyboard()
+    // BEFORE the hide, which is when Qt moves the keyboard on.
+    void restoreFocus(bool hadKeyboard);
+
+    // Whether the keyboard is on `widget` or inside it. Null holds nothing.
+    bool holdsKeyboard(const QWidget* widget) const;
+
+    // THE SHEET THE KEYBOARD BELONGS TO, top first: Rules or Settings, the
+    // pause menu, the game-over panel, or a round sheet that is holding the
+    // game. Null when none is up - an unwaited round sheet asks for nothing.
+    Overlay* activeOverlay() const;
+
     // Raises section 16.2's panel over the table it was filled from. The three
-    // callers are the two endings - onGameOver() and showFailure() - and a Play
-    // again the player then cancelled, which must put back what it took down.
+    // callers are the two endings - onGameOver() and showFailure() - and a New
+    // Game dialog the player then cancelled, which must put back what it took
+    // down.
     //
     // FILLS NOTHING. The panel keeps its face between a hide and a show, so this
-    // is geometry, show, raise and focus - the same four the pause menu does.
+    // is show, raise and focus - the same three the pause menu does.
     void showGameOverPanel();
 
     // Prepares the controller and starts a game, and - the reason this is a
@@ -256,8 +329,14 @@ private:
     // setPauseMenuVisible().
     PauseOverlay* pauseOverlay = nullptr;
 
-    // The menu bar's temporary Menu item, which raises it (buildViewMenu()).
-    QAction* pauseAction = nullptr;
+    // Section 2.12's bar, installed as the window's menu widget, and its items.
+    // Exit raises the pause menu, whose Main menu is the way out; it replaced
+    // phase 8's temporary Menu item.
+    MenuBar* bar = nullptr;
+    QAction* newGameAction = nullptr;
+    QAction* settingsAction = nullptr;
+    QAction* rulesAction = nullptr;
+    QAction* exitAction = nullptr;
 
     // Section 16.2's panel, the same shape as the pause menu and for the same
     // reason - it is drawn OVER the final state rather than replacing it, which
@@ -267,6 +346,15 @@ private:
 
     // Section 16.1's sheet, raised over the round it reports.
     RoundSheet* roundSheet = nullptr;
+
+    // The menu bar's Rules and Settings, the same arrangement again.
+    RulesSheet* rulesSheet = nullptr;
+    SettingsSheet* settingsSheet = nullptr;
+
+    // EVERY SHEET THE MENU BAR OPENS, in one list, so that one more - phase 11's
+    // Round history and Last trick - is added here and nowhere else:
+    // showMenuSheet(), dropMenuSheets() and openMenuSheet() all go through it.
+    std::vector<Overlay*> menuSheets;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this
@@ -301,6 +389,9 @@ private:
     // 16.2's "play again reopens the setup dialog pre-filled with the same
     // settings". In memory rather than in QSettings, which is section 20 and
     // phase E.
+    //
+    // AND THE PACE SETTINGS HAS SET SINCE: its bot speed and round wait are
+    // written here as they change, so the next game opens on them.
     newgame::Config lastConfig = newgame::defaults();
 
     // Holds the .ui's log widget from buildLogDock() onward.
@@ -326,15 +417,17 @@ private:
     // application. Cleared by startGame(), so it is true for exactly one stop.
     bool returningToMenu = false;
 
-    // THE TWO REASONS A GAME CAN BE HELD, kept apart so that releasing one does
-    // not release the other. applyHold() is what turns them into the single flag
+    // THE REASONS A GAME CAN BE HELD, kept apart so that releasing one does not
+    // release the other. applyHold() is what turns them into the single flag
     // GameBridge owns.
     bool pauseMenuHolding = false;
     bool roundSheetHolding = false;
 
-    // Does the round sheet WAIT? From the dialog, per game - section 16.1's
-    // dismissal, and off by default.
-    bool waitAfterEachRound = false;
+    // TWO MORE, since the redesign's phase 9: the setup dialog, opened from the
+    // menu bar over a game still running, and the bar's Rules and Settings
+    // sheets (the owner's call, 2026-10-21: the bots wait while you read).
+    bool dialogHolding = false;
+    bool sheetHolding = false;
 
     // WHAT THE TABLE IS SHOWING, and the three states are not two. This was a
     // bool through D1 and the bool is what put the client in a dead end: a

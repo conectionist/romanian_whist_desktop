@@ -82,7 +82,7 @@ void GameBridge::onBetPlaced(const GameEngine& engine, Seat seat, unsigned int b
     emit betPlaced(seat.index, bet);
 
     if(!isHuman(seat))
-        pace(botBeat());
+        pace(Beat::Bot);
 }
 
 void GameBridge::onBettingComplete(const GameEngine& engine)
@@ -90,7 +90,7 @@ void GameBridge::onBettingComplete(const GameEngine& engine)
     // Hold on the completed bid table before the first card goes down. Without
     // this the last bid is only ever seen when a bot made it.
     publish(engine);
-    pace(botBeat());
+    pace(Beat::Bot);
 
     // If this client ever grows a skip key, resetSkip() belongs HERE and not in
     // onRoundStarted - the terminal found that out the hard way. A skip runs to
@@ -124,7 +124,7 @@ void GameBridge::onCardRequested(const GameEngine& engine, Seat seat)
     // instead, which is what this class already does - so bidding is already
     // right and only the card path was missing one.
     if(!isHuman(seat))
-        pace(botBeat());
+        pace(Beat::Bot);
 }
 
 void GameBridge::onCardPlayed(const GameEngine& engine, Seat seat, const Card& card)
@@ -184,7 +184,7 @@ void GameBridge::onTrickWon(const GameEngine& engine, Seat seat, unsigned int tr
     // turn for the dwell below - which is the longest a frame stays up.
     publish(engine);
     emit trickWon(seat.index, trickNumber);
-    pace(pacing.trickDwell);
+    pace(Beat::TrickDwell);
 }
 
 RoundResult GameBridge::buildRoundResult(const GameEngine& engine) const
@@ -256,10 +256,19 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // shows the right round's numbers.
     publish(engine);
 
+    // THE WAIT, READ ONCE, and both the result and the hold below go by that one
+    // reading: Settings can change it at any moment, and the window learns
+    // whether its sheet is holding from the result rather than from a copy of
+    // its own (PR #35's review, finding #6).
+    const bool held = waitsAfterEachRound();
+
     // BUILT BEFORE THE PACE, on the game thread, out of an engine that is about
     // to move on. By onRoundComplete() the index has advanced and every number
     // above would be attributed to the next round.
-    emit roundScored(buildRoundResult(engine));
+    RoundResult result = buildRoundResult(engine);
+    result.held = held;
+
+    emit roundScored(result);
 
     // HELD BEFORE THE WAIT, ON THIS THREAD, and not by the window that shows the
     // sheet. The emit above is queued: a window that set the hold on receiving
@@ -268,7 +277,7 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     //
     // The window RELEASES it, on Continue. A release that arrives late is
     // harmless; a hold that arrives late does not hold anything.
-    if(pacing.waitAfterEachRound)
+    if(held)
         setPaused(true);
 
     // AND THE DWELL BELONGS HERE, on the frame that carries the result, not on
@@ -285,7 +294,7 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // and pauses there, and does not override onRoundComplete() at all. Its
     // roundPause() waits out the same option trickPause() uses, so matching it
     // needs no new knob here either.
-    pace(pacing.trickDwell);
+    pace(Beat::TrickDwell);
 }
 
 void GameBridge::onRoundComplete(const GameEngine& engine)
@@ -316,7 +325,33 @@ void GameBridge::onGameStopped(const GameEngine&)
     emit gameStopped();
 }
 
-void GameBridge::pace(std::chrono::milliseconds delay)
+std::chrono::milliseconds GameBridge::delayOf(Beat beat) const
+{
+    if(beat == Beat::TrickDwell)
+        return pacing.trickDwell;
+
+    // humanSeat is set once, by the constructor, so it needs no lock of its own.
+    return humanSeat ? pacing.beat : pacing.spectatorBeat;
+}
+
+bool GameBridge::waitsAfterEachRound()
+{
+    std::lock_guard lock(pacingMutex);
+    return pacing.waitAfterEachRound;
+}
+
+void GameBridge::setPacing(Pacing _pacing)
+{
+    {
+        std::lock_guard lock(pacingMutex);
+        pacing = _pacing;
+    }
+
+    // Wakes a beat under way, which works its deadline out again (see pace()).
+    pacingCv.notify_all();
+}
+
+void GameBridge::pace(Beat beat)
 {
     std::unique_lock lock(pacingMutex);
 
@@ -331,8 +366,26 @@ void GameBridge::pace(std::chrono::milliseconds delay)
     // for the whole hold either way and nothing is skipped by skipping this.
     //
     // Read under the lock this already holds, so it costs no new synchronisation.
+    //
+    // THE DEADLINE IS WORKED OUT AGAIN ON EVERY WAKE, from the beat's start and
+    // whatever its length is NOW: setPacing() notifies, so a speed changed in
+    // Settings lands on the beat already under way. A wake for anything else -
+    // a pause, a spurious one - finds the same deadline and waits on, so a pause
+    // landing mid-delay still waits it out, as it always has.
     if(!pacingPaused)
-        pacingCv.wait_for(lock, delay, [this]{ return pacingCancelled; });
+    {
+        const auto started = std::chrono::steady_clock::now();
+
+        while(!pacingCancelled)
+        {
+            const auto deadline = started + delayOf(beat);
+
+            if(std::chrono::steady_clock::now() >= deadline)
+                break;
+
+            pacingCv.wait_until(lock, deadline);
+        }
+    }
 
     // RETURNS on cancel. Does NOT throw - see the header. Getting this backwards
     // makes the clean shutdown path unreachable.
@@ -340,7 +393,7 @@ void GameBridge::pace(std::chrono::milliseconds delay)
     // AND THEN HOLDS, indefinitely, while the game is paused. Written as a
     // second wait rather than folded into the predicate above so that the beat
     // is still a beat: a pause landing MID-DELAY waits the delay out first and
-    // then holds, which costs at most one botBeat() of latency and keeps the
+    // then holds, which costs at most one bot beat of latency and keeps the
     // timed half exactly what it was. Only a pause that was already set when we
     // arrived skips it, which is the guard above.
     //

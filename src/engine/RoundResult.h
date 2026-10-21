@@ -89,6 +89,12 @@ struct RoundResult
     // False on the final round, where there is no next round to count.
     bool nextRoundCountsForStreaks = false;
 
+    // WHETHER THE BRIDGE HELD THE GAME FOR THIS RESULT, until the window's
+    // Continue: the round wait as the game thread read it, once, for this round.
+    // The window reads the hold from here rather than from a copy of its own,
+    // which Settings could change between the two (PR #35's review, finding #6).
+    bool held = false;
+
     // In seat order, which is the order the scoreboard and the sheet both draw.
     std::vector<RoundSeatResult> seats;
 };

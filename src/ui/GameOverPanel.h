@@ -1,13 +1,12 @@
 #ifndef GAME_OVER_PANEL_H
 #define GAME_OVER_PANEL_H
 
-#include "paint/Theme.h"
+#include "ui/Overlay.h"
 
 #include <romanian_whist/GameEngine.h>
 
 #include <QCoreApplication>
 #include <QString>
-#include <QWidget>
 
 #include <vector>
 
@@ -52,22 +51,17 @@ QString winnerAnnouncement(const std::vector<romanian_whist::Standing>& winners)
 
 } // namespace gameover
 
-// The panel itself. A CHILD OVERLAY, the shape PauseOverlay arrived at and for
-// the same two reasons: section 16.2 draws this OVER the final state - section
-// 4.1 publishes the last snapshot before emitting gameOver precisely so the
-// table underneath is the game that just ended - and section 4.4 wants nothing
-// application-modal standing over a window whose X must keep working.
-//
-// So it dims what is behind it, swallows the clicks that land on it, and reads
-// as modal without blocking the window.
-class GameOverPanel : public QWidget
+// The panel itself. An Overlay, for two reasons: section 16.2 draws this OVER
+// the final state - section 4.1 publishes the last snapshot before emitting
+// gameOver precisely so the table underneath is the game that just ended - and
+// section 4.4 wants nothing application-modal standing over a window whose X
+// must keep working.
+class GameOverPanel : public Overlay
 {
     Q_OBJECT
 
 public:
     explicit GameOverPanel(QWidget* parent = nullptr);
-
-    void setTheme(const Theme& theme);
 
     // The ordinary ending. Both vectors come straight off the gameOver signal.
     void showResult(const std::vector<romanian_whist::Standing>& standings,
@@ -79,25 +73,13 @@ public:
     // takes the announcement's place and Main menu is the only button.
     void showFailure(const QString& what);
 
-    // Puts the keyboard on the button that face leads with - Play again on the
-    // ordinary ending, Main menu on the failure. Called by the window after it
-    // shows this, rather than from showEvent(), for the reason PauseOverlay
-    // records: focus taken during a show is easy to lose to whatever is shown
-    // next.
-    void focusDefaultButton();
+    // The button the face on show leads with: Play again on the ordinary
+    // ending, Main menu on the failure.
+    void focusDefault() override;
 
 signals:
     void playAgainRequested();
     void mainMenuRequested();
-
-protected:
-    // The dim, as PauseOverlay paints it - Theme's own colour rather than one
-    // constructed here (section 18.1).
-    void paintEvent(QPaintEvent* event) override;
-
-    // Swallowed rather than left to the default, which would propagate to the
-    // PARENT rather than to the widgets underneath. Accepting says so on purpose.
-    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     // Empties the standings rows. Both faces below start from a clean panel, and
@@ -112,14 +94,6 @@ private:
     // 47, 47, 31, 28 reads 1, 1, 3, 4 - a counter would number that table
     // 1, 2, 3, 4 and quietly rank players the engine had ranked equal.
     void addRow(const romanian_whist::Standing& standing, bool isWinner);
-
-    Theme theme = Theme::light();
-
-    // The words on a plaque rather than straight on the table surface. Theme has
-    // no colour for text on the green - textPrimary is chosen against seatPlaque
-    // - and D1 found that out by rendering a menu title that was dark grey on
-    // dark green. MainMenuPage and PauseOverlay both sit on one for this reason.
-    QWidget* panel = nullptr;
 
     QLabel* title = nullptr;
 

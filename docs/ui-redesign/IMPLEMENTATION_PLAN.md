@@ -443,6 +443,19 @@ Marcellus 17 with an 18 px gold line icon, 12 px horizontal padding, rounded hov
 also has a **Players 3–6** switch: that is a mock-up control only, do not port it (player count is
 chosen in `NewGameDialog`).
 
+*(Phase 9.)* The numbers the build uses, all from `page.html`:
+- **The 46 includes the border** (`box-sizing: border-box`): the gradient fills the 45 above it, and
+  the items, 34 tall, centre there (5 above each, where CSS has 5.5, since Qt centres in whole
+  pixels). 16 in from each side, 4 between items, an icon 8 before its label (radius 6).
+- **The shadow is two**, `0 1px 0 rgba(201,164,92,0.22), 0 6px 16px rgba(0,0,0,0.45)`: a faint gold
+  glint one pixel deep along the bar's edge, over a soft shadow that reaches 30 below the bar. It
+  falls over the page beneath, the corner panels and any sheet included, as the mock-up's
+  `z-index: 10` bar does.
+- **Lit** (hover, or keyboard focus): icon and label gold-bright on the hover background. **Greyed**:
+  both muted, as the corner buttons are.
+- **View** (the client's Log and Card art) takes the Players switch's place: the `.players` margin of
+  14 and the gap of 4 before Exit. It has no icon. *(The owner's call, 2026-10-21.)*
+
 ### 2.13 Bid strip and modal sheets
 
 - **Bid strip** (`.bidstrip`): panel at table (428, 486), width 680, padding 16/22/18, centred text.
@@ -475,7 +488,7 @@ chosen in `NewGameDialog`).
 | Scoreboard with stacked trump | `InfoStrip` (top) + `ScoreboardWidget` (right column) | One panel, pinned top-left (phase 8) |
 | Current-trick panel | `PromptBar` (bottom) | Pinned top-right panel (phase 8) |
 | Round history / Last trick buttons | Nothing | New (phases 8 and 11) |
-| Menu bar | `QMenuBar` with a View menu; main-menu page and pause menu | Styled bar, new top-level actions (phase 9) |
+| Menu bar | `QMenuBar` with a View menu; main-menu page and pause menu | A bar of our own as the menu widget, new top-level actions (phase 9) |
 | Bid strip in the felt | `BidStrip` overlay above `TableScene::overlayBottom()` | Restyle, reposition (phase 10) |
 
 **Recommended structure for the pinned panels.** Keep them as `QWidget`s (so their existing pure
@@ -1325,7 +1338,7 @@ Done when: the whole page matches `screenshots/table-6-players.jpg` except the m
   - **The suit glyphs come from a fallback font**, as in the browser. The client's ♥ is larger than
     the mock-up's, as the logo's ♣ is.
 
-### Phase 9: menu bar and commands
+### Phase 9: menu bar and commands ✅ COMPLETE
 
 Files: `src/MainWindow.*`, `src/MainWindow.ui`, possibly new `src/ui/RulesSheet.*` and
 `src/ui/SettingsSheet.*`, tests `MainWindowTests.cpp`.
@@ -1335,6 +1348,13 @@ Files: `src/MainWindow.*`, `src/MainWindow.ui`, possibly new `src/ui/RulesSheet.
    corner widget, or a spacer action). **Exit replaces phase 8's temporary Menu item**
    (`QAction` "menu", which opens the pause menu); move `MainWindowTests`' pause cases to Exit
    with it. `paint/Icons.h` is where the four icons go.
+
+   > **AMENDED IN PHASE 9: a bar of our own, not a styled `QMenuBar`.** `QMenuBar` draws an item's
+   > icon **or** its text, never both (`QCommonStyle`'s `CE_MenuBarItem`), so no stylesheet gives
+   > the mock-up's icon beside its label, and it has no stretch to put Exit at the far right. The
+   > bar is `MenuBar` (`src/ui/MenuBar.h`), installed with `QMainWindow::setMenuWidget()`; each item
+   > is still a `QAction`. **Never call `QMainWindow::menuBar()` now:** it makes a `QMenuBar` when
+   > the menu widget is not one, and installing that deletes the bar.
 2. Wire them: New Game → the existing `showNewGameDialog()` path (it already handles a running
    game). Exit → the existing abandon-to-main-menu path, through the pause overlay so it can be
    cancelled. Rules → a sheet with the rules summary (the mock-up's `showRules()` text, which follows
@@ -1344,10 +1364,168 @@ Files: `src/MainWindow.*`, `src/MainWindow.ui`, possibly new `src/ui/RulesSheet.
 
 Done when: the menu bar matches the mock-up and every item works.
 
+**Outcome:**
+
+- **The count is 494 tests** (467 + 27, none retired), passing on the `default`, `release` and
+  `clang` presets with Qt 6.11.2 and building without a warning.
+  - **Added:** 7 `MenuBarTests` cases, 6 `RulesSheetTests`, 2 `SettingsSheetTests`, 8
+    `MainWindowTests` (New Game over a running game, and cancelled; Rules holding the game, under
+    Exit, under the digit keys and on the menu page; Settings on the menu page and over a game in
+    play), 3 `GameBridgeTests` for the pace changing mid-game and a `GameControllerTests` no-op case.
+  - **Rewritten, keeping their intent:** the pause cases moved from the Menu item to Exit (twelve
+    call sites, one case retitled "A game paused from Exit stops, and resumes"); "The table page is
+    the table alone" checks the bar; the icon case runs over all six icons.
+  - **Checked by mutation:** the cancelled New Game case fails without the dialog's hold, and the
+    Settings speed-up case fails without the live pacing.
+- **PR #35's review round brought it to 509** (494 + 15), passing on all three presets and
+  building without a warning. An `xhigh` review found 15 things; each was checked in the running
+  app first (on a nested Xephyr screen, with gdb for #6 and #9), and 14 are fixed, one commit
+  each. Every bug's new test was run against the old code and failed there. The nine screenshots
+  are pixel-identical before and after.
+  - **#1, switching sheets let the game go.** Opening Rules or Settings over the other (or over
+    itself) closed the first through `hideMenuSheets()`, releasing the game before the new sheet
+    held it; in the app, 40 presses of Alt+S under Settings let a watched game run a round and a
+    half. `showMenuSheet()` now swaps without a release.
+  - **#2, sheets kept their size when the log came or went.** The page stack resizes with the log
+    dock as well as the window; with the log hidden under Rules the hand was uncovered, and a card
+    was played under it. Every overlay now follows its parent's resizes itself, and
+    `MainWindow::resizeEvent()` is gone.
+  - **#3, a closed sheet left the keyboard on the bar's New Game**, the next widget in the Tab
+    order: it looked hovered, and Space opened the setup dialog over the game. `restoreFocus()`
+    now ends on the page (the table, or the menu page's New Game).
+  - **#4, Tab walked out of a sheet** through the bar to the bid strip under the dim, and Space
+    bid; a bot's bid followed at once, since nothing paces after your own move. Tab now stays in
+    the sheet on top (`MainWindow::focusNextPrevChild()`, `Overlay::focusNextInside()`).
+  - **#5, Rules contradicted itself** with both special-round options: "Every 1-card round is a
+    Forehead round" beside an appended Hidden round. It now names that round as the exception.
+  - **#6, the window kept its own copy of the round wait.** `RoundResult::held` carries the wait as
+    the bridge read it, once, for that round. (The crossing it guarded needed Settings open, whose
+    close released the game anyway, so this removed a copy rather than a hang.)
+  - **#7, New Game left the game-over panel up behind its dialog** (only Play again took it down).
+    `showNewGameDialog()` does it for every way in.
+  - **#8, a bridge test slept out its 5 s rescue** on every run; it polls now, 0.16 s.
+  - **#10, stale comments**; **#11, one `Overlay` base class** for all five sheets (the owner chose
+    all five over the review's three, since #2 and #4 were in every one); **#12, one builder** for
+    the pace controls the dialog and Settings share; **#13, `menuSheets`** and its helpers in place
+    of the same lines in five places.
+  - **#14, the log docks at the bottom only** (the owner's call): at the top, the bar's shadow lay
+    across its title bar.
+  - **#15, '&' on the bar:** `menubar::labelOf()` reads mnemonics as Qt does, so "&&" shows one.
+    The first version gave View's button its title as it comes, "&View", and the in-app check
+    caught what no test did: a button registers a mnemonic in its text as a shortcut of its own,
+    so Alt+V was claimed twice and fired neither. View's button now takes
+    `menubar::withoutMnemonic()` of the title, and a test checks no bar button has a mnemonic.
+  - **#9 was dropped:** the shadow does repaint with every table frame (counted with gdb: 30 and
+    30 in 12 s), but a paint costs 21-24 µs at 1600-1920 px wide, and caching it would save about
+    10 µs a frame.
+- **A follow-up to the review round brought it to 511** (509 + 2), both new tests failing on the
+  code before it:
+  - **#3's fix took the keyboard once a round.** It fell back to the page after *every* sheet went,
+    and a round sheet that does not wait never has the keyboard but goes by itself each round; in
+    a watched game the keyboard left the log for the table at every round's end.
+    `restoreFocus(hadKeyboard)` now falls back to the page only if what went had the keyboard,
+    read with `holdsKeyboard()` before the hide. The sheet on top also keeps the keyboard where it
+    already is inside it.
+  - **Play again left the keyboard nowhere useful.** The standings go down while the setup dialog
+    is up, and their Play again had the keyboard: Qt handed it to the next widget in the Tab order
+    (the bar's New Game, in the app) or, offscreen, left it on the hidden button. A new game now
+    starts with the keyboard on its table (`startGame()`).
+- **Four decisions by the owner, 2026-10-21:**
+  - **Q4, Settings:** the bot speed and "Wait for me after each round", applied to the game in
+    play at once and written into the settings the next New Game opens on. Its one button is Done.
+  - **Rules and Settings are built in today's look**, as `PauseOverlay` is. Phase 10 restyles all
+    five sheets together, and decides then whether sheets scale with the table.
+  - **View** (Log, Card art) stays, at the right before Exit, in the Players switch's place.
+  - **Rules, Settings and the New Game dialog hold a running game** while they are open, as the
+    pause menu does.
+- **Where the build departed from this phase's plan, and why:**
+  - **A bar of our own, not a styled `QMenuBar`**; see the amendment under task 1.
+  - **`src/engine/` changed, which section 0 says it should not need to.** Pacing was written once,
+    before the game thread started, and read there with no lock; live Settings needs it written
+    from the GUI thread. `GameBridge::setPacing()` writes it under `pacingMutex`, and every read
+    moved under that lock. `pace()` takes which beat it waits (`Beat::Bot`, `Beat::TrickDwell`)
+    rather than a length, and works its deadline out again on every wake, so a change lands **on the
+    beat already under way**, not only on the next. A wake for a pause finds the same deadline, so
+    a pause landing mid-delay still waits it out, as before. The engine itself is untouched.
+- **The page matches the mock-up's, the table to the pixel.**
+  - The client's bar is 46 px now, as the mock-up's is, so the table is drawn at the mock-up's own
+    scale. The rim, the scoreboard and the trick panel all land on the mock-up's pixels (offset 0,
+    measured across the rim on the centre row and on two columns away from the racks). Phase 8's
+    Qt bar was shorter, and its table a little larger.
+  - The bar's items sit half a pixel higher than the mock-up's: Qt centres in whole pixels.
+  - `table-empty.png` is pixel-identical to phase 8's. The hand shots differ from the last phase 8
+    pictures only in the scoreboard's corner, from phase 8's last review fix (the tension measured
+    with the widest digit), which those pictures predate.
+  - **The bare-view shots have no menu bar shadow**, where the mock-up's pictures, cropped below its
+    bar, carry the shadow along their top 30 px. The shadow belongs to the window, not the view.
+- **What later phases take from here:**
+  - **The bar:** `MenuBar`, `MenuBarButton` and `MenuBarShadow` in `src/ui/MenuBar.h`, its numbers in
+    `menubar::`. The colours are `TablePalette`'s `menuTop`, `menuBottom`, `menuHover`, `menuGlint`
+    and `menuShadow`. Icons: `icons::Icon::NewGame`, `Settings`, `Rules`, `Exit`.
+  - **The actions:** `newGameAction`, `settingsAction`, `rulesAction` and `exitAction` (object
+    names); View is `viewMenu`. Exit is greyed by `canPause()`, as the Menu item was.
+  - **Phase 10 has five sheets to restyle, through one class:** `Overlay` (`src/ui/Overlay.h`) is
+    the plaque, its palette, the dim, the swallowed press, the parent's size and Tab; `PauseOverlay`,
+    `RoundSheet`, `GameOverPanel`, `RulesSheet` and `SettingsSheet` add their content to
+    `panelLayout()` and name their default button in `focusDefault()`. All five are children of the
+    window's stack.
+  - **Holds:** `applyHold()` reads four reasons now: the pause menu, a waited round sheet, the setup
+    dialog over a running game (`dialogHolding`) and the bar's sheets (`sheetHolding`).
+  - **Focus:** `MainWindow::restoreFocus(hadKeyboard)` gives the keyboard to whatever is on top
+    after an overlay goes: `activeOverlay()` (the bar's sheet, the pause menu, the game-over panel,
+    a holding round sheet), the bid strip, or else - only if what went had it - the page. A hide
+    path reads `holdsKeyboard()` before it hides. Tab stays inside `activeOverlay()`.
+  - **Phase 11's two sheets** go into `MainWindow::menuSheets` and open through `showMenuSheet()`;
+    `hideMenuSheets()`, `dropMenuSheets()` and `openMenuSheet()` then cover them too.
+  - **The round hold:** `RoundResult::held` says whether the bridge held the game for a result;
+    the window reads that, not a setting of its own.
+  - **Pacing:** `pacingOf(config)` in `MainWindow.cpp` is a config's whole `Pacing`, and
+    `GameController::setPacing()` changes a running game's.
+- **Resizing**, release build, one run each.
+  - **`[.timing]`, the bare view**, against phase 8's recorded run (not measured back to back).
+    Phase 9 changed nothing the bare view draws, and it reads the same within a run's noise:
+
+    | | Phase 8 | Phase 9 |
+    |---|---|---|
+    | Drag frame, median | 9.5 ms | 9.2 ms |
+    | Drag frame, worst | 10.9 ms | 10.4 ms |
+    | First step | 85 ms | 80 ms |
+    | Settle frame | 94 ms | 95 ms |
+
+  - **The bar's shadow costs nothing measurable.** It is a widget over the top 30 px of the view,
+    outside what `[.timing]` drags, so a throwaway case (not committed) dragged the whole window
+    over a full six-seat table at 1600×946, the shadow shown and hidden back to back, three rounds
+    over the same 39 sizes. After the first round, which is warm-up, a drag frame's median was
+    8.5 ms either way (8.52 and 8.51 shown, 8.49 and 8.81 hidden).
+  - **A pitfall the first attempt hit:** the two passes must drag through the same sizes. Run one
+    after the other with the size still growing, the second pass is the larger window, and came
+    out a millisecond slower for that reason alone.
+- **Pitfalls:**
+  - **`QMainWindow::menuBar()` deletes a menu widget that is not a `QMenuBar`**, by making one and
+    installing it.
+  - **`QToolButton::setDefaultAction()` takes the action's `iconText()`, which drops a lone `&`**
+    but keeps `&&` as it is, so a mnemonic never reaches the button and a literal `&` needs
+    `menubar::labelOf()`. The bar's actions carry Alt+letter shortcuts instead, and
+    View's is a `QShortcut` to `showMenu()`: an `InstantPopup` button opens its menu on a press,
+    which a mnemonic's click is not.
+  - **`QWidget::render()` lays the window's background down first by default.** A test of a
+    translucent widget's own pixels must pass an empty `RenderFlags()`.
+  - **Two Catch2 test names as two arguments are not an "or".** Separate them with a comma in one
+    argument, or use a wildcard. **So a test name must not contain a comma**: it cannot be run on
+    its own.
+  - **A button whose text has a mnemonic claims it as a shortcut** (`QAbstractButton::setText()`).
+    Two claims on one key fire neither, so a bar button's text must carry none.
+  - **Hiding the widget that has the keyboard hands it to the next one in the window's Tab order**,
+    whatever that is - the menu bar's New Game, made last. Whoever hides a sheet gives the keyboard
+    somewhere on purpose (`restoreFocus()`). **But only if the sheet had it:** a fallback on every
+    hide takes the keyboard from wherever the player put it.
+
 ### Phase 10: bid strip and sheets
 
-Files: `src/ui/BidStrip.*`, `src/ui/RoundSheet.*`, `src/ui/GameOverPanel.*`,
-`src/ui/PauseOverlay.*`, `src/ui/MainMenuPage.*`, `src/table/TableScene.*` (`overlayBottom()`), tests.
+Files: `src/ui/BidStrip.*`, `src/ui/Overlay.*` (added by phase 9's review; the shared look of
+the five sheets), `src/ui/RoundSheet.*`, `src/ui/GameOverPanel.*`,
+`src/ui/PauseOverlay.*`, `src/ui/RulesSheet.*`, `src/ui/SettingsSheet.*` (added by phase 9),
+`src/ui/MainMenuPage.*`, `src/table/TableScene.*` (`overlayBottom()`), tests.
 
 1. Bid strip look and position per section 2.13 (table (428, 486), width 680, drawn over the felt).
 2. Restyle the sheets per section 2.13. Their content and buttons stay; only the look changes.
@@ -1427,7 +1605,7 @@ Ask the owner if possible. If not, use the default and record it.
 | Q1 | Light/dark: the mock-up is dark only. Should the table follow the system scheme? | No: the table page is always the dark design; menus and dialogs may keep following the system. **Decided by the owner, 2026-10-17: as the default** (phase 1) |
 | Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes. **Decided by the owner, 2026-10-17: yes** (phase 1) |
 | Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too. **Decided by the owner, 2026-10-20: the round score stays out; the streak comes back as a RUN column, W2 or L3** (phase 8; section 2.9) |
-| Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later |
+| Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later. **Decided by the owner, 2026-10-21: the bot speed and "Wait for me after each round", applied to the game in play at once and to the next New Game** (phase 9) |
 | Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off |
 | Q6 | Portraits: drawn busts as in the mock-up, or real art later? | Drawn busts now through `Theme::avatar()`, which is the seam for real art later |
 | Q7 | 2 players: not in the mock-up | Opponent at the top position, as in section 2.5 |

@@ -285,6 +285,16 @@ struct ThemeColours
         // The trump card's shadow on the scoreboard.
         QColor trumpShadow;
 
+        // THE MENU BAR (section 2.12), added in the redesign's phase 9. A vertical
+        // gradient over a panelBorder hairline; under the cursor, an item's faint
+        // gold background. Beneath the bar, on whatever page is showing, a faint
+        // gold glint along its edge and a soft shadow.
+        QColor menuTop;
+        QColor menuBottom;
+        QColor menuHover;
+        QColor menuGlint;
+        QColor menuShadow;
+
         bool operator==(const TablePalette&) const = default;
     };
 

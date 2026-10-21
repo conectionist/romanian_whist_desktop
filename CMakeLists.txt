@@ -144,12 +144,20 @@ qt_add_library(desktop_core STATIC
     src/ui/NewGameDialog.cpp
     src/ui/MainMenuPage.h
     src/ui/MainMenuPage.cpp
+    src/ui/MenuBar.h
+    src/ui/MenuBar.cpp
+    src/ui/Overlay.h
+    src/ui/Overlay.cpp
     src/ui/PauseOverlay.h
     src/ui/PauseOverlay.cpp
     src/ui/GameOverPanel.h
     src/ui/GameOverPanel.cpp
     src/ui/RoundSheet.h
     src/ui/RoundSheet.cpp
+    src/ui/RulesSheet.h
+    src/ui/RulesSheet.cpp
+    src/ui/SettingsSheet.h
+    src/ui/SettingsSheet.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares

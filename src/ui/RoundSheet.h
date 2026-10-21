@@ -2,12 +2,11 @@
 #define ROUND_SHEET_H
 
 #include "engine/RoundResult.h"
-#include "paint/Theme.h"
+#include "ui/Overlay.h"
 
 #include <QCoreApplication>
 #include <QString>
 #include <QStringList>
-#include <QWidget>
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
@@ -65,25 +64,21 @@ QStringList streakWarnings(const RoundResult& result);
 
 } // namespace roundsheet
 
-// The widget. THE THIRD OVERLAY, and built the way PauseOverlay and
-// GameOverPanel are because they settled the shape: a child of the window's
-// stack rather than a QDialog, dimming what is behind it and swallowing the
-// clicks that land on it, so it reads as modal without blocking the window that
-// section 4.4 needs closable.
+// The widget. An Overlay: a child of the window's stack rather than a QDialog,
+// so it reads as modal without blocking the window that section 4.4 needs
+// closable.
 //
 // ITS BUTTON SAYS "Continue" IN EVERY ROUND, where section 16.1's mockup says
 // "Deal round 8". The last round has nothing left to deal - the sheet there
 // hands over to the game-over panel - and a label that is a lie on the final
 // round is worse than one word that is true in all of them. Section 16.1 is
 // amended to record it.
-class RoundSheet : public QWidget
+class RoundSheet : public Overlay
 {
     Q_OBJECT
 
 public:
     explicit RoundSheet(QWidget* parent = nullptr);
-
-    void setTheme(const Theme& theme);
 
     // Fills the sheet from one round. Rebuilt per round rather than updated in
     // place: the seat count is fixed for a game but the rows carry per-round
@@ -91,18 +86,11 @@ public:
     // rewritten is a panel whose stale half is invisible.
     void showResult(const RoundResult& result);
 
-    // Puts the keyboard on Continue, so Enter dismisses. Called by the window
-    // after it shows this rather than from showEvent(), the reason PauseOverlay
-    // records: focus taken during a show is easy to lose to whatever is shown
-    // next.
-    void focusContinue();
+    // Continue, so Enter dismisses.
+    void focusDefault() override;
 
 signals:
     void continueRequested();
-
-protected:
-    void paintEvent(QPaintEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     // Empties the grid COMPLETELY, headings included - see the body for why they
@@ -111,13 +99,6 @@ private:
 
     void addHeadings();
     void addRow(const RoundSeatResult& seat);
-
-    Theme theme = Theme::light();
-
-    // On a plaque, not on the green: Theme has no colour for text on the table
-    // surface, because textPrimary is chosen against seatPlaque. D1 found that
-    // by rendering a menu title that was dark grey on dark green.
-    QWidget* panel = nullptr;
 
     QLabel* title = nullptr;
     QWidget* rows = nullptr;

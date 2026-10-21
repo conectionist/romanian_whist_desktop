@@ -7,8 +7,6 @@
 #include <QFont>
 #include <QGridLayout>
 #include <QLabel>
-#include <QMouseEvent>
-#include <QPainter>
 #include <QPushButton>
 
 namespace
@@ -97,22 +95,15 @@ QStringList roundsheet::streakWarnings(const RoundResult& result)
 
 // ---- the widget ----
 
-RoundSheet::RoundSheet(QWidget* parent) : QWidget(parent)
+RoundSheet::RoundSheet(QWidget* parent) : Overlay(parent)
 {
-    panel = new QWidget(this);
-    panel->setAutoFillBackground(true);
-
-    QVBoxLayout* inside = new QVBoxLayout(panel);
-    inside->setContentsMargins(40, 28, 40, 28);
+    QWidget* panel = this->panel();
+    QVBoxLayout* inside = panelLayout();
 
     title = new QLabel(panel);
     title->setAlignment(Qt::AlignCenter);
     title->setObjectName("roundTitle");
-
-    QFont titleFont = title->font();
-    titleFont.setBold(true);
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.2);
-    title->setFont(titleFont);
+    styleTitle(title, 1.2);
 
     inside->addWidget(title);
     inside->addSpacing(16);
@@ -147,30 +138,7 @@ RoundSheet::RoundSheet(QWidget* parent) : QWidget(parent)
     buttonRow->addWidget(continueButton);
     inside->addLayout(buttonRow);
 
-    QVBoxLayout* stack = new QVBoxLayout(this);
-    stack->addStretch(1);
-
-    QHBoxLayout* row = new QHBoxLayout;
-    row->addStretch(1);
-    row->addWidget(panel);
-    row->addStretch(1);
-
-    stack->addLayout(row);
-    stack->addStretch(1);
-
     connect(continueButton, &QPushButton::clicked, this, &RoundSheet::continueRequested);
-}
-
-void RoundSheet::setTheme(const Theme& _theme)
-{
-    theme = _theme;
-
-    QPalette scheme = panel->palette();
-    scheme.setColor(QPalette::Window, theme.seatPlaque);
-    scheme.setColor(QPalette::WindowText, theme.textPrimary);
-    panel->setPalette(scheme);
-
-    update();
 }
 
 void RoundSheet::clearRows()
@@ -275,7 +243,7 @@ void RoundSheet::addRow(const RoundSeatResult& seat)
     {
         QPalette scheme = round->palette();
         scheme.setColor(QPalette::WindowText,
-                        seat.roundScore > 0 ? theme.scorePositive : theme.scoreNegative);
+                        seat.roundScore > 0 ? theme().scorePositive : theme().scoreNegative);
         round->setPalette(scheme);
     }
 
@@ -303,23 +271,10 @@ void RoundSheet::showResult(const RoundResult& result)
 
     // The panel is rebuilt per round and the seat count can differ between
     // games, so it is sized to what it now holds rather than to what it held.
-    panel->adjustSize();
+    panel()->adjustSize();
 }
 
-void RoundSheet::focusContinue()
+void RoundSheet::focusDefault()
 {
     continueButton->setFocus(Qt::OtherFocusReason);
-}
-
-void RoundSheet::paintEvent(QPaintEvent* event)
-{
-    QPainter painter(this);
-    painter.fillRect(rect(), theme.dimmedOverlay);
-
-    QWidget::paintEvent(event);
-}
-
-void RoundSheet::mousePressEvent(QMouseEvent* event)
-{
-    event->accept();
 }
