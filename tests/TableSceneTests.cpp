@@ -4,6 +4,7 @@
 #include "TableFixtures.h"
 
 #include "table/TableScene.h"
+#include "table/BidStripItem.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
 #include "table/LeadMarkItem.h"
@@ -408,6 +409,18 @@ TEST_CASE("The scene stacks the table then the racks then the cards then the rho
         if(item != tables.front() && !item->parentItem())
             REQUIRE(tables.front()->zValue() < item->zValue());
     }
+
+    // THE BID STRIP THE HIGHEST, the corner panels included (section 3's ladder:
+    // "pinned HUD < bid strip"): it is what you are being asked to answer.
+    const BidStripItem* strip = scene.bidStripItem();
+    REQUIRE(strip != nullptr);
+    REQUIRE(scene.scoreboardItem()->zValue() < strip->zValue());
+
+    for(QGraphicsItem* item : scene.items())
+    {
+        if(item != strip && !item->parentItem())
+            REQUIRE(item->zValue() < strip->zValue());
+    }
 }
 
 TEST_CASE("The table is there before the first snapshot", "[table]")
@@ -758,50 +771,14 @@ TEST_CASE("The rhombus is on the felt only while a trick is played", "[table]")
     REQUIRE_FALSE(mark()->isVisible());
 }
 
-// ---- the floor the bid strip sits on, added in C2 ----
+// ---- the floor the bid strip sat on, C2 to the redesign's phase 10 ----
 //
-// SECTION 15.1's strip "rises over the bottom of the table", and the bottom of
-// the table is where your hand and your own plaque are. So "the bottom" and
-// "where the strip goes" are different places, and getting that wrong is not
-// subtle: C2's first run drew the strip straight through the player's own name.
-//
-// Geometry with a right answer, which is what this file is for.
-
-TEST_CASE("The strip's floor clears your hand and your own plaque", "[table]")
-{
-    TableScene scene;
-
-    scene.setTheme(Theme::light());
-    scene.setSnapshot(std::make_shared<const GameSnapshot>(holdingThree(4, 1)));
-
-    const std::optional<qreal> floor = scene.overlayBottom();
-
-    // THERE IS ONE, which is the assertion that actually failed first. No floor
-    // sends TableView to its fallback - the viewport's own bottom edge - and the
-    // strip lands under the plaque instead of above it, which looks like a
-    // placement bug rather than a floor that was never computed.
-    REQUIRE(floor.has_value());
-
-    // ABOVE THE CARDS YOU ARE BIDDING ON, which in table space sit higher than
-    // your plaque: C3's half of this, and the one the new layout turned round.
-    REQUIRE(*floor <= tablespace::handTop);
-
-    // And above your plaque, C2's half, bounded by the item itself rather than
-    // by the scene's arithmetic.
-    SeatItem* mine = plaqueAtBottom(scene);
-    REQUIRE(mine != nullptr);
-    REQUIRE(*floor <= mine->sceneBoundingRect().top());
-}
-
-TEST_CASE("The strip has no floor before there is anything to place it against", "[table]")
-{
-    // No snapshot means no seats, so there is no plaque to clear - and the caller
-    // is told so, and falls back, rather than being handed a number to lay a
-    // widget out against.
-    TableScene scene;
-
-    REQUIRE_FALSE(scene.overlayBottom().has_value());
-}
+// TableScene::overlayBottom() said how far down a strip floated over the view could
+// reach without covering your hand or your plaque; C2's first run drew it straight
+// through the plaque. Phase 10 put the strip on the felt, at section 2.13's place,
+// and the two cases that held the floor to account went with it: BidStripTests'
+// "The strip lies on the felt clear of your hand and your panel" asserts the same
+// clearance of the strip itself.
 
 TEST_CASE("A theme change during a play prompt leaves the prompt's fan standing", "[table]")
 {

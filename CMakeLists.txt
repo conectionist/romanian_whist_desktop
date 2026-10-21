@@ -127,6 +127,8 @@ qt_add_library(desktop_core STATIC
     src/table/ScoreboardItem.cpp
     src/table/TrickPanelItem.h
     src/table/TrickPanelItem.cpp
+    src/table/BidStripItem.h
+    src/table/BidStripItem.cpp
     src/table/TableScene.h
     src/table/TableScene.cpp
     src/table/TableView.h
@@ -136,9 +138,6 @@ qt_add_library(desktop_core STATIC
     src/ui/SnapshotLog.cpp
     src/ui/CardArtWindow.h
     src/ui/CardArtWindow.cpp
-
-    src/ui/BidStrip.h
-    src/ui/BidStrip.cpp
 
     src/ui/NewGameDialog.h
     src/ui/NewGameDialog.cpp

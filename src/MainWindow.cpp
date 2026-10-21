@@ -2,11 +2,11 @@
 #include "ui_MainWindow.h"
 
 #include "paint/Theme.h"
+#include "table/BidStripItem.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
-#include "ui/BidStrip.h"
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
 #include "ui/MainMenuPage.h"
@@ -135,15 +135,13 @@ void MainWindow::buildTable()
     scene = new TableScene(this);
     table = new TableView(scene, this);
 
-    // OVER the table rather than in the layout below it: a strip that appears
-    // only on your turn would move everything beneath it every round, which is
-    // the defect B2b's review recorded against the info strip. Parented and
-    // placed by the view - see TableView::setBottomOverlay().
-    bidStrip = new BidStrip(table);
-    bidStrip->hide();
-    table->setBottomOverlay(bidStrip);
+    // SECTION 2.13's STRIP, ON THE FELT and owned by the scene, which shows it while
+    // it holds a prompt. A handle here for its second source, the prompt for your
+    // bid - and, like the fan's, its digit keys are read on this window
+    // (keyPressEvent()).
+    bidStrip = scene->bidStripItem();
 
-    connect(bidStrip, &BidStrip::bidChosen, this, &MainWindow::onBidChosen);
+    connect(bidStrip, &BidStripItem::bidChosen, this, &MainWindow::onBidChosen);
 
     // OWNED BY THE SCENE, not by this window: the fan is a QGraphicsObject in the
     // table rather than a widget, because section 18.2 animates a card from it to
@@ -161,7 +159,6 @@ void MainWindow::buildTable()
     // Round history and Last trick open the sheets phase 11 builds.
 
     scene->setTheme(theme);
-    bidStrip->setTheme(theme);
 
     // TWO PAGES, and the table keeps its own state between games. The menu is
     // page 0 because that is what the window opens on; nothing is destroyed when
@@ -610,9 +607,12 @@ void MainWindow::restoreFocus(bool hadKeyboard)
         return;
     }
 
+    // THE TABLE WHILE YOU BID, whose digit keys reach this window and bid - and
+    // not the next widget in the Tab order, the menu bar's New Game, where Space
+    // would open the setup dialog over the game.
     if(bidStrip->isVisible())
     {
-        bidStrip->setFocus();
+        table->setFocus(Qt::OtherFocusReason);
         return;
     }
 
@@ -873,7 +873,7 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     activeBetPrompt = BetPrompt{};
     activePrompt = PlayPrompt{};
 
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->clear();
     hand->setPlayable(false);
     trickPanel->clearPrompt();
@@ -1028,18 +1028,15 @@ void MainWindow::onBetRequested(BetPrompt prompt)
     // survive until then.
     activeBetPrompt = prompt;
 
+    // Shown by the strip itself, which holds the prompt until onBidChosen() or the
+    // game's end takes it back. NO FOCUS TO GIVE IT: its digit keys are read on
+    // this window, as the fan's are, wherever the keyboard is.
     bidStrip->setPrompt(prompt);
-    bidStrip->show();
-
-    // So the digit keys work without the player clicking the strip first.
-    // Section 15.1 asks for them and a strip that never gets focus never sees a
-    // key press - which looks finished, because the buttons still work.
-    bidStrip->setFocus();
 }
 
 void MainWindow::onBidChosen(unsigned int bet)
 {
-    bidStrip->hide();
+    bidStrip->clearPrompt();
 
     // NULL IN A SPECTATOR GAME, which this window no longer starts but phase D
     // can start in the same process - "watching" is one of the setup dialog's
@@ -1162,6 +1159,31 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         return;
     }
 
+    // SECTION 15.1's DIGITS, while the strip is asking: ZERO-BASED, because a bid of
+    // zero is a real bid. Read here since the redesign's phase 10 put the strip on
+    // the table, as the fan's digits always were; the strip's own rule decides
+    // (bidstrip::answerKey()), modifiers included. The engine asks one thing at a
+    // time, so the fan is never playable while the strip is up.
+    if(bidStrip->isVisible())
+    {
+        const bidstrip::KeyAnswer answer =
+            bidstrip::answerKey(event->key(), event->modifiers(), bidStrip->fields());
+
+        switch(answer.kind)
+        {
+        case bidstrip::KeyAnswer::Kind::Bid:
+            bidStrip->activate(answer.bet);
+            return;
+
+        // The struck-out bid's digit, ignored as section 15.1 asks.
+        case bidstrip::KeyAnswer::Kind::Refuse:
+            return;
+
+        case bidstrip::KeyAnswer::Kind::Pass:
+            break;
+        }
+    }
+
     // UNMODIFIED DIGITS ONLY, the guard C2's review put on the bid strip and for
     // the same reason: a played card is irrevocable, and Ctrl+1 belongs to
     // whatever the window binds it to. The keypad's own modifier is masked back
@@ -1200,7 +1222,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 
 void MainWindow::onGameStopped()
 {
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->setPlayable(false);
     trickPanel->clearPrompt();
 
@@ -1267,7 +1289,7 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
     // panel below would otherwise be raised behind it.
     hideRoundSheet();
 
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->setPlayable(false);
     trickPanel->clearPrompt();
 
@@ -1307,7 +1329,7 @@ void MainWindow::showFailure(QString what)
     tableState = TableState::Finished;
     updatePauseAction();
 
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->setPlayable(false);
     trickPanel->clearPrompt();
 

@@ -34,25 +34,6 @@ class TableView : public QGraphicsView
 public:
     explicit TableView(TableScene* scene, QWidget* parent = nullptr);
 
-    // The widget floated over the BOTTOM of the viewport - section 15.1's bid
-    // strip, which "rises over the bottom of the table".
-    //
-    // AN OVERLAY RATHER THAN A ROW IN THE WINDOW'S LAYOUT, and B2b's review is
-    // what settled that: a widget whose size depends on the round moves
-    // everything laid out beneath it, which cost a ~50 pixel jump twice a game
-    // when the trump label was hidden in the eight-card round. A strip that
-    // appears only on your turn would do the same thing every round, and
-    // reserving a permanent row for a bank of buttons spends that height on the
-    // table for the whole game. An overlay changes no geometry at all.
-    //
-    // HERE RATHER THAN IN MainWindow BECAUSE THIS IS WHAT KNOWS THE VIEWPORT AND
-    // THE TRANSFORM. The floor the strip sits on is in table space, and only the
-    // view can say where that lands on the screen.
-    //
-    // NOT OWNED. Qt's parent/child owns the widget; this only places it, and
-    // passing nullptr forgets it.
-    void setBottomOverlay(QWidget* overlay);
-
     // tablespace::minimumViewport(): the size that draws the table at its
     // minimum scale. A HINT rather than a minimum size, so the layouts carry it up
     // to the window - which then refuses a size that would draw the table too
@@ -79,27 +60,14 @@ protected:
     // The room, over the whole viewport - see the definition.
     void drawBackground(QPainter* painter, const QRectF& rect) override;
 
-    // Watches the overlay, whose size changes with the prompt it is showing -
-    // see the definition.
-    bool eventFilter(QObject* watched, QEvent* event) override;
-
 private:
     // Scales the fit box to the viewport. See the definition.
     void fitTable();
-
-    // Puts the overlay where setBottomOverlay() promises. Called on resize and
-    // whenever the overlay changes, because a strip set on an already-sized view
-    // would otherwise sit at the origin until the next resize - which on a
-    // window nobody drags is forever.
-    void placeOverlay();
 
     // The scene, as the TableScene it is - or null when it has none. ASKED OF
     // QGraphicsView each time rather than kept: Qt drops a scene from its views
     // when it is destroyed, so this cannot dangle.
     TableScene* tableScene() const;
-
-    // Non-owning; null until a caller sets one. See setBottomOverlay().
-    QWidget* bottomOverlay = nullptr;
 
     // THE RESIZE SETTLING. See resizeEvent().
     //

@@ -162,6 +162,13 @@ inline constexpr qreal hudScale = 1.2;
 // which is 214 wide.
 inline constexpr qreal buttonGap = 14.0;
 
+// THE BID STRIP (section 2.13): a panel on the felt, over the logo, while you bid.
+// page.html's .bidstrip: its top-left at (428, 486) and 680 wide, border and
+// padding included, so it is centred on the table. Its height follows what it
+// holds (bidstrip::sizeFor()).
+inline constexpr QPointF bidStripOrigin(428.0, 486.0);
+inline constexpr qreal bidStripWidth = 680.0;
+
 // The scale that fits the box, margins and all, into a viewport of this size -
 // table.js fit()'s `scale`. Zero when the viewport has no room left inside its
 // margins, which a caller reads as "leave the transform alone".
@@ -191,8 +198,8 @@ struct Placement
 // no two files can disagree about what is drawn over what.
 //
 // GAPS OF TEN, so a later phase adds its rung without renumbering the others. The
-// bid strip and the modal sheets are widgets over the viewport until phase 10,
-// and so above all of these by construction.
+// modal sheets are not here: they are widgets over the whole page, and so above
+// every one of these by construction.
 //
 // The room is not here: it is the view's background, beneath every item.
 namespace z
@@ -218,6 +225,11 @@ inline constexpr qreal panels = 60.0;
 // The corner panels, over everything on the table: in a window too narrow for
 // them they overlap a seat's panel, and they are the ones being read.
 inline constexpr qreal hud = 70.0;
+
+// THE BID STRIP, the top rung (section 3's ladder: "pinned HUD < bid strip"). It
+// is the one thing on the table you are being asked to answer, so nothing on the
+// table may cover it - a corner panel in a narrow window included.
+inline constexpr qreal bidStrip = 80.0;
 
 } // namespace z
 

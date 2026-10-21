@@ -295,6 +295,16 @@ struct ThemeColours
         QColor menuGlint;
         QColor menuShadow;
 
+        // THE BID STRIP (section 2.13), added in the redesign's phase 10. Its bids are
+        // the green buttons above; each casts a small shadow, and under the cursor
+        // glows inside a gold-bright ring instead. The one bid the last bidder may
+        // not make is drawn flat and dark, its number struck through.
+        QColor bidShadow;
+        QColor bidGlow;
+        QColor bidDisabledFill;
+        QColor bidDisabledText;
+        QColor bidDisabledBorder;
+
         bool operator==(const TablePalette&) const = default;
     };
 

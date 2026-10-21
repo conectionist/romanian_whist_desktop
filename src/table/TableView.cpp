@@ -6,12 +6,10 @@
 
 #include <QPainter>
 #include <QPixmap>
-#include <QRect>
+#include <QRectF>
 #include <QResizeEvent>
 #include <QTransform>
-#include <QtMath>
 
-#include <algorithm>
 #include <optional>
 
 namespace
@@ -222,110 +220,6 @@ TableScene* TableView::tableScene() const
     return qobject_cast<TableScene*>(scene());
 }
 
-void TableView::setBottomOverlay(QWidget* overlay)
-{
-    bottomOverlay = overlay;
-
-    if(!bottomOverlay)
-        return;
-
-    // REPARENTED HERE rather than trusted to have been built with this as its
-    // parent. An overlay parented to the window would be positioned in this
-    // widget's coordinates and drawn in the window's, which puts it somewhere
-    // near the table by luck and nowhere near it after a resize.
-    bottomOverlay->setParent(this);
-
-    // Above the viewport, which is itself a child widget. Without this the
-    // strip is behind the green and invisible.
-    bottomOverlay->raise();
-
-    // So a prompt that changes the strip's size moves it - see eventFilter().
-    bottomOverlay->installEventFilter(this);
-
-    placeOverlay();
-}
-
-void TableView::placeOverlay()
-{
-    if(!bottomOverlay)
-        return;
-
-    // NO WIDER THAN THE VIEWPORT. The strip knows how wide it would like to be -
-    // the buttons, side by side - and this knows how much room there is.
-    const QSize viewportSize = viewport()->size();
-    const QSize hint = bottomOverlay->sizeHint();
-
-    const int width = std::min(hint.width(), viewportSize.width());
-
-    // THEN THE HEIGHT AT THE WIDTH IT IS ACTUALLY GETTING, not at the one it
-    // asked for. The explanation beneath the buttons is word-wrapped, so a strip
-    // squeezed narrower than its hint needs a second line for it - and
-    // sizeHint().height() reports the height of the first line only. Taking the
-    // hint's height there is what clipped the forbidden-bid reason in half on a
-    // window narrow enough to squeeze the strip.
-    const int hfw = bottomOverlay->hasHeightForWidth() ? bottomOverlay->heightForWidth(width)
-                                                       : -1;
-
-    const int preferred = hfw > 0 ? hfw : hint.height();
-
-    // ASKED OF THE SCENE, not measured off the viewport. The bottom of the table
-    // is where your hand and your plaque are, so a strip pinned to the viewport's
-    // bottom edge lands on top of them. That is not a hypothetical: it is what
-    // C2's first run drew, through the plaque.
-    const TableScene* table = tableScene();
-    const std::optional<qreal> floor = table ? table->overlayBottom() : std::nullopt;
-
-    // The viewport's offset in this widget, which is the strip's parent. Zero with
-    // no frame, which is this view's - but a frame added one day would otherwise
-    // move every strip.
-    const QPoint offset = viewport()->geometry().topLeft();
-
-    // FROM THE VIEWPORT'S TOP DOWN TO THE FLOOR. The strip is bottom-aligned on
-    // the floor, so it sits just above your hand and grows UPWARD over the middle
-    // of the table - deliberately: bidding finishes before the round's first card
-    // is played, so the middle is empty while this is up. And past the table's own
-    // top edge if it has to, into the room above it, which on a short, wide window
-    // is where the room is.
-    //
-    // The floor is in table space, so it goes through the transform; floored to a
-    // whole pixel, so the strip's bottom edge never reaches into the row the floor
-    // falls in. With no floor - only before the first snapshot, when there is
-    // nothing drawn to collide with - the strip may use the whole viewport.
-    const int top = offset.y();
-    const int bottom = floor ? qFloor(viewportTransform().map(QPointF(0.0, *floor)).y()) + offset.y()
-                             : offset.y() + viewportSize.height();
-
-    // CLAMPED ABOVE THE FLOOR, not to the viewport. A strip taller than the room
-    // above your hand has to lose the difference somewhere, and clamping only the
-    // y below would leave the height intact and push the bottom edge back down
-    // over the cards - the exact collision the floor exists to prevent.
-    const int height = std::min(preferred, bottom - top);
-
-    bottomOverlay->setGeometry((viewportSize.width() - width) / 2,
-                               std::max(top, bottom - height),
-                               width,
-                               height);
-}
-
-bool TableView::eventFilter(QObject* watched, QEvent* event)
-{
-    // THE STRIP CHANGES SIZE WITH THE PROMPT - an eight-card round has nine
-    // buttons and a one-card round two, and the explanation appears only for the
-    // final bidder. Geometry set once at setBottomOverlay() would therefore be
-    // right for one round and wrong for the rest, and a window nobody resizes
-    // would never correct it.
-    //
-    // Show as well as LayoutRequest, because the strip is hidden between turns
-    // and its size hint is only settled once the new buttons are in place.
-    if(watched == bottomOverlay &&
-       (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Show))
-    {
-        placeOverlay();
-    }
-
-    return QGraphicsView::eventFilter(watched, event);
-}
-
 void TableView::resizeEvent(QResizeEvent* event)
 {
     QGraphicsView::resizeEvent(event);
@@ -378,12 +272,6 @@ void TableView::resizeEvent(QResizeEvent* event)
 
         settleTimer.start();
     }
-
-    // AFTER the scale, and the order is load-bearing: the overlay is placed by
-    // mapping overlayBottom() through the transform just set. Placed first, it
-    // would be positioned against the PREVIOUS scale on every resize - correct
-    // only by one frame's delay, and visibly wrong while a window is dragged.
-    placeOverlay();
 }
 
 void TableView::paintEvent(QPaintEvent* event)

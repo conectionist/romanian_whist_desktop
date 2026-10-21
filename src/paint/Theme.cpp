@@ -259,6 +259,16 @@ Theme::TablePalette tablePalette()
     table.menuGlint = rgba(201, 164, 92, 0.22);
     table.menuShadow = rgba(0, 0, 0, 0.45);
 
+    // Section 2.13, from page.html's .bidstrip .opt: box-shadow 0 4px 10px
+    // rgba(0, 0, 0, 0.45); under the cursor 0 0 0 2px gold-bright, 0 0 16px
+    // rgba(242, 211, 140, 0.5); and :disabled background #2a211a, color #6d604d,
+    // border-color #4d3d28.
+    table.bidShadow = rgba(0, 0, 0, 0.45);
+    table.bidGlow = rgba(242, 211, 140, 0.5);
+    table.bidDisabledFill = QColor(0x2A, 0x21, 0x1A);
+    table.bidDisabledText = QColor(0x6D, 0x60, 0x4D);
+    table.bidDisabledBorder = QColor(0x4D, 0x3D, 0x28);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

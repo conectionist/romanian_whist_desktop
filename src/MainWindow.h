@@ -29,7 +29,7 @@ class QDockWidget;
 class QStackedWidget;
 QT_END_NAMESPACE
 
-class BidStrip;
+class BidStripItem;
 class CardArtWindow;
 class GameOverPanel;
 class HandItem;
@@ -75,9 +75,10 @@ public:
 
 protected:
     // Section 15.2's digit keys: 1-8 play by position in the fan, matching the
-    // terminal's numbering for anyone switching between the two clients.
+    // terminal's numbering for anyone switching between the two clients. And
+    // section 15.1's, 0-8 bid while the strip is up.
     //
-    // ON THE WINDOW rather than on the fan, unlike the bid strip's digits. A
+    // ON THE WINDOW rather than on the fan or the strip. A
     // QGraphicsObject has no focus of its own worth building here, and the fan is
     // not the only thing on screen that could want a key - so this is the one
     // place a play key is read, and it forwards to the item's own rule rather
@@ -136,7 +137,7 @@ private slots:
     // the card played is the card clicked.
     void onCardPicked(std::size_t slot);
 
-    // The bid strip was clicked, or a digit was pressed on it. Answers the
+    // A bid on the strip was clicked, or its digit was pressed. Answers the
     // prompt cached by onBetRequested().
     void onBidChosen(unsigned int bet);
 
@@ -250,7 +251,7 @@ private:
     void dropMenuSheets();
 
     // GIVES THE KEYBOARD TO WHATEVER IS NOW ON TOP, after something over it went:
-    // the sheet on top (activeOverlay()), the bid strip and its digit keys, or
+    // the sheet on top (activeOverlay()), the table while the bid strip asks, or
     // else the page itself - the table, or the menu page's New Game. Each takes
     // focus when it is raised, and hiding what took it from them does not give
     // it back - which looks finished, because the mouse still works.
@@ -313,10 +314,10 @@ private:
     TableScene* scene = nullptr;
     TableView* table = nullptr;
 
-    // Section 15.1's strip, floated over the bottom of the table rather than
-    // laid out beneath it - see TableView::setBottomOverlay() for why. Hidden
-    // except while the engine is parked waiting for your bid.
-    BidStrip* bidStrip = nullptr;
+    // Section 15.1's strip, on the felt since the table redesign's phase 10 and
+    // owned by the scene: a handle, as `hand` is, for its second source - the
+    // prompt for your bid. Shown only while the engine is parked waiting for one.
+    BidStripItem* bidStrip = nullptr;
 
     // SECTION 12'S FOURTH REGION, "where the game talks to you", which is the
     // trick panel in the table's top-right corner since the redesign's phase 8.

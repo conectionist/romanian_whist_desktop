@@ -4,13 +4,13 @@
 #include "WindowDriving.h"
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
+#include "table/BidStripItem.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 #include "paint/Theme.h"
-#include "ui/BidStrip.h"
 #include "ui/NewGameDialog.h"
 
 #include <QCheckBox>
@@ -68,7 +68,7 @@
 namespace
 {
 using driving::answerModalStrictly;
-using driving::bidButton;
+using driving::clickBid;
 using driving::DialogAnswer;
 using driving::need;
 using driving::pump;
@@ -280,19 +280,16 @@ std::optional<std::size_t> firstPlayableSlot(const HandItem& hand)
     return std::nullopt;
 }
 
-// Clicks the lowest bid the strip offers. Walked up from 0 until a bid has no
-// button: the strip offers every bid up to the hand size and DISABLES the
-// forbidden one rather than leaving it out, so the first enabled button is the
+// Clicks the lowest bid the strip offers, through the scene as a player clicks it.
+// Walked up from 0: the strip offers every bid up to the hand size and STRIKES OUT
+// the forbidden one rather than leaving it out, so the first one it offers is the
 // lowest legal bid.
-bool clickLowestBid(const BidStrip& strip)
+bool clickLowestBid(BidStripItem& strip)
 {
-    for(unsigned int bet = 0 ; QPushButton* button = bidButton(strip, bet) ; bet++)
+    for(unsigned int bet = 0 ; bet <= strip.fields().highest ; bet++)
     {
-        if(button->isEnabled())
-        {
-            button->click();
-            return true;
-        }
+        if(bidstrip::offers(strip.fields(), bet))
+            return clickBid(strip, bet);
     }
 
     return false;
@@ -395,10 +392,11 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
                 REQUIRE(answer.problems.isEmpty());
             }
 
-            BidStrip* bidStrip = window.findChild<BidStrip*>();
             TableScene* scene = window.findChild<TableScene*>();
-            REQUIRE(bidStrip != nullptr);
             REQUIRE(scene != nullptr);
+
+            BidStripItem* bidStrip = scene->bidStripItem();
+            REQUIRE(bidStrip != nullptr);
 
             HandItem* hand = scene->handItem();
             REQUIRE(hand != nullptr);

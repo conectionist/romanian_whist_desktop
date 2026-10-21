@@ -3,6 +3,7 @@
 #include "TableFixtures.h"
 
 #include "table/TableView.h"
+#include "table/BidStripItem.h"
 #include "table/RackItem.h"
 #include "table/SeatItem.h"
 #include "table/LeadMarkItem.h"
@@ -12,7 +13,6 @@
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
-#include "ui/BidStrip.h"
 #include "engine/Prompts.h"
 #include "paint/CardRenderer.h"
 #include "paint/Theme.h"
@@ -41,23 +41,13 @@ using romanian_whist::Card;
 using romanian_whist::Rank;
 using romanian_whist::Suit;
 
-// WHERE THE STRIP LANDS, which TableSceneTests can only half answer.
+// THE SCALE ITSELF, since the table redesign's phase 2: the view fits a fixed
+// table to the window, centred, and a resize changes that scale and nothing in the
+// scene.
 //
-// That file holds overlayBottom() to account - the floor clears your hand and
-// your plaque - but in table space, and the floor is only where the strip may go.
-// This one covers the other half: what placeOverlay() actually does with it once
-// the view has mapped it to the screen.
-//
-// The two strip cases are the two ways the placement went wrong in C2. The strip
-// is AS TALL AS ITS WRAPPED TEXT NEEDS, because sizeHint() answers for the width
-// the strip asked for rather than the width it got, and a narrow table clipped
-// the second line of the forbidden-bid reason off the bottom. And it STAYS CLEAR
-// OF YOUR HAND AND PLAQUE, because clamping the y without clamping the height
-// pushes the bottom edge back down over what the floor was computed to clear.
-//
-// AND THE SCALE ITSELF, since the table redesign's phase 2: the view fits a fixed
-// table to the window, centred, and a resize changes that scale and nothing in
-// the scene.
+// IT ALSO PLACED THE BID STRIP until phase 10, which put the strip on the felt as
+// a scene item (BidStripTests): the two cases on where the view floated it, and
+// how tall it was when squeezed, went with it.
 
 namespace
 {
@@ -78,142 +68,11 @@ GameSnapshot seatedTable(unsigned int seats, int humanSeat)
     return snapshot;
 }
 
-// WITH A FORBIDDEN BID, so the explanation label is not empty. It is the only
-// part of the strip that wraps, so a prompt without one cannot show the clipping
-// this file is about.
-BetPrompt lastBidder()
-{
-    BetPrompt prompt;
-    prompt.promptId = 7;
-    prompt.handSize = 8;
-    prompt.forbiddenBet = 3u;
-
-    return prompt;
-}
-
-// A window of the size a person actually plays in.
-const QSize played(1000, 700);
-
-// And one narrow enough to squeeze the strip below its preferred width, which is
-// where the wrapping starts. A real window this wide has the scoreboard beside
-// the table, so the table itself gets rather less than this.
-const QSize cramped(430, 460);
-
-// SHORTER THAN THE STRIP IS TALL, which no window a person plays in ever is. It
-// is in the list because it is the only size at which the height clamp is
-// observable: every playable table has room to spare, so a clamp that was
-// missing would sit unseen until the day something else made the strip taller.
-const QSize squashed(400, 120);
-
-// A table-space height, where it lands in the view's own coordinates - which is
-// where the strip, the view's child, is placed. Through Qt's own mapFromScene()
-// and the items' own positions, NOT through the arithmetic placeOverlay() does: a
-// test that repeated that would agree with any mistake in it.
-int onScreen(const TableView& view, qreal sceneY)
-{
-    return view.mapFromScene(QPointF(tablespace::centre.x(), sceneY)).y()
-         + view.viewport()->geometry().top();
-}
-
-// Your plaque, found by where section 2.5 puts it rather than by seat index.
-const SeatItem* yourPlaque(const TableScene& scene)
-{
-    for(const QGraphicsItem* item : scene.items())
-    {
-        const auto* seat = dynamic_cast<const SeatItem*>(item);
-
-        if(seat && seat->isVisible() && seat->sceneBoundingRect().contains(QPointF(768.0, 1105.0)))
-            return seat;
-    }
-
-    return nullptr;
-}
-
 // Windows of every shape the scale has to handle: the screenshot size, a laptop,
 // the size the suite plays at, an ultra-wide, and one taller than it is wide.
 const QSize shapes[] = { QSize(1920, 1080), QSize(1440, 900), QSize(1000, 700),
                          QSize(2560, 1080), QSize(800, 1200) };
 
-}
-
-// The strip is on the stack in both cases and DECLARED AFTER THE VIEW, which is
-// load-bearing: setBottomOverlay() reparents it, so a view destroyed first would
-// delete a stack object. Reverse order means the strip leaves the parent before
-// the parent goes.
-
-TEST_CASE("A squeezed strip is as tall as its wrapped explanation needs", "[table]")
-{
-    TableScene scene;
-
-    scene.setTheme(Theme::light());
-    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
-
-    TableView view(&scene);
-    BidStrip strip;
-
-    strip.setPrompt(lastBidder());
-
-    view.setBottomOverlay(&strip);
-    view.resize(cramped);
-    view.show();
-
-    // The premise of the case, asserted rather than assumed: at this width the
-    // strip is narrower than it asked to be, which is what makes the wrapped
-    // label taller than sizeHint() says.
-    REQUIRE(strip.width() < strip.sizeHint().width());
-    REQUIRE(strip.hasHeightForWidth());
-
-    // AGAINST heightForWidth RATHER THAN A NUMBER. What the sentence needs
-    // depends on the font the test machine has, so a pixel literal would assert
-    // the font. The relation does not: at the width it was given, the strip must
-    // have at least the height that width implies.
-    REQUIRE(strip.heightForWidth(strip.width()) > strip.sizeHint().height());
-    REQUIRE(strip.height() >= strip.heightForWidth(strip.width()));
-}
-
-TEST_CASE("The strip stays clear of your hand and your plaque at every size", "[table]")
-{
-    TableScene scene;
-
-    scene.setTheme(Theme::light());
-    scene.setSnapshot(std::make_shared<const GameSnapshot>(seatedTable(4, 1)));
-
-    TableView view(&scene);
-    BidStrip strip;
-
-    strip.setPrompt(lastBidder());
-
-    view.setBottomOverlay(&strip);
-    view.show();
-
-    const SeatItem* plaque = yourPlaque(scene);
-    REQUIRE(plaque != nullptr);
-
-    for(const QSize& size : {played, cramped, squashed})
-    {
-        INFO("table " << size.width() << "x" << size.height());
-
-        view.resize(size);
-
-        const QRect placed = strip.geometry();
-
-        // THE BOTTOM EDGE, which is what the floor exists for: above the top of
-        // the cards you are bidding on, and above your plaque. y + height is the
-        // edge itself, where QRect::bottom() is the last row inside it.
-        REQUIRE(placed.y() + placed.height() <= onScreen(view, tablespace::handTop));
-        REQUIRE(placed.y() + placed.height() <= onScreen(view, plaque->sceneBoundingRect().top()));
-
-        // And on the view at all.
-        REQUIRE(placed.top() >= 0);
-    }
-
-    // THE ROOM ABOVE THE TABLE IS THE STRIP'S TOO. At this size the table is a
-    // short band across a wide window and the strip is taller than the space
-    // between the fit box's top and your hand; it used to be cut to that, though
-    // the window's top edge was further up. It may rise to the view's own top.
-    view.resize(squashed);
-
-    REQUIRE(strip.geometry().top() < onScreen(view, tablespace::fitBox.top()));
 }
 
 // SECTION 2.1, and the mock-up's fit(): one scale for both axes, the largest that
@@ -651,6 +510,13 @@ TEST_CASE("While a drag settles no panel is composed again", "[table]")
 {
     ShownTable table;
 
+    // The bid strip up, as it is while you bid: one more panel on the table, and
+    // the one with the most shadows in it.
+    BetPrompt prompt;
+    prompt.handSize = 8;
+    prompt.forbiddenBet = 3u;
+    table.scene.bidStripItem()->setPrompt(prompt);
+
     const auto composed = [&]
     {
         std::size_t total = 0;
@@ -670,6 +536,9 @@ TEST_CASE("While a drag settles no panel is composed again", "[table]")
 
             if(const auto* trickPanel = dynamic_cast<const TrickPanelItem*>(item))
                 total += trickPanel->compositions();
+
+            if(const auto* strip = dynamic_cast<const BidStripItem*>(item))
+                total += strip->compositions();
         }
 
         return total;
