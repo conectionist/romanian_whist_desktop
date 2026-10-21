@@ -119,6 +119,10 @@ qt_add_library(desktop_core STATIC
     src/table/TableButtonItem.cpp
     src/table/CardText.h
     src/table/CardText.cpp
+    src/table/HudText.h
+    src/table/HudText.cpp
+    src/table/RoundText.h
+    src/table/RoundText.cpp
     src/table/ScoreboardItem.h
     src/table/ScoreboardItem.cpp
     src/table/TrickPanelItem.h

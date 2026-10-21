@@ -1,8 +1,9 @@
 #include "RoundSheet.h"
 
-#include "table/ScoreboardItem.h"
+#include "table/RoundText.h"
 
 #include <QBoxLayout>
+#include <QCoreApplication>
 #include <QFont>
 #include <QGridLayout>
 #include <QLabel>

@@ -4,6 +4,7 @@
 
 #include "paint/CardRenderer.h"
 #include "paint/TextRuns.h"
+#include "table/RoundText.h"
 #include "table/ScoreboardItem.h"
 
 #include <QString>

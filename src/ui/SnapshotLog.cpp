@@ -69,8 +69,8 @@ QString describe(const Card& card)
 
 // FIXED ASCII, not user-facing text: these three words are asserted on by the
 // log tests and read out of saved logs, so they must not move when a translation
-// is loaded. The status bar's own names go through tr() - see
-// MainWindow::roundTypeText().
+// is loaded. The names a player reads go through translate() - see
+// infostrip::roundTypeText().
 QString describe(RoundType type)
 {
     switch(type)

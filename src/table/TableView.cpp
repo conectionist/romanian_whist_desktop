@@ -262,7 +262,7 @@ void TableView::placeOverlay()
     // squeezed narrower than its hint needs a second line for it - and
     // sizeHint().height() reports the height of the first line only. Taking the
     // hint's height there is what clipped the forbidden-bid reason in half on a
-    // window narrow enough that the scoreboard crowds the table.
+    // window narrow enough to squeeze the strip.
     const int hfw = bottomOverlay->hasHeightForWidth() ? bottomOverlay->heightForWidth(width)
                                                        : -1;
 
@@ -330,8 +330,9 @@ void TableView::resizeEvent(QResizeEvent* event)
 {
     QGraphicsView::resizeEvent(event);
 
-    // THE SCALE AND NOTHING ELSE. The scene is in table space and does not know
-    // the window has changed size; nothing in it moves.
+    // THE SCALE, AND THE CORNER PANELS WITH IT. The scene is in table space, so
+    // the table and everything on it stay where they are; fitTable() pins the four
+    // corner panels to the window's new corners, the only items a resize moves.
     fitTable();
 
     // AND THE PIXMAPS WAIT FOR THE WINDOW TO STOP. Every pixmap on the table is

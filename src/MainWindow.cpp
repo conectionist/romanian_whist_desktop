@@ -467,8 +467,7 @@ void MainWindow::abandonToMenu()
     // game's queue is worthless, which is why the purge is no longer private to
     // prepare(). Every frame the game thread published between this click and
     // the join above is still in this thread's queue, and is delivered after
-    // showMainMenu() below: a line into the log of a game that no longer exists,
-    // and the status bar with it whenever the round or the trick moved in one.
+    // showMainMenu() below: a line into the log of a game that no longer exists.
     //
     // SMALL HERE, AND NOT NOTHING. Main menu is only reachable from the pause,
     // which has usually let the window go idle and drain the queue first -

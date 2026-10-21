@@ -3,6 +3,7 @@
 #include "paint/DevicePixels.h"
 #include "paint/Fonts.h"
 #include "table/CardText.h"
+#include "table/HudText.h"
 #include "table/TrickItem.h"
 
 #include <QCoreApplication>
@@ -44,20 +45,12 @@ struct Styles
 
 Styles stylesFor(const Theme::TablePalette& palette)
 {
-    const auto make = [&](const QFont& font, qreal pixels, const QColor& colour)
-    {
-        textruns::Style style = textruns::plainStyle(font, pixels, colour);
-        style.redSuit = palette.redSuit;
-        style.blackSuit = palette.blackSuit;
-        return style;
-    };
-
     Styles styles;
 
-    styles.title = make(fonts::heading(), titleSize, palette.cream);
+    styles.title = hudtext::style(fonts::heading(), titleSize, palette.cream, palette);
 
     // .row: muted, its <b> in cream at weight 500.
-    styles.row = make(fonts::body(), bodySize, palette.muted);
+    styles.row = hudtext::style(fonts::body(), bodySize, palette.muted, palette);
 
     QFont medium = fonts::body();
     medium.setWeight(QFont::Medium);
@@ -65,7 +58,7 @@ Styles stylesFor(const Theme::TablePalette& palette)
     styles.row.strong = fonts::sized(medium, bodySize).font;
     styles.row.strongColour = palette.cream;
 
-    styles.prompt = make(fonts::body(), bodySize, palette.goldBright);
+    styles.prompt = hudtext::style(fonts::body(), bodySize, palette.goldBright, palette);
 
     return styles;
 }
@@ -259,7 +252,7 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     fields.rows.push_back(textruns::emphasised(
         QCoreApplication::translate("trickpanel", "Winning: %1"),
         winning == snapshot.table.end()
-            ? QStringLiteral("–")
+            ? hudtext::dash()
             : nameOf(winning->seatIndex) + QStringLiteral(", ") + cardtext::label(winning->card)));
 
     const bool trickFull = !snapshot.seats.empty() && snapshot.table.size() >= snapshot.seats.size();

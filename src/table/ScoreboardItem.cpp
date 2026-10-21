@@ -5,6 +5,8 @@
 #include "paint/Paths.h"
 #include "paint/Shadows.h"
 #include "table/CardText.h"
+#include "table/HudText.h"
+#include "table/RoundText.h"
 #include "table/TableSpace.h"
 
 #include <QFont>
@@ -14,8 +16,6 @@
 
 #include <algorithm>
 #include <numeric>
-
-using romanian_whist::RoundType;
 
 namespace
 {
@@ -75,14 +75,6 @@ constexpr qreal trumpShadowBlur = 12.0;
 // after a hex escape as the escape's end - so the mark sits against the name.
 const QString turnMarker = QStringLiteral("▸");
 
-// A dash for a cell with nothing in it yet. Punctuation rather than a word, so not
-// a translatable string; an en dash rather than a hyphen because a hyphen beside
-// right-aligned digits reads as a minus.
-QString dash()
-{
-    return QStringLiteral("–");
-}
-
 // One style for every piece of the panel's text.
 struct Styles
 {
@@ -109,28 +101,20 @@ void capitalsSpaced(textruns::Style& style, qreal em)
 
 Styles stylesFor(const Theme::TablePalette& palette)
 {
-    const auto make = [&](const QFont& font, qreal pixels, const QColor& colour)
-    {
-        textruns::Style style = textruns::plainStyle(font, pixels, colour);
-        style.redSuit = palette.redSuit;
-        style.blackSuit = palette.blackSuit;
-        return style;
-    };
-
     QFont bold = fonts::body();
     bold.setWeight(QFont::Bold);
 
     Styles styles;
 
-    styles.round = make(fonts::heading(), roundSize, palette.cream);
-    styles.sub = make(fonts::body(), subSize, palette.muted);
+    styles.round = hudtext::style(fonts::heading(), roundSize, palette.cream, palette);
+    styles.sub = hudtext::style(fonts::body(), subSize, palette.muted, palette);
 
     // .tension b: the number in bold cream, in a muted line.
-    styles.tension = make(fonts::body(), tensionSize, palette.muted);
+    styles.tension = hudtext::style(fonts::body(), tensionSize, palette.muted, palette);
     styles.tension.strong = fonts::sized(bold, tensionSize).font;
     styles.tension.strongColour = palette.cream;
 
-    styles.head = make(bold, headSize, palette.muted);
+    styles.head = hudtext::style(bold, headSize, palette.muted, palette);
     capitalsSpaced(styles.head, headSpacing);
 
     // TABULAR FIGURES (section 18), so a 1 and a 0 occupy the same box and a
@@ -142,12 +126,12 @@ Styles stylesFor(const Theme::TablePalette& palette)
     cell.setFeature(QFont::Tag("tnum"), 1);
 #endif
 
-    styles.cell = make(cell, cellSize, palette.cream);
+    styles.cell = hudtext::style(cell, cellSize, palette.cream, palette);
 
-    styles.trumpLabel = make(bold, trumpLabelSize, palette.muted);
+    styles.trumpLabel = hudtext::style(bold, trumpLabelSize, palette.muted, palette);
     capitalsSpaced(styles.trumpLabel, trumpLabelSpacing);
 
-    styles.trumpName = make(fonts::heading(), trumpNameSize, palette.cream);
+    styles.trumpName = hudtext::style(fonts::heading(), trumpNameSize, palette.cream, palette);
 
     return styles;
 }
@@ -384,78 +368,6 @@ qreal layOut(const scoreboard::Shown& shown, const Styles& styles, const Canvas&
 
 }
 
-// ---- the info strip's words ----
-
-QString infostrip::cardsText(unsigned int trickCount)
-{
-    // TWO STRINGS RATHER THAN Qt's "%n card(s)", which was tried and is wrong
-    // here. Qt takes the plural FORMS from the catalogue, for the source language
-    // as much as for any other - so with no translator loaded, which is what an
-    // English build is, translate("%n card(s)", n) substitutes the count and
-    // leaves the rest alone: "1 card(s)", on screen, in the shipped language.
-    // Selecting here spells both forms correctly out of the box and still gives
-    // lupdate two strings to collect. Languages whose plural rules need more than
-    // two forms are the reason %n exists, and the day one is added this becomes
-    // the thing to revisit.
-    return trickCount == 1 ? QCoreApplication::translate("infostrip", "1 card")
-                           : QCoreApplication::translate("infostrip", "%1 cards")
-                                 .arg(trickCount);
-}
-
-QString infostrip::roundTypeText(RoundType type)
-{
-    // No default case, so a fourth round type is a warning here rather than a
-    // silent "unknown" in front of a player. The fallback sits after the switch,
-    // which is what Card::toString() and SnapshotLog both do.
-    switch(type)
-    {
-        case RoundType::Normal:   return QCoreApplication::translate("infostrip", "Normal");
-        case RoundType::Forehead: return QCoreApplication::translate("infostrip", "Forehead");
-        case RoundType::Hidden:   return QCoreApplication::translate("infostrip", "Hidden");
-    }
-
-    return QCoreApplication::translate("infostrip", "Unknown");
-}
-
-bool infostrip::isCalledOut(RoundType type)
-{
-    // Asked as "not Normal" rather than listed, so a round type added to the
-    // engine is called out by default. The two that exist are the two section 17
-    // is about, and a new one would be a special round too.
-    return type != RoundType::Normal;
-}
-
-infostrip::Fields infostrip::fieldsFor(const GameSnapshot& snapshot)
-{
-    Fields fields;
-
-    // "of" rather than "7/24": this is a sentence a player reads once a round,
-    // not a column in a log, and the slash is the log's idiom.
-    //
-    // One arg() taking both, never chained - the rule SnapshotLog.cpp and
-    // MainWindow both carry, because a substituted value containing %2 would
-    // otherwise swallow the next substitution.
-    fields.round = QCoreApplication::translate("infostrip", "Round %1 of %2")
-                       .arg(QString::number(snapshot.roundNumber),
-                            QString::number(snapshot.roundCount));
-
-    // The trick count IS the number of cards dealt to each player - a round of
-    // six cards is a round of six tricks - so this reads it rather than adding a
-    // field that would have to agree with it.
-    fields.cards = cardsText(snapshot.trickCount);
-
-    fields.roundType = roundTypeText(snapshot.roundType);
-
-    fields.hasTrump = snapshot.hasTrump;
-
-    // Copied ONLY under hasTrump. Left at Card's default otherwise, which is a
-    // real two of clubs - see the header.
-    if(snapshot.hasTrump)
-        fields.trump = snapshot.trump;
-
-    return fields;
-}
-
 // ---- the scoreboard ----
 
 QString scoreboard::dealtText(unsigned int trickCount)
@@ -611,8 +523,8 @@ std::vector<scoreboard::Row> scoreboard::rowsFor(const GameSnapshot& snapshot)
         Row row;
 
         row.name = QString::fromStdString(seat.name);
-        row.bid = seat.hasBet ? QString::number(seat.bet) : dash();
-        row.taken = bidding ? dash() : QString::number(seat.tricksWon);
+        row.bid = seat.hasBet ? QString::number(seat.bet) : hudtext::dash();
+        row.taken = bidding ? hudtext::dash() : QString::number(seat.tricksWon);
         row.points = QString::number(seat.totalScore);
 
         // A win streak and a loss streak are never both running.
@@ -692,8 +604,8 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
     Columns widest;
 
     widest.player = head(headingPlayer());
-    widest.bid = std::max({ head(headingBid()), cell(QStringLiteral("8")), cell(dash()) });
-    widest.taken = std::max({ head(headingTaken()), cell(QStringLiteral("8")), cell(dash()) });
+    widest.bid = std::max({ head(headingBid()), cell(QStringLiteral("8")), cell(hudtext::dash()) });
+    widest.taken = std::max({ head(headingTaken()), cell(QStringLiteral("8")), cell(hudtext::dash()) });
     widest.points = std::max(head(headingPoints()), cell(QStringLiteral("000")));
     widest.run = std::max({ head(headingRun()), cell(QStringLiteral("W5")), cell(QStringLiteral("L5")) });
 
