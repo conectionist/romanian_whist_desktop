@@ -104,6 +104,10 @@ public:
     // tests in the same way.
     const cardshadow::Cache& cardShadows() const { return shadowPictures; }
 
+    // The name panels' and the corner buttons' chrome - not the scoreboard's or
+    // the trick panel's - READ-ONLY and for tests in the same way.
+    const panel::Cache& seatPanels() const { return panels; }
+
     // The lead rhombus, READ-ONLY and for tests in the same way.
     const LeadMarkItem* leadMarkItem() const { return leadMark; }
 
@@ -151,9 +155,15 @@ private:
     // to it: members die in reverse declaration order, so this outlives them.
     CardRenderer cards;
 
-    // The seats' panel chrome, shared by all of them, for the renderer's reasons
-    // and held the same way.
+    // The seats' panel chrome, shared by all of them and the corner buttons, for
+    // the renderer's reasons and held the same way.
     panel::Cache panels;
+
+    // THE SCOREBOARD'S AND THE TRICK PANEL'S, apart from the seats': drawn at
+    // tablespace::hudScale, they ask for their chrome at 1.2 times the ratio the
+    // seats do, and a cache holds one ratio at a time. Shared, each turn's seats
+    // and corner panels cleared each other's pictures and drew their shadows again.
+    panel::Cache hudPanels;
 
     // The racks' pictures, shared by every rack showing the same cards, and held
     // the same way.

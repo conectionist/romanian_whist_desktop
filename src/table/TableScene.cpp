@@ -42,14 +42,14 @@ TableScene::TableScene(QObject* parent)
 
     // THE SCOREBOARD (section 2.9), drawn larger than the table as the mock-up's
     // is, and hidden until placeHud() has a corner and a game for it.
-    scoreboard = new ScoreboardItem(&cards, &panels);
+    scoreboard = new ScoreboardItem(&cards, &hudPanels);
     scoreboard->setZValue(tablespace::z::hud);
     scoreboard->setScale(tablespace::hudScale);
     scoreboard->hide();
     addItem(scoreboard);
 
     // THE TRICK PANEL (section 2.10), the same.
-    trickPanel = new TrickPanelItem(&panels);
+    trickPanel = new TrickPanelItem(&hudPanels);
     trickPanel->setZValue(tablespace::z::hud);
     trickPanel->setScale(tablespace::hudScale);
     trickPanel->hide();

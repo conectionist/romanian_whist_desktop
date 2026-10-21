@@ -80,8 +80,12 @@ Picture render(QSizeF size, const Theme::TablePalette& palette, State state, qre
 // ONE RATIO AND ONE PALETTE AT A TIME, as Theme's avatars are one box at a time:
 // a new ratio means the window was resized or moved to another screen, and the
 // old pictures are never asked for again. Within one, a picture per size and
-// state - the bottom panel's two and everyone else's, the scoreboard's and the
-// trick panel's, and the two buttons' in each of their states.
+// state - the seats' panels, plain and active, and the two buttons' in each of
+// their states.
+//
+// SO ITEMS DRAWN AT DIFFERENT SCALES NEED A CACHE EACH. The scoreboard and the
+// trick panel are drawn at tablespace::hudScale, so they ask at 1.2 times the
+// seats' ratio, and sharing one cache had each clear the other's on every turn.
 //
 // Owned by whatever owns the items (TableScene), which outlives them.
 class Cache
@@ -103,9 +107,10 @@ private:
         bool operator==(const Key&) const = default;
     };
 
-    // A handful of sizes is every panel there is: four for the seats, two for the
-    // corner panels - whose heights follow what they say, so an old height or two
-    // lingers - and four for the buttons.
+    // A handful of sizes is every panel there is: two for the seats (one size,
+    // plain and active) and four for the buttons in one cache; two for the corner
+    // panels in the other - whose heights follow what they say, so an old height
+    // or two lingers.
     PictureCache<Key, Theme::TablePalette, 16> pictures;
 };
 

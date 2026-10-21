@@ -8,6 +8,7 @@
 #include "table/HandItem.h"
 #include "table/LeadMarkItem.h"
 #include "table/RackItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
@@ -986,4 +987,53 @@ TEST_CASE("A snapshot that changes nothing repaints nothing", "[table]")
     QCoreApplication::processEvents();
 
     REQUIRE_FALSE(repainted.isEmpty());
+}
+
+// THE CORNER PANELS KEEP THEIR CHROME APART FROM THE SEATS'. The scoreboard and the
+// trick panel are drawn at tablespace::hudScale, so they ask for their chrome at
+// 1.2 times the seats' ratio; and a panel::Cache holds one ratio at a time. When
+// they shared the seats' cache, every turn's corner panels cleared the seats'
+// pictures, and the next turn's seats drew their two blurred shadows again (PR 34's
+// review, finding #1).
+TEST_CASE("A turn passing draws no seat's chrome again", "[table]")
+{
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+
+    GameSnapshot snapshot = fullTable();
+    snapshot.activeSeat = 1;
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    // The corner panels show once there are a window's corners to pin them to: the
+    // fit box itself, drawn at half its size.
+    const QRectF visible = scene.sceneRect();
+    scene.pinHud(visible, 0.5);
+
+    const auto render = [&scene, &visible]
+    {
+        QImage image(QSize(940, 662), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+
+        QPainter painter(&image);
+        scene.render(&painter, QRectF(QPointF(), QSizeF(image.size())), visible);
+    };
+
+    // Every seat's chrome, plain and active, and the corner panels'.
+    render();
+    REQUIRE(scene.scoreboardItem()->isVisible());
+
+    const std::size_t drawn = scene.seatPanels().renders();
+
+    // The turn moves on and back: each time two seats and the scoreboard are
+    // composed again, from chrome already drawn.
+    for(const int active : { 2, 1 })
+    {
+        INFO("active seat " << active);
+
+        snapshot.activeSeat = active;
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+        render();
+
+        REQUIRE(scene.seatPanels().renders() == drawn);
+    }
 }
