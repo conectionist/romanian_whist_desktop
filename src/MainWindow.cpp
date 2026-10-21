@@ -1142,6 +1142,17 @@ void MainWindow::onCardPicked(std::size_t slot)
 // a control that looks live and does nothing is its own defect.
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
+    // A HELD KEY ACTS ONCE. A bid and a played card are irrevocable, and the bid
+    // digits and the card digits are read here together: a 2 held to bid repeated
+    // into the fan once the card prompt arrived - inside the keyboard's repeat
+    // delay, with fast bots - and played a card nobody chose (PR #36's review,
+    // finding #4). Esc too, which held would raise and drop the pause in turn.
+    if(event->isAutoRepeat())
+    {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
     // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc raises the pause
     // menu, which is the keyboard half of the menu bar's Exit, and
     // dismisses it again - so the key that opened it is the key that leaves.

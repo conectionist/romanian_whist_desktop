@@ -876,6 +876,54 @@ TEST_CASE("Abandoning while you bid leaves nothing of the bid on the menu page",
     REQUIRE(focus == newGame);
 }
 
+TEST_CASE("A held digit bids or plays once and its repeats do nothing", "[main-window]")
+{
+    // PR #36's review, finding #4. The bid digits and the card digits are read in
+    // the same handler, so a 2 held to bid could repeat into the fan once the card
+    // prompt arrived - with fast bots, inside the keyboard's repeat delay - and play
+    // a card nobody chose. Neither can be taken back.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    REQUIRE(newGame != nullptr);
+
+    answerModalFastSeatedGame(300);
+    newGame->click();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    HandItem* hand = scene->handItem();
+
+    // Round 1 is one card, and the human bids first and leads.
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    const auto press = [&window](int key, bool repeated)
+    {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier, QString(), repeated);
+        QCoreApplication::sendEvent(window.focusWidget(), &event);
+    };
+
+    press(Qt::Key_0, true);
+    REQUIRE(bidStrip->isVisible());
+
+    press(Qt::Key_0, false);
+    REQUIRE_FALSE(bidStrip->isVisible());
+
+    REQUIRE(pumpUntil(10000, [hand]{ return hand->isPlayable(0); }));
+
+    press(Qt::Key_1, true);
+    REQUIRE(hand->isPlayable(0));
+
+    press(Qt::Key_1, false);
+    REQUIRE_FALSE(hand->isPlayable(0));
+}
+
 TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
 {
     // QDockWidget::hide() UNCHECKS ITS OWN toggleViewAction(), and that two-way
