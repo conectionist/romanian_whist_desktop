@@ -4,11 +4,14 @@
 #include "table/HandItem.h"
 #include "table/LeadMarkItem.h"
 #include "table/RackItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/SeatItem.h"
 #include "table/SeatLayout.h"
+#include "table/TableButtonItem.h"
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
 #include "table/TrickItem.h"
+#include "table/TrickPanelItem.h"
 #include "table/Turn.h"
 
 #include <algorithm>
@@ -36,6 +39,35 @@ TableScene::TableScene(QObject* parent)
     hand = new HandItem(&cards, &shadowPictures);
     hand->setZValue(tablespace::z::hand);
     addItem(hand);
+
+    // THE SCOREBOARD (section 2.9), drawn larger than the table as the mock-up's
+    // is, and hidden until placeHud() has a corner and a game for it.
+    scoreboard = new ScoreboardItem(&cards, &hudPanels);
+    scoreboard->setZValue(tablespace::z::hud);
+    scoreboard->setScale(tablespace::hudScale);
+    scoreboard->hide();
+    addItem(scoreboard);
+
+    // THE TRICK PANEL (section 2.10), the same.
+    trickPanel = new TrickPanelItem(&hudPanels);
+    trickPanel->setZValue(tablespace::z::hud);
+    trickPanel->setScale(tablespace::hudScale);
+    trickPanel->hide();
+    addItem(trickPanel);
+
+    // THE CORNER BUTTONS (section 2.11), DISABLED UNTIL PHASE 11 builds the sheets
+    // they open: drawn where the mock-up has them, muted, taking no click.
+    history = new TableButtonItem(icons::Icon::RoundHistory, tr("Round history"), &panels);
+    lastTrick = new TableButtonItem(icons::Icon::LastTrick, tr("Last trick"), &panels);
+
+    for(TableButtonItem* button : { history, lastTrick })
+    {
+        button->setZValue(tablespace::z::hud);
+        button->setEnabled(false);
+        button->setTheme(theme);
+        button->hide();
+        addItem(button);
+    }
 }
 
 void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
@@ -53,6 +85,8 @@ void TableScene::setTheme(const Theme& palette)
 
     top->setTheme(theme);
     hand->setTheme(theme);
+    history->setTheme(theme);
+    lastTrick->setTheme(theme);
 
     // The room is drawn by TableView::drawBackground() rather than held in an
     // item, so this has to say so - nothing else would repaint it. Invalidating
@@ -82,6 +116,48 @@ void TableScene::ensureSeats(std::size_t count)
         seats[i]->hide();
         racks[i]->hide();
     }
+}
+
+void TableScene::pinHud(const QRectF& visible, qreal scale)
+{
+    if(visible.isEmpty() || scale <= 0.0)
+        return;
+
+    pin = Pin{ visible, scale };
+    placeHud();
+}
+
+void TableScene::placeHud()
+{
+    const bool shown = pin && snapshot;
+
+    scoreboard->setVisible(shown);
+    trickPanel->setVisible(shown);
+
+    for(TableButtonItem* button : { history, lastTrick })
+        button->setVisible(shown);
+
+    if(!shown)
+        return;
+
+    // The inset is in the window's pixels, so in table units it is larger the
+    // smaller the table is drawn.
+    const qreal inset = tablespace::hudInset / pin->scale;
+
+    // TOP-LEFT, growing right and down.
+    scoreboard->setPos(pin->visible.left() + inset, pin->visible.top() + inset);
+
+    // TOP-RIGHT, growing left and down: placed by its right edge, at its drawn
+    // width.
+    trickPanel->setPos(pin->visible.right() - inset - trickPanel->size().width() * tablespace::hudScale,
+                       pin->visible.top() + inset);
+
+    // BOTTOM-LEFT, side by side (table.js fit()).
+    const QPointF corner(pin->visible.left() + inset, pin->visible.bottom() - inset);
+
+    history->setPos(corner.x(), corner.y() - history->size().height());
+    lastTrick->setPos(history->pos().x() + history->size().width() + tablespace::buttonGap,
+                      corner.y() - lastTrick->size().height());
 }
 
 std::optional<qreal> TableScene::overlayBottom() const
@@ -227,4 +303,9 @@ void TableScene::relayout()
     // NOBODY SEATED, NO HAND. Section 14: a spectated table "has no human... and the
     // bottom hand area is not drawn at all".
     hand->setVisible(seatlayout::humanSeated(static_cast<unsigned int>(seatCount), snapshot->humanSeat));
+
+    // The corner panels, shown from the first snapshot on.
+    scoreboard->setSnapshot(*snapshot, theme);
+    trickPanel->setSnapshot(snapshot, theme);
+    placeHud();
 }

@@ -19,14 +19,14 @@ QT_END_NAMESPACE
 // over the table it was played on.
 //
 // Translated through QCoreApplication::translate() with an explicit context, for
-// the reason InfoStrip.h and ScoreboardWidget.h give at length - this is chrome
-// a player reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of
-// our own hides every string in here from lupdate.
+// the reason table/ScoreboardItem.h gives at length - this is chrome a player
+// reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of our own
+// hides every string in here from lupdate.
 namespace roundsheet
 {
 
 // "Round 7 - 6 cards - Normal". The three facts that identify a round, and the
-// same three the info strip carries across the top of the table all round.
+// same three the scoreboard carries at the top of the table all round.
 QString titleFor(const RoundResult& result);
 
 // SECTION 16.1's "34 -> 41", and the honest rendering of a number that means two

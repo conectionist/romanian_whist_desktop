@@ -8,6 +8,7 @@
 #include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
+#include "table/TrickPanelItem.h"
 #include "paint/Theme.h"
 #include "ui/BidStrip.h"
 #include "ui/NewGameDialog.h"
@@ -457,9 +458,9 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 // phase 3: table-empty.png, to set beside screenshots/table-4-players.jpg below
 // its 46-pixel menu bar.
 //
-// A BARE VIEW, NOT THE WINDOW. The window still has the info strip, the
-// scoreboard and the prompt bar round the table until phase 8, so its table is
-// smaller than the mock-up's and lies elsewhere. A view of 1920 x 1034 is the
+// A BARE VIEW, NOT THE WINDOW. The window's menu bar is not the mock-up's 46
+// pixels until phase 9, so its table is drawn at a slightly different scale and
+// lies a little higher. A view of 1920 x 1034 is the
 // mock-up's viewport less its menu bar: inside the margins both leave 1888 x 1016,
 // so the two tables are drawn at one scale in one place, and the rim, the bead,
 // the gold circle and the logo can be compared pixel for pixel.
@@ -581,8 +582,10 @@ GameSnapshot handMoment(const HandShot& shot)
         seat.name = names[i];
         seat.isHuman = i == 0;
 
-        // Seat 1 bid first, as it leads.
-        seat.bidOrder = (i + 3) % 4;
+        // Seat 1 bid first, as it leads. ONE-BASED, as the engine's
+        // getBiddingOrder() is: the scoreboard lists the rows in this order since
+        // the redesign's phase 8, and a 0 there is "not known yet".
+        seat.bidOrder = (i + 3) % 4 + 1;
         seat.hasBet = true;
         seat.bet = shot.bids[i];
 
@@ -629,6 +632,9 @@ TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
             HandItem* hand = scene.handItem();
             hand->setPrompt(prompt);
             hand->setPlayable(true);
+
+            // And to the trick panel, which says why the dimmed cards are out.
+            scene.trickPanelItem()->setPrompt(prompt);
 
             TableView view(&scene);
             view.resize(1920, 1034);

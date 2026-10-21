@@ -9,8 +9,8 @@ QT_BEGIN_NAMESPACE
 class QPushButton;
 QT_END_NAMESPACE
 
-// What the prompt bar's Menu button raises, and Esc. Resume, or abandon the game
-// and go back to the main menu.
+// What the menu bar's Menu item raises, and Esc. Resume, or abandon the game and
+// go back to the main menu.
 //
 // A PANEL AND NOT A QDialog, which is section 4.4's rule and which this started
 // out breaking. It was a modal QDialog first, on the reasoning that section

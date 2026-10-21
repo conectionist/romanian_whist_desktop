@@ -37,7 +37,8 @@ using namespace romanian_whist;
 // and score, and a Taken/Bid pill; the cards-left stack went. PHASE 5 moved the
 // Forehead card off the panel and into the seat's rack (RackItemTests), so the
 // panel is the same in every round, and the cases that placed the card on it are
-// retired.
+// retired. The score went in the owner's experiment of 2026-10-21, and the panel
+// narrowed to its pill.
 namespace
 {
 
@@ -131,16 +132,16 @@ TEST_CASE("A seat whose hand can be seen draws the same panel as one whose canno
 TEST_CASE("The panel's parts are section 2.5's sizes", "[seat]")
 {
     // page.html's .plaque: a border of 1, padding of 8 and 16, an 88 x 100
-    // portrait and a gap of 12 - which leaves the text 154 units of a 280 panel
-    // and 174 of your 300.
+    // portrait and a gap of 12 - which leaves the text 133 units of a 259 panel,
+    // yours as well as everyone else's.
     const seatitem::Layout other = seatitem::layoutFor(tablespace::panelSize);
     const seatitem::Layout yours = seatitem::layoutFor(tablespace::bottomPanel.size());
 
-    REQUIRE(other.panel.size() == QSizeF(280.0, 118.0));
+    REQUIRE(other.panel.size() == QSizeF(259.0, 118.0));
     REQUIRE(other.portrait.size() == QSizeF(88.0, 100.0));
     REQUIRE(other.portrait.topLeft() == other.panel.topLeft() + QPointF(9.0, 9.0));
-    REQUIRE(other.text.width() == 154.0);
-    REQUIRE(yours.text.width() == 174.0);
+    REQUIRE(other.text.width() == 133.0);
+    REQUIRE(yours.text.width() == 133.0);
 
     // Centred on the item's origin, which TableScene puts at the panel's centre.
     REQUIRE(other.panel.center() == QPointF(0.0, 0.0));
@@ -156,13 +157,42 @@ TEST_CASE("The panel's parts are section 2.5's sizes", "[seat]")
     }
 }
 
-TEST_CASE("A long name is elided and its score still shows", "[seat]")
+// AS WIDE AS THE WIDEST PILL AND NO WIDER (the owner's experiment of 2026-10-21):
+// every pill the game can show fits whole, and the column has under a unit to
+// spare. Taken and bid run 0 to 8.
+TEST_CASE("The text column is as wide as the widest pill", "[seat]")
 {
-    // A name from section 13's dialog is arbitrary text, and the score after it is
-    // the one number every panel owes the player - so the name gives way and the
-    // score does not.
+    QFont font = fonts::body();
+    font.setPixelSize(seatitem::pillSize);
+    const QFontMetricsF metrics(font);
+
+    // The pill's padding of 12 and its border of 1, either side.
+    const qreal frame = 2.0 * (12.0 + 1.0);
+
+    std::vector<QString> texts = { seatitem::pillFor(unseen(QStringLiteral("Ana")), true, true).text,
+                                   seatitem::pillFor(unseen(QStringLiteral("Ana")), false, true).text };
+
+    for(unsigned int taken = 0 ; taken <= 8 ; taken++)
+        for(unsigned int bet = 0 ; bet <= 8 ; bet++)
+            texts.push_back(seatitem::pillFor(bidding(bet, taken), false, false).text);
+
+    qreal widest = 0.0;
+
+    for(const QString& text : texts)
+        widest = std::max(widest, metrics.horizontalAdvance(text) + frame);
+
+    const qreal column = seatitem::layoutFor(tablespace::panelSize).text.width();
+
+    INFO("widest pill " << widest << ", column " << column);
+    REQUIRE(widest <= column);
+    REQUIRE(column - widest < 1.0);
+}
+
+TEST_CASE("A long name is elided to the column", "[seat]")
+{
+    // A name from section 13's dialog is arbitrary text, so it gives way rather
+    // than run past the panel.
     SeatView view = unseen(QStringLiteral("Bartholomew Featherstonehaugh"));
-    view.totalScore = -123;
 
     const qreal width = seatitem::layoutFor(tablespace::panelSize).text.width();
 
@@ -177,12 +207,10 @@ TEST_CASE("A long name is elided and its score still shows", "[seat]")
         const QFontMetricsF metrics(font);
 
         REQUIRE(line.name != QString::fromStdString(view.name));
-        REQUIRE(line.score == QStringLiteral(" (-123)"));
 
         const qreal marker = line.marker.isEmpty() ? 0.0 : metrics.horizontalAdvance(line.marker) + 6.0;
 
-        REQUIRE(marker + metrics.horizontalAdvance(line.name) + metrics.horizontalAdvance(line.score)
-                <= width);
+        REQUIRE(marker + metrics.horizontalAdvance(line.name) <= width);
     }
 }
 
@@ -191,11 +219,10 @@ TEST_CASE("A short name is drawn whole", "[seat]")
     SeatView view = unseen(QStringLiteral("Ana"));
     view.totalScore = 44;
 
-    const seatitem::NameLine line = seatitem::nameLineFor(view, false, 154.0);
+    const seatitem::NameLine line = seatitem::nameLineFor(view, false, 133.0);
 
     REQUIRE(line.marker.isEmpty());
     REQUIRE(line.name == QStringLiteral("Ana"));
-    REQUIRE(line.score == QStringLiteral(" (44)"));
 }
 
 TEST_CASE("Only the seat to move carries the marker", "[seat]")

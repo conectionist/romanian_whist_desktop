@@ -40,7 +40,7 @@ TEST_CASE("A panel's picture puts the panel on whole pixels", "[panel]")
     {
         INFO("ratio " << ratio);
 
-        const panel::Picture picture = panel::render(size, Theme::dark().table, false, ratio);
+        const panel::Picture picture = panel::render(size, Theme::dark().table, panel::State::Plain, ratio);
 
         REQUIRE_FALSE(picture.pixmap.isNull());
 
@@ -63,8 +63,8 @@ TEST_CASE("Only an active panel is ringed in gold", "[panel]")
     const Theme::TablePalette palette = Theme::dark().table;
     const QPointF onRing(-1.5, size.height() / 2.0);
 
-    const QColor active = pixelAt(panel::render(size, palette, true, 1.0), onRing, 1.0);
-    const QColor idle = pixelAt(panel::render(size, palette, false, 1.0), onRing, 1.0);
+    const QColor active = pixelAt(panel::render(size, palette, panel::State::Active, 1.0), onRing, 1.0);
+    const QColor idle = pixelAt(panel::render(size, palette, panel::State::Plain, 1.0), onRing, 1.0);
 
     REQUIRE(active.alpha() > 240);
     REQUIRE(std::abs(active.red() - palette.goldBright.red()) <= 2);
@@ -80,10 +80,35 @@ TEST_CASE("A panel's shadow falls below it", "[panel]")
 {
     // 0 12 26: straight down, so more shadow under the panel than over it at the
     // same distance from its edge.
-    const panel::Picture picture = panel::render(size, Theme::dark().table, false, 1.0);
+    const panel::Picture picture = panel::render(size, Theme::dark().table, panel::State::Plain, 1.0);
 
     const QColor below = pixelAt(picture, QPointF(size.width() / 2.0, size.height() + 8.0), 1.0);
     const QColor above = pixelAt(picture, QPointF(size.width() / 2.0, -8.0), 1.0);
 
     REQUIRE(below.alpha() > above.alpha() + 40);
+}
+
+TEST_CASE("A hovered panel brightens its inner line and glows", "[panel]")
+{
+    // .panel.btn:hover: the inset gold line at gold-bright, 3.5 units in from the
+    // border box (inside the 1-unit border and the 3-unit dark ring), and a faint
+    // glow round the outside.
+    const Theme::TablePalette palette = Theme::dark().table;
+
+    const panel::Picture hovered = panel::render(size, palette, panel::State::Hovered, 1.0);
+    const panel::Picture plain = panel::render(size, palette, panel::State::Plain, 1.0);
+
+    const QPointF onLine(4.5, size.height() / 2.0);
+
+    REQUIRE(pixelAt(hovered, onLine, 1.0).lightness() > pixelAt(plain, onLine, 1.0).lightness() + 20);
+
+    // Above the panel, where the drop shadow hardly reaches, the glow does.
+    const QPointF above(size.width() / 2.0, -4.0);
+
+    REQUIRE(pixelAt(hovered, above, 1.0).alpha() > pixelAt(plain, above, 1.0).alpha() + 10);
+
+    // And no ring: that is the active seat's alone.
+    const QColor ring = pixelAt(hovered, QPointF(-1.5, size.height() / 2.0), 1.0);
+
+    REQUIRE(ring.alpha() < 160);
 }

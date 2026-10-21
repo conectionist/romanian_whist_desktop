@@ -30,9 +30,9 @@ namespace gameover
 {
 
 // Translated through QCoreApplication::translate() with an explicit context, for
-// the reason InfoStrip.h and ScoreboardWidget.h give at length: this is chrome a
-// player reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of our
-// own would hide every string in here from lupdate.
+// the reason table/ScoreboardItem.h gives at length: this is chrome a player
+// reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of our own
+// would hide every string in here from lupdate.
 
 // PORTED FROM romanian_whist_terminal, src/Renderer.cpp - Renderer::
 // winnerAnnouncement(), with its test (section 21.4). Verbatim in its wording

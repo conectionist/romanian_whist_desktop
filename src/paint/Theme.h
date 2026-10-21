@@ -271,6 +271,20 @@ struct ThemeColours
         QColor leadMarkOutline;
         QColor leadMarkGlow;
 
+        // THE CORNER PANELS (sections 2.9 to 2.11), added in the redesign's phase 8.
+        //
+        // A button under the cursor: its inset gold line brightened, and a faint
+        // gold glow round it.
+        QColor panelInnerLineHover;
+        QColor buttonGlow;
+
+        // The faint gold rules inside a panel: under the scoreboard's headings,
+        // above its trump, and over the trick panel's prompt.
+        QColor hudRule;
+
+        // The trump card's shadow on the scoreboard.
+        QColor trumpShadow;
+
         bool operator==(const TablePalette&) const = default;
     };
 

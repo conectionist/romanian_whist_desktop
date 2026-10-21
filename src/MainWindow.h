@@ -24,6 +24,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 QT_BEGIN_NAMESPACE
+class QAction;
 class QDockWidget;
 class QStackedWidget;
 QT_END_NAMESPACE
@@ -32,14 +33,12 @@ class BidStrip;
 class CardArtWindow;
 class GameOverPanel;
 class HandItem;
-class InfoStrip;
 class MainMenuPage;
 class PauseOverlay;
-class PromptBar;
 class RoundSheet;
-class ScoreboardWidget;
 class TableScene;
 class TableView;
+class TrickPanelItem;
 
 // Phase C's window: phase B's table with a human in one of the seats, and the
 // two things that let them answer for themselves - section 15.1's bid strip and
@@ -86,7 +85,7 @@ protected:
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
 
-    // Caps the scoreboard's share of the window - see capScoreboard().
+    // Keeps the overlays over the whole page - see the body.
     void resizeEvent(QResizeEvent* event) override;
 
 private slots:
@@ -139,7 +138,7 @@ private slots:
     void showNewGameDialog();
 
     // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
-    // its own slot because that is what the Menu button connects to.
+    // its own slot because that is what the menu bar's Menu item connects to.
     void showPauseMenu();
 
     // Abandons the running game and returns to the main menu. The second stop
@@ -149,11 +148,8 @@ private slots:
 private:
     void appendLine(const QString& line);
 
-    // Section 12's window: the info strip across the top, the table and the
-    // scoreboard side by side beneath it. Phase B is this.
-    //
-    // The central widget was the bare TableView until B2b, with no layout at
-    // all, so this introduces the container the other two hang off.
+    // Section 12's window: the table, with the scoreboard, the trick panel and the
+    // corner buttons pinned inside it since the table redesign's phase 8.
     void buildTable();
 
     // Moves the .ui's log into a dock, hidden by default. B2's half of A5's
@@ -162,16 +158,9 @@ private:
     // action that empties the window is not a diagnostic.
     void buildLogDock();
 
-    // Builds the View menu. Must run AFTER buildLogDock(), which owns the
-    // action this adds.
+    // Builds the menu bar: the temporary Menu item and the View menu. Must run
+    // AFTER buildLogDock(), which owns an action this adds.
     void buildViewMenu();
-
-    // HOW THE WINDOW DIVIDES, which is this window's decision and not the
-    // panel's. ScoreboardWidget asks for the width its widest name and its
-    // headings need, and that is right of it - but at a small window that width
-    // is half the screen, and section 12 has the table as the region everything
-    // else is arranged around. The panel yields; the green does not.
-    void capScoreboard();
 
     // Shows the card-art window, creating it the first time. Parented to this
     // window with Qt::Window, so it is a top-level window that still dies with
@@ -193,6 +182,12 @@ private:
     // went because Qt drops window-system events to a window a modal blocks, so
     // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
     void setPauseMenuVisible(bool visible);
+
+    // WHETHER THE PAUSE MENU MAY GO UP NOW: a game playing, and no round sheet
+    // holding it. What setPauseMenuVisible() refuses on, and what the Menu item
+    // is greyed by (updatePauseAction()).
+    bool canPause() const;
+    void updatePauseAction();
 
     // THE ONLY CALLER OF GameController::setPaused(). Two things can want a game
     // held now - the pause menu and the round sheet - and two callers writing
@@ -233,37 +228,36 @@ private:
                    std::optional<romanian_whist::Seat> humanSeat,
                    Pacing pacing);
 
-    // The status bar, from the snapshot - but only when it would actually
-    // change. See the shown* members below.
-    void updateStatus(const GameSnapshot& snapshot);
-
     Ui::MainWindow *ui;
 
-    // ONE PALETTE, owned here and handed to all three, rather than each widget
+    // ONE PALETTE, owned here and handed to everything, rather than each widget
     // resolving the system scheme for itself. Phase E's preference is a single
-    // setter on this member and three calls out of it.
+    // setter on this member and a call out of it per widget.
     Theme theme = Theme::light();
 
-    // The table and the two panels. Qt owns every one of them through the
-    // widget tree, so these are handles rather than ownership.
+    // The table. Qt owns it through the widget tree, so these are handles rather
+    // than ownership. The scoreboard and the trick panel are items in the scene.
     TableScene* scene = nullptr;
     TableView* table = nullptr;
-    InfoStrip* infoStrip = nullptr;
-    ScoreboardWidget* scoreboard = nullptr;
 
     // Section 15.1's strip, floated over the bottom of the table rather than
     // laid out beneath it - see TableView::setBottomOverlay() for why. Hidden
     // except while the engine is parked waiting for your bid.
     BidStrip* bidStrip = nullptr;
 
-    // Section 12's fourth region, and the last to be built.
-    PromptBar* promptBar = nullptr;
+    // SECTION 12'S FOURTH REGION, "where the game talks to you", which is the
+    // trick panel in the table's top-right corner since the redesign's phase 8.
+    // Owned by the scene; a handle, as `hand` is, for the same second source.
+    TrickPanelItem* trickPanel = nullptr;
 
     // The pause menu, a child of the stack rather than a page in it or a dialog
     // of its own - it covers whichever page is showing and dims it. Its
     // visibility and GameController's pause are one fact; see
     // setPauseMenuVisible().
     PauseOverlay* pauseOverlay = nullptr;
+
+    // The menu bar's temporary Menu item, which raises it (buildViewMenu()).
+    QAction* pauseAction = nullptr;
 
     // Section 16.2's panel, the same shape as the pause menu and for the same
     // reason - it is drawn OVER the final state rather than replacing it, which
@@ -321,22 +315,6 @@ private:
     // column is measured from. Cleared by startGame() above.
     std::chrono::steady_clock::time_point started;
     bool haveStarted = false;
-
-    // THE LAST FRAME, kept because the prompt bar needs a fact from it that the
-    // prompt does not carry: which suit is being followed. Legality lives only on
-    // the prompt and the lead suit only on the snapshot, so the bar is the one
-    // thing in the client that has to read both at once.
-    //
-    // By shared_ptr, which is what crosses the boundary - so this is a refcount
-    // bump rather than a copy of six hands.
-    std::shared_ptr<const GameSnapshot> lastSnapshot;
-
-    // What the status bar was last told, so it is rewritten only when the round
-    // or the trick moves rather than on every one of a game's ~1300 frames.
-    // haveShownStatus is what tells "round 0" apart from "nothing shown yet".
-    bool haveShownStatus = false;
-    unsigned int shownRound = 0;
-    unsigned int shownTrick = 0;
 
     // Set by closeEvent() before it stops the game, so onGameStopped() can tell
     // a stop it caused from one it did not.

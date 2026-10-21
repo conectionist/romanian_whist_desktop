@@ -44,6 +44,22 @@ QFont logo();
 QFont heading();
 QFont body();
 
+// A FONT OF A FRACTIONAL PIXEL SIZE, which QFont cannot hold: its pixel size is a
+// whole number. The mock-up writes 14.5 and 19.8, so the font is set at the least
+// whole multiple of the size - 14.5 at 29, 19.8 at 99 - and drawn scaled down by
+// that multiple, `scale`. A whole size comes back as it is, at a scale of 1.
+//
+// NOT A POINT SIZE, which would be fractional and is the obvious answer: Qt turns
+// points into pixels at the device's logical DPI, which is the screen's, so the
+// panels would be laid out differently on every screen.
+struct Sized
+{
+    QFont font;
+    qreal scale = 1.0;
+};
+
+Sized sized(QFont font, qreal pixels);
+
 // Where a line of text puts its baseline in a line box of `height` at `top`: CSS's
 // half-leading, which centres the font's ascent-plus-descent in the line box. In
 // one place because every panel that sets text the way the mock-up does - the

@@ -69,7 +69,13 @@ QRectF seatlayout::panelRect(unsigned int seatCount, int humanSeat, unsigned int
     if(steps == 0)
         return tablespace::bottomPanel;
 
-    return QRectF(panelCorners[seatCount - fewestSeats][steps - 1], tablespace::panelSize);
+    // Centred on the mock-up's panel at that corner.
+    const QRectF spot(panelCorners[seatCount - fewestSeats][steps - 1], tablespace::panelSpot);
+
+    QRectF panel(QPointF(), tablespace::panelSize);
+    panel.moveCenter(spot.center());
+
+    return panel;
 }
 
 std::optional<qreal> seatlayout::rackAngle(QRectF panel)

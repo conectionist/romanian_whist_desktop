@@ -22,6 +22,9 @@ constexpr qreal shadowBlur = 26.0;
 constexpr qreal ringWidth = 3.0;
 constexpr qreal glowBlur = 26.0;
 
+// .panel.btn:hover's glow, fainter and closer than the active seat's.
+constexpr qreal hoverGlowBlur = 18.0;
+
 }
 
 QMarginsF panel::reach()
@@ -39,7 +42,7 @@ QPainterPath panel::shape(const QRectF& rect)
 }
 
 void panel::paint(QPainter& painter, const QRectF& rect, const Theme::TablePalette& palette,
-                  bool active)
+                  State state)
 {
     const QPainterPath outline = shape(rect);
 
@@ -50,7 +53,12 @@ void panel::paint(QPainter& painter, const QRectF& rect, const Theme::TablePalet
     // glow, then the drop shadow, so they are painted the other way round.
     shadows::drawShapeShadow(painter, outline, shadowOffset, shadowBlur, palette.panelShadow);
 
-    if(active)
+    // A button's glow sits over the drop shadow for the same reason: .panel.btn:hover
+    // lists it first.
+    if(state == State::Hovered)
+        shadows::drawShapeShadow(painter, outline, QPointF(), hoverGlowBlur, palette.buttonGlow);
+
+    if(state == State::Active)
     {
         shadows::drawShapeShadow(painter, outline, QPointF(), glowBlur, palette.activeGlow);
 
@@ -78,7 +86,7 @@ void panel::paint(QPainter& painter, const QRectF& rect, const Theme::TablePalet
                                         padding.adjusted(insetLine, insetLine,
                                                          -insetLine, -insetLine),
                                         paddingRadius - insetLine),
-                     palette.panelInnerLine);
+                     state == State::Hovered ? palette.panelInnerLineHover : palette.panelInnerLine);
 
     painter.fillPath(paths::roundedBand(padding, paddingRadius,
                                         padding.adjusted(insetDark, insetDark,
@@ -91,7 +99,7 @@ void panel::paint(QPainter& painter, const QRectF& rect, const Theme::TablePalet
     painter.restore();
 }
 
-panel::Picture panel::render(QSizeF size, const Theme::TablePalette& palette, bool active,
+panel::Picture panel::render(QSizeF size, const Theme::TablePalette& palette, State state,
                              qreal ratio)
 {
     if(size.isEmpty() || ratio <= 0.0)
@@ -114,18 +122,18 @@ panel::Picture panel::render(QSizeF size, const Theme::TablePalette& palette, bo
     pixmap.fill(Qt::transparent);
 
     QPainter painter(&pixmap);
-    paint(painter, QRectF(QPointF(snapped.left(), snapped.top()), size), palette, active);
+    paint(painter, QRectF(QPointF(snapped.left(), snapped.top()), size), palette, state);
     painter.end();
 
     return { pixmap, QPointF(-snapped.left(), -snapped.top()) };
 }
 
-panel::Picture panel::Cache::picture(QSizeF size, const Theme::TablePalette& wanted, bool active,
+panel::Picture panel::Cache::picture(QSizeF size, const Theme::TablePalette& wanted, State state,
                                      qreal ratio)
 {
     if(size.isEmpty() || ratio <= 0.0)
         return {};
 
-    return pictures.picture({ size, active }, wanted, ratio,
-                            [&] { return render(size, wanted, active, ratio); });
+    return pictures.picture({ size, state }, wanted, ratio,
+                            [&] { return render(size, wanted, state, ratio); });
 }

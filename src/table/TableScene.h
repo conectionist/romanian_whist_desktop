@@ -18,9 +18,12 @@
 
 class HandItem;
 class LeadMarkItem;
+class ScoreboardItem;
 class SeatItem;
+class TableButtonItem;
 class TableTopItem;
 class TrickItem;
+class TrickPanelItem;
 
 // The table: name panels round it, racks on its rim, the trick on its felt.
 //
@@ -101,8 +104,34 @@ public:
     // tests in the same way.
     const cardshadow::Cache& cardShadows() const { return shadowPictures; }
 
+    // The name panels' and the corner buttons' chrome - not the scoreboard's or
+    // the trick panel's - READ-ONLY and for tests in the same way.
+    const panel::Cache& seatPanels() const { return panels; }
+
     // The lead rhombus, READ-ONLY and for tests in the same way.
     const LeadMarkItem* leadMarkItem() const { return leadMark; }
+
+    // PINS THE CORNER PANELS TO THE WINDOW (section 2.1): `visible` is the part of
+    // the scene the viewport shows, in table space, and `scale` the view's pixels
+    // per table unit. Each panel goes tablespace::hudInset pixels in from its
+    // corner. TableView calls this on every fit, and nothing else moves when it
+    // does - the corner panels are the scene's only items that follow the window.
+    //
+    // NOT SHOWN UNTIL THERE IS SOMEWHERE TO PIN THEM AND A GAME TO SHOW: a scene
+    // drawn without a view, or a table with no snapshot yet, has no corner panels.
+    void pinHud(const QRectF& visible, qreal scale);
+
+    // Section 2.9's scoreboard, top-left. READ-ONLY and for tests.
+    const ScoreboardItem* scoreboardItem() const { return scoreboard; }
+
+    // Section 2.10's trick panel, top-right. Like the fan, it has a second source
+    // the snapshot cannot supply - the prompt for your card - and MainWindow hands
+    // that over through here.
+    TrickPanelItem* trickPanelItem() const { return trickPanel; }
+
+    // Section 2.11's two buttons. Disabled until phase 11 gives them their sheets.
+    TableButtonItem* historyButton() const { return history; }
+    TableButtonItem* lastTrickButton() const { return lastTrick; }
 
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
@@ -115,6 +144,10 @@ private:
     // reason in the class comment.
     void ensureSeats(std::size_t count);
 
+    // Puts the corner panels where the last pinHud() said, or hides them while
+    // there is no pin or no game. See pinHud().
+    void placeHud();
+
     Theme theme = Theme::light();
 
     // BY VALUE, so its cache lives as long as the scene and a repaint costs
@@ -122,9 +155,15 @@ private:
     // to it: members die in reverse declaration order, so this outlives them.
     CardRenderer cards;
 
-    // The seats' panel chrome, shared by all of them, for the renderer's reasons
-    // and held the same way.
+    // The seats' panel chrome, shared by all of them and the corner buttons, for
+    // the renderer's reasons and held the same way.
     panel::Cache panels;
+
+    // THE SCOREBOARD'S AND THE TRICK PANEL'S, apart from the seats': drawn at
+    // tablespace::hudScale, they ask for their chrome at 1.2 times the ratio the
+    // seats do, and a cache holds one ratio at a time. Shared, each turn's seats
+    // and corner panels cleared each other's pictures and drew their shadows again.
+    panel::Cache hudPanels;
 
     // The racks' pictures, shared by every rack showing the same cards, and held
     // the same way.
@@ -153,6 +192,22 @@ private:
     // The human's fan. Built for every game, and hidden in a spectator one -
     // section 14: "the bottom hand area is not drawn at all".
     HandItem* hand = nullptr;
+
+    // The corner panels (tablespace::z::hud).
+    ScoreboardItem* scoreboard = nullptr;
+    TrickPanelItem* trickPanel = nullptr;
+    TableButtonItem* history = nullptr;
+    TableButtonItem* lastTrick = nullptr;
+
+    // Where pinHud() last said the viewport is: none before a view has fitted the
+    // table.
+    struct Pin
+    {
+        QRectF visible;
+        qreal scale = 0.0;
+    };
+
+    std::optional<Pin> pin;
 };
 
 #endif

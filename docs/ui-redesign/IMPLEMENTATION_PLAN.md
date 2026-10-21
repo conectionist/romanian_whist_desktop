@@ -174,9 +174,10 @@ side of it; below, the same strokes as waves and the diamond, no dots (the inlin
 the human) sits at angle `90° + s·360°/n`, with y pointing down (so 90° is straight down). This is
 section 14's rule; the existing `seatlayout::seatCentres()` already encodes the order.
 
-**Name-panel positions** (top-left corner in table space; width 280, height 118). Hand-tuned per
-player count so every panel sits just outside the wooden rim (circle r ≈ 522) and clears the corner
-panels:
+**Name-panel positions** (top-left corner in table space of the mock-up's 280 × 118 panel).
+Hand-tuned per player count so every panel sits just outside the wooden rim (circle r ≈ 522) and
+clears the corner panels. **Every panel is now 259 × 118, centred where the mock-up's was**, so the
+racks stay put (the owner's call, 2026-10-21; see the name panel below):
 
 | n | seat 1 | seat 2 | seat 3 | seat 4 | seat 5 |
 |---|---|---|---|---|---|
@@ -187,11 +188,11 @@ panels:
 | 6 | (1, 700) | (96, 49) | (628, −140) | (1160, 49) | (1255, 700) |
 
 The 2-player row is not in the mock-up (it stops at 3): the opponent takes the top position, which
-follows directly from the 4- and 6-player rows. **Seat 0 (the human)**: left 618, top 1046, width
-300; centre (768, 1105).
+follows directly from the 4- and 6-player rows. **Seat 0 (the human)**: top 1046, centre
+(768, 1105). The mock-up's was 300 wide (left 618); it is now the others' 259.
 
 **Spectated game** (no human seat, `humanSeat < 0`): section 14 lays seat 0 out as though it were
-the human. Do the same: seat 0's panel goes in the human's spot (618, 1046) but it is drawn as an
+the human. Do the same: seat 0's panel goes in the human's spot but it is drawn as an
 opponent: a rack on the rim at angle 90° (bottom), no hand.
 
 **Name panel** (`.plaque`): panel style; padding 8 (left, top, bottom) and 16 (right); 12 gap.
@@ -199,8 +200,11 @@ opponent: a rack on the rim at angle 90° (bottom), no hand.
   replace its painter with a head-and-shoulders bust (see `portrait()` in `table.js` for shapes
   and per-seat colours; it is six hand-drawn variants indexed by seat, which matches avatar()'s
   existing per-seat contract).
-- Line 1: name, Marcellus 25, cream, followed by the total score in brackets in muted:
-  `Bogdan (44)`. No "AI" tag (see Q5).
+- Line 1: name, Marcellus 25, cream. No "AI" tag (see Q5). **No score after it** (the owner's call,
+  2026-10-21, replacing the mock-up's muted `Bogdan (44)`): the scoreboard has every seat's score.
+  So the text column is **as wide as the widest pill** ("Taken/Bid: 0/0", 133) and no wider, which
+  makes the panel 259 wide, yours included, and keeps the top-left seat clear of the scoreboard in
+  narrow windows even at the scoreboard's widest. *(Phase 8.)*
 - Line 2: a pill, Alegreya Sans 19, padding 2/12, fully rounded, 1 px border
   `rgba(201,164,92,0.4)`. Text **`Taken/Bid: w/b`** (tricks taken first, then the bid). States:
   before bidding "No bid yet", while this seat is bidding "Bidding…", neutral colours; once play has
@@ -353,25 +357,45 @@ cache behaviour; it is already a single seam for exactly this.
 `page.html` `.score`, `table.js` `renderScore()`. Merges today's `InfoStrip` into the scoreboard.
 Screenshot: any `table-*.jpg`.
 
-Panel, width 236, padding 12/14, **drawn at 1.2× the table scale**, pinned 8 from the window's left
-edge and 8 below the menu bar, growing right and down. Content, top to bottom:
+Panel, as wide as its columns (at most 236, below), padding 12/14, **drawn at 1.2× the table scale**,
+pinned 8 from the window's left edge and 8 below the menu bar, growing right and down. Content, top
+to bottom:
 
 1. "Round 11 of 30", Marcellus 22, centred, one size for the whole line.
 2. "6 cards dealt · Normal", 15, muted, centred. "1 card dealt" in the singular. Forehead and Hidden
    are named here (section 17 asks for them to be called out; use the accent colour for those two).
 3. The bid tension line, 14.5, muted, centred, the number in bold cream:
    "Bids so far: **3** of 6 tricks" while bidding; then "Bids total **7** for 6 tricks: over by 1" or
-   "… under by 1". `betsPlaced` and `betSum` are already on the snapshot.
-4. A table, rows in **bid order** (`SeatView::bidOrder`): header PLAYER / BID / TAKEN / PTS in
+   "… under by 1". `betsPlaced` and `betSum` are already on the snapshot. "1 trick" in the
+   singular. *(Phase 8.)*
+4. A table, rows in **bid order** (`SeatView::bidOrder`): header PLAYER / B / T / PTS in
    12 px bold uppercase muted letter-spaced 0.1em with a faint rule under it; rows 17 px, numbers
    right-aligned in tabular figures; "–" for a bid not yet made and for "taken" during bidding.
    The row of whoever is to move is gold-bright with a "▸".
+   - **The "▸" sits against the name.** page.html writes `content: "\25B8 "`, but CSS takes the one
+     space after a hex escape as the escape's end, so the mock-up draws no space. *(Phase 8.)*
+   - **A fifth column, RUN** (the owner's call, 2026-10-20; see Q3): a seat's streak as green
+     **W2** for two exact bids running, or red **L3** for three misses, and blank for neither.
+     The letter carries which, so colour is not the only cue.
+   - **The panel is as wide as its columns**, not the mock-up's fixed 236 shared out (the owner's
+     call, 2026-10-20, so the scoreboard clears the top-left seat in windows narrower than about
+     3:2): each column as wide as its widest content, with a gap of 12 before each number column.
+     The headings BID and TAKEN are **B** and **T**. Names are measured as though each carried
+     the "▸", and the numbers at their widest values (a minus and three digits for a score, two
+     digits for a run, which the engine keeps counting past the fifth round), so the columns hold
+     still as play moves.
+     The panel is never narrower than the bid tension at its widest, so that line never wraps;
+     and never wider than 236, past which the names are elided. "Widest" is measured with the
+     font's widest digit: the tension's figures are proportional, and in Alegreya Sans a 0 and a
+     4 are wider than an 8. *(Phase 8.)*
 5. A faint divider, then the **trump section stacked and centred**: "TRUMP" (19.8, bold uppercase,
    letter-spaced 0.24em, muted); the trump card at **154.9 table units wide** (same as a hand card,
    radius 10, shadow); the suit name, Marcellus 19.8, e.g. "♣ Clubs" (♥/♦ glyph in red suit
    colour). In an 8-card round: "TRUMP" then "None this round", no card.
 
-The round-score and streak columns of today's scoreboard are not in the mock-up (see Q3).
+The round-score and streak columns of the old scoreboard are not in the mock-up. **Decided by the
+owner, 2026-10-20 (Q3):** the round score goes, because it showed for only a second or two at the end
+of a round; the streak stays, as the RUN column above.
 
 ### 2.10 Current-trick panel (top-right)
 
@@ -382,19 +406,33 @@ pinned 8 from the window's right edge and 8 below the menu bar, growing left and
 
 - Play phase: title "Trick 3 of 6" (Marcellus 21); "Leader: **Bogdan** · Led ♥"; "Winning:
   **Costel, K♥**" (or "–"); then, above a faint rule, the prompt in gold-bright.
-- Bidding: title "Bidding"; "First to bid: **You**"; prompt "Your bid. How many tricks will you
-  take?" or "Ana is thinking…".
+- Bidding: title "Bidding"; "First to bid: **You**"; prompt "Your bid. How many tricks?" or
+  "Ana is thinking…".
 - Between rounds: "Round over" / "Scores are in."
 - Prompt texts during play: "Your turn. You lead." / "Your turn. You must follow ♥." /
-  "Your turn. No ♥, so you must trump." / "Your turn. Any card." / "Ana is thinking…" /
+  "Your turn. No ♥, you must trump." / "Your turn. Any card." / "Ana is thinking…" /
   "Ana wins the trick." / "You win the trick.". Reuse `promptbar::fieldsFor()` for the "must follow"
   logic (it is already tested) and extend it; do not reimplement legality.
+- *(Phase 8.)* What the build adds:
+  - "Your turn." in a blind round, and while your prompt has yet to arrive.
+  - "Game over" / "Final scores are in." The mock-up has no game-over state.
+  - "Winning" is named from the first card on, as the mock-up writes it, although the felt rings
+    the winner only from the second (section 2.7).
+  - Your own seat is "You" in every sentence. A spectated game has no "You".
+  - The prompt keeps its line when it has nothing to say, so the panel does not jump between
+    turns.
+  - **Nothing on the panel takes a second line** (PR 34's review, 2026-10-21). The mock-up's
+    "Your bid. How many tricks will you take?" and "Your turn. No ♥, so you must trump." are
+    shortened to the two above, which fit the 230-unit column. A long name gives way, elided so
+    its line still fits: "Leader: **Bartholomew Fea…** · Led ♥".
 
 ### 2.11 Bottom-left buttons
 
 Two panel buttons, height 76, padding 0/22, Marcellus 21, 24 px gold icon then the label: **Round
 history** and **Last trick**, 14 apart, pinned 8 from the window's left and bottom edges, at the
-table scale (1.0). Hover: brighter inner line and a gold glow. What they open: phase 11.
+table scale (1.0). Hover: brighter inner line and a gold glow. What they open: phase 11. *(Phase 8
+builds them disabled: in place, the label and icon muted, no hover and no click. Phase 11 enables
+them.)*
 
 ### 2.12 Menu bar
 
@@ -448,6 +486,13 @@ scoreboard and the trick panel, 1.0 for the buttons). Proxy widgets render text 
 the view transform, so they stay crisp. If proxies cause problems (focus, HiDPI), the fallback is
 plain child widgets of the viewport with every size multiplied by the view's scale; it is more code.
 Whichever you choose, choose it once for all pinned panels.
+
+> **AMENDED IN PHASE 8, by the owner's call of 2026-10-20: painted scene items, not proxies.** The
+> corner panels are `QGraphicsObject`s, as the seats are. Each is one cached picture: its chrome
+> comes from `panel::Cache`, it is held in a `PictureMemo`, and it is drawn at
+> `devicepixels::effectiveRatio()`, so a drag scales it and composes nothing. The pure functions the
+> widgets had survive as free functions next to each item. `TableView::fitTable()` pins them through
+> `TableScene::pinHud()`, from the visible rect it already computes for its scene rect.
 
 ---
 
@@ -1154,7 +1199,7 @@ Done when: the hand matches the mock-up with 1, 4 and 8 cards, and clicking stil
   hinge would have carried it. `setTransformOriginPoint()` would also work, but then `pos` would no
   longer be the card's middle, which the hit test and phase 12's animation both read.
 
-### Phase 8: scoreboard, trick panel, bottom buttons
+### Phase 8: scoreboard, trick panel, bottom buttons ✅ COMPLETE
 
 Files: `src/ui/ScoreboardWidget.*`, `src/ui/InfoStrip.*`, `src/ui/PromptBar.*`, new
 `src/ui/TrickPanel.h/.cpp`, new `src/ui/TableButtons.h/.cpp` (or similar), `src/MainWindow.cpp`,
@@ -1176,6 +1221,110 @@ Files: `src/ui/ScoreboardWidget.*`, `src/ui/InfoStrip.*`, `src/ui/PromptBar.*`, 
 
 Done when: the whole page matches `screenshots/table-6-players.jpg` except the menu bar.
 
+**Outcome:**
+
+- **The count is 459 tests** (418 + 41), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. **PR 34's review brought it to 467.**
+  - **Retired, with the widgets they measured:**
+    - the info strip's "same height with and without a trump";
+    - the old scoreboard's "sized for the weight it draws in";
+    - the prompt bar's "keeps its height". Its intent is kept as "The panel keeps its height
+      between turns".
+  - **Retired by Q3:** the scoreboard's two round-score cases.
+  - **Moved:**
+    - the info strip's seven pure cases into `ScoreboardTests`;
+    - `PromptBarTests` became `TrickPanelTests`, its cases kept with the new words.
+  - **Added:**
+    - `TextRunsTests`: the runs, wrapping, glyph colours and icons;
+    - a `PanelTests` case for the hover;
+    - `HudTests`: the buttons, every corner's pin, and the overlap case below;
+    - the new scoreboard and trick panel cases;
+    - a `MainWindowTests` case: the table page is the table alone.
+- **Four decisions by the owner, 2026-10-20:**
+  - **Painted scene items, not `QGraphicsProxyWidget`** (section 3, amended above).
+  - **Q3:** the round score goes; the streak stays as a **RUN** column (W2, L3), which widens the
+    panel rather than squeezing the names (section 2.9).
+  - **A temporary top-level Menu item** on today's menu bar replaces the prompt bar's Menu button,
+    until phase 9's Exit.
+  - **The status bar is removed.** The scoreboard, the trick panel and the game-over panel say
+    everything it said.
+- **A default taken, not asked:** the two corner buttons are drawn **disabled** until phase 11 (the
+  plan allowed it): in place, muted, with no hover and no click.
+- **The page matches the mock-up but for the menu bar.**
+  - The screenshot tool's window shots show the table alone under the menu bar, with the four corner
+    panels where the mock-up has them.
+  - The hand shots, which are at the mock-up's own scale, line the corners up with the mock-up's to
+    within a pixel or two. The scoreboard's lines sit about a pixel lower: Qt's line heights for
+    Alegreya Sans and Chrome's differ slightly.
+  - `table-empty.png` is pixel-identical to phase 7's.
+  - What still differs:
+    - the menu bar, until phase 9 (the window's is Qt's own, and shorter, so the table is drawn a
+      little larger);
+    - the bid strip, until phase 10;
+    - the buttons' muted labels, until phase 11;
+    - the ♥'s size (see the pitfalls).
+- **Every corner panel clears every seat** for 3 to 6 players at 1920×1080, 1920×1200 and 1440×900,
+  checked as a bare view the size of the whole window, which is stricter than the real viewport.
+  The plan worried about four players at 16:10; it clears.
+- **What later phases take from here:**
+  - **Pinning:**
+    - `TableScene::pinHud(visible, scale)`, called by `TableView::fitTable()`, places every corner
+      panel `tablespace::hudInset` pixels in from its corner;
+    - `tablespace::hudScale` (1.2) and `buttonGap` (14);
+    - the corner panels are the only items a resize moves, and "A resize moves nothing in the
+      scene" skips `z::hud`;
+    - they show only with a view to pin to and a snapshot, so `table-empty.png` has none.
+  - **The panel's states:** `panel::State` is Plain, Active or Hovered; it used to be a bool.
+    Phase 10's sheet buttons can take Hovered.
+  - **Text:**
+    - `paint/TextRuns.h` sets a line in plain and strong runs, colours every suit glyph, wraps at
+      spaces and centres by its measured width. Phase 10's sheets should set their text through
+      it.
+    - `textruns::emphasised()` bolds a translated sentence's %1.
+    - `fonts::sized()` handles a fractional size (see the pitfalls).
+  - **Icons:** `paint/Icons.h`, the mock-up's inline SVGs drawn in any colour. Phase 9 adds the menu
+    bar's four.
+  - **Words:**
+    - `table/CardText.h` spells a card for people: "K♥", "♣ Clubs".
+    - The info strip's words (`infostrip::`) live in `ScoreboardItem.h` now, under their old
+      translation context.
+    - The round sheet keeps Won/Round/Total as its own until phase 10 restyles it.
+  - **Phase 11:** `TableScene::historyButton()` and `lastTrickButton()` are `TableButtonItem`s with
+    a `clicked()` signal: enable them and connect them.
+  - **The trick panel's two sources:** `TrickPanelItem` takes the snapshot from the scene and your
+    prompt from `MainWindow` (`setPrompt()` / `clearPrompt()`), as the hand does.
+  - **Left for later:**
+    - `accentText` has no reader now. Phase 10, which moves the last widgets off the old palette,
+      is where it goes.
+    - Section 12's D1 note in `QT_CLIENT_PLAN_proposal1.md` still describes the Menu button; that
+      is phase 12's documentation pass.
+- **Resizing**, release build, `[.timing]`, one run, against phase 7's recorded run (not measured
+  back to back):
+
+  | | Phase 7 | Phase 8 |
+  |---|---|---|
+  | Drag frame, median | 8.8 ms | 9.5 ms |
+  | Drag frame, worst | 9.9 ms | 10.9 ms |
+  | First step | 78 ms | 85 ms |
+  | Settle frame | 88 ms | 94 ms |
+
+  - **The corner panels cost about 0.7 ms per drag frame.** That is four pictures blended, and the
+    four items moved on every step, since they follow the window's corners.
+  - The first step and the settle frame compose the scoreboard and the trick panel afresh, text
+    and trump card included: about 6 ms more.
+- **Pitfalls:**
+  - **CSS eats the space after a hex escape.** page.html's `content: "\25B8 "` draws "▸" with no
+    space, so the scoreboard's turn mark sits against the name. Read any other escaped `content`
+    the same way.
+  - **`QFont` holds only whole pixel sizes,** and the mock-up writes 14.5 and 19.8. A point size
+    would be fractional but follows the screen's logical DPI, so the panels would lay out
+    differently per screen. `fonts::sized()` sets the font at a whole multiple (14.5 at 29) and
+    `textruns` draws it scaled down by the same.
+  - **The hand shots' fixture numbered the bidding from 0**, where `SeatView::bidOrder` is 1-based
+    (`GameEngine::getBiddingOrder()`). Nothing read it until the scoreboard sorted by it.
+  - **The suit glyphs come from a fallback font**, as in the browser. The client's ♥ is larger than
+    the mock-up's, as the logo's ♣ is.
+
 ### Phase 9: menu bar and commands
 
 Files: `src/MainWindow.*`, `src/MainWindow.ui`, possibly new `src/ui/RulesSheet.*` and
@@ -1183,7 +1332,9 @@ Files: `src/MainWindow.*`, `src/MainWindow.ui`, possibly new `src/ui/RulesSheet.
 
 1. Style the existing `QMenuBar` per section 2.12 with a stylesheet scoped to it, and add top-level
    actions (no drop-down) **New Game**, **Settings**, **Rules**, and **Exit** right-aligned (a
-   corner widget, or a spacer action).
+   corner widget, or a spacer action). **Exit replaces phase 8's temporary Menu item**
+   (`QAction` "menu", which opens the pause menu); move `MainWindowTests`' pause cases to Exit
+   with it. `paint/Icons.h` is where the four icons go.
 2. Wire them: New Game → the existing `showNewGameDialog()` path (it already handles a running
    game). Exit → the existing abandon-to-main-menu path, through the pause overlay so it can be
    cancelled. Rules → a sheet with the rules summary (the mock-up's `showRules()` text, which follows
@@ -1275,7 +1426,7 @@ Ask the owner if possible. If not, use the default and record it.
 |---|---|---|
 | Q1 | Light/dark: the mock-up is dark only. Should the table follow the system scheme? | No: the table page is always the dark design; menus and dialogs may keep following the system. **Decided by the owner, 2026-10-17: as the default** (phase 1) |
 | Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes. **Decided by the owner, 2026-10-17: yes** (phase 1) |
-| Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too |
+| Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too. **Decided by the owner, 2026-10-20: the round score stays out; the streak comes back as a RUN column, W2 or L3** (phase 8; section 2.9) |
 | Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later |
 | Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off |
 | Q6 | Portraits: drawn busts as in the mock-up, or real art later? | Drawn busts now through `Theme::avatar()`, which is the seam for real art later |

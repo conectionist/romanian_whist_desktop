@@ -78,8 +78,8 @@ void MainMenuPage::setTheme(const Theme& _theme)
 {
     theme = _theme;
 
-    // Through the palette rather than a stylesheet, the call InfoStrip, BidStrip
-    // and PromptBar all make - section 18.1's rule is that colours come from
+    // Through the palette rather than a stylesheet, the call BidStrip and the
+    // sheets all make - section 18.1's rule is that colours come from
     // Theme, and a stylesheet string is a colour constructed somewhere else.
     QPalette scheme = panel->palette();
     scheme.setColor(QPalette::Window, theme.seatPlaque);

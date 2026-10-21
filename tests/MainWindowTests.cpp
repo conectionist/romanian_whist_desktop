@@ -191,6 +191,12 @@ TEST_CASE("The client opens on the menu with no game running", "[main-window]")
 
     REQUIRE(window.findChild<QPushButton*>("newGame") != nullptr);
     REQUIRE(window.findChild<QPushButton*>("quit") != nullptr);
+
+    // NOTHING TO PAUSE, and the Menu item says so rather than doing nothing when
+    // clicked (PR 34's review, finding #4).
+    QAction* menu = window.findChild<QAction*>("menu");
+    REQUIRE(menu != nullptr);
+    REQUIRE_FALSE(menu->isEnabled());
 }
 
 TEST_CASE("Esc on the menu page does nothing", "[main-window]")
@@ -216,7 +222,7 @@ TEST_CASE("Esc on the menu page does nothing", "[main-window]")
     SUCCEED("Esc with no game did not open a dialog");
 }
 
-TEST_CASE("A game paused from the menu button stops, and resumes", "[main-window]")
+TEST_CASE("A game paused from the Menu item stops, and resumes", "[main-window]")
 {
     MainWindow window;
     window.resize(1000, 700);
@@ -234,15 +240,16 @@ TEST_CASE("A game paused from the menu button stops, and resumes", "[main-window
 
     REQUIRE(log->blockCount() > 1);
 
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
+    REQUIRE(menu->isEnabled());
 
     // MEASURED ACROSS THE MIDDLE OF THE PAUSE, not from the click. The pause
     // lands at the next pace(), so a frame or two still arrives after the button
     // - what it claims is that the game is stopped THEREAFTER. The gap sampled
     // is 1.8s of a 250ms spectator beat, which is seven frames that must not
     // appear.
-    menu->click();
+    menu->trigger();
 
     PauseOverlay* overlay = window.findChild<PauseOverlay*>();
     REQUIRE(overlay != nullptr);
@@ -293,7 +300,7 @@ TEST_CASE("The window can be closed while the game is paused", "[main-window]")
     window.findChild<QPushButton*>("newGame")->click();
     pump(2000);
 
-    window.findChild<QPushButton*>("menu")->click();
+    window.findChild<QAction*>("menu")->trigger();
     pump(200);
 
     REQUIRE(window.findChild<PauseOverlay*>()->isVisible());
@@ -398,10 +405,10 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     pump(2000);
     REQUIRE(pages->currentIndex() == 1);
 
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
 
-    menu->click();
+    menu->trigger();
     pump(100);
 
     QPushButton* mainMenu = window.findChild<QPushButton*>("mainMenu");
@@ -412,6 +419,7 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
+    REQUIRE_FALSE(menu->isEnabled());
 }
 
 TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main-window]")
@@ -439,7 +447,7 @@ TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main
     const int gameOne = log->blockCount();
     REQUIRE(gameOne > 1);
 
-    window.findChild<QPushButton*>("menu")->click();
+    window.findChild<QAction*>("menu")->trigger();
     pump(100);
     window.findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -507,8 +515,9 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // THE SECOND MOMENT AN OLD GAME'S QUEUE IS WORTHLESS, and until D1's review
     // only prepare() knew about the first. stop() joins the game thread, so
     // every frame published between the click and the join is already in this
-    // thread's queue - and it is delivered AFTER showMainMenu() has cleared the
-    // status bar, writing a dead game's round and trick over the menu page.
+    // thread's queue - and it is delivered AFTER showMainMenu(), drawing a dead
+    // game into the log and onto the table behind the menu page. (Into the status
+    // bar too, until the table redesign's phase 8 took the status bar away.)
     //
     // A WATCHED GAME, which is what puts frames in the queue at all: a seated one
     // is parked in the provider waiting for a bid and has published everything it
@@ -528,13 +537,15 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     pump(2000);
     REQUIRE(pages->currentIndex() == 1);
 
-    // Mid-game, with the bots pacing - so there is a backlog to leak.
-    REQUIRE_FALSE(window.statusBar()->currentMessage().isEmpty());
-
     QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    TableScene* scene = window.findChild<TableScene*>();
     REQUIRE(log != nullptr);
+    REQUIRE(scene != nullptr);
 
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    // Mid-game, with the bots pacing - so there is a backlog to leak.
+    REQUIRE(scene->lastSnapshot() != nullptr);
+
+    QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
 
     // BOTH CLICKS IN ONE TURN OF THE EVENT LOOP, and that is the whole setup:
@@ -543,7 +554,7 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // to leak. A player clicking Main menu straight after Menu is the ordinary
     // case, not a contrived one - the queue is only ever drained by the window
     // going idle.
-    menu->click();
+    menu->trigger();
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
 
     // THE PUMP IS THE MEASUREMENT. Everything the abandon does is synchronous,
@@ -551,17 +562,16 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // still queued behind it; what has to be given the chance to happen is the
     // delivery.
     const int atAbandon = log->blockCount();
-    const QString cleared = window.statusBar()->currentMessage();
+    const std::shared_ptr<const GameSnapshot> drawn = scene->lastSnapshot();
 
     pump(500);
 
     REQUIRE(pages->currentIndex() == 0);
 
     // Nothing was drawn from a game that no longer exists: not a line in the
-    // log, and not a round-and-trick over the menu page's empty status bar.
+    // log, and not a frame on the table waiting behind the menu page.
     REQUIRE(log->blockCount() == atAbandon);
-    REQUIRE(window.statusBar()->currentMessage() == cleared);
-    REQUIRE(window.statusBar()->currentMessage().isEmpty());
+    REQUIRE(scene->lastSnapshot() == drawn);
 }
 
 TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
@@ -609,10 +619,10 @@ TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
     // would deliver a key press to.
     REQUIRE(window.focusWidget() == bidStrip);
 
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
 
-    menu->click();
+    menu->trigger();
     pump(100);
     REQUIRE(window.focusWidget() != bidStrip);
 
@@ -654,9 +664,9 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     logAction->trigger();
     REQUIRE(logDock->isVisible());
 
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
-    menu->click();
+    menu->trigger();
     pump(100);
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -717,9 +727,10 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     // Resume raised over a finished game would promise a game that has ended -
     // which is what the state this panel reads is for.
     window.findChild<PauseOverlay*>()->hide();
-    QPushButton* menu = window.findChild<QPushButton*>("menu");
+    QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
-    menu->click();
+    REQUIRE_FALSE(menu->isEnabled());
+    menu->trigger();
     pump(100);
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
 
@@ -767,11 +778,17 @@ TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
     REQUIRE(log->blockCount() == atSheet);
     REQUIRE(sheet->isVisible());
 
+    // The sheet has the way on, so the Menu item is greyed while it holds.
+    QAction* menu = window.findChild<QAction*>("menu");
+    REQUIRE(menu != nullptr);
+    REQUIRE_FALSE(menu->isEnabled());
+
     QPushButton* continueButton = window.findChild<QPushButton*>("continueRound");
     REQUIRE(continueButton != nullptr);
     continueButton->click();
 
     REQUIRE_FALSE(sheet->isVisible());
+    REQUIRE(menu->isEnabled());
     REQUIRE(pumpUntil(10000, [&]{ return log->blockCount() > atSheet; }));
 }
 
@@ -836,12 +853,11 @@ TEST_CASE("The pause menu and the round sheet do not release each other",
     REQUIRE_FALSE(overlay->isVisible());
     REQUIRE(sheet->isVisible());
 
-    // And the Menu button, which is the same refusal by the other road.
-    window.findChild<QPushButton*>("menu")->click();
-    pump(100);
-
-    REQUIRE_FALSE(overlay->isVisible());
-    REQUIRE(sheet->isVisible());
+    // AND THE MENU ITEM, the other road, is greyed: the same refusal, shown before
+    // anyone asks (PR 34's review, #4). It is not triggered here. Qt drops the
+    // trigger of a disabled action before it reaches the window, so the refusal
+    // would pass whatever setPauseMenuVisible() did; Esc above is what reaches it.
+    REQUIRE_FALSE(window.findChild<QAction*>("menu")->isEnabled());
 
     // THE GAME IS STILL HELD after both attempts, which is what the hazard is
     // actually about: a menu that had opened and closed would have cleared the
@@ -887,4 +903,29 @@ TEST_CASE("The window cannot shrink the table below a readable scale", "[main-wi
     INFO("table " << table->viewport()->width() << "x" << table->viewport()->height()
                   << ", window " << window.width() << "x" << window.height());
     REQUIRE(scale >= tablespace::minimumScale - 1e-9);
+}
+
+// THE TABLE IS THE PAGE (the table redesign's phase 8). The info strip across its
+// top, the scoreboard beside it and the prompt bar beneath it are the panels in
+// its corners now, drawn by the scene; and the status bar, which said what the
+// scoreboard and the game-over panel say, is gone, so the window is the menu bar
+// and the table, as the mock-up is.
+TEST_CASE("The table page is the table alone", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    TableView* table = window.findChild<TableView*>();
+
+    REQUIRE(pages != nullptr);
+    REQUIRE(table != nullptr);
+    REQUIRE(table->parentWidget() == pages);
+
+    REQUIRE(window.findChild<QStatusBar*>() == nullptr);
+
+    // And the pause menu's way in for the mouse, until phase 9's menu bar.
+    REQUIRE(window.findChild<QAction*>("menu") != nullptr);
 }

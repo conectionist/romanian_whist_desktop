@@ -18,11 +18,11 @@
 // Section 15.1's strip, in two halves.
 //
 // FIRST, fieldsFor() - the part with a right answer, tested without a window,
-// which is the split InfoStrip and SnapshotLog both argue for. THEN the widget
+// which is the split the scoreboard and SnapshotLog both argue for. THEN the widget
 // itself, which the suite can construct because TestApp is a QApplication on the
 // offscreen platform.
 //
-// THE ENGLISH IS SAFE TO ASSERT ON for the reason InfoStripTests states: these
+// THE ENGLISH IS SAFE TO ASSERT ON for the reason ScoreboardTests states: these
 // strings go through QCoreApplication::translate() and TestApp installs no
 // translator, so translate() returns its source text.
 

@@ -91,6 +91,10 @@ qt_add_library(desktop_core STATIC
     src/paint/Shadows.cpp
     src/paint/CardShadow.h
     src/paint/CardShadow.cpp
+    src/paint/TextRuns.h
+    src/paint/TextRuns.cpp
+    src/paint/Icons.h
+    src/paint/Icons.cpp
 
     src/table/TableSpace.h
     src/table/TableSpace.cpp
@@ -111,6 +115,18 @@ qt_add_library(desktop_core STATIC
     src/table/LeadMarkItem.cpp
     src/table/HandItem.h
     src/table/HandItem.cpp
+    src/table/TableButtonItem.h
+    src/table/TableButtonItem.cpp
+    src/table/CardText.h
+    src/table/CardText.cpp
+    src/table/HudText.h
+    src/table/HudText.cpp
+    src/table/RoundText.h
+    src/table/RoundText.cpp
+    src/table/ScoreboardItem.h
+    src/table/ScoreboardItem.cpp
+    src/table/TrickPanelItem.h
+    src/table/TrickPanelItem.cpp
     src/table/TableScene.h
     src/table/TableScene.cpp
     src/table/TableView.h
@@ -120,15 +136,9 @@ qt_add_library(desktop_core STATIC
     src/ui/SnapshotLog.cpp
     src/ui/CardArtWindow.h
     src/ui/CardArtWindow.cpp
-    src/ui/InfoStrip.h
-    src/ui/InfoStrip.cpp
-    src/ui/ScoreboardWidget.h
-    src/ui/ScoreboardWidget.cpp
 
     src/ui/BidStrip.h
     src/ui/BidStrip.cpp
-    src/ui/PromptBar.h
-    src/ui/PromptBar.cpp
 
     src/ui/NewGameDialog.h
     src/ui/NewGameDialog.cpp

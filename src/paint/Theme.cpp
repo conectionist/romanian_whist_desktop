@@ -239,6 +239,16 @@ Theme::TablePalette tablePalette()
     table.leadMarkOutline = rgba(60, 40, 10, 0.5);
     table.leadMarkGlow = rgba(242, 211, 140, 0.8);
 
+    // Sections 2.9 to 2.11, from page.html. .panel.btn:hover: inset 0 0 0 4px
+    // rgba(242, 211, 140, 0.6) and 0 0 18px rgba(242, 211, 140, 0.25). The rules:
+    // .score th's border-bottom, .score .divider and .trickinfo .prompt's border-top,
+    // all 1px rgba(201, 164, 92, 0.25). .score .trump img: 0 4px 12px
+    // rgba(0, 0, 0, 0.55).
+    table.panelInnerLineHover = rgba(242, 211, 140, 0.6);
+    table.buttonGlow = rgba(242, 211, 140, 0.25);
+    table.hudRule = rgba(201, 164, 92, 0.25);
+    table.trumpShadow = rgba(0, 0, 0, 0.55);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

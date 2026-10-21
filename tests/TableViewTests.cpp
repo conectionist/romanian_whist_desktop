@@ -6,6 +6,9 @@
 #include "table/RackItem.h"
 #include "table/SeatItem.h"
 #include "table/LeadMarkItem.h"
+#include "table/ScoreboardItem.h"
+#include "table/TableButtonItem.h"
+#include "table/TrickPanelItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableTopItem.h"
@@ -314,8 +317,14 @@ TEST_CASE("A resize moves nothing in the scene", "[table]")
 
         REQUIRE(scene.items().size() == static_cast<qsizetype>(before.size()));
 
+        // ALL BUT THE CORNER PANELS, which belong to the window's corners rather
+        // than to the table (section 2.1), and are meant to move: HudTests holds
+        // them to their corners.
         for(const QGraphicsItem* item : scene.items())
-            REQUIRE(item->sceneBoundingRect() == before.at(item));
+        {
+            if(item->zValue() != tablespace::z::hud)
+                REQUIRE(item->sceneBoundingRect() == before.at(item));
+        }
     }
 }
 
@@ -650,6 +659,17 @@ TEST_CASE("While a drag settles no panel is composed again", "[table]")
         {
             if(const auto* seat = dynamic_cast<const SeatItem*>(item))
                 total += seat->compositions();
+
+            // And the corner panels, which a drag moves but must not compose
+            // again either.
+            if(const auto* button = dynamic_cast<const TableButtonItem*>(item))
+                total += button->compositions();
+
+            if(const auto* scoreboard = dynamic_cast<const ScoreboardItem*>(item))
+                total += scoreboard->compositions();
+
+            if(const auto* trickPanel = dynamic_cast<const TrickPanelItem*>(item))
+                total += trickPanel->compositions();
         }
 
         return total;

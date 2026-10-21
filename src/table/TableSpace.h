@@ -54,8 +54,9 @@ inline constexpr qreal marginBottom = 8.0;
 // fixed space the view scales, so a small window used to draw it as small as it
 // liked. Decided by the owner on 2026-10-17 at 0.30, for the old plaque's larger
 // names; raised to 0.36 on 2026-10-18 when phase 4's panels made them 25. The
-// smallest window is then 945 x 659, which still leaves a 1000 x 700 one room
-// for the scoreboard. TableSpaceTests pins the nine pixels.
+// smallest window is then minimumViewport() and the menu bar above it: since
+// phase 8 the table is the whole page, with nothing beside it or below it.
+// TableSpaceTests pins the nine pixels.
 inline constexpr qreal minimumScale = 0.36;
 
 // THE TABLE (section 2.4), every circle centred on `centre`.
@@ -119,9 +120,15 @@ inline constexpr qreal playedInset = 60.0;
 // so it goes in the gap between your card and your hand, half way.
 inline constexpr qreal leadMarkHumanY = handTop - playedInset / 2.0;
 
-// THE NAME PANELS (section 2.5). Every opponent's is this size; where each one
-// goes is seatlayout::panelRect(), from a table hand-tuned per player count.
-inline constexpr QSizeF panelSize(280.0, 118.0);
+// THE NAME PANELS (section 2.5). Where each one goes is seatlayout::panelRect(),
+// from a table hand-tuned per player count for the mock-up's panel of this size:
+// every panel is centred where that one was, so the racks stay where they were.
+inline constexpr QSizeF panelSpot(280.0, 118.0);
+
+// EVERY PANEL'S SIZE, yours included: the portrait, and a text column as wide as
+// the widest Taken/Bid pill and no wider, now the name has no score after it (the
+// owner's experiment of 2026-10-21). SeatItemTests holds the column to the pill.
+inline constexpr QSizeF panelSize(259.0, 118.0);
 
 // THE RACKS (section 2.6): each opponent's hand, standing in a wooden rack on the
 // rim. A rack's origin is on this circle, table.js's RIM_R - on the bead, between
@@ -132,10 +139,28 @@ inline constexpr QSizeF panelSize(280.0, 118.0);
 inline constexpr qreal rackRadius = 452.0;
 inline constexpr qreal rackCardHeight = 90.0;
 
-// The bottom seat's panel: yours, or seat 0's in a spectated game. Wider than the
-// others, centred on the table at (768, 1105), and it covers the bottom of your
-// hand - which section 2.8 intends.
-inline constexpr QRectF bottomPanel(618.0, 1046.0, 300.0, 118.0);
+// The bottom seat's panel: yours, or seat 0's in a spectated game. Centred on the
+// table at (768, 1105), and it covers the bottom of your hand - which section 2.8
+// intends. The mock-up's was 300 wide, for a longer name line than any other seat
+// has room for; with no score on it, it is the others' size.
+inline constexpr QRectF bottomPanel(768.0 - panelSize.width() / 2.0, 1046.0,
+                                    panelSize.width(), panelSize.height());
+
+// THE CORNER PANELS (sections 2.1 and 2.9 to 2.11): the scoreboard top-left, the
+// trick panel top-right, the two buttons bottom-left. PINNED TO THE WINDOW, NOT TO
+// TABLE SPACE - each this many device-independent pixels in from its corner of
+// the viewport, whose top is already under the menu bar - and drawn at the
+// table's scale, so they grow and shrink with it. TableScene::pinHud() places
+// them; table.js fit() is where the mock-up does.
+inline constexpr qreal hudInset = 8.0;
+
+// The scoreboard and the trick panel are drawn this much larger than the table
+// (page.html's transform: scale(1.2)); the buttons at the table's own scale.
+inline constexpr qreal hudScale = 1.2;
+
+// Between the two buttons: the mock-up puts Last trick 228 right of Round history,
+// which is 214 wide.
+inline constexpr qreal buttonGap = 14.0;
 
 // The scale that fits the box, margins and all, into a viewport of this size -
 // table.js fit()'s `scale`. Zero when the viewport has no room left inside its
@@ -166,9 +191,8 @@ struct Placement
 // no two files can disagree about what is drawn over what.
 //
 // GAPS OF TEN, so a later phase adds its rung without renumbering the others. The
-// pinned panels arrive in phase 8. The bid strip and the modal sheets are widgets
-// over the viewport until phases 8 and 10, and so above all of these by
-// construction.
+// bid strip and the modal sheets are widgets over the viewport until phase 10,
+// and so above all of these by construction.
 //
 // The room is not here: it is the view's background, beneath every item.
 namespace z
@@ -190,6 +214,9 @@ inline constexpr qreal hand = 40.0;
 inline constexpr qreal humanPanel = 50.0;
 
 inline constexpr qreal panels = 60.0;
+
+// The corner panels, over everything on the table: in a window too narrow for
+// them they overlap a seat's panel, and they are the ones being read.
 inline constexpr qreal hud = 70.0;
 
 } // namespace z

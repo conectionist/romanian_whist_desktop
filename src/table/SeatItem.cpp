@@ -137,12 +137,11 @@ seatitem::NameLine seatitem::nameLineFor(const SeatView& seat, bool active, qrea
 
     NameLine line;
     line.marker = active ? QStringLiteral("▸") : QString();
-    line.score = QStringLiteral(" (%1)").arg(seat.totalScore);
 
     const qreal markerWidth = line.marker.isEmpty() ? 0.0
                                                     : metrics.horizontalAdvance(line.marker) + markerGap;
 
-    const qreal room = std::max(0.0, width - markerWidth - metrics.horizontalAdvance(line.score));
+    const qreal room = std::max(0.0, width - markerWidth);
 
     // A name is arbitrary text from a setup dialog, so it is elided rather than
     // allowed to run past the panel.
@@ -169,7 +168,7 @@ seatitem::Shown SeatItem::shownNow() const
 }
 
 // COMPARED BY WHAT IT DRAWS, not by the snapshot's fields: the cards left, the
-// round score and the streaks change on most snapshots and are not on the panel,
+// scores and the streaks change on most snapshots and are not on the panel,
 // so a snapshot that changes none of what is costs no composing.
 void SeatItem::setSeat(const SeatView& view, bool isActive, bool isBiddingOpen, const Theme& palette)
 {
@@ -277,7 +276,9 @@ const panel::Picture& SeatItem::picture(const seatitem::Layout& layout, qreal ra
 {
     return memo.picture(ratio, [&]() -> panel::Picture
     {
-        const panel::Picture frame = panels->picture(size, theme.table, active, ratio);
+        const panel::Picture frame = panels->picture(size, theme.table,
+                                                     active ? panel::State::Active : panel::State::Plain,
+                                                     ratio);
 
         // NO CHROME, NOTHING TO COMPOSE: a ratio of zero, from a degenerate
         // transform. Null, which the memo neither keeps as current nor lets replace
@@ -363,9 +364,8 @@ void SeatItem::paintText(QPainter& painter, const QRectF& column) const
     // centres it.
     const qreal top = column.center().y() - (nameHeight + statsGap + pillHeight) / 2.0;
 
-    // THE NAME LINE: "▸ " in gold-bright when this seat is to move, the name in
-    // cream, its score in muted - a shape cue beside the ring, never colour alone
-    // (section 18).
+    // THE NAME LINE: "▸ " in gold-bright when this seat is to move - a shape cue
+    // beside the ring, never colour alone (section 18) - and the name in cream.
     const seatitem::NameLine& line = shown.name;
     const qreal nameBaseline = fonts::baselineIn(nameMetrics, top, nameHeight);
 
@@ -382,10 +382,6 @@ void SeatItem::paintText(QPainter& painter, const QRectF& column) const
 
     painter.setPen(palette.cream);
     painter.drawText(QPointF(x, nameBaseline), line.name);
-    x += nameMetrics.horizontalAdvance(line.name);
-
-    painter.setPen(palette.muted);
-    painter.drawText(QPointF(x, nameBaseline), line.score);
 
     // THE PILL, as wide as its text and no wider than the column.
     const seatitem::PillView& view = shown.pill;
