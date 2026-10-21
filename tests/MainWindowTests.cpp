@@ -1224,6 +1224,50 @@ TEST_CASE("Rules holds a watched game and Esc closes it", "[main-window]")
     REQUIRE(log->blockCount() > held);
 }
 
+TEST_CASE("Moving between Rules and Settings never lets the game go", "[main-window]")
+{
+    // PR #35's review, finding #1. Opening one of the bar's sheets over the
+    // other - or the same one again - closed the first through hideMenuSheets(),
+    // which released the game before the new sheet held it. The game thread,
+    // parked in pace(), woke into that gap and played on: in the app, 40 presses
+    // of Alt+S under Settings let a watched game run a round and a half.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    QAction* rulesItem = window.findChild<QAction*>("rulesAction");
+    QAction* settingsItem = window.findChild<QAction*>("settingsAction");
+    REQUIRE(log != nullptr);
+    REQUIRE(rulesItem != nullptr);
+    REQUIRE(settingsItem != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+    REQUIRE(log->blockCount() > 1);
+
+    settingsItem->trigger();
+
+    // Held, as the pause case measures it.
+    pump(600);
+    const int settled = log->blockCount();
+
+    // Settings again, then Rules twice, and round: each sheet over itself and
+    // over the other.
+    for(int press = 0 ; press < 40 ; press++)
+    {
+        (press % 4 < 2 ? settingsItem : rulesItem)->trigger();
+        pump(30);
+    }
+
+    pump(600);
+
+    INFO("settled " << settled << ", after the switching " << log->blockCount());
+    REQUIRE(log->blockCount() == settled);
+}
+
 TEST_CASE("Exit over Rules raises the pause menu in its place", "[main-window]")
 {
     MainWindow window;

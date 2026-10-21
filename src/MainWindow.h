@@ -170,8 +170,8 @@ private slots:
     // into the game in play.
     void applySettings(int botSpeed, bool waitAfterEachRound);
 
-    // Closes Rules or Settings, whichever is up, releasing its hold and giving
-    // the keyboard back to what is beneath.
+    // Closes the menu sheet that is up, releasing its hold and giving the
+    // keyboard back to what is beneath.
     void hideMenuSheets();
 
 private:
@@ -231,11 +231,22 @@ private:
     void showRoundSheet(const RoundResult& result);
     void hideRoundSheet();
 
-    // THE MENU BAR'S SHEET THAT IS UP, Rules or Settings, or null. They open over
-    // everything else and close back to it, as the mock-up's do, so whatever
-    // raises itself while one is up puts it back on top (keepMenuSheetOnTop()).
-    QWidget* openMenuSheet() const;
+    // THE MENU BAR'S SHEET THAT IS UP, one of menuSheets, or null. They open
+    // over everything else and close back to it, as the mock-up's do, so
+    // whatever raises itself while one is up puts it back on top
+    // (keepMenuSheetOnTop()).
+    Overlay* openMenuSheet() const;
     void keepMenuSheetOnTop();
+
+    // Shows one of menuSheets over everything else, in place of any other, and
+    // holds a game in play while it is up. Opening one over another, or over
+    // itself, never lets the game go in between - see the body.
+    void showMenuSheet(Overlay* sheet);
+
+    // Hides every menu sheet and drops their hold, WITHOUT releasing the game:
+    // the caller decides that - hideMenuSheets() by applyHold(), a stop by
+    // ending the game.
+    void dropMenuSheets();
 
     // GIVES THE KEYBOARD TO WHATEVER IS NOW ON TOP, after something over it went:
     // the pause menu's Resume, the game-over panel's default button, a holding
@@ -328,6 +339,11 @@ private:
     // The menu bar's Rules and Settings, the same arrangement again.
     RulesSheet* rulesSheet = nullptr;
     SettingsSheet* settingsSheet = nullptr;
+
+    // EVERY SHEET THE MENU BAR OPENS, in one list, so that one more - phase 11's
+    // Round history and Last trick - is added here and nowhere else:
+    // showMenuSheet(), dropMenuSheets() and openMenuSheet() all go through it.
+    std::vector<Overlay*> menuSheets;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this

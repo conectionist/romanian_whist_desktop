@@ -245,6 +245,8 @@ void MainWindow::buildTable()
     connect(settingsSheet, &SettingsSheet::settingsChanged, this, &MainWindow::applySettings);
     connect(settingsSheet, &SettingsSheet::closeRequested, this, &MainWindow::hideMenuSheets);
 
+    menuSheets = { rulesSheet, settingsSheet };
+
     // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
     // for a game that has already ended: stop() is idempotent, and a game that
     // reached gameOver emits no gameStopped for the returningToMenu latch to
@@ -448,36 +450,41 @@ void MainWindow::showPauseMenu()
 
 void MainWindow::showRules()
 {
-    hideMenuSheets();
-
     rulesSheet->showRules(lastConfig);
+    showMenuSheet(rulesSheet);
+}
 
-    rulesSheet->show();
-    rulesSheet->raise();
+void MainWindow::showSettings()
+{
+    // The pace changes the moment the slider moves, so the bots take it up as
+    // soon as the sheet is closed.
+    settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound);
+    showMenuSheet(settingsSheet);
+}
+
+void MainWindow::showMenuSheet(Overlay* sheet)
+{
+    // THE OTHER SHEET GOES DOWN WITHOUT A RELEASE, and so does this one when it
+    // is opened over itself. Closing it through hideMenuSheets() released the
+    // game before this sheet held it again, and the game thread, parked in
+    // pace(), woke into that gap and played on - a round and a half in the app
+    // from 40 presses of Alt+S (PR #35's review, finding #1). Hiding them here
+    // and holding below leaves the hold set throughout.
+    for(Overlay* other : menuSheets)
+    {
+        if(other != sheet)
+            other->hide();
+    }
+
+    sheet->show();
+    sheet->raise();
 
     // ONLY A GAME IN PLAY IS HELD. Over the menu page there is nothing to hold,
     // and over the game-over panel nothing left to.
     sheetHolding = tableState == TableState::Playing;
     applyHold();
 
-    rulesSheet->focusDefault();
-}
-
-void MainWindow::showSettings()
-{
-    hideMenuSheets();
-
-    settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound);
-
-    settingsSheet->show();
-    settingsSheet->raise();
-
-    // Held as Rules holds it. The pace changes the moment the slider moves, so the
-    // bots take it up as soon as the sheet is closed.
-    sheetHolding = tableState == TableState::Playing;
-    applyHold();
-
-    settingsSheet->focusDefault();
+    sheet->focusDefault();
 }
 
 void MainWindow::applySettings(int botSpeed, bool wait)
@@ -501,22 +508,27 @@ void MainWindow::hideMenuSheets()
     if(!openMenuSheet() && !sheetHolding)
         return;
 
-    rulesSheet->hide();
-    settingsSheet->hide();
-
-    sheetHolding = false;
+    dropMenuSheets();
     applyHold();
 
     restoreFocus();
 }
 
-QWidget* MainWindow::openMenuSheet() const
+void MainWindow::dropMenuSheets()
 {
-    if(rulesSheet && rulesSheet->isVisible())
-        return rulesSheet;
+    for(Overlay* sheet : menuSheets)
+        sheet->hide();
 
-    if(settingsSheet && settingsSheet->isVisible())
-        return settingsSheet;
+    sheetHolding = false;
+}
+
+Overlay* MainWindow::openMenuSheet() const
+{
+    for(Overlay* sheet : menuSheets)
+    {
+        if(sheet->isVisible())
+            return sheet;
+    }
 
     return nullptr;
 }
@@ -526,7 +538,7 @@ void MainWindow::keepMenuSheetOnTop()
     // A round scored or a game ended under Rules: the hold lands at the game's
     // next pause, and the last trick of a round or a game can finish first. The
     // sheet the player is reading stays where it is.
-    if(QWidget* sheet = openMenuSheet())
+    if(Overlay* sheet = openMenuSheet())
     {
         sheet->raise();
         restoreFocus();
@@ -585,38 +597,9 @@ void MainWindow::hideRoundSheet()
 
 void MainWindow::restoreFocus()
 {
-    // The menu bar's sheets open over everything else.
-    if(rulesSheet && rulesSheet->isVisible())
+    if(Overlay* sheet = activeOverlay())
     {
-        rulesSheet->focusDefault();
-        return;
-    }
-
-    if(settingsSheet && settingsSheet->isVisible())
-    {
-        settingsSheet->focusDefault();
-        return;
-    }
-
-    // THEN THE REST, TOP FIRST. The pause menu hides any round sheet on its way up, and a game
-    // that has ended has neither a sheet holding it nor a strip waiting, so at
-    // most one of these is ever the answer - the order only says which wins if a
-    // later change lets two stand at once.
-    if(pauseOverlay->isVisible())
-    {
-        pauseOverlay->focusDefault();
-        return;
-    }
-
-    if(gameOverPanel->isVisible())
-    {
-        gameOverPanel->focusDefault();
-        return;
-    }
-
-    if(roundSheet->isVisible() && roundSheetHolding)
-    {
-        roundSheet->focusDefault();
+        sheet->focusDefault();
         return;
     }
 
@@ -626,12 +609,14 @@ void MainWindow::restoreFocus()
 
 Overlay* MainWindow::activeOverlay() const
 {
-    if(rulesSheet && rulesSheet->isVisible())
-        return rulesSheet;
+    // The menu bar's sheets open over everything else.
+    if(Overlay* sheet = openMenuSheet())
+        return sheet;
 
-    if(settingsSheet && settingsSheet->isVisible())
-        return settingsSheet;
-
+    // THEN THE REST, TOP FIRST. The pause menu hides any round sheet on its way
+    // up, and a game that has ended has neither a sheet holding it nor a strip
+    // waiting, so at most one of these is ever the answer - the order only says
+    // which wins if a later change lets two stand at once.
     if(pauseOverlay && pauseOverlay->isVisible())
         return pauseOverlay;
 
@@ -683,9 +668,7 @@ void MainWindow::abandonToMenu()
     updatePauseAction();
 
     // And the menu bar's sheets, which can stand over the game-over panel.
-    rulesSheet->hide();
-    settingsSheet->hide();
-    sheetHolding = false;
+    dropMenuSheets();
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
@@ -876,9 +859,7 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     dialogHolding = false;
 
     // AND THE MENU BAR'S SHEETS, which can be up over a game New Game replaces.
-    rulesSheet->hide();
-    settingsSheet->hide();
-    sheetHolding = false;
+    dropMenuSheets();
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
