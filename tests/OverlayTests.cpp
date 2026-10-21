@@ -14,6 +14,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -400,6 +401,53 @@ TEST_CASE("A sheet table rules its headings and every row", "[overlay]")
     table.clearRows();
     REQUIRE(table.rowCount() == 0);
     REQUIRE(table.cell(0, 0) == nullptr);
+}
+
+TEST_CASE("The keyboard scrolls a sheet whose body does not fit", "[overlay]")
+{
+    // PR #36's review, finding #7, which this showed to be a false alarm. The body
+    // scrolls in a short window, and its scroll area is never a Tab stop, so the
+    // keyboard is always on one of the sheet's buttons. A button takes neither Page
+    // Up nor Home, so Qt passes them up to its parents, and the buttons sit inside
+    // the scrolled body: the scroll area takes them. Pinned, because a sheet whose
+    // actions moved out of the scroll area - a footer that stays put, say - would
+    // put the top of the rules out of the keyboard's reach once a Tab to Close had
+    // scrolled to the bottom.
+    FiveSheets five(QSize(709, 495));
+    Overlay* rules = five.sheets[3];
+
+    QScrollArea* scroll = rules->findChild<QScrollArea*>();
+    REQUIRE(scroll != nullptr);
+
+    QScrollBar* bar = scroll->verticalScrollBar();
+    REQUIRE(bar->maximum() > 0);
+
+    // As a Tab to it leaves things (Overlay::focusNextInside()).
+    QPushButton* close = rules->findChild<QPushButton*>("rulesClose");
+    REQUIRE(close != nullptr);
+
+    close->setFocus(Qt::TabFocusReason);
+    scroll->ensureWidgetVisible(close);
+    REQUIRE(bar->value() == bar->maximum());
+
+    // To the button, which passes on what it does not take.
+    const auto press = [close](int key)
+    {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(close, &event);
+    };
+
+    press(Qt::Key_PageUp);
+    REQUIRE(bar->value() < bar->maximum());
+
+    press(Qt::Key_Home);
+    REQUIRE(bar->value() == bar->minimum());
+
+    press(Qt::Key_PageDown);
+    REQUIRE(bar->value() > bar->minimum());
+
+    press(Qt::Key_End);
+    REQUIRE(bar->value() == bar->maximum());
 }
 
 TEST_CASE("A sheet table shows a name as typed, markup and all", "[overlay]")
