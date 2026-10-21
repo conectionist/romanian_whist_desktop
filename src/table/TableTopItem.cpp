@@ -271,14 +271,16 @@ void paintOrnament(QPainter& painter, QPointF topLeft, bool wavy, const QColor& 
     painter.restore();
 }
 
+}
+
 // THE LOGO PLAQUE (.panel.logo), in its own 270 x 142 frame, drawn at 0.9 of that
-// about the table's centre.
-void paintLogo(QPainter& painter, const Theme& theme)
+// about `centre`.
+void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre)
 {
     const Theme::TablePalette& table = theme.table;
 
     painter.save();
-    painter.translate(tablespace::centre);
+    painter.translate(centre);
     painter.scale(tablespace::logoScale, tablespace::logoScale);
     painter.translate(-tablespace::logoBox.width() / 2.0, -tablespace::logoBox.height() / 2.0);
 
@@ -412,6 +414,16 @@ void paintLogo(QPainter& painter, const Theme& theme)
     painter.restore();
 }
 
+QRectF tabletop::logoBounds()
+{
+    // The 270 x 142 frame and its drop shadow - 12 down, blurred 26 - all at 0.9.
+    const qreal reach = shadows::reach(logoShadowBlur);
+    const QRectF frame(-tablespace::logoBox.width() / 2.0, -tablespace::logoBox.height() / 2.0,
+                       tablespace::logoBox.width(), tablespace::logoBox.height());
+
+    const QRectF shadowed = frame.adjusted(-reach, -reach, reach, reach + logoShadowOffset.y());
+
+    return QRectF(shadowed.topLeft() * tablespace::logoScale, shadowed.size() * tablespace::logoScale);
 }
 
 QRectF tabletop::bounds()
@@ -443,7 +455,7 @@ QPixmap tabletop::render(const Theme& theme, qreal ratio)
     painter.translate(-box.topLeft());
 
     paintTable(painter, theme, ratio);
-    paintLogo(painter, theme);
+    paintLogo(painter, theme, tablespace::centre);
 
     return picture;
 }

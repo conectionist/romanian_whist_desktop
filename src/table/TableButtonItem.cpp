@@ -33,6 +33,39 @@ QSizeF tablebutton::sizeFor(const QString& label)
     return QSizeF(2.0 * (borderWidth + paddingX) + iconSize + iconGap + labelWidth, height);
 }
 
+tablebutton::Colours tablebutton::coloursFor(const Theme::TablePalette& palette, bool enabled, bool lit)
+{
+    if(!enabled)
+        return { palette.muted, palette.muted };
+
+    if(lit)
+        return { palette.goldBright, palette.goldBright };
+
+    return { palette.gold, palette.cream };
+}
+
+void tablebutton::paintFace(QPainter& painter, const QRectF& box, icons::Icon icon, const QString& label,
+                            const Colours& colours)
+{
+    const QFont font = labelFont();
+    const QFontMetricsF metrics(font);
+    const qreal line = metrics.lineSpacing();
+
+    // align-items: center, so the icon and the label's line box are both centred on
+    // the button's height; and the two together across it.
+    const qreal across = iconSize + iconGap + metrics.horizontalAdvance(label);
+    const qreal left = box.left() + (box.width() - across) / 2.0;
+
+    icons::paint(painter, icon, QRectF(left, box.top() + (box.height() - iconSize) / 2.0, iconSize, iconSize),
+                 colours.icon);
+
+    painter.setFont(font);
+    painter.setPen(colours.label);
+    painter.drawText(QPointF(left + iconSize + iconGap,
+                             fonts::baselineIn(metrics, box.top() + (box.height() - line) / 2.0, line)),
+                     label);
+}
+
 TableButtonItem::TableButtonItem(icons::Icon _icon, const QString& label, panel::Cache* _panels,
                                  QGraphicsItem* parent)
     : QGraphicsObject(parent),
@@ -157,33 +190,8 @@ const panel::Picture& TableButtonItem::picture(qreal ratio) const
 
         // .btn: the icon in gold and the label in cream; both gold-bright under the
         // cursor; and, disabled, both muted.
-        const Theme::TablePalette& palette = theme.table;
-
-        QColor iconColour = palette.gold;
-        QColor labelColour = palette.cream;
-
-        if(!isEnabled())
-            iconColour = labelColour = palette.muted;
-        else if(hovered)
-            iconColour = labelColour = palette.goldBright;
-
-        // align-items: center, so the icon and the label's line box are both
-        // centred on the button's height.
-        const qreal left = borderWidth + paddingX;
-
-        icons::paint(painter, icon,
-                     QRectF(left, (tablebutton::height - iconSize) / 2.0, iconSize, iconSize),
-                     iconColour);
-
-        const QFont font = labelFont();
-        const QFontMetricsF metrics(font);
-        const qreal line = metrics.lineSpacing();
-
-        painter.setFont(font);
-        painter.setPen(labelColour);
-        painter.drawText(QPointF(left + iconSize + iconGap,
-                                 fonts::baselineIn(metrics, (tablebutton::height - line) / 2.0, line)),
-                         text);
+        tablebutton::paintFace(painter, QRectF(QPointF(0.0, 0.0), buttonSize), icon, text,
+                               tablebutton::coloursFor(theme.table, isEnabled(), hovered));
 
         painter.end();
 

@@ -818,3 +818,25 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
         sheet->hide();
     }
 }
+
+// menu.png: the page the client opens on, in the real window at 1920 x 1080 - the
+// room, the logo plaque and its two buttons, under the menu bar. No namesake in the
+// mock-up, which has no menu page.
+TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
+{
+    const QString dir = shotsDirectory();
+    REQUIRE(QDir().mkpath(dir));
+
+    MainWindow window;
+    window.resize(1920, 1080);
+    window.show();
+    pump(200);
+
+    const QPixmap picture = window.grab();
+    const QString path = QDir(dir).filePath(QStringLiteral("menu.png"));
+    REQUIRE(picture.save(path));
+
+    std::cout << path.toStdString() << ": the main menu page\n";
+
+    CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1080));
+}
