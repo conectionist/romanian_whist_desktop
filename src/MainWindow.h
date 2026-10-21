@@ -34,6 +34,7 @@ class CardArtWindow;
 class GameOverPanel;
 class HandItem;
 class MainMenuPage;
+class MenuBar;
 class PauseOverlay;
 class RoundSheet;
 class TableScene;
@@ -132,13 +133,18 @@ private slots:
     // prompt cached by onBetRequested().
     void onBidChosen(unsigned int bet);
 
-    // Section 13's dialog, opened from the main menu. Builds a GameSetup from
-    // what it was told and starts a game on it - which for the second and every
-    // later game is section 4.3's ordering run again from the top.
+    // Section 13's dialog, opened from the main menu, from the menu bar's New
+    // Game, or from the game-over panel's Play again. Builds a GameSetup from what
+    // it was told and starts a game on it - which for the second and every later
+    // game is section 4.3's ordering run again from the top, and which from the
+    // menu bar may replace a game still running (prepare() stops and joins it).
+    //
+    // A RUNNING GAME IS HELD WHILE THE DIALOG IS UP, by the owner's call of
+    // 2026-10-21, and runs on if the dialog is cancelled.
     void showNewGameDialog();
 
     // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
-    // its own slot because that is what the menu bar's Menu item connects to.
+    // its own slot because that is what the menu bar's Exit connects to.
     void showPauseMenu();
 
     // Abandons the running game and returns to the main menu. The second stop
@@ -158,9 +164,13 @@ private:
     // action that empties the window is not a diagnostic.
     void buildLogDock();
 
-    // Builds the menu bar: the temporary Menu item and the View menu. Must run
-    // AFTER buildLogDock(), which owns an action this adds.
-    void buildViewMenu();
+    // Builds section 2.12's menu bar - New Game, Settings, Rules, View and Exit -
+    // and installs it with setMenuWidget(). Must run AFTER buildLogDock(), which
+    // owns an action this adds to View.
+    //
+    // NEVER CALL menuBar() AFTER IT. QMainWindow::menuBar() makes a QMenuBar when
+    // the menu widget is not one, and installing that deletes this bar.
+    void buildMenuBar();
 
     // Shows the card-art window, creating it the first time. Parented to this
     // window with Qt::Window, so it is a top-level window that still dies with
@@ -184,8 +194,8 @@ private:
     void setPauseMenuVisible(bool visible);
 
     // WHETHER THE PAUSE MENU MAY GO UP NOW: a game playing, and no round sheet
-    // holding it. What setPauseMenuVisible() refuses on, and what the Menu item
-    // is greyed by (updatePauseAction()).
+    // holding it. What setPauseMenuVisible() refuses on, and what Exit is greyed
+    // by (updatePauseAction()).
     bool canPause() const;
     void updatePauseAction();
 
@@ -197,6 +207,13 @@ private:
 
     void showRoundSheet(const RoundResult& result);
     void hideRoundSheet();
+
+    // GIVES THE KEYBOARD TO WHATEVER IS NOW ON TOP, after something over it went:
+    // the pause menu's Resume, the game-over panel's default button, a holding
+    // round sheet's Continue, or the bid strip and its digit keys. Each of those
+    // takes focus when it is raised, and hiding what took it from them does not
+    // give it back - which looks finished, because the mouse still works.
+    void restoreFocus();
 
     // Raises section 16.2's panel over the table it was filled from. The three
     // callers are the two endings - onGameOver() and showFailure() - and a Play
@@ -256,8 +273,14 @@ private:
     // setPauseMenuVisible().
     PauseOverlay* pauseOverlay = nullptr;
 
-    // The menu bar's temporary Menu item, which raises it (buildViewMenu()).
-    QAction* pauseAction = nullptr;
+    // Section 2.12's bar, installed as the window's menu widget, and its items.
+    // Exit raises the pause menu, whose Main menu is the way out; it replaced
+    // phase 8's temporary Menu item.
+    MenuBar* bar = nullptr;
+    QAction* newGameAction = nullptr;
+    QAction* settingsAction = nullptr;
+    QAction* rulesAction = nullptr;
+    QAction* exitAction = nullptr;
 
     // Section 16.2's panel, the same shape as the pause menu and for the same
     // reason - it is drawn OVER the final state rather than replacing it, which
@@ -326,11 +349,15 @@ private:
     // application. Cleared by startGame(), so it is true for exactly one stop.
     bool returningToMenu = false;
 
-    // THE TWO REASONS A GAME CAN BE HELD, kept apart so that releasing one does
-    // not release the other. applyHold() is what turns them into the single flag
+    // THE REASONS A GAME CAN BE HELD, kept apart so that releasing one does not
+    // release the other. applyHold() is what turns them into the single flag
     // GameBridge owns.
     bool pauseMenuHolding = false;
     bool roundSheetHolding = false;
+
+    // A THIRD, since the redesign's phase 9: the setup dialog, opened from the
+    // menu bar over a game still running.
+    bool dialogHolding = false;
 
     // Does the round sheet WAIT? From the dialog, per game - section 16.1's
     // dismissal, and off by default.

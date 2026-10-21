@@ -144,6 +144,8 @@ qt_add_library(desktop_core STATIC
     src/ui/NewGameDialog.cpp
     src/ui/MainMenuPage.h
     src/ui/MainMenuPage.cpp
+    src/ui/MenuBar.h
+    src/ui/MenuBar.cpp
     src/ui/PauseOverlay.h
     src/ui/PauseOverlay.cpp
     src/ui/GameOverPanel.h

@@ -249,6 +249,16 @@ Theme::TablePalette tablePalette()
     table.hudRule = rgba(201, 164, 92, 0.25);
     table.trumpShadow = rgba(0, 0, 0, 0.55);
 
+    // Section 2.12, from page.html's .menubar: background linear-gradient(180deg,
+    // #2e1c10, #1a1009); border-bottom 1px #806137, which is panelBorder; box-shadow
+    // 0 1px 0 rgba(201, 164, 92, 0.22), 0 6px 16px rgba(0, 0, 0, 0.45). An item
+    // under the cursor, .menubar .btn:hover: background rgba(201, 164, 92, 0.13).
+    table.menuTop = QColor(0x2E, 0x1C, 0x10);
+    table.menuBottom = QColor(0x1A, 0x10, 0x09);
+    table.menuHover = rgba(201, 164, 92, 0.13);
+    table.menuGlint = rgba(201, 164, 92, 0.22);
+    table.menuShadow = rgba(0, 0, 0, 0.45);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

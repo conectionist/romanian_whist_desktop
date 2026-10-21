@@ -10,6 +10,7 @@
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
 #include "ui/MainMenuPage.h"
+#include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
@@ -22,10 +23,10 @@
 #include <QDockWidget>
 #include <QGuiApplication>
 #include <QMenu>
-#include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
 #include <QResizeEvent>
+#include <QShortcut>
 #include <QStyleHints>
 
 #include <cstdint>
@@ -93,7 +94,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     buildTable();
     buildLogDock();
-    buildViewMenu();
+    buildMenuBar();
 
     // NO GAME AT LAUNCH, which is what phase D's "the app never needs a command
     // line" actually means and what the terminal does - its startGame() runs the
@@ -280,8 +281,23 @@ void MainWindow::showNewGameDialog()
     // QSettings, which is section 20 and phase E.
     NewGameDialog dialog(lastConfig, this);
 
-    if(dialog.exec() != QDialog::Accepted)
+    // A RUNNING GAME WAITS FOR THE ANSWER, which the menu bar's New Game made
+    // possible: before the redesign's phase 9 the dialog opened only over the
+    // menu page or a game that had ended. Cancelled, the game runs on from where
+    // it stood; accepted, startGame() replaces it.
+    dialogHolding = tableState == TableState::Playing;
+    applyHold();
+
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+
+    dialogHolding = false;
+
+    if(!accepted)
+    {
+        applyHold();
+        restoreFocus();
         return;
+    }
 
     lastConfig = dialog.config();
 
@@ -336,14 +352,15 @@ bool MainWindow::canPause() const
     return !roundSheetHolding;
 }
 
-// THE MENU ITEM SAYS WHAT A CLICK ON IT WOULD DO: greyed wherever canPause() would
-// refuse it - on the menu page, over the game-over panel, under a round sheet
-// that is holding the game - rather than live and doing nothing (PR 34's review,
-// finding #4). Called wherever either of canPause()'s two facts changes.
+// EXIT SAYS WHAT A CLICK ON IT WOULD DO: greyed wherever canPause() would refuse
+// it - on the menu page, over the game-over panel, under a round sheet that is
+// holding the game - rather than live and doing nothing (PR 34's review, finding
+// #4, made of the Menu item Exit replaced). Called wherever either of canPause()'s
+// two facts changes.
 void MainWindow::updatePauseAction()
 {
-    if(pauseAction)
-        pauseAction->setEnabled(canPause());
+    if(exitAction)
+        exitAction->setEnabled(canPause());
 }
 
 void MainWindow::setPauseMenuVisible(bool visible)
@@ -354,7 +371,7 @@ void MainWindow::setPauseMenuVisible(bool visible)
     // to the pause before it has a chance to go wrong.
     //
     // NOTHING TO PAUSE, OR NOTHING TO RAISE IT OVER: see canPause(). Esc comes
-    // here whatever the Menu item shows.
+    // here whatever Exit shows.
     if(visible && !canPause())
         return;
 
@@ -381,14 +398,12 @@ void MainWindow::setPauseMenuVisible(bool visible)
         // it on the Resume button, and hiding that button does not give it back
         // - so a pause taken at a bid prompt left the strip's digit keys dead
         // afterwards, with its buttons still working, which is the shape that
-        // looks finished. The same call onBetRequested() makes when it raises
-        // the strip, and for the same reason stated there.
+        // looks finished.
         //
-        // ASKED OF THE STRIP rather than remembered across the pause: it is
-        // visible exactly while the engine is parked waiting for a bid, which is
-        // the whole of the question.
-        if(bidStrip->isVisible())
-            bidStrip->setFocus();
+        // ASKED OF WHAT IS SHOWING rather than remembered across the pause: the
+        // strip is visible exactly while the engine is parked waiting for a bid,
+        // which is the whole of the question.
+        restoreFocus();
 
         return;
     }
@@ -407,7 +422,9 @@ void MainWindow::showPauseMenu()
 void MainWindow::applyHold()
 {
     // THE ONLY CALLER OF setPaused() IN THE CLIENT, and that is the whole point
-    // of it existing.
+    // of it existing. (Since the redesign's phase 9 there is a third reason, the
+    // setup dialog opened over a running game; it is one more member here, and
+    // the argument below holds for it unchanged.)
     //
     // D1 had one reason to hold a game and set the flag where it showed the
     // menu. D2 adds a second - section 16.1's round sheet, for a player who
@@ -420,7 +437,7 @@ void MainWindow::applyHold()
     // So the two reasons are two members, this computes the hold from both, and
     // GameBridge is untouched - the arbitration belongs to the one object that
     // knows every reason there is.
-    controller.setPaused(pauseMenuHolding || roundSheetHolding);
+    controller.setPaused(pauseMenuHolding || roundSheetHolding || dialogHolding);
 }
 
 void MainWindow::showRoundSheet(const RoundResult& result)
@@ -448,6 +465,33 @@ void MainWindow::hideRoundSheet()
     // The keyboard back to the strip if the strip is what is waiting, exactly as
     // the pause menu returns it - focusContinue() took it, and hiding the button
     // does not give it back.
+    restoreFocus();
+}
+
+void MainWindow::restoreFocus()
+{
+    // TOP FIRST. The pause menu hides any round sheet on its way up, and a game
+    // that has ended has neither a sheet holding it nor a strip waiting, so at
+    // most one of these is ever the answer - the order only says which wins if a
+    // later change lets two stand at once.
+    if(pauseOverlay->isVisible())
+    {
+        pauseOverlay->focusResume();
+        return;
+    }
+
+    if(gameOverPanel->isVisible())
+    {
+        gameOverPanel->focusDefaultButton();
+        return;
+    }
+
+    if(roundSheet->isVisible() && roundSheetHolding)
+    {
+        roundSheet->focusContinue();
+        return;
+    }
+
     if(bidStrip->isVisible())
         bidStrip->setFocus();
 }
@@ -551,23 +595,46 @@ void MainWindow::buildLogDock()
     logDock->hide();
 }
 
-void MainWindow::buildViewMenu()
+void MainWindow::buildMenuBar()
 {
-    // THE PAUSE MENU'S WAY IN FOR THE MOUSE, a top-level item rather than a menu:
-    // it was the prompt bar's Menu button until the table redesign's phase 8 took
-    // the prompt bar away, and Esc is its keyboard half. TEMPORARY, by the owner's
-    // call of 2026-10-20: phase 9 restyles this bar after the mock-up's - New Game,
-    // Settings, Rules and Exit - and Exit replaces it.
-    pauseAction = menuBar()->addAction(tr("&Menu"));
-    pauseAction->setObjectName(QStringLiteral("menu"));
-    connect(pauseAction, &QAction::triggered, this, &MainWindow::showPauseMenu);
-    updatePauseAction();
+    // SECTION 2.12's FOUR, and a QAction each so that what a menu action gives -
+    // a trigger, a greyed state, a shortcut - works as it did on the QMenuBar this
+    // replaced. The bar's buttons stand for them (QToolButton::setDefaultAction()).
+    //
+    // ALT AND A LETTER, set as each action's shortcut. A painted label has no
+    // underline to show a mnemonic with, and the button takes its text from the
+    // action without the '&' anyway.
+    newGameAction = new QAction(tr("New Game"), this);
+    newGameAction->setObjectName(QStringLiteral("newGameAction"));
+    newGameAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_N));
+    connect(newGameAction, &QAction::triggered, this, &MainWindow::showNewGameDialog);
 
-    // The menu bar is in MainWindow.ui and is empty. In code rather than in the
-    // .ui because the action needs a connection either way, and a
-    // designer-declared action that is only ever reached from here would be split
-    // across two files for nothing.
-    QMenu* view = menuBar()->addMenu(tr("&View"));
+    // NOT YET: the redesign's phase 9 builds the two sheets these open after the
+    // bar, and an item that looks live and does nothing is its own defect.
+    settingsAction = new QAction(tr("Settings"), this);
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
+    settingsAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_S));
+    settingsAction->setEnabled(false);
+
+    rulesAction = new QAction(tr("Rules"), this);
+    rulesAction->setObjectName(QStringLiteral("rulesAction"));
+    rulesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_R));
+    rulesAction->setEnabled(false);
+
+    // THE PAUSE MENU'S WAY IN FOR THE MOUSE, and Esc is its keyboard half. The
+    // mock-up's Exit "returns to the main menu"; it does so through the pause
+    // menu, so it can be taken back with Resume. It replaces the temporary Menu
+    // item phase 8 put here when it took the prompt bar's Menu button away.
+    exitAction = new QAction(tr("Exit"), this);
+    exitAction->setObjectName(QStringLiteral("exitAction"));
+    exitAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_X));
+    connect(exitAction, &QAction::triggered, this, &MainWindow::showPauseMenu);
+
+    // THE DEVELOPER'S MENU, kept: the log is the thing to reach for when the table
+    // looks wrong. At the right, in the place of the mock-up's Players switch,
+    // which was not a game control either (the owner's call, 2026-10-21).
+    QMenu* view = new QMenu(tr("&View"), this);
+    view->setObjectName(QStringLiteral("viewMenu"));
 
     // Qt's own action for the dock, not one of ours - see buildLogDock().
     QAction* logAction = logDock->toggleViewAction();
@@ -578,6 +645,16 @@ void MainWindow::buildViewMenu()
 
     QAction* cardArtAction = view->addAction(tr("&Card art..."));
     connect(cardArtAction, &QAction::triggered, this, &MainWindow::showCardArt);
+
+    bar = new MenuBar({ newGameAction, settingsAction, rulesAction, view, exitAction }, this);
+    bar->setTheme(theme);
+    setMenuWidget(bar);
+
+    // View pops its menu up on a press, so a shortcut's click would do nothing.
+    QShortcut* viewShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_V), this);
+    connect(viewShortcut, &QShortcut::activated, bar, &MenuBar::showViewMenu);
+
+    updatePauseAction();
 }
 
 void MainWindow::showCardArt()
@@ -645,6 +722,7 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     roundSheetHolding = false;
     updatePauseAction();
     pauseMenuHolding = false;
+    dialogHolding = false;
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
@@ -874,7 +952,7 @@ void MainWindow::onCardPicked(std::size_t slot)
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
     // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc raises the pause
-    // menu, which is the keyboard half of the menu bar's Menu item, and
+    // menu, which is the keyboard half of the menu bar's Exit, and
     // dismisses it again - so the key that opened it is the key that leaves.
     // Checked first because the digit path below subtracts Key_1 from whatever
     // arrives and would otherwise have to reason about the result.
