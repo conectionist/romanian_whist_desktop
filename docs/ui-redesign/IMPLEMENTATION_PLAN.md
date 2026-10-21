@@ -381,7 +381,9 @@ to bottom:
      call, 2026-10-20, so the scoreboard clears the top-left seat in windows narrower than about
      3:2): each column as wide as its widest content, with a gap of 12 before each number column.
      The headings BID and TAKEN are **B** and **T**. Names are measured as though each carried
-     the "▸", and the numbers at their widest values, so the columns hold still as play moves.
+     the "▸", and the numbers at their widest values (a minus and three digits for a score, two
+     digits for a run, which the engine keeps counting past the fifth round), so the columns hold
+     still as play moves.
      The panel is never narrower than the bid tension at its widest, so that line never wraps;
      and never wider than 236, past which the names are elided. *(Phase 8.)*
 5. A faint divider, then the **trump section stacked and centred**: "TRUMP" (19.8, bold uppercase,

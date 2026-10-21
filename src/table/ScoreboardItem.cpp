@@ -599,15 +599,19 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
     const auto cell = [&](const QString& text) { return widthOf(text, styles.cell); };
 
     // Each column's widest content. The numbers at their widest values - one digit
-    // for a bid or a trick count, three for a score, the fifth of a run - so the
-    // columns hold still as the numbers change.
+    // for a bid or a trick count; a minus and three digits for a score, which goes
+    // negative and stays under a thousand; two digits for a run, which the engine
+    // goes on counting past the fifth round, the only one it pays for
+    // (Scoreboard.cpp) - so the columns hold still as the numbers change.
     Columns widest;
 
     widest.player = head(headingPlayer());
     widest.bid = std::max({ head(headingBid()), cell(QStringLiteral("8")), cell(hudtext::dash()) });
     widest.taken = std::max({ head(headingTaken()), cell(QStringLiteral("8")), cell(hudtext::dash()) });
-    widest.points = std::max(head(headingPoints()), cell(QStringLiteral("000")));
-    widest.run = std::max({ head(headingRun()), cell(QStringLiteral("W5")), cell(QStringLiteral("L5")) });
+    widest.points = std::max(head(headingPoints()), cell(QStringLiteral("-000")));
+    widest.run = std::max({ head(headingRun()),
+                            cell(QCoreApplication::translate("scoreboard", "W%1").arg(88)),
+                            cell(QCoreApplication::translate("scoreboard", "L%1").arg(88)) });
 
     for(const Row& row : rows)
     {

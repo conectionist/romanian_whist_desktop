@@ -523,6 +523,14 @@ TEST_CASE("The columns hold still as the turn and the scores move", "[scoreboard
     snapshot.seats[3].bet = 8;
 
     REQUIRE(scoreboard::columnsFor(scoreboard::rowsFor(snapshot)) == before);
+
+    // Nor do a run past the fifth round, which the engine goes on counting, or a
+    // score gone negative (PR 34's review, finding #6).
+    snapshot.seats[1].winStreak = 12;
+    snapshot.seats[2].lossStreak = 11;
+    snapshot.seats[0].totalScore = -134;
+
+    REQUIRE(scoreboard::columnsFor(scoreboard::rowsFor(snapshot)) == before);
 }
 
 TEST_CASE("Names too long for the panel are what gives way", "[scoreboard]")
