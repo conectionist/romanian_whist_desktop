@@ -813,6 +813,11 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     QAction* logAction = logDock->toggleViewAction();
     REQUIRE_FALSE(logAction->isChecked());
 
+    // At the bottom, and only there: docked at the top it lay under the menu
+    // bar's shadow (PR #35's review, finding #14).
+    REQUIRE(window.dockWidgetArea(logDock) == Qt::BottomDockWidgetArea);
+    REQUIRE(logDock->allowedAreas() == Qt::BottomDockWidgetArea);
+
     QPushButton* newGame = window.findChild<QPushButton*>("newGame");
     REQUIRE(newGame != nullptr);
 

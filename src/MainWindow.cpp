@@ -716,7 +716,11 @@ void MainWindow::buildLogDock()
 {
     logDock = new QDockWidget(tr("Log"), this);
     logDock->setObjectName(QStringLiteral("logDock"));
-    logDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    // AT THE BOTTOM ONLY. Docked at the top it sat right under the menu bar, and
+    // the bar's shadow - which falls on whatever is under it - lay across the
+    // log's title bar (PR #35's review, finding #14). A diagnostic needs one
+    // place to be, not a choice of two.
+    logDock->setAllowedAreas(Qt::BottomDockWidgetArea);
 
     // Reparented out of the .ui's central layout and into the dock. Every
     // existing `ui->log` call site keeps working, which is the point of moving
