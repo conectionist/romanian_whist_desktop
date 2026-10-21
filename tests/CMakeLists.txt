@@ -45,6 +45,7 @@ add_executable(desktop_tests
     MenuBarTests.cpp
     RulesSheetTests.cpp
     SettingsSheetTests.cpp
+    OverlayTests.cpp
     ScoreboardTests.cpp
     ScreenshotTool.cpp
     ResizeTiming.cpp

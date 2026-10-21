@@ -1,9 +1,7 @@
 #ifndef SETTINGS_SHEET_H
 #define SETTINGS_SHEET_H
 
-#include "paint/Theme.h"
-
-#include <QWidget>
+#include "ui/Overlay.h"
 
 QT_BEGIN_NAMESPACE
 class QCheckBox;
@@ -21,22 +19,19 @@ QT_END_NAMESPACE
 // its pace; there is nothing to apply and nothing to cancel, so its one button is
 // Done.
 //
-// Built as PauseOverlay is, in today's look, for phase 10 to restyle with the
-// others; see RulesSheet.
-class SettingsSheet : public QWidget
+// An Overlay, in today's look, for phase 10 to restyle with the others.
+class SettingsSheet : public Overlay
 {
     Q_OBJECT
 
 public:
     explicit SettingsSheet(QWidget* parent = nullptr);
 
-    void setTheme(const Theme& theme);
-
     // What the sheet opens on, without announcing it as a change.
     void setValues(int botSpeed, bool waitAfterEachRound);
 
-    // Puts the keyboard on Done, so Enter closes, as the other overlays do.
-    void focusDone();
+    // Done, so Enter closes, as the other overlays do.
+    void focusDefault() override;
 
 signals:
     // A control moved: the slider's position (newgame::SlowestSpeed to
@@ -45,16 +40,9 @@ signals:
 
     void closeRequested();
 
-protected:
-    void paintEvent(QPaintEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
-
 private:
     void announce();
 
-    Theme theme = Theme::light();
-
-    QWidget* panel = nullptr;
     QSlider* speed = nullptr;
     QCheckBox* waitEachRound = nullptr;
     QPushButton* done = nullptr;

@@ -5,29 +5,19 @@
 #include <QBoxLayout>
 #include <QCheckBox>
 #include <QCoreApplication>
-#include <QFont>
 #include <QLabel>
-#include <QMouseEvent>
-#include <QPainter>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 
-SettingsSheet::SettingsSheet(QWidget* parent) : QWidget(parent)
+SettingsSheet::SettingsSheet(QWidget* parent) : Overlay(parent)
 {
-    panel = new QWidget(this);
-    panel->setAutoFillBackground(true);
-
-    QVBoxLayout* inside = new QVBoxLayout(panel);
-    inside->setContentsMargins(40, 28, 40, 28);
+    QWidget* panel = this->panel();
+    QVBoxLayout* inside = panelLayout();
 
     QLabel* title = new QLabel(tr("Settings"), panel);
     title->setObjectName(QStringLiteral("settingsTitle"));
-
-    QFont titleFont = title->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
+    styleTitle(title, 1.6);
 
     inside->addWidget(title);
 
@@ -75,32 +65,9 @@ SettingsSheet::SettingsSheet(QWidget* parent) : QWidget(parent)
     actions->addWidget(done);
     inside->addLayout(actions);
 
-    QVBoxLayout* stack = new QVBoxLayout(this);
-    stack->addStretch(1);
-
-    QHBoxLayout* row = new QHBoxLayout;
-    row->addStretch(1);
-    row->addWidget(panel);
-    row->addStretch(1);
-
-    stack->addLayout(row);
-    stack->addStretch(1);
-
     connect(speed, &QSlider::valueChanged, this, &SettingsSheet::announce);
     connect(waitEachRound, &QCheckBox::toggled, this, &SettingsSheet::announce);
     connect(done, &QPushButton::clicked, this, &SettingsSheet::closeRequested);
-}
-
-void SettingsSheet::setTheme(const Theme& _theme)
-{
-    theme = _theme;
-
-    QPalette scheme = panel->palette();
-    scheme.setColor(QPalette::Window, theme.seatPlaque);
-    scheme.setColor(QPalette::WindowText, theme.textPrimary);
-    panel->setPalette(scheme);
-
-    update();
 }
 
 void SettingsSheet::setValues(int botSpeed, bool waitAfterEachRound)
@@ -113,7 +80,7 @@ void SettingsSheet::setValues(int botSpeed, bool waitAfterEachRound)
     waitEachRound->setChecked(waitAfterEachRound);
 }
 
-void SettingsSheet::focusDone()
+void SettingsSheet::focusDefault()
 {
     done->setFocus(Qt::OtherFocusReason);
 }
@@ -121,20 +88,4 @@ void SettingsSheet::focusDone()
 void SettingsSheet::announce()
 {
     emit settingsChanged(speed->value(), waitEachRound->isChecked());
-}
-
-void SettingsSheet::paintEvent(QPaintEvent* event)
-{
-    QPainter painter(this);
-
-    // The same dim as the pause menu's, from Theme (section 18.1).
-    painter.fillRect(rect(), theme.dimmedOverlay);
-
-    QWidget::paintEvent(event);
-}
-
-void SettingsSheet::mousePressEvent(QMouseEvent* event)
-{
-    // Swallowed, as PauseOverlay's are: the table under the dim is not live.
-    event->accept();
 }

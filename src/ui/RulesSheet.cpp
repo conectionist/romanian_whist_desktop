@@ -4,10 +4,7 @@
 
 #include <QBoxLayout>
 #include <QCoreApplication>
-#include <QFont>
 #include <QLabel>
-#include <QMouseEvent>
-#include <QPainter>
 #include <QPushButton>
 
 #include <algorithm>
@@ -121,21 +118,14 @@ QStringList rulessheet::linesFor(const newgame::Config& config)
     return lines;
 }
 
-RulesSheet::RulesSheet(QWidget* parent) : QWidget(parent)
+RulesSheet::RulesSheet(QWidget* parent) : Overlay(parent)
 {
-    panel = new QWidget(this);
-    panel->setAutoFillBackground(true);
-
-    QVBoxLayout* inside = new QVBoxLayout(panel);
-    inside->setContentsMargins(40, 28, 40, 28);
+    QWidget* panel = this->panel();
+    QVBoxLayout* inside = panelLayout();
 
     QLabel* title = new QLabel(QCoreApplication::translate("rulessheet", "Rules at a glance"), panel);
     title->setObjectName(QStringLiteral("rulesTitle"));
-
-    QFont titleFont = title->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
+    styleTitle(title, 1.6);
 
     inside->addWidget(title);
     inside->addSpacing(12);
@@ -165,30 +155,7 @@ RulesSheet::RulesSheet(QWidget* parent) : QWidget(parent)
     actions->addWidget(closeButton);
     inside->addLayout(actions);
 
-    QVBoxLayout* stack = new QVBoxLayout(this);
-    stack->addStretch(1);
-
-    QHBoxLayout* row = new QHBoxLayout;
-    row->addStretch(1);
-    row->addWidget(panel);
-    row->addStretch(1);
-
-    stack->addLayout(row);
-    stack->addStretch(1);
-
     connect(closeButton, &QPushButton::clicked, this, &RulesSheet::closeRequested);
-}
-
-void RulesSheet::setTheme(const Theme& _theme)
-{
-    theme = _theme;
-
-    QPalette scheme = panel->palette();
-    scheme.setColor(QPalette::Window, theme.seatPlaque);
-    scheme.setColor(QPalette::WindowText, theme.textPrimary);
-    panel->setPalette(scheme);
-
-    update();
 }
 
 void RulesSheet::showRules(const newgame::Config& config)
@@ -204,23 +171,7 @@ void RulesSheet::showRules(const newgame::Config& config)
     rules->setText(list);
 }
 
-void RulesSheet::focusClose()
+void RulesSheet::focusDefault()
 {
     closeButton->setFocus(Qt::OtherFocusReason);
-}
-
-void RulesSheet::paintEvent(QPaintEvent* event)
-{
-    QPainter painter(this);
-
-    // The same dim as the pause menu's, from Theme (section 18.1).
-    painter.fillRect(rect(), theme.dimmedOverlay);
-
-    QWidget::paintEvent(event);
-}
-
-void RulesSheet::mousePressEvent(QMouseEvent* event)
-{
-    // Swallowed, as PauseOverlay's are: the table under the dim is not live.
-    event->accept();
 }

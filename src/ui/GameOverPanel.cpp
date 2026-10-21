@@ -4,8 +4,6 @@
 #include <QFont>
 #include <QGridLayout>
 #include <QLabel>
-#include <QMouseEvent>
-#include <QPainter>
 #include <QPushButton>
 
 #include <algorithm>
@@ -53,25 +51,18 @@ QString winnerAnnouncement(const std::vector<Standing>& winners)
 
 } // namespace gameover
 
-GameOverPanel::GameOverPanel(QWidget* parent) : QWidget(parent)
+GameOverPanel::GameOverPanel(QWidget* parent) : Overlay(parent)
 {
-    panel = new QWidget(this);
-    panel->setAutoFillBackground(true);
+    QWidget* panel = this->panel();
 
-    QVBoxLayout* inside = new QVBoxLayout(panel);
+    // A little roomier than the other sheets: it is the last word of a game.
+    QVBoxLayout* inside = panelLayout();
     inside->setContentsMargins(48, 32, 48, 32);
 
     title = new QLabel(panel);
     title->setAlignment(Qt::AlignCenter);
     title->setObjectName("gameOverTitle");
-
-    // OFF THE WIDGET'S OWN FONT rather than a point size written here, the rule
-    // MainMenuPage records: a HiDPI display or a large system font gets a title
-    // that grew with everything else.
-    QFont titleFont = title->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
+    styleTitle(title, 1.6);
 
     inside->addWidget(title);
     inside->addSpacing(20);
@@ -129,18 +120,6 @@ GameOverPanel::GameOverPanel(QWidget* parent) : QWidget(parent)
     buttons->addStretch(1);
     inside->addLayout(buttons);
 
-    // The panel centred both ways, and no bigger than its contents.
-    QVBoxLayout* stack = new QVBoxLayout(this);
-    stack->addStretch(1);
-
-    QHBoxLayout* row = new QHBoxLayout;
-    row->addStretch(1);
-    row->addWidget(panel);
-    row->addStretch(1);
-
-    stack->addLayout(row);
-    stack->addStretch(1);
-
     // NO Close BUTTON, departing from section 16.2's mockup and recorded there.
     // That mockup predates D1's main-menu page: the window's X and the menu
     // page's Quit both already end the session, and D1 replaced the menu bar
@@ -148,21 +127,6 @@ GameOverPanel::GameOverPanel(QWidget* parent) : QWidget(parent)
     // APPLICATION.
     connect(playAgain, &QPushButton::clicked, this, &GameOverPanel::playAgainRequested);
     connect(mainMenu, &QPushButton::clicked, this, &GameOverPanel::mainMenuRequested);
-}
-
-void GameOverPanel::setTheme(const Theme& _theme)
-{
-    theme = _theme;
-
-    // Through the palette rather than a stylesheet, the call every other panel
-    // makes - section 18.1's rule is that colours come from Theme, and a
-    // stylesheet string is a colour constructed somewhere else.
-    QPalette scheme = panel->palette();
-    scheme.setColor(QPalette::Window, theme.seatPlaque);
-    scheme.setColor(QPalette::WindowText, theme.textPrimary);
-    panel->setPalette(scheme);
-
-    update();
 }
 
 void GameOverPanel::showResult(const std::vector<Standing>& standings,
@@ -213,7 +177,7 @@ void GameOverPanel::showFailure(const QString& what)
     mainMenu->setDefault(true);
 }
 
-void GameOverPanel::focusDefaultButton()
+void GameOverPanel::focusDefault()
 {
     if(playAgain->isVisible())
         playAgain->setFocus(Qt::OtherFocusReason);
@@ -280,18 +244,4 @@ void GameOverPanel::addRow(const Standing& standing, bool isWinner)
     grid->addWidget(name,  line, 1);
     grid->addWidget(score, line, 2);
     grid->addWidget(star,  line, 3);
-}
-
-void GameOverPanel::paintEvent(QPaintEvent* event)
-{
-    QPainter painter(this);
-
-    painter.fillRect(rect(), theme.dimmedOverlay);
-
-    QWidget::paintEvent(event);
-}
-
-void GameOverPanel::mousePressEvent(QMouseEvent* event)
-{
-    event->accept();
 }

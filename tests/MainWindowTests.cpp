@@ -580,7 +580,7 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
 
 TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
 {
-    // THE PAUSE TAKES FOCUS AND NOTHING GIVES IT BACK. focusResume() puts the
+    // THE PAUSE TAKES FOCUS AND NOTHING GIVES IT BACK. focusDefault() puts the
     // keyboard on the Resume button so that Enter resumes; hiding that button
     // does not return it, so a pause taken while the strip was up left its digit
     // keys dead afterwards - with the buttons still working, which is exactly

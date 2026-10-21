@@ -1,14 +1,13 @@
 #ifndef RULES_SHEET_H
 #define RULES_SHEET_H
 
-#include "paint/Theme.h"
 #include "ui/NewGameDialog.h"
+#include "ui/Overlay.h"
 
 #include <romanian_whist/Card.h>
 
 #include <QString>
 #include <QStringList>
-#include <QWidget>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -42,36 +41,25 @@ QStringList linesFor(const newgame::Config& config);
 
 } // namespace rulessheet
 
-// The widget. Built as PauseOverlay is - a child of the window's stack, dimming
-// what is behind it and swallowing the clicks that land on it - because phase 10
-// restyles every sheet together (the owner's call, 2026-10-21).
-class RulesSheet : public QWidget
+// The widget, an Overlay like every other sheet, because phase 10 restyles them
+// all together (the owner's call, 2026-10-21).
+class RulesSheet : public Overlay
 {
     Q_OBJECT
 
 public:
     explicit RulesSheet(QWidget* parent = nullptr);
 
-    void setTheme(const Theme& theme);
-
     // Fills the sheet for the game `config` deals.
     void showRules(const newgame::Config& config);
 
-    // Puts the keyboard on Close, so Enter closes. Called by the window when it
-    // shows this, as the other overlays' are.
-    void focusClose();
+    // Close, so Enter closes.
+    void focusDefault() override;
 
 signals:
     void closeRequested();
 
-protected:
-    void paintEvent(QPaintEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
-
 private:
-    Theme theme = Theme::light();
-
-    QWidget* panel = nullptr;
     QLabel* rules = nullptr;
     QPushButton* closeButton = nullptr;
 };

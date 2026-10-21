@@ -418,7 +418,7 @@ void MainWindow::setPauseMenuVisible(bool visible)
     {
         pauseOverlay->hide();
 
-        // AND THE KEYBOARD BACK WHERE THE PAUSE TOOK IT FROM. focusResume() put
+        // AND THE KEYBOARD BACK WHERE THE PAUSE TOOK IT FROM. focusDefault() put
         // it on the Resume button, and hiding that button does not give it back
         // - so a pause taken at a bid prompt left the strip's digit keys dead
         // afterwards, with its buttons still working, which is the shape that
@@ -435,7 +435,7 @@ void MainWindow::setPauseMenuVisible(bool visible)
     pauseOverlay->setGeometry(pages->rect());
     pauseOverlay->show();
     pauseOverlay->raise();
-    pauseOverlay->focusResume();
+    pauseOverlay->focusDefault();
 }
 
 void MainWindow::showPauseMenu()
@@ -463,7 +463,7 @@ void MainWindow::showRules()
     sheetHolding = tableState == TableState::Playing;
     applyHold();
 
-    rulesSheet->focusClose();
+    rulesSheet->focusDefault();
 }
 
 void MainWindow::showSettings()
@@ -481,7 +481,7 @@ void MainWindow::showSettings()
     sheetHolding = tableState == TableState::Playing;
     applyHold();
 
-    settingsSheet->focusDone();
+    settingsSheet->focusDefault();
 }
 
 void MainWindow::applySettings(int botSpeed, bool wait)
@@ -567,7 +567,7 @@ void MainWindow::showRoundSheet(const RoundResult& result)
     roundSheet->raise();
 
     if(roundSheetHolding)
-        roundSheet->focusContinue();
+        roundSheet->focusDefault();
 
     keepMenuSheetOnTop();
 }
@@ -583,7 +583,7 @@ void MainWindow::hideRoundSheet()
     applyHold();
 
     // The keyboard back to the strip if the strip is what is waiting, exactly as
-    // the pause menu returns it - focusContinue() took it, and hiding the button
+    // the pause menu returns it - focusDefault() took it, and hiding the button
     // does not give it back.
     restoreFocus();
 }
@@ -593,13 +593,13 @@ void MainWindow::restoreFocus()
     // The menu bar's sheets open over everything else.
     if(rulesSheet && rulesSheet->isVisible())
     {
-        rulesSheet->focusClose();
+        rulesSheet->focusDefault();
         return;
     }
 
     if(settingsSheet && settingsSheet->isVisible())
     {
-        settingsSheet->focusDone();
+        settingsSheet->focusDefault();
         return;
     }
 
@@ -609,19 +609,19 @@ void MainWindow::restoreFocus()
     // later change lets two stand at once.
     if(pauseOverlay->isVisible())
     {
-        pauseOverlay->focusResume();
+        pauseOverlay->focusDefault();
         return;
     }
 
     if(gameOverPanel->isVisible())
     {
-        gameOverPanel->focusDefaultButton();
+        gameOverPanel->focusDefault();
         return;
     }
 
     if(roundSheet->isVisible() && roundSheetHolding)
     {
-        roundSheet->focusContinue();
+        roundSheet->focusDefault();
         return;
     }
 
@@ -634,7 +634,7 @@ void MainWindow::showGameOverPanel()
     gameOverPanel->setGeometry(pages->rect());
     gameOverPanel->show();
     gameOverPanel->raise();
-    gameOverPanel->focusDefaultButton();
+    gameOverPanel->focusDefault();
 
     keepMenuSheetOnTop();
 }
