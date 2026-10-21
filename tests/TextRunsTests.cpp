@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "paint/Fonts.h"
 #include "paint/Icons.h"
@@ -169,6 +170,17 @@ TEST_CASE("A word wider than the line stands on its own", "[text-runs]")
 
 TEST_CASE("An icon is drawn in the colour asked for and inside its box", "[text-runs]")
 {
+    // EVERY ICON, the corner buttons' two and the menu bar's four: one with
+    // markup that fails to parse draws nothing, and nothing else would say so.
+    const icons::Icon icon = GENERATE(icons::Icon::RoundHistory,
+                                      icons::Icon::LastTrick,
+                                      icons::Icon::NewGame,
+                                      icons::Icon::Settings,
+                                      icons::Icon::Rules,
+                                      icons::Icon::Exit);
+
+    CAPTURE(static_cast<int>(icon));
+
     QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
 
@@ -176,11 +188,11 @@ TEST_CASE("An icon is drawn in the colour asked for and inside its box", "[text-
     const QRectF box(12.0, 12.0, 24.0, 24.0);
 
     QPainter painter(&image);
-    icons::paint(painter, icons::Icon::RoundHistory, box, gold);
+    icons::paint(painter, icon, box, gold);
     painter.end();
 
-    // The grid's outline runs along the box's 4-unit inset, so its strokes are
-    // drawn; and nothing outside the box is.
+    // Each is a few strokes 1.8 wide over a 24-unit box, so its strokes are
+    // drawn in gold; and nothing outside the box is.
     REQUIRE(pixelsNear(image, gold) > 20);
 
     for(int y = 0 ; y < image.height() ; y++)
