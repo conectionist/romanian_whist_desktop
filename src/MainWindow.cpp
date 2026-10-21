@@ -729,6 +729,16 @@ void MainWindow::abandonToMenu()
     // rather than a race.
     controller.discardQueuedSignals();
 
+    // THE PROMPTS GO HERE, because onGameStopped() never runs on this path: the
+    // purge above drops the queued gameStopped with everything else. The strip is
+    // an item in the scene since the redesign's phase 10, so hiding the table's
+    // page does not hide it - left up, the menu page took its digits for a game
+    // that was gone, and restoreFocus() sent the keyboard to the hidden table
+    // (PR #36's review, findings #1 and #2).
+    bidStrip->clearPrompt();
+    hand->setPlayable(false);
+    trickPanel->clearPrompt();
+
     tableState = TableState::NoGame;
     updatePauseAction();
     showMainMenu();
@@ -1121,10 +1131,12 @@ void MainWindow::onCardPicked(std::size_t slot)
     controller.provider()->submit(activePrompt.promptId, activePrompt.handIndex[slot]);
 }
 
-// THE THREE ENDINGS ALL HIDE THE STRIP, and it is one line in each rather than
-// one in a shared helper because they are reached from different places and two
-// of them are not reached at all on the path the third is. Between them they
-// close the same hole: a strip left standing over a finished game is a live
+// THE FOUR ENDINGS ALL HIDE THE STRIP - onGameStopped(), onGameOver(),
+// showFailure() and abandonToMenu() - and it is one line in each rather than one
+// in a shared helper because they are reached from different places, and an
+// ending cannot count on another one running after it: abandonToMenu()'s purge
+// is what keeps onGameStopped() from running at all on its path. Between them
+// they close the same hole: a strip left standing over a finished game is a live
 // button whose click would submit into a provider whose engine is gone. The
 // promptId gate would drop that answer, so this is the belt to its braces - but
 // a control that looks live and does nothing is its own defect.

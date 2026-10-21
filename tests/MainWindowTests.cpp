@@ -812,6 +812,70 @@ TEST_CASE("Closing a sheet gives the keyboard to the page and not the menu bar",
     REQUIRE_FALSE(dialogOpened);
 }
 
+TEST_CASE("Abandoning while you bid leaves nothing of the bid on the menu page", "[main-window]")
+{
+    // PR #36's review, findings #1 and #2. The strip is an item in the scene since
+    // phase 10, so hiding the table's page no longer hides it - and the one clear
+    // on this path, onGameStopped()'s, never ran: abandonToMenu() purges the queued
+    // gameStopped with the rest of the abandoned game's signals. The menu page then
+    // took bid digits for a game that was gone, and closing Rules there sent the
+    // keyboard to the hidden table instead of to New Game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    REQUIRE(pages != nullptr);
+    REQUIRE(newGame != nullptr);
+    REQUIRE(rules != nullptr);
+
+    // The dialog's defaults are a played game, so this accepts them unchanged.
+    QTimer::singleShot(300, []
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+            dialog->done(QDialog::Accepted);
+    });
+
+    newGame->click();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    pump(100);
+    window.findChild<QPushButton*>("mainMenu")->click();
+    pump(500);
+
+    REQUIRE(pages->currentIndex() == 0);
+    REQUIRE_FALSE(bidStrip->isVisible());
+    REQUIRE_FALSE(scene->handItem()->isPlayable(0));
+
+    // A digit on the menu page is nobody's bid.
+    QKeyEvent zero(QEvent::KeyPress, Qt::Key_0, Qt::NoModifier);
+    QCoreApplication::sendEvent(window.focusWidget(), &zero);
+    pump(50);
+
+    REQUIRE(pages->currentIndex() == 0);
+    REQUIRE_FALSE(bidStrip->isVisible());
+
+    // And a sheet closed there gives the keyboard to New Game, not the menu bar.
+    window.findChild<QAction*>("rulesAction")->trigger();
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    pump(50);
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+    REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+    REQUIRE(focus == newGame);
+}
+
 TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
 {
     // QDockWidget::hide() UNCHECKS ITS OWN toggleViewAction(), and that two-way
