@@ -249,10 +249,10 @@ private:
     void dropMenuSheets();
 
     // GIVES THE KEYBOARD TO WHATEVER IS NOW ON TOP, after something over it went:
-    // the pause menu's Resume, the game-over panel's default button, a holding
-    // round sheet's Continue, or the bid strip and its digit keys. Each of those
-    // takes focus when it is raised, and hiding what took it from them does not
-    // give it back - which looks finished, because the mouse still works.
+    // the sheet on top (activeOverlay()), the bid strip and its digit keys, or
+    // else the page itself - the table, or the menu page's New Game. Each takes
+    // focus when it is raised, and hiding what took it from them does not give
+    // it back - which looks finished, because the mouse still works.
     void restoreFocus();
 
     // THE SHEET THE KEYBOARD BELONGS TO, top first: Rules or Settings, the

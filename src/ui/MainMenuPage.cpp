@@ -89,6 +89,11 @@ void MainMenuPage::setTheme(const Theme& _theme)
     update();
 }
 
+void MainMenuPage::focusNewGame()
+{
+    newGame->setFocus(Qt::OtherFocusReason);
+}
+
 void MainMenuPage::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);

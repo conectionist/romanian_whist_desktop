@@ -32,6 +32,8 @@
 #include <QString>
 #include <QTimer>
 
+#include <string>
+
 // D1's flow, driven through the real window: menu, deal, pause, resume, abandon,
 // and a second game. Constructible because TestApp is a QApplication on the
 // offscreen platform - real widgets, a real scene, a real game thread, and no
@@ -715,6 +717,82 @@ TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
     REQUIRE(bidStrip->isVisible());
     REQUIRE(log->blockCount() == lines);
     REQUIRE(window.focusWidget() == bidStrip);
+}
+
+TEST_CASE("Closing a sheet gives the keyboard to the page and not the menu bar", "[main-window]")
+{
+    // PR #35's review, finding #3. With no bid strip to go back to,
+    // restoreFocus() gave the keyboard to nothing, so hiding the sheet's button
+    // let Qt hand it to the next widget in the window's Tab order: the menu
+    // bar's New Game, made last. In the app it showed as hovered with the mouse
+    // far away, and Space opened the setup dialog over the game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    TableView* table = window.findChild<TableView*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    REQUIRE(table != nullptr);
+    REQUIRE(newGame != nullptr);
+
+    // focusWidget(), for the reason "Resuming gives the keyboard back to the bid
+    // strip" gives.
+    const auto keyboardOn = [&window](QWidget* expected)
+    {
+        pump(50);
+
+        QWidget* focus = window.focusWidget();
+        INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+        REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+        REQUIRE(focus == expected);
+    };
+
+    // On the menu page: back to its New Game.
+    window.findChild<QAction*>("rulesAction")->trigger();
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    keyboardOn(newGame);
+
+    answerModalWatching(300);
+    newGame->click();
+    pump(2000);
+
+    // On a watched game: to the table, whichever way the sheet went.
+    window.findChild<QAction*>("rulesAction")->trigger();
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    keyboardOn(table);
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    keyboardOn(table);
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    pause->findChild<QPushButton*>("resume")->click();
+    keyboardOn(table);
+
+    // And Space there opens nothing. Armed to close a dialog that does open,
+    // so a failure is an assertion rather than a test stuck in exec().
+    bool dialogOpened = false;
+    QTimer::singleShot(300, [&dialogOpened]
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+        {
+            dialogOpened = true;
+            dialog->reject();
+        }
+    });
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+    QCoreApplication::sendEvent(window.focusWidget(), &press);
+    QCoreApplication::sendEvent(window.focusWidget(), &release);
+    pump(500);
+
+    REQUIRE_FALSE(dialogOpened);
 }
 
 TEST_CASE("The log dock survives a trip to the menu", "[main-window]")

@@ -604,7 +604,20 @@ void MainWindow::restoreFocus()
     }
 
     if(bidStrip->isVisible())
+    {
         bidStrip->setFocus();
+        return;
+    }
+
+    // AND OTHERWISE THE PAGE, NEVER NOTHING. Hiding the button that had the
+    // keyboard hands it to the next widget in the window's Tab order, which is
+    // the menu bar's New Game, made last: it showed as hovered with the mouse
+    // far away, and Space opened the setup dialog over the game (PR #35's
+    // review, finding #3).
+    if(pages->currentWidget() == menuPage)
+        menuPage->focusNewGame();
+    else
+        table->setFocus(Qt::OtherFocusReason);
 }
 
 Overlay* MainWindow::activeOverlay() const

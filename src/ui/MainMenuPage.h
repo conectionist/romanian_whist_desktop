@@ -41,6 +41,10 @@ public:
     // no colour is constructed outside Theme (section 18.1).
     void setTheme(const Theme& theme);
 
+    // Puts the keyboard on New Game, so Enter deals - where it goes back to when
+    // a sheet over this page closes.
+    void focusNewGame();
+
 signals:
     void newGameRequested();
     void quitRequested();
