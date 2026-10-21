@@ -31,78 +31,34 @@
 // cards do not, because a card is white in the dark too. That is why nothing
 // about a card face or a card back is in this struct.
 //
-// The palette is the five names section 18.1 declares, plus section 14's
-// bid/won pill and section 18's +/- score colours - each added in the phase
-// whose widget needed it, and each added HERE rather than in that widget, which
-// is the rule that matters. Nothing in section 18 is owed to this struct now.
+// THE TABLE'S PALETTE, `table` below, IS NOW NEARLY ALL OF IT. The table
+// redesign (docs/ui-redesign/IMPLEMENTATION_PLAN.md) moved every widget that
+// drew in section 18's first palette across to it, one phase at a time, and phase
+// 10 moved the last of them - the bid strip, the sheets and the main-menu page -
+// and retired the colours they left with no reader: the seat plaque, the accent
+// and its text form, the dim, the pill's three states and the two score colours.
+// The table's own good, warn and bad are those colours now.
 //
-// The one member section 18 does NOT name is accentText below, which is not a
-// sixth design colour but the accent's second FORM: a colour readable as a mark
-// and a colour readable as a word are different colours, and the section spells
-// out neither. See the note on it.
-//
-// THE TABLE PAGE IS DARK IN BOTH SCHEMES - the table redesign's open question Q1
-// (docs/ui-redesign/IMPLEMENTATION_PLAN.md), decided by the owner on 2026-10-17.
-// The redesign is a dark wood-panelled room and has no light variant to follow
-// the system with, so its colours are one set, `table` below, which light() and
-// dark() assign from the same function. The members above it keep following the
-// scheme for the main menu and the dialogs, and keep drawing today's table until
-// the redesign's later phases move each widget across to `table`.
+// THE TABLE PAGE IS DARK IN BOTH SCHEMES - the table redesign's open question Q1,
+// decided by the owner on 2026-10-17. The redesign is a dark wood-panelled room
+// and has no light variant to follow the system with, so its colours are one set,
+// `table` below, which light() and dark() assign from the same function. The two
+// members above it are what still follows the scheme: the Card art window's
+// ground and caption, a developer's view of the deck.
 //
 // EVERY COLOUR LIVES IN THIS BASE, NOT IN Theme BELOW IT, because Theme's caches
 // tell a stale picture from a fresh one by comparing the colours it was painted
 // from with the colours the theme holds now: all of them, through the defaulted
 // operator== at the foot of this struct. A member added here is in that
 // comparison with no other edit. The hand-written key this replaced had to be
-// told about each new colour, and twice it was not - accent, which paintAvatar()
-// reads, and then the three bid colours in B2. Theme.cpp asserts that Theme adds
+// told about each new colour, and twice it was not - the accent, which the
+// portraits read then, and the three bid colours in B2. Theme.cpp asserts that Theme adds
 // nothing beside its cache, so a colour declared there instead does not compile.
 struct ThemeColours
 {
+    // The Card art window's ground (background()) and the caption written on it.
     QColor tableSurface;
-    QColor seatPlaque;
-    QColor accent;
     QColor textPrimary;
-    QColor dimmedOverlay;
-
-    // THE ACCENT AS TEXT, which is not the same colour as the accent as a mark.
-    // C4 painted section 17's round-type label in `accent` and the light theme's
-    // amber measured 2.0:1 against the plaque behind it - below even the 3:1
-    // large-text floor, and dimmer than the textPrimary the label had before,
-    // so the line meant to CATCH the eye read worse than the three beside it.
-    //
-    // A hairline or a pip on a card can be the bright amber, because a mark is
-    // read as a shape at whatever contrast it has. A word has to be read as
-    // letters. So the two uses are two members: `accent` stays what it was for
-    // every mark already drawing it, and text takes the darkened one here.
-    //
-    // In the dark theme they are one colour, because the amber that had to be
-    // lifted to hold against a dark plaque already reads as text against it -
-    // hence the assignment rather than a literal in dark(). The split exists
-    // for the light theme; the dark one just keeps the same two names honest.
-    QColor accentText;
-
-    // Section 14's bid/won pill, which is colour-coded because "on target",
-    // "still owing tricks" and "over the bid" are three different states and a
-    // player should not have to subtract to see which one they are in.
-    //
-    // NEVER THE ONLY CUE. Section 18's rule is that colour never carries meaning
-    // alone, and it does not here: the pill always reads "2 - 1" as well, so the
-    // colour is what makes the state quick rather than what makes it knowable.
-    QColor bidOnTarget;
-    QColor bidOwing;
-    QColor bidOver;
-
-    // Section 18's scoreboard numbers: a positive round score green with a `+`,
-    // a negative one red with a `-`. Added in B2b, with the scoreboard that
-    // reads them, which is what the note above this struct promised.
-    //
-    // The SIGN is what carries the meaning and the colour is what makes it
-    // quick, the same way round as the pill above - section 18 allows no cue
-    // that is colour alone, and a round score is a number that already says
-    // which way it went.
-    QColor scorePositive;
-    QColor scoreNegative;
 
     // The redesign's palette: section 2.2 of docs/ui-redesign/IMPLEMENTATION_PLAN.md,
     // copied from the mock-up's page.html. The same in both schemes, per the note

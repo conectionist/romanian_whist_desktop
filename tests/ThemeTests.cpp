@@ -168,39 +168,6 @@ TEST_CASE("The six portraits are six different pictures", "[theme]")
     REQUIRE(theme.avatar(6, box, 1.0).toImage() == seen.front());
 }
 
-// THE KEY LEADS ITS PAINTERS, which is the half of the rule above that only a
-// colour NOTHING READS YET can assert. B2 added the three bid/won colours to the
-// struct and left the cache key hashing the five that came before them - the
-// identical omission the accent case above records, caught this time before a
-// painter existed to make it visible.
-//
-// Deliberately no toImage() companion assertion, unlike that case: nothing
-// paints a bid colour today, so the two pictures ARE the same and the pixels
-// prove nothing. The cacheKey is the whole assertion - it says the cache would
-// already have noticed, so section 14's pill can start reading bidOwing without
-// this file or Theme.cpp needing a matching edit.
-TEST_CASE("Recolouring a bid colour invalidates the cached background", "[theme]")
-{
-    Theme theme = Theme::light();
-    const Theme other = Theme::dark();
-    const QSize view(320, 200);
-
-    // One at a time, because they were added together and a key maintained by
-    // hand is a key that ends up with two of the three.
-    const QPixmap before = theme.background(view, 1.0);
-
-    theme.bidOwing = other.bidOwing;
-    const QPixmap afterOwing = theme.background(view, 1.0);
-    REQUIRE(afterOwing.cacheKey() != before.cacheKey());
-
-    theme.bidOnTarget = other.bidOnTarget;
-    const QPixmap afterOnTarget = theme.background(view, 1.0);
-    REQUIRE(afterOnTarget.cacheKey() != afterOwing.cacheKey());
-
-    theme.bidOver = other.bidOver;
-    REQUIRE(theme.background(view, 1.0).cacheKey() != afterOnTarget.cacheKey());
-}
-
 // THE SAME CONTRACT CardRenderer HAS, and it has to be the same one: the table
 // and the cards are drawn beside each other in one frame, so a Theme that
 // rasterizes at the logical size is a soft background behind crisp cards, which
@@ -247,42 +214,16 @@ TEST_CASE("The theme's caches are keyed on the device pixel ratio", "[theme]")
     REQUIRE(theme.avatar(0, box, -1.0).isNull());
 }
 
-// The same rule the bid colours needed in B2a, for the two the scoreboard added
-// in B2b. Nothing in Theme's own painters reads either one - they are drawn by
-// the scoreboard, which has a palette of its own to consult - so this is the
-// rule holding for colours no painter here touches, which is exactly the case
-// it exists for.
-TEST_CASE("Recolouring a score colour invalidates the cached background", "[theme]")
-{
-    const QSize view(320, 200);
-
-    {
-        Theme theme = Theme::light();
-        const QPixmap before = theme.background(view, 1.0);
-
-        theme.scorePositive = Theme::dark().scorePositive;
-
-        REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
-    }
-
-    {
-        Theme theme = Theme::light();
-        const QPixmap before = theme.background(view, 1.0);
-
-        theme.scoreNegative = Theme::dark().scoreNegative;
-
-        REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
-    }
-}
-
-// Section 18 asks for green and red by name, and dark mode must keep them the
-// same two colours a player has already learned rather than recolouring them.
-TEST_CASE("The score colours are a green and a red in both palettes", "[theme]")
+// Section 18 asks for green and red by name - a gain and a loss on the round
+// sheet, the pill on target and over - and since the table redesign's phase 10
+// moved the last of them across, those are the table's own good and bad, the
+// same in every scheme.
+TEST_CASE("The table's good and bad are a green and a red", "[theme]")
 {
     for(const Theme& theme : { Theme::light(), Theme::dark() })
     {
-        REQUIRE(theme.scorePositive.green() > theme.scorePositive.red());
-        REQUIRE(theme.scoreNegative.red() > theme.scoreNegative.green());
+        REQUIRE(theme.table.good.green() > theme.table.good.red());
+        REQUIRE(theme.table.bad.red() > theme.table.bad.green());
     }
 }
 
@@ -313,58 +254,6 @@ static double contrastRatio(const QColor& text, const QColor& background)
     const double two = relativeLuminance(background);
 
     return (std::max(one, two) + 0.05) / (std::min(one, two) + 0.05);
-}
-
-TEST_CASE("Every colour drawn as text on the plaque holds AA against it", "[theme]")
-{
-    for(const Theme& theme : { Theme::light(), Theme::dark() })
-    {
-        // The regression this case exists for. accentText was the round type in
-        // the info strip, which the table redesign's phase 8 folded into the
-        // scoreboard; if a later phase reaches for `accent` to colour another
-        // word, this is the line that should stop it.
-        REQUIRE(contrastRatio(theme.accentText, theme.seatPlaque) >= 4.5);
-
-        // Its neighbours, in the same case rather than a second one: they are
-        // all text on the same plaque, and the point is the RULE, not the one
-        // colour that broke it. The bid and score colours read on the plaque
-        // too - the pill and the scoreboard both fill with seatPlaque.
-        REQUIRE(contrastRatio(theme.textPrimary, theme.seatPlaque) >= 4.5);
-        REQUIRE(contrastRatio(theme.bidOnTarget, theme.seatPlaque) >= 4.5);
-        REQUIRE(contrastRatio(theme.bidOwing, theme.seatPlaque) >= 4.5);
-        REQUIRE(contrastRatio(theme.bidOver, theme.seatPlaque) >= 4.5);
-        REQUIRE(contrastRatio(theme.scorePositive, theme.seatPlaque) >= 4.5);
-        REQUIRE(contrastRatio(theme.scoreNegative, theme.seatPlaque) >= 4.5);
-    }
-}
-
-// The other half of the split, and the half a contrast number cannot say: the
-// two ambers have to stay ONE colour to a player. A darkened accent is a shade
-// of the same thing; an unrelated brown would be a second colour to learn, and
-// would pass the ratio above just as happily.
-TEST_CASE("The text accent is the accent, darkened", "[theme]")
-{
-    for(const Theme& theme : { Theme::light(), Theme::dark() })
-    {
-        REQUIRE(std::abs(theme.accentText.hslHue() - theme.accent.hslHue()) <= 10);
-        REQUIRE(theme.accentText.lightnessF() <= theme.accent.lightnessF());
-    }
-}
-
-// THE KEY LEADS ITS PAINTERS again, for the colour C4a added. Nothing Theme
-// paints reads accentText - the info strip coloured a QLabel with it - so this is the
-// bid-colour case's argument one more time, and the reason it is written now
-// rather than when a painter finally does read it.
-TEST_CASE("Recolouring the text accent invalidates the cached background", "[theme]")
-{
-    Theme theme = Theme::light();
-    const QSize view(320, 200);
-
-    const QPixmap before = theme.background(view, 1.0);
-
-    theme.accentText = Theme::dark().accentText;
-
-    REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
 }
 
 // ---------------------------------------------------------------------------
@@ -581,8 +470,9 @@ TEST_CASE("Every table-page text colour holds AA against the panel", "[theme]")
             REQUIRE(contrastRatio(text, panel) >= 4.5);
         }
 
-        // THE RED SUIT IS A MARK, NOT A WORD - accentText's argument, the other
-        // way round. A ♥ or ♦ is recognised by its shape, which says the suit on
+        // THE RED SUIT IS A MARK, NOT A WORD - the argument the old palette's
+        // text accent was split out on, the other way round. A ♥ or ♦ is
+        // recognised by its shape, which says the suit on
         // its own, so it is held to the 3:1 non-text floor rather than to AA.
         // It measures about 3.7:1 on the lighter end; if a later phase starts
         // writing words in it, this is the line that needs to become 4.5.
