@@ -6,7 +6,6 @@
 #include "table/TableTopItem.h"
 
 #include <QEvent>
-#include <QFocusEvent>
 #include <QPainter>
 
 #include <algorithm>
@@ -15,22 +14,15 @@
 // ---- MenuPageButton ----
 
 MenuPageButton::MenuPageButton(icons::Icon _icon, const QString& text, QWidget* parent)
-    : QPushButton(text, parent), icon(_icon), colours(Theme::dark().table)
+    : LitButton(text, parent), icon(_icon), colours(Theme::dark().table)
 {
-    // Repainted as the cursor comes and goes, which is all the lit face needs; the
-    // page repaints the panel behind it (MainMenuPage::eventFilter()).
-    setAttribute(Qt::WA_Hover);
+    // The page repaints the panel behind the face (MainMenuPage::eventFilter()).
 }
 
 void MenuPageButton::setColours(const Theme::TablePalette& palette)
 {
     colours = palette;
     update();
-}
-
-bool MenuPageButton::isLit() const
-{
-    return isEnabled() && (underMouse() || isDown() || (tabbedTo && hasFocus()));
 }
 
 QSize MenuPageButton::sizeHint() const
@@ -43,22 +35,6 @@ QSize MenuPageButton::sizeHint() const
 QSize MenuPageButton::minimumSizeHint() const
 {
     return sizeHint();
-}
-
-void MenuPageButton::focusInEvent(QFocusEvent* event)
-{
-    tabbedTo = event->reason() == Qt::TabFocusReason || event->reason() == Qt::BacktabFocusReason;
-    update();
-
-    QPushButton::focusInEvent(event);
-}
-
-void MenuPageButton::focusOutEvent(QFocusEvent* event)
-{
-    tabbedTo = false;
-    update();
-
-    QPushButton::focusOutEvent(event);
 }
 
 void MenuPageButton::paintEvent(QPaintEvent*)

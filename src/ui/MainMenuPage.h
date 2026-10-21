@@ -4,9 +4,9 @@
 #include "paint/Icons.h"
 #include "paint/Panel.h"
 #include "paint/Theme.h"
+#include "ui/LitButton.h"
 
 #include <QPixmap>
-#include <QPushButton>
 #include <QSize>
 #include <QWidget>
 
@@ -22,8 +22,9 @@
 // the corner buttons' own).
 //
 // A QPushButton, so it keeps what a button does - the click, Enter and Space, the
-// default - and the name every test finds it by.
-class MenuPageButton : public QPushButton
+// default - and the name every test finds it by. Lit by a sheet button's rule
+// (LitButton::isLit()).
+class MenuPageButton : public LitButton
 {
     Q_OBJECT
 
@@ -32,10 +33,6 @@ public:
 
     void setColours(const Theme::TablePalette& palette);
 
-    // Under the cursor, held down, or with the keyboard brought to it by Tab - not
-    // merely focused, as a sheet's buttons are not (SheetButton::isLit()).
-    bool isLit() const;
-
     // .panel.btn's size for its label: 76 tall, as wide as its icon and label
     // with 22 either side (tablebutton::sizeFor()).
     QSize sizeHint() const override;
@@ -43,13 +40,10 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override;
-    void focusInEvent(QFocusEvent* event) override;
-    void focusOutEvent(QFocusEvent* event) override;
 
 private:
     icons::Icon icon;
     Theme::TablePalette colours;
-    bool tabbedTo = false;
 };
 
 // The screen the client opens on, and the one it returns to when a game is

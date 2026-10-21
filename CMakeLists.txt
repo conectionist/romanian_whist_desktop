@@ -141,6 +141,8 @@ qt_add_library(desktop_core STATIC
 
     src/ui/NewGameDialog.h
     src/ui/NewGameDialog.cpp
+    src/ui/LitButton.h
+    src/ui/LitButton.cpp
     src/ui/MainMenuPage.h
     src/ui/MainMenuPage.cpp
     src/ui/MenuBar.h

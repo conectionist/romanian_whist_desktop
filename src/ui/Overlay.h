@@ -3,10 +3,10 @@
 
 #include "paint/Panel.h"
 #include "paint/Theme.h"
+#include "ui/LitButton.h"
 
 #include <QColor>
 #include <QFont>
-#include <QPushButton>
 #include <QSize>
 #include <QString>
 #include <QWidget>
@@ -86,8 +86,9 @@ QString number(int value);
 // gold-bright.
 //
 // A QPushButton, painted, so a sheet's buttons keep everything a button does - the
-// click, Enter and Space, the default - and every test that finds one by name.
-class SheetButton : public QPushButton
+// click, Enter and Space, the default - and every test that finds one by name. When
+// it is lit is LitButton's rule.
+class SheetButton : public LitButton
 {
     Q_OBJECT
 
@@ -107,26 +108,15 @@ public:
 
     void setColours(const Theme::TablePalette& palette);
 
-    // Under the cursor, held down, or with the keyboard brought to it by Tab. NOT
-    // merely focused: a sheet puts the keyboard on its default button when it
-    // opens (Overlay::focusDefault()), and a browser draws no focus ring for focus
-    // a page moved there itself.
-    bool isLit() const;
-
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
-    void focusInEvent(QFocusEvent* event) override;
-    void focusOutEvent(QFocusEvent* event) override;
 
 private:
     Kind buttonKind;
     Theme::TablePalette colours;
-
-    // Whether the keyboard came here by Tab, and has not left since.
-    bool tabbedTo = false;
 };
 
 // .sheet table: headings in small spaced capitals over a faint gold rule, rows of

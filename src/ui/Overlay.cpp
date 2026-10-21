@@ -6,7 +6,6 @@
 
 #include <QBoxLayout>
 #include <QEvent>
-#include <QFocusEvent>
 #include <QFontMetricsF>
 #include <QGridLayout>
 #include <QLabel>
@@ -204,11 +203,8 @@ QString sheet::number(int value)
 // ---- SheetButton ----
 
 SheetButton::SheetButton(const QString& text, Kind kind, QWidget* parent)
-    : QPushButton(text, parent), buttonKind(kind), colours(Theme::dark().table)
+    : LitButton(text, parent), buttonKind(kind), colours(Theme::dark().table)
 {
-    // Repainted as the cursor comes and goes, which is all the lit look needs.
-    setAttribute(Qt::WA_Hover);
-
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 }
 
@@ -227,11 +223,6 @@ void SheetButton::setColours(const Theme::TablePalette& palette)
     update();
 }
 
-bool SheetButton::isLit() const
-{
-    return isEnabled() && (underMouse() || isDown() || (tabbedTo && hasFocus()));
-}
-
 QSize SheetButton::sizeHint() const
 {
     const QFontMetricsF metrics(buttonFont());
@@ -245,22 +236,6 @@ QSize SheetButton::sizeHint() const
 QSize SheetButton::minimumSizeHint() const
 {
     return sizeHint();
-}
-
-void SheetButton::focusInEvent(QFocusEvent* event)
-{
-    tabbedTo = event->reason() == Qt::TabFocusReason || event->reason() == Qt::BacktabFocusReason;
-    update();
-
-    QPushButton::focusInEvent(event);
-}
-
-void SheetButton::focusOutEvent(QFocusEvent* event)
-{
-    tabbedTo = false;
-    update();
-
-    QPushButton::focusOutEvent(event);
 }
 
 void SheetButton::paintEvent(QPaintEvent*)
@@ -665,7 +640,7 @@ bool Overlay::focusNextInside(bool next)
     // A TAB THAT LANDS WHERE THE KEYBOARD ALREADY IS - a sheet with one button,
     // whose default it is - still shows it there: Qt sends no focus event to the
     // widget that has it, so it is let go and taken again, and the button lights
-    // as a Tab lights it (SheetButton::isLit()).
+    // as a Tab lights it (LitButton::isLit()).
     if(stops[to]->hasFocus())
         stops[to]->clearFocus();
 
