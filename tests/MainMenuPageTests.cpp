@@ -5,7 +5,10 @@
 
 #include <QCoreApplication>
 #include <QImage>
+#include <QKeyEvent>
+#include <QPaintEvent>
 #include <QPushButton>
+#include <QRegion>
 
 #include <cstdlib>
 
@@ -109,4 +112,63 @@ TEST_CASE("A menu page button lights under the cursor and when Tab brings the ke
 
     const QPoint line(newGame->geometry().center().x(), newGame->y() + 4);
     REQUIRE(lit.pixelColor(line) != plain.pixelColor(line));
+}
+
+TEST_CASE("Space on a menu page button repaints the glow behind it", "[menu-page]")
+{
+    // PR #36's review, finding #8. Space holds a button down, which lights it
+    // (LitButton::isLit()), and the page paints the lit panel behind it - glow and
+    // all, reaching past the button's rect. Qt repaints the page under a button that
+    // paints only its face, but only inside the button's rect, so the glow has to
+    // be asked for: no event the page watched said the button had gone down.
+    MainMenuPage page;
+    page.resize(1280, 800);
+    page.show();
+    QCoreApplication::processEvents();
+
+    MenuPageButton* newGame = page.findChild<MenuPageButton*>("newGame");
+    REQUIRE(newGame != nullptr);
+
+    // Where a closed sheet puts the keyboard, which lights nothing.
+    page.focusNewGame();
+    QCoreApplication::processEvents();
+    REQUIRE_FALSE(newGame->isLit());
+
+    // What the page repaints from here on.
+    struct Painted : QObject
+    {
+        QRegion region;
+
+        bool eventFilter(QObject*, QEvent* event) override
+        {
+            if(event->type() == QEvent::Paint)
+                region += static_cast<QPaintEvent*>(event)->region();
+
+            return false;
+        }
+    } painted;
+
+    page.installEventFilter(&painted);
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+    QCoreApplication::sendEvent(newGame, &press);
+    QCoreApplication::processEvents();
+
+    REQUIRE(newGame->isLit());
+
+    // Just above the button: the glow, which only the page paints.
+    const QPoint glow(newGame->geometry().center().x(), newGame->geometry().top() - 3);
+    REQUIRE(painted.region.contains(glow));
+
+    // And let go, out again.
+    painted.region = QRegion();
+
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+    QCoreApplication::sendEvent(newGame, &release);
+    QCoreApplication::processEvents();
+
+    REQUIRE_FALSE(newGame->isDown());
+    REQUIRE(painted.region.contains(glow));
+
+    page.removeEventFilter(&painted);
 }

@@ -60,7 +60,17 @@ MainMenuPage::MainMenuPage(QWidget* parent) : QWidget(parent), logoPalette(theme
     buttons = { newGame, quit };
 
     for(MenuPageButton* button : buttons)
+    {
         button->installEventFilter(this);
+
+        // DOWN AND UP, by the mouse or by Space - and by a press dragged off the
+        // button and back. isLit() counts a button held down, and no event the
+        // filter sees says so: a Space press lit the face over an unlit panel, the
+        // glow outside the button's rect never repainted (PR #36's review, finding
+        // #8).
+        connect(button, &QPushButton::pressed, this, [this]{ update(); });
+        connect(button, &QPushButton::released, this, [this]{ update(); });
+    }
 
     connect(newGame, &QPushButton::clicked, this, &MainMenuPage::newGameRequested);
     connect(quit, &QPushButton::clicked, this, &MainMenuPage::quitRequested);
@@ -191,7 +201,8 @@ void MainMenuPage::resizeEvent(QResizeEvent* event)
 
 bool MainMenuPage::eventFilter(QObject* watched, QEvent* event)
 {
-    // WHAT LIGHTS A BUTTON lights the panel this paints behind it.
+    // WHAT LIGHTS A BUTTON lights the panel this paints behind it. Held down is the
+    // button's pressed() and released(), connected in the constructor.
     switch(event->type())
     {
     case QEvent::Enter:
@@ -200,8 +211,6 @@ bool MainMenuPage::eventFilter(QObject* watched, QEvent* event)
     case QEvent::HoverLeave:
     case QEvent::FocusIn:
     case QEvent::FocusOut:
-    case QEvent::MouseButtonPress:
-    case QEvent::MouseButtonRelease:
     case QEvent::EnabledChange:
         update();
         break;
