@@ -139,7 +139,7 @@ TEST_CASE("A hand void in the lead suit is told it must trump", "[trick-panel]")
                                          HandEntry{ Card(Rank::Ace, Suit::Spades), false } });
 
     REQUIRE(trickpanel::yourTurn(prompt, leadingWith(Suit::Hearts))
-            == QStringLiteral("Your turn. No ♥, so you must trump."));
+            == QStringLiteral("Your turn. No ♥, you must trump."));
 }
 
 TEST_CASE("A blind round explains nothing, because there is nothing to choose", "[trick-panel]")
@@ -253,7 +253,7 @@ TEST_CASE("The bidding panel names the first bidder and who is bidding", "[trick
     snapshot.activeSeat = 0;
     fields = trickpanel::fieldsFor(snapshot, nullptr);
 
-    REQUIRE(promptOf(fields) == QStringLiteral("Your bid. How many tricks will you take?"));
+    REQUIRE(promptOf(fields) == QStringLiteral("Your bid. How many tricks?"));
 }
 
 TEST_CASE("A scored round and a finished game say so", "[trick-panel]")
@@ -311,6 +311,89 @@ TEST_CASE("The panel keeps its height between turns", "[trick-panel]")
 
     REQUIRE(idle == asked);
     REQUIRE(idle.width() == trickpanel::width);
+}
+
+// AND NOTHING ON IT EVER TAKES A SECOND LINE (PR 34's review, finding #2): the two
+// longest prompts used to wrap, the bid on every one of yours, and so did a line
+// with a long name in it - a panel a line taller for as long as each showed.
+TEST_CASE("The panel keeps its height through the longest lines it says", "[trick-panel]")
+{
+    // The setup dialog's longest, 20 characters, for everyone but you.
+    GameSnapshot snapshot = playing();
+
+    for(SeatView& seat : snapshot.seats)
+    {
+        if(!seat.isHuman)
+            seat.name = "Bartholomew Feathers";
+    }
+
+    const auto height = [](const GameSnapshot& at, const PlayPrompt* prompt = nullptr)
+    {
+        return trickpanel::sizeFor(trickpanel::fieldsFor(at, prompt)).height();
+    };
+
+    // THE PLAY, a long name leading and winning: idle, then a long name thinking,
+    // then you void in hearts and made to trump.
+    snapshot.activeSeat = -1;
+    const qreal play = height(snapshot);
+
+    snapshot.activeSeat = 2;
+    REQUIRE(height(snapshot) == play);
+
+    const PlayPrompt trump = promptOf({ HandEntry{ Card(Rank::Two, Suit::Clubs), true },
+                                        HandEntry{ Card(Rank::Ace, Suit::Spades), false } });
+
+    snapshot.activeSeat = 0;
+    REQUIRE(height(snapshot, &trump) == play);
+
+    // A full trick a long name won.
+    GameSnapshot won = snapshot;
+    won.activeSeat = -1;
+    won.table = { PlayedCardView{ 1, Card(Rank::King, Suit::Hearts) },
+                  PlayedCardView{ 2, Card(Rank::Two, Suit::Hearts) },
+                  PlayedCardView{ 3, Card(Rank::Ace, Suit::Hearts), true },
+                  PlayedCardView{ 0, Card(Rank::Three, Suit::Hearts) } };
+
+    REQUIRE(height(won) == play);
+
+    // THE BIDDING, a long name first to bid: your bid, a long name thinking, idle.
+    snapshot.phase = GamePhase::Betting;
+    snapshot.table.clear();
+
+    snapshot.activeSeat = 0;
+    const qreal bidding = height(snapshot);
+
+    snapshot.activeSeat = 3;
+    REQUIRE(height(snapshot) == bidding);
+
+    snapshot.activeSeat = -1;
+    REQUIRE(height(snapshot) == bidding);
+}
+
+TEST_CASE("A long name gives way, and the rest of its line stays", "[trick-panel]")
+{
+    GameSnapshot snapshot = playing();
+    snapshot.seats[1].name = "Bartholomew Feathers";
+    snapshot.seats[3].name = "Bartholomew Feathers";
+
+    snapshot.table = { PlayedCardView{ 1, Card(Rank::King, Suit::Hearts) },
+                       PlayedCardView{ 2, Card(Rank::Two, Suit::Hearts) },
+                       PlayedCardView{ 3, Card(Rank::Ace, Suit::Hearts), true },
+                       PlayedCardView{ 0, Card(Rank::Three, Suit::Hearts) } };
+
+    const trickpanel::Fields fields = trickpanel::fieldsFor(snapshot, nullptr);
+    const QString ellipsis(QChar(0x2026));
+
+    // The name is cut short - never the words round it, the suit led or the card.
+    REQUIRE(rowOf(fields, 0).startsWith(QStringLiteral("Leader: Bartholomew")));
+    REQUIRE(rowOf(fields, 0).endsWith(ellipsis + QStringLiteral(" · Led ♥")));
+    REQUIRE(rowOf(fields, 1).startsWith(QStringLiteral("Winning: Bartholomew")));
+    REQUIRE(rowOf(fields, 1).endsWith(ellipsis + QStringLiteral(", A♥")));
+    REQUIRE(promptOf(fields).startsWith(QStringLiteral("Bartholomew")));
+    REQUIRE(promptOf(fields).endsWith(ellipsis + QStringLiteral(" wins the trick.")));
+
+    // A name that fits is left whole.
+    REQUIRE(rowOf(trickpanel::fieldsFor(playing(), nullptr), 0) == QStringLiteral("Leader: Bogdan · Led ♥"));
 }
 
 TEST_CASE("The panel keeps your prompt through a redraw", "[trick-panel]")

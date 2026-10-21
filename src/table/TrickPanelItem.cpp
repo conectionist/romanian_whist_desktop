@@ -8,6 +8,7 @@
 
 #include <QCoreApplication>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 
@@ -122,6 +123,39 @@ const Styles& measuring()
     return styles;
 }
 
+// A LINE WITH A NAME IN IT, ON ONE LINE (PR 34's review, finding #2). A name is up
+// to 20 characters from the setup dialog, and a line it pushed past the panel's
+// width would wrap, making the panel a line taller for as long as it showed - so
+// the name gives way instead, elided to what the rest of the line leaves.
+//
+// `build` makes the line around a name; the name is measured in `style`'s strong
+// font if it stands out and its plain one if not. Elided again by however much it
+// still runs over, should it: the runs are measured apart, so the line's width is
+// not quite the rest's plus the name's.
+template<typename Build>
+textruns::Line onOneLine(const QString& name, const textruns::Style& style,
+                         textruns::Emphasis emphasis, Build&& build)
+{
+    if(textruns::width(build(name), style) <= contentWidth)
+        return build(name);
+
+    const QFontMetricsF metrics(emphasis == textruns::Emphasis::Strong ? style.strong : style.plain);
+
+    qreal room = contentWidth - textruns::width(build(QString()), style);
+
+    for(;;)
+    {
+        const QString elided = metrics.elidedText(name, Qt::ElideRight, std::max(0.0, room) * style.scale);
+        const textruns::Line line = build(elided);
+        const qreal over = textruns::width(line, style) - contentWidth;
+
+        if(over <= 0.0 || elided.isEmpty())
+            return line;
+
+        room -= over;
+    }
+}
+
 }
 
 QString trickpanel::yourTurn(const PlayPrompt& prompt, const GameSnapshot& snapshot)
@@ -158,7 +192,7 @@ QString trickpanel::yourTurn(const PlayPrompt& prompt, const GameSnapshot& snaps
     if(following)
         return QCoreApplication::translate("trickpanel", "Your turn. You must follow %1.").arg(lead);
 
-    return QCoreApplication::translate("trickpanel", "Your turn. No %1, so you must trump.").arg(lead);
+    return QCoreApplication::translate("trickpanel", "Your turn. No %1, you must trump.").arg(lead);
 }
 
 trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const PlayPrompt* yourPrompt)
@@ -177,10 +211,17 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     const bool yoursActive = snapshot.humanSeat >= 0 && snapshot.activeSeat == snapshot.humanSeat;
     const bool anotherActive = snapshot.activeSeat >= 0 && !yoursActive;
 
+    // Every line with a name in it is kept to one line, the name giving way.
+    const Styles& styles = measuring();
+
     const auto thinking = [&]
     {
-        return textruns::Line{ textruns::Run{ QCoreApplication::translate("trickpanel", "%1 is thinking…")
-                                                  .arg(nameOf(static_cast<unsigned int>(snapshot.activeSeat))) } };
+        return onOneLine(nameOf(static_cast<unsigned int>(snapshot.activeSeat)), styles.prompt,
+                         textruns::Emphasis::Plain, [](const QString& name)
+                         {
+                             return textruns::Line{ textruns::Run{
+                                 QCoreApplication::translate("trickpanel", "%1 is thinking…").arg(name) } };
+                         });
     };
 
     Fields fields;
@@ -207,14 +248,18 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
         {
             if(snapshot.seats[seat].bidOrder == 1)
             {
-                fields.rows.push_back(textruns::emphasised(QCoreApplication::translate("trickpanel", "First to bid: %1"),
-                                                           nameOf(static_cast<unsigned int>(seat))));
+                fields.rows.push_back(onOneLine(nameOf(static_cast<unsigned int>(seat)), styles.row,
+                                                textruns::Emphasis::Strong, [](const QString& name)
+                                                {
+                                                    return textruns::emphasised(
+                                                        QCoreApplication::translate("trickpanel", "First to bid: %1"), name);
+                                                }));
                 break;
             }
         }
 
         if(yoursActive)
-            fields.prompt = { textruns::Run{ QCoreApplication::translate("trickpanel", "Your bid. How many tricks will you take?") } };
+            fields.prompt = { textruns::Run{ QCoreApplication::translate("trickpanel", "Your bid. How many tricks?") } };
         else if(anotherActive)
             fields.prompt = thinking();
 
@@ -232,15 +277,20 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     // owner once it is down, the engine's leader before.
     if(const std::optional<unsigned int> leader = trickitem::leadSeat(snapshot))
     {
-        textruns::Line row = textruns::emphasised(QCoreApplication::translate("trickpanel", "Leader: %1"), nameOf(*leader));
-
-        if(snapshot.hasLeadSuit)
+        const auto leaderLine = [&](const QString& name)
         {
-            row.push_back(textruns::Run{ QStringLiteral(" · ")
-                                         + QCoreApplication::translate("trickpanel", "Led %1").arg(cardtext::symbol(snapshot.leadSuit)) });
-        }
+            textruns::Line row = textruns::emphasised(QCoreApplication::translate("trickpanel", "Leader: %1"), name);
 
-        fields.rows.push_back(row);
+            if(snapshot.hasLeadSuit)
+            {
+                row.push_back(textruns::Run{ QStringLiteral(" · ")
+                                             + QCoreApplication::translate("trickpanel", "Led %1").arg(cardtext::symbol(snapshot.leadSuit)) });
+            }
+
+            return row;
+        };
+
+        fields.rows.push_back(onOneLine(nameOf(*leader), styles.row, textruns::Emphasis::Strong, leaderLine));
     }
 
     // WHO IS WINNING: the engine's ranking, never recomputed, from the first card
@@ -249,11 +299,25 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     const auto winning = std::find_if(snapshot.table.begin(), snapshot.table.end(),
                                       [](const PlayedCardView& played) { return played.isWinning; });
 
-    fields.rows.push_back(textruns::emphasised(
-        QCoreApplication::translate("trickpanel", "Winning: %1"),
-        winning == snapshot.table.end()
-            ? hudtext::dash()
-            : nameOf(winning->seatIndex) + QStringLiteral(", ") + cardtext::label(winning->card)));
+    const auto winningLine = [](const QString& who)
+    {
+        return textruns::emphasised(QCoreApplication::translate("trickpanel", "Winning: %1"), who);
+    };
+
+    if(winning == snapshot.table.end())
+    {
+        fields.rows.push_back(winningLine(hudtext::dash()));
+    }
+    else
+    {
+        const QString card = cardtext::label(winning->card);
+
+        fields.rows.push_back(onOneLine(nameOf(winning->seatIndex), styles.row, textruns::Emphasis::Strong,
+                                        [&](const QString& name)
+                                        {
+                                            return winningLine(name + QStringLiteral(", ") + card);
+                                        }));
+    }
 
     const bool trickFull = !snapshot.seats.empty() && snapshot.table.size() >= snapshot.seats.size();
 
@@ -262,8 +326,19 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
         const bool yours = snapshot.humanSeat >= 0
                            && static_cast<unsigned int>(snapshot.humanSeat) == winning->seatIndex;
 
-        fields.prompt = { textruns::Run{ yours ? QCoreApplication::translate("trickpanel", "You win the trick.")
-                                               : QCoreApplication::translate("trickpanel", "%1 wins the trick.").arg(nameOf(winning->seatIndex)) } };
+        if(yours)
+        {
+            fields.prompt = { textruns::Run{ QCoreApplication::translate("trickpanel", "You win the trick.") } };
+        }
+        else
+        {
+            fields.prompt = onOneLine(nameOf(winning->seatIndex), styles.prompt, textruns::Emphasis::Plain,
+                                      [](const QString& name)
+                                      {
+                                          return textruns::Line{ textruns::Run{
+                                              QCoreApplication::translate("trickpanel", "%1 wins the trick.").arg(name) } };
+                                      });
+        }
     }
     else if(yourPrompt)
     {

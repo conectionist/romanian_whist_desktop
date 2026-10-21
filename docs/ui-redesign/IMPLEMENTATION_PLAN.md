@@ -402,11 +402,11 @@ pinned 8 from the window's right edge and 8 below the menu bar, growing left and
 
 - Play phase: title "Trick 3 of 6" (Marcellus 21); "Leader: **Bogdan** · Led ♥"; "Winning:
   **Costel, K♥**" (or "–"); then, above a faint rule, the prompt in gold-bright.
-- Bidding: title "Bidding"; "First to bid: **You**"; prompt "Your bid. How many tricks will you
-  take?" or "Ana is thinking…".
+- Bidding: title "Bidding"; "First to bid: **You**"; prompt "Your bid. How many tricks?" or
+  "Ana is thinking…".
 - Between rounds: "Round over" / "Scores are in."
 - Prompt texts during play: "Your turn. You lead." / "Your turn. You must follow ♥." /
-  "Your turn. No ♥, so you must trump." / "Your turn. Any card." / "Ana is thinking…" /
+  "Your turn. No ♥, you must trump." / "Your turn. Any card." / "Ana is thinking…" /
   "Ana wins the trick." / "You win the trick.". Reuse `promptbar::fieldsFor()` for the "must follow"
   logic (it is already tested) and extend it; do not reimplement legality.
 - *(Phase 8.)* What the build adds:
@@ -417,6 +417,10 @@ pinned 8 from the window's right edge and 8 below the menu bar, growing left and
   - Your own seat is "You" in every sentence. A spectated game has no "You".
   - The prompt keeps its line when it has nothing to say, so the panel does not jump between
     turns.
+  - **Nothing on the panel takes a second line** (PR 34's review, 2026-10-21). The mock-up's
+    "Your bid. How many tricks will you take?" and "Your turn. No ♥, so you must trump." are
+    shortened to the two above, which fit the 230-unit column. A long name gives way, elided so
+    its line still fits: "Leader: **Bartholomew Fea…** · Led ♥".
 
 ### 2.11 Bottom-left buttons
 
