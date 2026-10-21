@@ -682,9 +682,9 @@ TEST_CASE("A blind prompt fans backs, playable, with no card shown", "[hand]")
 TEST_CASE("A shorter hand leaves no cards from the longer one", "[hand]")
 {
     // The hand loses a card every trick, so nearly every rebuild is smaller than
-    // the last. The same trap BidStrip has a case for, one layer down: a child
-    // item that was hidden rather than deleted still belongs to the parent and
-    // still answers a hit test.
+    // the last. The trap the bid strip's "A second prompt leaves no bids from the
+    // first" guards against, one layer down: a child item that was hidden rather
+    // than deleted still belongs to the parent and still answers a hit test.
     Fanned fan(promptOf({ true, true, true, true, true, true }));
 
     REQUIRE(fan.cards().size() == 6);

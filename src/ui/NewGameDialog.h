@@ -63,9 +63,9 @@ QT_END_NAMESPACE
 namespace newgame
 {
 
-// TRANSLATED, the choice BidStrip and the scoreboard make, through
-// QCoreApplication::translate() with an explicit context at every call site
-// rather than a tr() of our own - Q_DECLARE_TR_FUNCTIONS is class-only whatever
+// TRANSLATED, the choice the bid strip (BidStripItem.h) and the scoreboard make,
+// through QCoreApplication::translate() with an explicit context at every call
+// site rather than a tr() of our own - Q_DECLARE_TR_FUNCTIONS is class-only whatever
 // its name suggests, and a hand-rolled wrapper hides every string from lupdate.
 // Section 7 is explicit that this includes the strategy names and the
 // round-count sentence, which are the two here least likely to look like UI

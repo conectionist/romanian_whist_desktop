@@ -88,8 +88,8 @@ public:
 
     // Fills the sheet from one round. Rebuilt per round rather than updated in
     // place: the seat count is fixed for a game but the rows carry per-round
-    // numbers throughout, and BidStrip's reason applies - a panel built once and
-    // rewritten is a panel whose stale half is invisible.
+    // numbers throughout, and a panel built once and rewritten is a panel whose
+    // stale half is invisible.
     void showResult(const RoundResult& result);
 
     // Continue, so Enter dismisses.

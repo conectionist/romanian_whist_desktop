@@ -13,7 +13,7 @@
 
 #include <string>
 
-// The split BidStrip.h argues for and NewGameTests follows: the half with a
+// The split SnapshotLog.h argues for and NewGameTests follows: the half with a
 // right answer tested without a window, the widget after it.
 namespace
 {

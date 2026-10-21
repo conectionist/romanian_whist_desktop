@@ -96,7 +96,11 @@ void TableScene::setTheme(const Theme& palette)
     hand->setTheme(theme);
     history->setTheme(theme);
     lastTrick->setTheme(theme);
-    bidStrip->setSnapshot(snapshot, theme);
+
+    // Handed over by relayout() below whenever there is a snapshot - only a theme
+    // set before the first one has to reach the strip from here.
+    if(!snapshot)
+        bidStrip->setSnapshot(snapshot, theme);
 
     // The room is drawn by TableView::drawBackground() rather than held in an
     // item, so this has to say so - nothing else would repaint it. Invalidating

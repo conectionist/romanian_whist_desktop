@@ -107,8 +107,8 @@ seatitem::Layout seatitem::layoutFor(QSizeF panel)
 
 seatitem::PillView seatitem::pillFor(const SeatView& seat, bool active, bool biddingOpen)
 {
-    // An explicit context and a literal at every call site, for BidStrip.h's reason:
-    // a wrapper of our own would hide these from lupdate.
+    // An explicit context and a literal at every call site, for BidStripItem.h's
+    // reason: a wrapper of our own would hide these from lupdate.
     if(!seat.hasBet)
         return { active && biddingOpen ? QCoreApplication::translate("SeatItem", "Bidding…")
                                        : QCoreApplication::translate("SeatItem", "No bid yet"),

@@ -230,9 +230,9 @@ void HandItem::activate(std::size_t slot)
 
 void HandItem::rebuild()
 {
-    // DELETED, not hidden, for the reason BidStrip::rebuild() gives: the hand
-    // shrinks by one card every trick, so most rebuilds are smaller than the last
-    // and a hidden item still belongs to this one's children.
+    // DELETED, not hidden: the hand shrinks by one card every trick, so most
+    // rebuilds are smaller than the last, and a hidden item still belongs to this
+    // one's children and still answers a hit test.
     for(Slot& slot : fan)
         delete slot.item;
 
