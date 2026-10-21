@@ -13,6 +13,7 @@
 #include <QString>
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -83,12 +84,14 @@ class TrickPanelItem : public QGraphicsObject
     Q_OBJECT
 
 public:
-    // `panels` is the chrome cache every panel on the table shares, owned by
-    // TableScene. Null gives the item one of its own.
+    // `panels` is the corner panels' chrome cache, owned by TableScene. Null gives
+    // the item one of its own.
     explicit TrickPanelItem(panel::Cache* panels, QGraphicsItem* parent = nullptr);
 
-    // The panel's first source: every snapshot, from TableScene.
-    void setSnapshot(const GameSnapshot& snapshot, const Theme& theme);
+    // The panel's first source: every snapshot, from TableScene. HELD, NOT COPIED:
+    // it runs on all ~1300 frames of a game, and is read again only when the
+    // second source changes (PR 34's review, finding #7).
+    void setSnapshot(std::shared_ptr<const GameSnapshot> snapshot, const Theme& theme);
 
     // ITS SECOND SOURCE, and the same split as the hand's: MainWindow hands over
     // the prompt the engine is waiting on for your card, and takes it back once
@@ -128,7 +131,7 @@ private:
     panel::Cache* panels;
 
     Theme theme = Theme::dark();
-    GameSnapshot snapshot;
+    std::shared_ptr<const GameSnapshot> snapshot;
     std::optional<PlayPrompt> prompt;
 
     trickpanel::Fields showing;

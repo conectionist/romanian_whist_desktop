@@ -8,6 +8,7 @@
 
 #include <QString>
 
+#include <memory>
 #include <vector>
 
 using namespace romanian_whist;
@@ -406,11 +407,13 @@ TEST_CASE("The panel keeps your prompt through a redraw", "[trick-panel]")
     GameSnapshot snapshot = playing();
     snapshot.activeSeat = 0;
 
-    panel.setSnapshot(snapshot, Theme::dark());
+    const auto shared = std::make_shared<const GameSnapshot>(snapshot);
+
+    panel.setSnapshot(shared, Theme::dark());
     panel.setPrompt(promptOf({ HandEntry{ Card(Rank::Two, Suit::Hearts), true },
                                HandEntry{ Card(Rank::Ace, Suit::Spades), false } }));
 
-    panel.setSnapshot(snapshot, Theme::light());
+    panel.setSnapshot(shared, Theme::light());
 
     REQUIRE(promptOf(panel.fields()) == QStringLiteral("Your turn. You must follow ♥."));
 

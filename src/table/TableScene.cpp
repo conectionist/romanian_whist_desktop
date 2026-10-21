@@ -306,6 +306,6 @@ void TableScene::relayout()
 
     // The corner panels, shown from the first snapshot on.
     scoreboard->setSnapshot(*snapshot, theme);
-    trickPanel->setSnapshot(*snapshot, theme);
+    trickPanel->setSnapshot(snapshot, theme);
     placeHud();
 }

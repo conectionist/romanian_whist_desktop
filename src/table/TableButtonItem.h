@@ -42,8 +42,9 @@ class TableButtonItem : public QGraphicsObject
     Q_OBJECT
 
 public:
-    // `panels` is the chrome cache every panel on the table shares, owned by
-    // TableScene. Null gives the button one of its own.
+    // `panels` is the chrome cache the button shares with the seats, which are
+    // drawn at the same scale, owned by TableScene. Null gives the button one of
+    // its own.
     TableButtonItem(icons::Icon icon, const QString& label, panel::Cache* panels,
                     QGraphicsItem* parent = nullptr);
 

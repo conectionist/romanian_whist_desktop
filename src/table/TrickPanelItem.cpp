@@ -368,9 +368,9 @@ TrickPanelItem::TrickPanelItem(panel::Cache* _panels, QGraphicsItem* parent)
 {
 }
 
-void TrickPanelItem::setSnapshot(const GameSnapshot& next, const Theme& palette)
+void TrickPanelItem::setSnapshot(std::shared_ptr<const GameSnapshot> next, const Theme& palette)
 {
-    snapshot = next;
+    snapshot = std::move(next);
 
     if(theme.table != palette.table)
     {
@@ -396,7 +396,11 @@ void TrickPanelItem::clearPrompt()
 
 void TrickPanelItem::refresh()
 {
-    trickpanel::Fields now = trickpanel::fieldsFor(snapshot, prompt ? &*prompt : nullptr);
+    // A prompt can arrive before the first snapshot; until one does, the panel
+    // reads an empty table, as it did when it held one by value.
+    static const GameSnapshot none;
+
+    trickpanel::Fields now = trickpanel::fieldsFor(snapshot ? *snapshot : none, prompt ? &*prompt : nullptr);
 
     // REDRAWN ONLY WHEN WHAT IT SAYS CHANGES: this runs on every snapshot, and an
     // update() repaints the panel and what lies beneath it.
