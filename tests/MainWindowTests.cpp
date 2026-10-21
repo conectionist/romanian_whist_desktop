@@ -191,6 +191,12 @@ TEST_CASE("The client opens on the menu with no game running", "[main-window]")
 
     REQUIRE(window.findChild<QPushButton*>("newGame") != nullptr);
     REQUIRE(window.findChild<QPushButton*>("quit") != nullptr);
+
+    // NOTHING TO PAUSE, and the Menu item says so rather than doing nothing when
+    // clicked (PR 34's review, finding #4).
+    QAction* menu = window.findChild<QAction*>("menu");
+    REQUIRE(menu != nullptr);
+    REQUIRE_FALSE(menu->isEnabled());
 }
 
 TEST_CASE("Esc on the menu page does nothing", "[main-window]")
@@ -236,6 +242,7 @@ TEST_CASE("A game paused from the Menu item stops, and resumes", "[main-window]"
 
     QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
+    REQUIRE(menu->isEnabled());
 
     // MEASURED ACROSS THE MIDDLE OF THE PAUSE, not from the click. The pause
     // lands at the next pace(), so a frame or two still arrives after the button
@@ -412,6 +419,7 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
+    REQUIRE_FALSE(menu->isEnabled());
 }
 
 TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main-window]")
@@ -721,6 +729,7 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     window.findChild<PauseOverlay*>()->hide();
     QAction* menu = window.findChild<QAction*>("menu");
     REQUIRE(menu != nullptr);
+    REQUIRE_FALSE(menu->isEnabled());
     menu->trigger();
     pump(100);
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
@@ -769,11 +778,17 @@ TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
     REQUIRE(log->blockCount() == atSheet);
     REQUIRE(sheet->isVisible());
 
+    // The sheet has the way on, so the Menu item is greyed while it holds.
+    QAction* menu = window.findChild<QAction*>("menu");
+    REQUIRE(menu != nullptr);
+    REQUIRE_FALSE(menu->isEnabled());
+
     QPushButton* continueButton = window.findChild<QPushButton*>("continueRound");
     REQUIRE(continueButton != nullptr);
     continueButton->click();
 
     REQUIRE_FALSE(sheet->isVisible());
+    REQUIRE(menu->isEnabled());
     REQUIRE(pumpUntil(10000, [&]{ return log->blockCount() > atSheet; }));
 }
 

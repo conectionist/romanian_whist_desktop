@@ -24,6 +24,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 QT_BEGIN_NAMESPACE
+class QAction;
 class QDockWidget;
 class QStackedWidget;
 QT_END_NAMESPACE
@@ -182,6 +183,12 @@ private:
     // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
     void setPauseMenuVisible(bool visible);
 
+    // WHETHER THE PAUSE MENU MAY GO UP NOW: a game playing, and no round sheet
+    // holding it. What setPauseMenuVisible() refuses on, and what the Menu item
+    // is greyed by (updatePauseAction()).
+    bool canPause() const;
+    void updatePauseAction();
+
     // THE ONLY CALLER OF GameController::setPaused(). Two things can want a game
     // held now - the pause menu and the round sheet - and two callers writing
     // one flag is the defect setPauseMenuVisible() was shaped to prevent. See
@@ -248,6 +255,9 @@ private:
     // visibility and GameController's pause are one fact; see
     // setPauseMenuVisible().
     PauseOverlay* pauseOverlay = nullptr;
+
+    // The menu bar's temporary Menu item, which raises it (buildViewMenu()).
+    QAction* pauseAction = nullptr;
 
     // Section 16.2's panel, the same shape as the pause menu and for the same
     // reason - it is drawn OVER the final state rather than replacing it, which

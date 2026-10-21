@@ -305,22 +305,18 @@ void MainWindow::showNewGameDialog()
               pacing);
 }
 
-void MainWindow::setPauseMenuVisible(bool visible)
+bool MainWindow::canPause() const
 {
-    // ONE FACT, NOT TWO. "The menu is up" and "the game is held" are set here
-    // together and nowhere else, so no caller can put them out of step - which
-    // is the hardening phase E's box asks for on the fan's two sources, applied
-    // to the pause before it has a chance to go wrong.
-    //
     // NOTHING TO PAUSE ON THE MENU PAGE, or on a game that has already ended.
-    // Esc is bound on the window, so it arrives here whichever page is showing.
+    // Esc is bound on the window, so it arrives at the pause whichever page is
+    // showing.
     //
     // PLAYING EXACTLY, not "anything but NoGame". A finished game now has a
     // panel of its own with the two ways on, and a Resume raised over it would
     // promise a game that has already ended - which is the same reason the flag
     // this reads was cleared at gameOver before there was anywhere to go.
-    if(visible && tableState != TableState::Playing)
-        return;
+    if(tableState != TableState::Playing)
+        return false;
 
     // NOT OVER A ROUND SHEET THAT IS HOLDING THE GAME. That sheet has its own way
     // on and its own hold; a pause menu over it would be a second overlay on the
@@ -336,8 +332,30 @@ void MainWindow::setPauseMenuVisible(bool visible)
     // clicked Menu and found nothing opened.
     //
     // A dwelling sheet is transient chrome, so the menu takes precedence and the
-    // sheet goes on the way past.
-    if(visible && roundSheetHolding)
+    // sheet goes on the way past (setPauseMenuVisible()).
+    return !roundSheetHolding;
+}
+
+// THE MENU ITEM SAYS WHAT A CLICK ON IT WOULD DO: greyed wherever canPause() would
+// refuse it - on the menu page, over the game-over panel, under a round sheet
+// that is holding the game - rather than live and doing nothing (PR 34's review,
+// finding #4). Called wherever either of canPause()'s two facts changes.
+void MainWindow::updatePauseAction()
+{
+    if(pauseAction)
+        pauseAction->setEnabled(canPause());
+}
+
+void MainWindow::setPauseMenuVisible(bool visible)
+{
+    // ONE FACT, NOT TWO. "The menu is up" and "the game is held" are set here
+    // together and nowhere else, so no caller can put them out of step - which
+    // is the hardening phase E's box asks for on the fan's two sources, applied
+    // to the pause before it has a chance to go wrong.
+    //
+    // NOTHING TO PAUSE, OR NOTHING TO RAISE IT OVER: see canPause(). Esc comes
+    // here whatever the Menu item shows.
+    if(visible && !canPause())
         return;
 
     if(visible && roundSheet->isVisible())
@@ -424,6 +442,7 @@ void MainWindow::hideRoundSheet()
     // THE HOLD GOES WITH THE SHEET, always, and through applyHold() so that a
     // pause menu standing at the same time is not released with it.
     roundSheetHolding = false;
+    updatePauseAction();
     applyHold();
 
     // The keyboard back to the strip if the strip is what is waiting, exactly as
@@ -455,6 +474,7 @@ void MainWindow::abandonToMenu()
     // the game thread either way.
     roundSheet->hide();
     roundSheetHolding = false;
+    updatePauseAction();
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
@@ -480,6 +500,7 @@ void MainWindow::abandonToMenu()
     controller.discardQueuedSignals();
 
     tableState = TableState::NoGame;
+    updatePauseAction();
     showMainMenu();
 }
 
@@ -537,9 +558,10 @@ void MainWindow::buildViewMenu()
     // the prompt bar away, and Esc is its keyboard half. TEMPORARY, by the owner's
     // call of 2026-10-20: phase 9 restyles this bar after the mock-up's - New Game,
     // Settings, Rules and Exit - and Exit replaces it.
-    QAction* pause = menuBar()->addAction(tr("&Menu"));
-    pause->setObjectName(QStringLiteral("menu"));
-    connect(pause, &QAction::triggered, this, &MainWindow::showPauseMenu);
+    pauseAction = menuBar()->addAction(tr("&Menu"));
+    pauseAction->setObjectName(QStringLiteral("menu"));
+    connect(pauseAction, &QAction::triggered, this, &MainWindow::showPauseMenu);
+    updatePauseAction();
 
     // The menu bar is in MainWindow.ui and is empty. In code rather than in the
     // .ui because the action needs a connection either way, and a
@@ -621,12 +643,14 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // would pause a game nobody asked to pause.
     roundSheet->hide();
     roundSheetHolding = false;
+    updatePauseAction();
     pauseMenuHolding = false;
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
     returningToMenu = false;
     tableState = TableState::Playing;
+    updatePauseAction();
 
     showTable();
 
@@ -958,6 +982,7 @@ void MainWindow::onRoundScored(RoundResult result)
     // taken, which is idempotent, and matters only when a pause menu is up at
     // the same time.
     roundSheetHolding = waitAfterEachRound;
+    updatePauseAction();
     applyHold();
 
     showRoundSheet(result);
@@ -996,6 +1021,7 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
     // a game that has already ended. The panel below is the way on, and D1's
     // review is what found that there had to be one.
     tableState = TableState::Finished;
+    updatePauseAction();
 
     gameOverPanel->showResult(standings, winners);
     showGameOverPanel();
@@ -1007,6 +1033,7 @@ void MainWindow::showFailure(QString what)
     // they move has to be moved here too - otherwise the pause menu is still
     // reachable on a game whose thread has already unwound.
     tableState = TableState::Finished;
+    updatePauseAction();
 
     bidStrip->hide();
     hand->setPlayable(false);
