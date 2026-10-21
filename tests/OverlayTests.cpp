@@ -87,3 +87,36 @@ TEST_CASE("A press on an overlay goes no further", "[overlay]")
 
     REQUIRE(press.isAccepted());
 }
+
+TEST_CASE("An overlay covers its parent at every size", "[overlay]")
+{
+    // PR #35's review, finding #2. The parent is the window's page stack, which
+    // changes size with the window and also when the log dock comes and goes. A
+    // sheet sized only on the window's resizes kept its old size: too tall and
+    // off-centre, or short of the bottom - uncovering the hand, and leaving it
+    // clickable, under a sheet that was holding the game.
+    QWidget window;
+    window.resize(800, 600);
+    window.show();
+
+    // A child rather than the window itself, so its resizes arrive at once.
+    QWidget* page = new QWidget(&window);
+    page->setGeometry(0, 0, 400, 300);
+    page->show();
+
+    TestSheet sheet(page);
+    sheet.show();
+    REQUIRE(sheet.geometry() == page->rect());
+
+    page->resize(640, 480);
+    REQUIRE(sheet.geometry() == page->rect());
+
+    page->resize(500, 260);
+    REQUIRE(sheet.geometry() == page->rect());
+
+    // And while hidden, so that it opens at the page's size.
+    sheet.hide();
+    page->resize(720, 540);
+    sheet.show();
+    REQUIRE(sheet.geometry() == page->rect());
+}

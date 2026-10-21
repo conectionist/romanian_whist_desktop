@@ -681,6 +681,51 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     REQUIRE(logDock->isVisible());
 }
 
+TEST_CASE("A sheet still covers the page when the log comes and goes", "[main-window]")
+{
+    // PR #35's review, finding #2. View stays usable over a sheet, and showing
+    // or hiding the log changes the page's height. A sheet sized only on the
+    // window's resizes was left at the old size: with the log hidden it stopped
+    // short of the bottom, and the hand under it took a click while the sheet
+    // was holding the game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    QDockWidget* logDock = window.findChild<QDockWidget*>("logDock");
+    REQUIRE(pages != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(logDock != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+    REQUIRE(rules->isVisible());
+    REQUIRE(rules->geometry() == pages->rect());
+
+    QAction* logAction = logDock->toggleViewAction();
+    const QRect before = pages->rect();
+
+    // The log shown: the page gets shorter.
+    logAction->trigger();
+    pump(200);
+    REQUIRE(logDock->isVisible());
+    REQUIRE(pages->height() < before.height());
+    REQUIRE(rules->geometry() == pages->rect());
+
+    // And hidden again: taller.
+    logAction->trigger();
+    pump(200);
+    REQUIRE_FALSE(logDock->isVisible());
+    REQUIRE(pages->rect() == before);
+    REQUIRE(rules->geometry() == pages->rect());
+}
+
 TEST_CASE("A finished game has a way back to the menu", "[main-window]")
 {
     // THE DEAD END D1's REVIEW FOUND, and the one thing under this whole panel

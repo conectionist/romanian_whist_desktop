@@ -88,8 +88,6 @@ protected:
     // stops - see the flag below for why the order matters.
     void closeEvent(QCloseEvent* event) override;
 
-    // Keeps the overlays over the whole page - see the body.
-    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void render(std::shared_ptr<const GameSnapshot> snapshot);
@@ -244,7 +242,7 @@ private:
     // again the player then cancelled, which must put back what it took down.
     //
     // FILLS NOTHING. The panel keeps its face between a hide and a show, so this
-    // is geometry, show, raise and focus - the same four the pause menu does.
+    // is show, raise and focus - the same three the pause menu does.
     void showGameOverPanel();
 
     // Prepares the controller and starts a game, and - the reason this is a

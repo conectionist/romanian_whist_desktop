@@ -27,7 +27,6 @@
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
-#include <QResizeEvent>
 #include <QShortcut>
 #include <QStyleHints>
 
@@ -191,8 +190,8 @@ void MainWindow::buildTable()
 
     // A CHILD OF THE STACK, not a page in it, and not a dialog. It covers
     // whichever page is showing rather than replacing one - the point is to dim
-    // the table and still show it. Hidden until a game is paused, and its
-    // geometry is kept by resizeEvent() below.
+    // the table and still show it. Hidden until a game is paused; it keeps
+    // itself the page's size (Overlay).
     pauseOverlay = new PauseOverlay(pages);
     pauseOverlay->setTheme(theme);
     pauseOverlay->hide();
@@ -432,7 +431,6 @@ void MainWindow::setPauseMenuVisible(bool visible)
         return;
     }
 
-    pauseOverlay->setGeometry(pages->rect());
     pauseOverlay->show();
     pauseOverlay->raise();
     pauseOverlay->focusDefault();
@@ -454,7 +452,6 @@ void MainWindow::showRules()
 
     rulesSheet->showRules(lastConfig);
 
-    rulesSheet->setGeometry(pages->rect());
     rulesSheet->show();
     rulesSheet->raise();
 
@@ -472,7 +469,6 @@ void MainWindow::showSettings()
 
     settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound);
 
-    settingsSheet->setGeometry(pages->rect());
     settingsSheet->show();
     settingsSheet->raise();
 
@@ -562,7 +558,6 @@ void MainWindow::showRoundSheet(const RoundResult& result)
 {
     roundSheet->showResult(result);
 
-    roundSheet->setGeometry(pages->rect());
     roundSheet->show();
     roundSheet->raise();
 
@@ -631,7 +626,6 @@ void MainWindow::restoreFocus()
 
 void MainWindow::showGameOverPanel()
 {
-    gameOverPanel->setGeometry(pages->rect());
     gameOverPanel->show();
     gameOverPanel->raise();
     gameOverPanel->focusDefault();
@@ -686,29 +680,6 @@ void MainWindow::abandonToMenu()
     tableState = TableState::NoGame;
     updatePauseAction();
     showMainMenu();
-}
-
-void MainWindow::resizeEvent(QResizeEvent* event)
-{
-    QMainWindow::resizeEvent(event);
-
-    // The overlay is a child rather than a layout item, so nothing else moves
-    // it. Only while it is up: a hidden widget's geometry is nobody's business,
-    // and it is set again on the way in.
-    if(pauseOverlay && pauseOverlay->isVisible())
-        pauseOverlay->setGeometry(pages->rect());
-
-    if(gameOverPanel && gameOverPanel->isVisible())
-        gameOverPanel->setGeometry(pages->rect());
-
-    if(roundSheet && roundSheet->isVisible())
-        roundSheet->setGeometry(pages->rect());
-
-    if(rulesSheet && rulesSheet->isVisible())
-        rulesSheet->setGeometry(pages->rect());
-
-    if(settingsSheet && settingsSheet->isVisible())
-        settingsSheet->setGeometry(pages->rect());
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this

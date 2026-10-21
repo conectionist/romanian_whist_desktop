@@ -34,11 +34,19 @@ QT_END_NAMESPACE
 // behind it and swallows the clicks that land on it, so it reads and behaves as
 // modal - and the window is never blocked, so closing it runs closeEvent(),
 // stop() and cancelPacing() like any other close.
+//
+// IT COVERS ITS PARENT AT EVERY SIZE, by following the parent's resizes itself.
+// The parent is the window's page stack, which changes size with the window and
+// also when the log dock is shown or hidden. Sized only on the window's resizes,
+// a sheet kept its old size when the log came or went: too tall and off-centre,
+// or short of the bottom, leaving the hand uncovered and clickable under a sheet
+// that was holding the game (PR #35's review, finding #2).
 class Overlay : public QWidget
 {
     Q_OBJECT
 
 public:
+    // `parent` is the page stack, which this covers from now on.
     explicit Overlay(QWidget* parent);
 
     // The panel's colours: the words sit on a plaque rather than on the table's
@@ -74,6 +82,9 @@ protected:
     // underneath - so the table would not be clicked either way. Accepting it
     // says so on purpose, and stops a press on the dim from reaching the window.
     void mousePressEvent(QMouseEvent* event) override;
+
+    // The parent's resizes, which this follows.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     Theme palette = Theme::light();

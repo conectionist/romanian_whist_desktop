@@ -1,6 +1,7 @@
 #include "Overlay.h"
 
 #include <QBoxLayout>
+#include <QEvent>
 #include <QFont>
 #include <QLabel>
 #include <QMouseEvent>
@@ -25,6 +26,13 @@ Overlay::Overlay(QWidget* parent) : QWidget(parent)
 
     stack->addLayout(row);
     stack->addStretch(1);
+
+    // Hidden or shown, so that it always opens at the page's size.
+    if(parent)
+    {
+        setGeometry(parent->rect());
+        parent->installEventFilter(this);
+    }
 }
 
 void Overlay::setTheme(const Theme& theme)
@@ -61,4 +69,12 @@ void Overlay::paintEvent(QPaintEvent* event)
 void Overlay::mousePressEvent(QMouseEvent* event)
 {
     event->accept();
+}
+
+bool Overlay::eventFilter(QObject* watched, QEvent* event)
+{
+    if(watched == parentWidget() && event->type() == QEvent::Resize)
+        setGeometry(parentWidget()->rect());
+
+    return QWidget::eventFilter(watched, event);
 }
