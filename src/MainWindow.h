@@ -254,7 +254,16 @@ private:
     // else the page itself - the table, or the menu page's New Game. Each takes
     // focus when it is raised, and hiding what took it from them does not give
     // it back - which looks finished, because the mouse still works.
-    void restoreFocus();
+    //
+    // THE PAGE ONLY IF `hadKeyboard`: if what went had the keyboard. A round
+    // sheet that does not wait never takes it, and goes by itself every round;
+    // falling back to the table then took the keyboard from wherever the player
+    // had put it, the log for one, once a round. Read it with holdsKeyboard()
+    // BEFORE the hide, which is when Qt moves the keyboard on.
+    void restoreFocus(bool hadKeyboard);
+
+    // Whether the keyboard is on `widget` or inside it. Null holds nothing.
+    bool holdsKeyboard(const QWidget* widget) const;
 
     // THE SHEET THE KEYBOARD BELONGS TO, top first: Rules or Settings, the
     // pause menu, the game-over panel, or a round sheet that is holding the

@@ -1622,3 +1622,90 @@ TEST_CASE("Settings speeds up the game in play", "[main-window]")
 
     REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
 }
+
+// THE OTHER SIDE OF "Closing a sheet gives the keyboard to the page": only what
+// had the keyboard gives it back. A round sheet that does not wait for you never
+// takes it, and goes by itself once a round, so when it goes the keyboard stays
+// where you put it - here the log, which #3's fix took it from every round.
+TEST_CASE("A round sheet that goes by itself leaves the keyboard where it was", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    QDockWidget* logDock = window.findChild<QDockWidget*>("logDock");
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    RoundSheet* sheet = window.findChild<RoundSheet*>();
+    REQUIRE(logDock != nullptr);
+    REQUIRE(log != nullptr);
+    REQUIRE(sheet != nullptr);
+
+    logDock->show();
+    log->setFocus();
+    pump(100);
+    REQUIRE(window.focusWidget() == log);
+
+    // Round 1's sheet, up for the dwell and gone at the next frame.
+    REQUIRE(pumpUntil(20000, [sheet]{ return sheet->isVisible(); }));
+    REQUIRE(pumpUntil(20000, [sheet]{ return !sheet->isVisible(); }));
+    pump(50);
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->metaObject()->className() : "nothing"));
+    REQUIRE(focus == log);
+}
+
+// AND A NEW GAME DEALT FROM THE STANDINGS: Play again's button had the keyboard,
+// and the panel goes down while the setup dialog is up, which hands it to the
+// next widget in the Tab order - the menu bar's New Game, lit as though hovered,
+// where Space opens the dialog again. The new game starts with it on the table.
+TEST_CASE("Play again leaves the keyboard on the table and not the menu bar", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    TableView* table = window.findChild<TableView*>();
+    REQUIRE(panel != nullptr);
+    REQUIRE(table != nullptr);
+
+    answerModalShortWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+
+    QPushButton* playAgain = panel->findChild<QPushButton*>("playAgain");
+    REQUIRE(playAgain != nullptr);
+    playAgain->setFocus();
+    pump(50);
+
+    // At the default pace, so the new game is still in its first round when this
+    // looks: the dialog opens on the last game's, where every beat is zero.
+    QTimer::singleShot(300, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::DefaultSpeed);
+
+        dialog->done(QDialog::Accepted);
+    });
+
+    playAgain->click();
+    pump(200);
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+    REQUIRE_FALSE(panel->isVisible());
+    REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+    REQUIRE(focus == table);
+}

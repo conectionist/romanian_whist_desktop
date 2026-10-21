@@ -1418,6 +1418,18 @@ Done when: the menu bar matches the mock-up and every item works.
   - **#9 was dropped:** the shadow does repaint with every table frame (counted with gdb: 30 and
     30 in 12 s), but a paint costs 21-24 µs at 1600-1920 px wide, and caching it would save about
     10 µs a frame.
+- **A follow-up to the review round brought it to 511** (509 + 2), both new tests failing on the
+  code before it:
+  - **#3's fix took the keyboard once a round.** It fell back to the page after *every* sheet went,
+    and a round sheet that does not wait never has the keyboard but goes by itself each round; in
+    a watched game the keyboard left the log for the table at every round's end.
+    `restoreFocus(hadKeyboard)` now falls back to the page only if what went had the keyboard,
+    read with `holdsKeyboard()` before the hide. The sheet on top also keeps the keyboard where it
+    already is inside it.
+  - **Play again left the keyboard nowhere useful.** The standings go down while the setup dialog
+    is up, and their Play again had the keyboard: Qt handed it to the next widget in the Tab order
+    (the bar's New Game, in the app) or, offscreen, left it on the hidden button. A new game now
+    starts with the keyboard on its table (`startGame()`).
 - **Four decisions by the owner, 2026-10-21:**
   - **Q4, Settings:** the bot speed and "Wait for me after each round", applied to the game in
     play at once and written into the settings the next New Game opens on. Its one button is Done.
@@ -1459,9 +1471,10 @@ Done when: the menu bar matches the mock-up and every item works.
     window's stack.
   - **Holds:** `applyHold()` reads four reasons now: the pause menu, a waited round sheet, the setup
     dialog over a running game (`dialogHolding`) and the bar's sheets (`sheetHolding`).
-  - **Focus:** `MainWindow::restoreFocus()` gives the keyboard to whatever is on top after an
-    overlay goes: `activeOverlay()` (the bar's sheet, the pause menu, the game-over panel, a holding
-    round sheet), the bid strip, or else the page. Tab stays inside `activeOverlay()`.
+  - **Focus:** `MainWindow::restoreFocus(hadKeyboard)` gives the keyboard to whatever is on top
+    after an overlay goes: `activeOverlay()` (the bar's sheet, the pause menu, the game-over panel,
+    a holding round sheet), the bid strip, or else - only if what went had it - the page. A hide
+    path reads `holdsKeyboard()` before it hides. Tab stays inside `activeOverlay()`.
   - **Phase 11's two sheets** go into `MainWindow::menuSheets` and open through `showMenuSheet()`;
     `hideMenuSheets()`, `dropMenuSheets()` and `openMenuSheet()` then cover them too.
   - **The round hold:** `RoundResult::held` says whether the bridge held the game for a result;
@@ -1504,7 +1517,8 @@ Done when: the menu bar matches the mock-up and every item works.
     Two claims on one key fire neither, so a bar button's text must carry none.
   - **Hiding the widget that has the keyboard hands it to the next one in the window's Tab order**,
     whatever that is - the menu bar's New Game, made last. Whoever hides a sheet gives the keyboard
-    somewhere on purpose (`restoreFocus()`).
+    somewhere on purpose (`restoreFocus()`). **But only if the sheet had it:** a fallback on every
+    hide takes the keyboard from wherever the player put it.
 
 ### Phase 10: bid strip and sheets
 

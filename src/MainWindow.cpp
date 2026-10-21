@@ -324,7 +324,10 @@ void MainWindow::showNewGameDialog()
             showGameOverPanel();
 
         applyHold();
-        restoreFocus();
+
+        // The dialog had the keyboard, and Qt gives it back to wherever it was
+        // when the dialog closes: only what is on top now may need it.
+        restoreFocus(false);
         return;
     }
 
@@ -409,6 +412,8 @@ void MainWindow::setPauseMenuVisible(bool visible)
 
     if(!visible)
     {
+        const bool hadKeyboard = holdsKeyboard(pauseOverlay);
+
         pauseOverlay->hide();
 
         // AND THE KEYBOARD BACK WHERE THE PAUSE TOOK IT FROM. focusDefault() put
@@ -420,7 +425,7 @@ void MainWindow::setPauseMenuVisible(bool visible)
         // ASKED OF WHAT IS SHOWING rather than remembered across the pause: the
         // strip is visible exactly while the engine is parked waiting for a bid,
         // which is the whole of the question.
-        restoreFocus();
+        restoreFocus(hadKeyboard);
 
         return;
     }
@@ -498,10 +503,12 @@ void MainWindow::hideMenuSheets()
     if(!openMenuSheet() && !sheetHolding)
         return;
 
+    const bool hadKeyboard = holdsKeyboard(openMenuSheet());
+
     dropMenuSheets();
     applyHold();
 
-    restoreFocus();
+    restoreFocus(hadKeyboard);
 }
 
 void MainWindow::dropMenuSheets()
@@ -531,7 +538,10 @@ void MainWindow::keepMenuSheetOnTop()
     if(Overlay* sheet = openMenuSheet())
     {
         sheet->raise();
-        restoreFocus();
+
+        // Nothing went, so nothing's keyboard needs giving back: the sheet is on
+        // top, and keeps it or takes it.
+        restoreFocus(false);
     }
 }
 
@@ -571,6 +581,9 @@ void MainWindow::showRoundSheet(const RoundResult& result)
 
 void MainWindow::hideRoundSheet()
 {
+    // Only a sheet that waits for you takes the keyboard (showRoundSheet()).
+    const bool hadKeyboard = holdsKeyboard(roundSheet);
+
     roundSheet->hide();
 
     // THE HOLD GOES WITH THE SHEET, always, and through applyHold() so that a
@@ -582,14 +595,18 @@ void MainWindow::hideRoundSheet()
     // The keyboard back to the strip if the strip is what is waiting, exactly as
     // the pause menu returns it - focusDefault() took it, and hiding the button
     // does not give it back.
-    restoreFocus();
+    restoreFocus(hadKeyboard);
 }
 
-void MainWindow::restoreFocus()
+void MainWindow::restoreFocus(bool hadKeyboard)
 {
+    // The sheet on top keeps the keyboard where it already is inside it - on its
+    // Main menu, say - and otherwise takes it.
     if(Overlay* sheet = activeOverlay())
     {
-        sheet->focusDefault();
+        if(!holdsKeyboard(sheet))
+            sheet->focusDefault();
+
         return;
     }
 
@@ -599,15 +616,31 @@ void MainWindow::restoreFocus()
         return;
     }
 
-    // AND OTHERWISE THE PAGE, NEVER NOTHING. Hiding the button that had the
-    // keyboard hands it to the next widget in the window's Tab order, which is
-    // the menu bar's New Game, made last: it showed as hovered with the mouse
+    // AND OTHERWISE THE PAGE, when what went had the keyboard. Hiding the button
+    // that had it hands it to the next widget in the window's Tab order, which
+    // is the menu bar's New Game, made last: it showed as hovered with the mouse
     // far away, and Space opened the setup dialog over the game (PR #35's
     // review, finding #3).
+    //
+    // NOT OTHERWISE: then the keyboard is where the player put it. The first
+    // version of #3's fix fell back every time, and an unwaited round sheet,
+    // which never has the keyboard, took it from the log once a round.
+    if(!hadKeyboard)
+        return;
+
     if(pages->currentWidget() == menuPage)
         menuPage->focusNewGame();
     else
         table->setFocus(Qt::OtherFocusReason);
+}
+
+bool MainWindow::holdsKeyboard(const QWidget* widget) const
+{
+    // The window's focus widget rather than QApplication's, which is null
+    // whenever this window is not the active one.
+    const QWidget* focus = focusWidget();
+
+    return widget && focus && (focus == widget || widget->isAncestorOf(focus));
 }
 
 Overlay* MainWindow::activeOverlay() const
@@ -873,6 +906,13 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     updatePauseAction();
 
     showTable();
+
+    // A NEW GAME STARTS WITH THE KEYBOARD ON ITS TABLE. It comes from the setup
+    // dialog, which had it, and often from under the standings, whose Play again
+    // had it before them: that panel went down while the dialog was up, handing
+    // the keyboard to the next widget in the Tab order - the menu bar's New Game,
+    // lit as though hovered - or to nothing at all.
+    table->setFocus(Qt::OtherFocusReason);
 
     // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one
     // optional decides three things at once and they must not be separable:
