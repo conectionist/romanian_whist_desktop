@@ -298,21 +298,40 @@ QSizeF bidstrip::sizeFor(const Fields& fields)
 namespace
 {
 
-// The first bid's button. 0..highest INCLUSIVE, side by side and centred: an
-// 8-card round offers nine bids, and bidding zero is a real choice rather than the
-// absence of one.
-QRectF firstButton(const bidstrip::Fields& fields)
+// The first bid's button, its row's top at `bidsTop`. 0..highest INCLUSIVE, side by
+// side and centred: an 8-card round offers nine bids, and bidding zero is a real
+// choice rather than the absence of one.
+QRectF firstButton(const bidstrip::Fields& fields, qreal bidsTop)
 {
     const qreal count = static_cast<qreal>(fields.highest) + 1.0;
     const qreal row = count * optWidth + (count - 1.0) * optGap;
 
-    return QRectF((tablespace::bidStripWidth - row) / 2.0, layOut(fields, measuring()).bidsTop,
-                  optWidth, optHeight);
+    return QRectF((tablespace::bidStripWidth - row) / 2.0, bidsTop, optWidth, optHeight);
+}
+
+// The same, measured: a whole layout, the question's wrapping included. The item
+// does this once per change of what it says (BidStripItem::refresh()) and keeps
+// the answer, because its hit test runs on every move of the cursor.
+QRectF measuredFirstButton(const bidstrip::Fields& fields)
+{
+    return firstButton(fields, layOut(fields, measuring()).bidsTop);
 }
 
 QRectF nthButton(const QRectF& first, unsigned int bet)
 {
     return first.translated(static_cast<qreal>(bet) * (optWidth + optGap), 0.0);
+}
+
+// The bid whose button is under `point`, in a row of 0..highest from `first`.
+std::optional<unsigned int> bidUnder(const QRectF& first, unsigned int highest, QPointF point)
+{
+    for(unsigned int bet = 0 ; bet <= highest ; bet++)
+    {
+        if(nthButton(first, bet).contains(point))
+            return bet;
+    }
+
+    return std::nullopt;
 }
 
 }
@@ -322,21 +341,12 @@ QRectF bidstrip::buttonRect(const Fields& fields, unsigned int bet)
     if(bet > fields.highest)
         return QRectF();
 
-    return nthButton(firstButton(fields), bet);
+    return nthButton(measuredFirstButton(fields), bet);
 }
 
 std::optional<unsigned int> bidstrip::bidAt(const Fields& fields, QPointF point)
 {
-    // Laid out once, not once per bid: this runs on every move of the cursor.
-    const QRectF first = firstButton(fields);
-
-    for(unsigned int bet = 0 ; bet <= fields.highest ; bet++)
-    {
-        if(nthButton(first, bet).contains(point))
-            return bet;
-    }
-
-    return std::nullopt;
+    return bidUnder(measuredFirstButton(fields), fields.highest, point);
 }
 
 // ---- the item ----
@@ -432,7 +442,11 @@ void BidStripItem::refresh()
     if(now == showing && !stripSize.isEmpty())
         return;
 
-    const QSizeF size = bidstrip::sizeFor(now);
+    // LAID OUT ONCE, here, for the size and the bids' row both: the hit test and
+    // the picture read the row from firstBid rather than wrapping the question
+    // again (PR #36's review, finding #9).
+    const Layout measured = layOut(now, measuring());
+    const QSizeF size(tablespace::bidStripWidth, measured.height);
 
     if(size != stripSize)
     {
@@ -440,6 +454,7 @@ void BidStripItem::refresh()
         stripSize = size;
     }
 
+    firstBid = firstButton(now, measured.bidsTop);
     showing = std::move(now);
 
     // New bids are new buttons in new places: what was lit is lit again only by
@@ -458,7 +473,7 @@ void BidStripItem::hoverAt(std::optional<QPointF> point)
     // a button that brightens says it can be pressed.
     if(prompt && point)
     {
-        if(const std::optional<unsigned int> bet = bidstrip::bidAt(showing, *point);
+        if(const std::optional<unsigned int> bet = bidUnder(firstBid, showing.highest, *point);
            bet && bidstrip::offers(showing, *bet))
         {
             now = bet;
@@ -496,7 +511,7 @@ void BidStripItem::mousePressEvent(QGraphicsSceneMouseEvent* event)
 
     pressed.reset();
 
-    if(const std::optional<unsigned int> bet = bidstrip::bidAt(showing, event->pos());
+    if(const std::optional<unsigned int> bet = bidUnder(firstBid, showing.highest, event->pos());
        prompt && bet && bidstrip::offers(showing, *bet))
     {
         pressed = bet;
@@ -512,7 +527,7 @@ void BidStripItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event)
     if(!was || event->button() != Qt::LeftButton)
         return;
 
-    if(bidstrip::bidAt(showing, event->pos()) != was)
+    if(bidUnder(firstBid, showing.highest, event->pos()) != was)
         return;
 
     activate(*was);
@@ -576,7 +591,9 @@ const panel::Picture& BidStripItem::picture(qreal ratio) const
 
         paintCentred(painter, layout.question, styles.title, layout.questionTop, layout.questionLine);
 
-        const QRectF first = firstButton(showing);
+        // The row the hit test reads, so what is drawn and what takes the cursor
+        // are one rectangle.
+        const QRectF first = firstBid;
 
         for(unsigned int bet = 0 ; bet <= showing.highest ; bet++)
         {

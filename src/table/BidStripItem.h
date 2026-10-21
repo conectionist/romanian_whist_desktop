@@ -209,6 +209,10 @@ private:
     bidstrip::Fields showing;
     QSizeF stripSize;
 
+    // The first bid's button in the strip's frame, worked out with `showing`
+    // (refresh()). The others follow it at a fixed step.
+    QRectF firstBid;
+
     std::optional<unsigned int> hovered;
 
     // The bid a press landed on: a click is a press and a release on the same one.
