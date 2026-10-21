@@ -149,6 +149,12 @@ public:
     void setPrompt(const BetPrompt& prompt);
     void clearPrompt();
 
+    // WHERE THE CURSOR WENT, in table space, or nothing once it has left the view:
+    // from TableScene::event(), on every move. Puts out a bid lit under a resting
+    // cursor (setPrompt()) once the cursor is off the strip - the scene sends no
+    // hover leave to an item it never sent a hover to.
+    void followCursor(std::optional<QPointF> scenePos);
+
     // Bids `bet` if the strip offers it, as a click on its button would: the
     // keyboard's road, and the tests'. False, and nothing bid, otherwise.
     bool activate(unsigned int bet);
@@ -196,6 +202,14 @@ private:
 
     // Lights the bid offered under `point`, in the strip's frame, or none.
     void hoverAt(std::optional<QPointF> point);
+
+    // The bid that would light under `point`, in the strip's frame: an offered one,
+    // while a prompt is held.
+    std::optional<unsigned int> offeredAt(std::optional<QPointF> point) const;
+
+    // Where the scene last saw the cursor (TableScene::cursorPosition()), in the
+    // strip's frame, or nothing.
+    std::optional<QPointF> cursorHere() const;
 
     const panel::Picture& picture(qreal ratio) const;
 

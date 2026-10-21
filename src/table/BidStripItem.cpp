@@ -390,15 +390,36 @@ void BidStripItem::setPrompt(const BetPrompt& next)
     // and the strip appears wherever the cursor was left - often right over it, in
     // the round dealt from the setup dialog's Deal. The mock-up's browser lights it
     // at once; so does this (phase 7 found the same on the hand).
-    std::optional<QPointF> cursor;
+    //
+    // AND THE SCENE PUTS IT OUT (followCursor()): lit this way, the strip is not in
+    // the scene's hover list, so no hover leave would ever reach it.
+    hoverAt(cursorHere());
+}
 
+void BidStripItem::followCursor(std::optional<QPointF> scenePos)
+{
+    // Nothing lit, nothing to put out - which is every move of the mouse but the
+    // few after a strip lights under a resting cursor.
+    if(!hovered)
+        return;
+
+    // Still on the strip, and then the move is a hover the scene sends it, which
+    // puts it in the scene's hover list from here on.
+    if(scenePos && QRectF(QPointF(), stripSize).contains(mapFromScene(*scenePos)))
+        return;
+
+    hoverAt(std::nullopt);
+}
+
+std::optional<QPointF> BidStripItem::cursorHere() const
+{
     if(const TableScene* table = qobject_cast<const TableScene*>(scene()))
     {
         if(const std::optional<QPointF> at = table->cursorPosition())
-            cursor = mapFromScene(*at);
+            return mapFromScene(*at);
     }
 
-    hoverAt(cursor);
+    return std::nullopt;
 }
 
 void BidStripItem::clearPrompt()
@@ -457,28 +478,34 @@ void BidStripItem::refresh()
     firstBid = firstButton(now, measured.bidsTop);
     showing = std::move(now);
 
-    // New bids are new buttons in new places: what was lit is lit again only by
-    // the cursor (setPrompt(), or the next hover).
-    hovered.reset();
+    // New bids are new buttons in new places, so what is lit is read again from
+    // where the cursor rests, as the hand does (HandItem::layOut()). Put out
+    // instead, a bid under a cursor that had not moved went dark until it did
+    // (PR #36's review, finding #3).
+    hovered = offeredAt(cursorHere());
 
     memo.invalidate();
     update();
 }
 
-void BidStripItem::hoverAt(std::optional<QPointF> point)
+std::optional<unsigned int> BidStripItem::offeredAt(std::optional<QPointF> point) const
 {
-    std::optional<unsigned int> now;
+    if(!prompt || !point)
+        return std::nullopt;
 
     // ONLY AN OFFERED BID LIGHTS. The refused one under the cursor stays as it is:
     // a button that brightens says it can be pressed.
-    if(prompt && point)
-    {
-        if(const std::optional<unsigned int> bet = bidUnder(firstBid, showing.highest, *point);
-           bet && bidstrip::offers(showing, *bet))
-        {
-            now = bet;
-        }
-    }
+    const std::optional<unsigned int> bet = bidUnder(firstBid, showing.highest, *point);
+
+    if(bet && bidstrip::offers(showing, *bet))
+        return bet;
+
+    return std::nullopt;
+}
+
+void BidStripItem::hoverAt(std::optional<QPointF> point)
+{
+    const std::optional<unsigned int> now = offeredAt(point);
 
     if(now == hovered)
         return;

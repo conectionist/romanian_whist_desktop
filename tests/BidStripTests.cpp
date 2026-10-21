@@ -532,6 +532,74 @@ TEST_CASE("A bid under a still cursor lights when you are asked", "[bid-strip]")
     REQUIRE_FALSE(scene.bidStripItem()->hoveredBid().has_value());
 }
 
+TEST_CASE("A bid lit under a still cursor goes out when the cursor leaves the strip", "[bid-strip]")
+{
+    // PR #36's review, finding #3. A strip lit by setPrompt() was never in the
+    // scene's hover list - the cursor had not moved over it - so the scene sent it
+    // no hover leave: a cursor that left in one jump, or left the view, left the
+    // bid lit with nothing on it.
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+
+    const GameSnapshot table = biddingTable(4);
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(table));
+
+    BidStripItem* strip = scene.bidStripItem();
+    const BetPrompt prompt = promptFor(6);
+    const QPointF one = tablespace::bidStripOrigin
+                      + bidstrip::buttonRect(bidstrip::fieldsFor(prompt, table), 1).center();
+
+    // Off the strip in one move.
+    hoverAt(scene, one);
+    strip->setPrompt(prompt);
+    REQUIRE(strip->hoveredBid() == 1u);
+
+    hoverAt(scene, QPointF(-500.0, -500.0));
+    REQUIRE_FALSE(strip->hoveredBid().has_value());
+
+    // Off the view. As a view sends it - see "A bid under a still cursor lights
+    // when you are asked".
+    strip->clearPrompt();
+    hoverAt(scene, one);
+    strip->setPrompt(prompt);
+    REQUIRE(strip->hoveredBid() == 1u);
+
+    TableView view(&scene);
+
+    QGraphicsSceneEvent leave(QEvent::GraphicsSceneLeave);
+    leave.setWidget(view.viewport());
+    QCoreApplication::sendEvent(&scene, &leave);
+
+    REQUIRE_FALSE(strip->hoveredBid().has_value());
+}
+
+TEST_CASE("A bid lit under a still cursor stays lit when the note changes", "[bid-strip]")
+{
+    // PR #36's review, finding #3, the other way round: refresh() put the light out
+    // for any change to what the strip says, and nothing lit it again until the
+    // mouse moved. The bids do not move when the note does.
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+
+    const GameSnapshot table = biddingTable(4);
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(table));
+
+    BidStripItem* strip = scene.bidStripItem();
+    const BetPrompt prompt = promptFor(6);
+    const QPointF one = tablespace::bidStripOrigin
+                      + bidstrip::buttonRect(bidstrip::fieldsFor(prompt, table), 1).center();
+
+    hoverAt(scene, one);
+    strip->setPrompt(prompt);
+    REQUIRE(strip->hoveredBid() == 1u);
+
+    const bidstrip::Fields before = strip->fields();
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(biddingTable(4, 1, 2)));
+
+    REQUIRE(strip->fields().note != before.note);
+    REQUIRE(strip->hoveredBid() == 1u);
+}
+
 TEST_CASE("A snapshot that changes nothing does not compose the strip again", "[bid-strip]")
 {
     // relayout() hands the strip every snapshot, about 1300 a game. One that leaves

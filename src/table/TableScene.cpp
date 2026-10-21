@@ -175,6 +175,8 @@ bool TableScene::event(QEvent* event)
     // A view sends the scene its mouse moves, with or without a button down, and
     // a leave when the cursor goes off it; a test may send hover moves straight to
     // the scene. All three say where the cursor is.
+    bool moved = true;
+
     switch(event->type())
     {
     case QEvent::GraphicsSceneMouseMove:
@@ -192,8 +194,14 @@ bool TableScene::event(QEvent* event)
         break;
 
     default:
+        moved = false;
         break;
     }
+
+    // And the strip hears it: a bid it lit under a resting cursor is one the scene
+    // would never tell it the cursor had left (BidStripItem::followCursor()).
+    if(moved)
+        bidStrip->followCursor(cursor);
 
     return QGraphicsScene::event(event);
 }
