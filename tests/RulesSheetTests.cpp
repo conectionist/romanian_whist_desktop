@@ -141,6 +141,20 @@ TEST_CASE("The rules name the special rounds only when the game deals them", "[r
     REQUIRE(lines.contains(QStringLiteral(
         "In a Forehead round you see everyone's card but your own while you bid.")));
     REQUIRE_FALSE(anyLineHas(lines, QStringLiteral("Hidden")));
+
+    // BOTH, and the appended Hidden round is a 1-card round that is NOT
+    // Forehead: the engine keeps its type (Scoreboard's "all1GamesAreForehead"
+    // case). The sheet said every 1-card round was, and in the app the last
+    // round of such a game was Hidden (PR #35's review, finding #5).
+    config.endWithForeheadAndHidden = true;
+    config.all1GamesAreForehead = true;
+
+    lines = rulessheet::linesFor(config);
+    REQUIRE(lines.contains(QStringLiteral(
+        "Every 1-card round is a Forehead round, except the Hidden round at the end.")));
+    REQUIRE_FALSE(lines.contains(QStringLiteral("Every 1-card round is a Forehead round.")));
+    REQUIRE(lines.contains(QStringLiteral(
+        "In a Hidden round nobody sees their card until the bidding is done.")));
 }
 
 TEST_CASE("The rules end on trump bidding play and scoring", "[rules]")

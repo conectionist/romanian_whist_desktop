@@ -80,8 +80,19 @@ QStringList rulessheet::linesFor(const newgame::Config& config)
     }
 
     // RULES.md rule 9, said only for a game that deals them.
+    //
+    // WITH THE APPENDED PAIR, NOT QUITE EVERY ONE: the Hidden round at the end
+    // is a 1-card round and keeps its own type (Scoreboard::initialize()). The
+    // plain sentence claimed it was Forehead (PR #35's review, finding #5).
     if(config.all1GamesAreForehead)
-        lines << QCoreApplication::translate("rulessheet", "Every 1-card round is a Forehead round.");
+    {
+        lines << (appended
+                      ? QCoreApplication::translate("rulessheet",
+                                                    "Every 1-card round is a Forehead round, except "
+                                                    "the Hidden round at the end.")
+                      : QCoreApplication::translate("rulessheet",
+                                                    "Every 1-card round is a Forehead round."));
+    }
 
     if(config.all1GamesAreForehead || appended)
     {
