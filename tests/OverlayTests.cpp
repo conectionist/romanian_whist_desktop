@@ -450,6 +450,30 @@ TEST_CASE("The keyboard scrolls a sheet whose body does not fit", "[overlay]")
     REQUIRE(bar->value() == bar->maximum());
 }
 
+TEST_CASE("A sheet's words are plain text unless the line asks for rich", "[overlay]")
+{
+    // PR #36's review, finding #5, for every line rather than the table's cells
+    // alone. A QLabel's default AutoText reads anything with a tag on its first line
+    // as markup, and the announcement, the streak warning and a crash's message all
+    // carry what a player typed or an exception said. Only the two lines that build
+    // their own markup, escaped, are rich.
+    FiveSheets five(QSize(1920, 1034));
+
+    for(Overlay* sheet : five.sheets)
+    {
+        for(const QLabel* label : sheet->findChildren<QLabel*>())
+        {
+            INFO(sheet->metaObject()->className() << ", " << label->objectName().toStdString()
+                 << ": " << label->text().left(40).toStdString());
+
+            const bool rich = label->objectName() == QStringLiteral("roundMeta")
+                           || label->objectName() == QStringLiteral("rulesText");
+
+            REQUIRE(label->textFormat() == (rich ? Qt::RichText : Qt::PlainText));
+        }
+    }
+}
+
 TEST_CASE("A sheet table shows a name as typed, markup and all", "[overlay]")
 {
     // PR #36's review, finding #5. A QLabel's default AutoText reads a string that

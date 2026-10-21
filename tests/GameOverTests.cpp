@@ -205,6 +205,26 @@ TEST_CASE("A second game over replaces the first one's table", "[game-over]")
     REQUIRE(rowTexts(panel, 0) == QStringList{ "1.", "Dan", "8", QString::fromUtf8("★") });
 }
 
+TEST_CASE("A winner named in markup is announced as typed", "[game-over]")
+{
+    // PR #36's review, finding #5: the names come from the setup dialog as the
+    // player typed them, and the announcement once read "<b>Dan</b>" as bold. So
+    // does a failure's message, which is whatever an exception said.
+    const std::vector<Standing> standings{ standing(0, "<b>Dan</b>", 63, 1),
+                                           standing(1, "Ana", 40, 2) };
+
+    GameOverPanel panel;
+    panel.showResult(standings, { standings[0] });
+
+    QLabel* announcement = panel.findChild<QLabel*>("announcement");
+    REQUIRE(announcement);
+    REQUIRE(announcement->textFormat() == Qt::PlainText);
+    REQUIRE(announcement->text().startsWith(QStringLiteral("<b>Dan</b>")));
+
+    panel.showFailure(QStringLiteral("<i>bad</i> state"));
+    REQUIRE(announcement->textFormat() == Qt::PlainText);
+}
+
 TEST_CASE("The failure face shows no standings and no Play again", "[game-over]")
 {
     // THE OTHER ENDING, and the reason the panel has two faces: the run slot

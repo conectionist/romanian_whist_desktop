@@ -558,6 +558,15 @@ void Overlay::dress(QLabel* label, sheet::Role role)
     label->setFont(sheet::fontFor(role));
     label->setWordWrap(true);
 
+    // PLAIN TEXT, unless the line has asked for rich text itself - the round
+    // sheet's trump line and the rules do, and escape what they put in. A QLabel's
+    // default AutoText reads anything with a tag on its first line as markup, and
+    // the sheets' lines carry player names: "Ana and <b>Dan</b> tie for first..."
+    // drew in bold, and so did a streak warning (PR #36's review, finding #5, which
+    // first covered only the tables' cells).
+    if(label->textFormat() == Qt::AutoText)
+        label->setTextFormat(Qt::PlainText);
+
     setTextColour(label, sheet::colourFor(role, palette.table));
 }
 

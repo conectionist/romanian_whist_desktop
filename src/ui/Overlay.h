@@ -260,7 +260,9 @@ protected:
     const Theme& theme() const { return palette; }
 
     // Sets `label` as a line of `role`: its font and colour, and wrapping. Kept,
-    // so a new theme sets it again.
+    // so a new theme sets it again. Plain text, unless the label has already been
+    // set to rich text: a sheet's lines carry player names, which must read as
+    // typed.
     void dress(QLabel* label, sheet::Role role);
 
     // The sheet's buttons, at the bottom right, 12 apart and 20 below what is
