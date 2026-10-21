@@ -1366,8 +1366,8 @@ Done when: the menu bar matches the mock-up and every item works.
 
 **Outcome:**
 
-- **The count is 494 tests** (467 + 27, none retired), passing on the `default` preset with
-  Qt 6.11.2 and building without a warning.
+- **The count is 494 tests** (467 + 27, none retired), passing on the `default`, `release` and
+  `clang` presets with Qt 6.11.2 and building without a warning.
   - **Added:** 7 `MenuBarTests` cases, 6 `RulesSheetTests`, 2 `SettingsSheetTests`, 8
     `MainWindowTests` (New Game over a running game, and cancelled; Rules holding the game, under
     Exit, under the digit keys and on the menu page; Settings on the menu page and over a game in
@@ -1421,9 +1421,25 @@ Done when: the menu bar matches the mock-up and every item works.
     `hideMenuSheets()` the way Rules does, or be added to them.
   - **Pacing:** `pacingOf(config)` in `MainWindow.cpp` is a config's whole `Pacing`, and
     `GameController::setPacing()` changes a running game's.
-- **Not measured:** the `[.timing]` drag. The bar's shadow is a widget over the top 30 px of the
-  view, so each drag frame repaints it too: a gradient fill, expected to cost well under a
-  millisecond.
+- **Resizing**, release build, one run each.
+  - **`[.timing]`, the bare view**, against phase 8's recorded run (not measured back to back).
+    Phase 9 changed nothing the bare view draws, and it reads the same within a run's noise:
+
+    | | Phase 8 | Phase 9 |
+    |---|---|---|
+    | Drag frame, median | 9.5 ms | 9.2 ms |
+    | Drag frame, worst | 10.9 ms | 10.4 ms |
+    | First step | 85 ms | 80 ms |
+    | Settle frame | 94 ms | 95 ms |
+
+  - **The bar's shadow costs nothing measurable.** It is a widget over the top 30 px of the view,
+    outside what `[.timing]` drags, so a throwaway case (not committed) dragged the whole window
+    over a full six-seat table at 1600×946, the shadow shown and hidden back to back, three rounds
+    over the same 39 sizes. After the first round, which is warm-up, a drag frame's median was
+    8.5 ms either way (8.52 and 8.51 shown, 8.49 and 8.81 hidden).
+  - **A pitfall the first attempt hit:** the two passes must drag through the same sizes. Run one
+    after the other with the size still growing, the second pass is the larger window, and came
+    out a millisecond slower for that reason alone.
 - **Pitfalls:**
   - **`QMainWindow::menuBar()` deletes a menu widget that is not a `QMenuBar`**, by making one and
     installing it.
