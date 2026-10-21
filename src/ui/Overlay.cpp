@@ -92,6 +92,26 @@ void setTextColour(QWidget* widget, const QColor& colour)
 
 }
 
+namespace
+{
+
+// Every layout under `layout`, and every item in them, told to measure again.
+void invalidateLayouts(QLayout* layout)
+{
+    layout->invalidate();
+
+    for(int i = 0 ; i < layout->count() ; i++)
+    {
+        QLayoutItem* item = layout->itemAt(i);
+        item->invalidate();
+
+        if(QLayout* inner = item->layout())
+            invalidateLayouts(inner);
+    }
+}
+
+}
+
 // ---- sheet:: ----
 
 QFont sheet::fontFor(Role role)
@@ -578,6 +598,15 @@ void Overlay::placeSheet()
     const int room = std::max(0, width() - 2 * sheet::pageMargin);
     const int across = std::min(sheet::width, room);
 
+    // EVERY LAYOUT IN THE SHEET FORGETS WHAT IT MEASURED, the nested ones included.
+    // A label's new text invalidates the layout it sits in, but a box layout keeps
+    // the height it last worked out for a width, and a row inside the column -
+    // Rules' list - went on answering with the height it had measured empty: the
+    // window lays a sheet out at start-up, and the rules arrive when Rules is first
+    // pressed. The sheet opened as a sliver with a scroll bar (found in the running
+    // app, phase 10).
+    invalidateLayouts(column);
+
     int wanted = plaque->hasHeightForWidth() ? plaque->heightForWidth(across) : -1;
 
     if(wanted <= 0)
@@ -617,6 +646,13 @@ bool Overlay::focusNextInside(bool next)
 
     if(at >= 0)
         to = (at + (next ? 1 : count - 1)) % count;
+
+    // A TAB THAT LANDS WHERE THE KEYBOARD ALREADY IS - a sheet with one button,
+    // whose default it is - still shows it there: Qt sends no focus event to the
+    // widget that has it, so it is let go and taken again, and the button lights
+    // as a Tab lights it (SheetButton::isLit()).
+    if(stops[to]->hasFocus())
+        stops[to]->clearFocus();
 
     stops[to]->setFocus(next ? Qt::TabFocusReason : Qt::BacktabFocusReason);
 

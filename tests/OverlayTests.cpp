@@ -230,6 +230,38 @@ TEST_CASE("Every sheet stays on the page at the smallest window and Rules scroll
     }
 }
 
+// THE WINDOW'S ORDER, NOT A TEST'S: MainWindow builds Rules at start-up, the event
+// loop lays it out with no rules in it, and the rules arrive when the bar's Rules is
+// first pressed. The list sits in a row of its own, which kept the height it had
+// measured empty - one line - so in the app the sheet opened as a sliver with a
+// scroll bar (found in the running app, phase 10).
+TEST_CASE("A sheet filled after it was laid out is sized to what it then holds", "[overlay]")
+{
+    QWidget page;
+    page.resize(1280, 754);
+
+    // Hidden from the first, as the window keeps it until Rules is pressed.
+    RulesSheet sheet(&page);
+    sheet.hide();
+    page.show();
+    QCoreApplication::processEvents();
+
+    newgame::Config config = newgame::defaults();
+    config.endWithForeheadAndHidden = true;
+    sheet.showRules(config);
+
+    sheet.show();
+    QCoreApplication::processEvents();
+
+    QScrollArea* scroll = sheet.findChild<QScrollArea*>();
+    REQUIRE(scroll != nullptr);
+
+    // The whole list fits a page this tall, so nothing scrolls, and the sheet is
+    // far taller than a title, one line and a button.
+    REQUIRE(scroll->verticalScrollBar()->maximum() == 0);
+    REQUIRE(sheet.sheetRect().height() > 300);
+}
+
 TEST_CASE("A sheet button lights under the cursor and when Tab brings the keyboard", "[overlay]")
 {
     QWidget page;
@@ -270,6 +302,32 @@ TEST_CASE("A sheet button lights under the cursor and when Tab brings the keyboa
 
     button->setAttribute(Qt::WA_UnderMouse, false);
     REQUIRE_FALSE(button->isLit());
+}
+
+TEST_CASE("Tab lights a sheet's only button though the keyboard is already on it", "[overlay]")
+{
+    // Rules has one button, Close, which the sheet puts the keyboard on as it opens -
+    // unlit, as a page's own focus is. Tab finds nowhere else to go; it must still
+    // show where the keyboard is.
+    QWidget page;
+    page.resize(1280, 754);
+
+    RulesSheet sheet(&page);
+    sheet.showRules(newgame::defaults());
+    page.show();
+    sheet.show();
+    QCoreApplication::processEvents();
+
+    sheet.focusDefault();
+
+    SheetButton* close = sheet.findChild<SheetButton*>(QStringLiteral("rulesClose"));
+    REQUIRE(close != nullptr);
+    REQUIRE(page.focusWidget() == close);
+    REQUIRE_FALSE(close->isLit());
+
+    REQUIRE(sheet.focusNextInside(true));
+    REQUIRE(page.focusWidget() == close);
+    REQUIRE(close->isLit());
 }
 
 TEST_CASE("A quiet sheet button has no fill and a primary one is green", "[overlay]")
