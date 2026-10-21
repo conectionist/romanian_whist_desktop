@@ -34,6 +34,31 @@ QFont menubar::labelFont()
     return font;
 }
 
+QString menubar::labelOf(const QString& text)
+{
+    QString label;
+    label.reserve(text.size());
+
+    for(qsizetype i = 0 ; i < text.size() ; i++)
+    {
+        if(text.at(i) == QLatin1Char('&'))
+        {
+            // "&&" is one '&'; a lone one marks the next character and goes.
+            if(i + 1 < text.size() && text.at(i + 1) == QLatin1Char('&'))
+            {
+                label += QLatin1Char('&');
+                i++;
+            }
+
+            continue;
+        }
+
+        label += text.at(i);
+    }
+
+    return label;
+}
+
 menubar::Colours menubar::coloursFor(const Theme::TablePalette& palette, bool enabled, bool lit)
 {
     if(!enabled)
@@ -71,11 +96,16 @@ bool MenuBarButton::isLit() const
     return underMouse() || hasFocus() || isDown();
 }
 
+QString MenuBarButton::label() const
+{
+    return menubar::labelOf(text());
+}
+
 QSize MenuBarButton::sizeHint() const
 {
     const QFontMetricsF metrics(menubar::labelFont());
 
-    qreal width = 2.0 * menubar::itemPadding + metrics.horizontalAdvance(text());
+    qreal width = 2.0 * menubar::itemPadding + metrics.horizontalAdvance(label());
 
     if(icon)
         width += menubar::iconSize + menubar::iconGap;
@@ -126,7 +156,7 @@ void MenuBarButton::paintEvent(QPaintEvent*)
     painter.setFont(font);
     painter.setPen(colours.label);
     painter.drawText(QPointF(left, fonts::baselineIn(metrics, (height() - line) / 2.0, line)),
-                     text());
+                     label());
 }
 
 MenuBarShadow::MenuBarShadow(QWidget* parent) : QWidget(parent)
@@ -196,7 +226,9 @@ MenuBar::MenuBar(const Items& given, QWidget* window) : QWidget(window)
 
     viewButton = new MenuBarButton(std::nullopt, this);
     viewButton->setObjectName(QStringLiteral("menuView"));
-    viewButton->setText(given.view ? given.view->title().remove(QLatin1Char('&')) : QString());
+    // The title as it comes, '&' and all: label() reads it, as it reads an
+    // action's text.
+    viewButton->setText(given.view ? given.view->title() : QString());
     viewButton->setMenu(given.view);
     viewButton->setPopupMode(QToolButton::InstantPopup);
     items.push_back(viewButton);

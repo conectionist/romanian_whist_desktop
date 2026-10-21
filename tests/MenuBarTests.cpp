@@ -118,15 +118,74 @@ TEST_CASE("A menu item is as wide as its padding icon and label", "[menu-bar]")
             static_cast<int>(std::ceil(12.0 + 18.0 + 8.0 + metrics.horizontalAdvance(newGame->text()) +
                                        12.0)));
 
-    // View has no icon, and no '&' from its menu's title.
+    // View has no icon, and shows no '&' from its menu's title.
     MenuBarButton* view = fixture.button("menuView");
-    REQUIRE(view->text() == QStringLiteral("View"));
+    REQUIRE(view->label() == QStringLiteral("View"));
     REQUIRE(view->width() ==
-            static_cast<int>(std::ceil(12.0 + metrics.horizontalAdvance(view->text()) + 12.0)));
+            static_cast<int>(std::ceil(12.0 + metrics.horizontalAdvance(view->label()) + 12.0)));
 
     // The label's font is Marcellus 17, through section 2.3's chain.
     REQUIRE(menubar::labelFont().pixelSize() == 17);
     REQUIRE(menubar::labelFont().families().front() == QStringLiteral("Marcellus"));
+}
+
+TEST_CASE("A label reads mnemonics the way Qt does", "[menu-bar]")
+{
+    // PR #35's review, finding #15: a '&' marks a mnemonic and is not shown, and
+    // "&&" is one literal '&'.
+    REQUIRE(menubar::labelOf(QStringLiteral("New Game")) == QStringLiteral("New Game"));
+    REQUIRE(menubar::labelOf(QStringLiteral("&View")) == QStringLiteral("View"));
+    REQUIRE(menubar::labelOf(QStringLiteral("Joc && nou")) == QStringLiteral("Joc & nou"));
+    REQUIRE(menubar::labelOf(QStringLiteral("&Vedere && jurnal")) == QStringLiteral("Vedere & jurnal"));
+    REQUIRE(menubar::labelOf(QStringLiteral("&&&A")) == QStringLiteral("&A"));
+    REQUIRE(menubar::labelOf(QStringLiteral("Trailing&")) == QStringLiteral("Trailing"));
+    REQUIRE(menubar::labelOf(QString()).isEmpty());
+}
+
+TEST_CASE("An ampersand in a label is drawn and sized as one", "[menu-bar]")
+{
+    // PR #35's review, finding #15. Qt's text marks a mnemonic with '&' and
+    // writes a literal one as "&&". The bar dropped every '&' from View's title,
+    // so "&Vedere && jurnal" read "Vedere  jurnal", and drew an action's label
+    // as it came, so "Joc && nou" read "Joc && nou". Shown with a throwaway
+    // probe of the real bar before the fix.
+    QMainWindow window;
+    QAction* newGame = new QAction(QStringLiteral("Joc && nou"), &window);
+    QAction* settings = new QAction(QStringLiteral("Settings"), &window);
+    QAction* rules = new QAction(QStringLiteral("Rules"), &window);
+    QMenu* view = new QMenu(QStringLiteral("&Vedere && jurnal"), &window);
+    QAction* exitAction = new QAction(QStringLiteral("Exit"), &window);
+    view->addAction(QStringLiteral("Log"));
+
+    MenuBar* bar = new MenuBar({ newGame, settings, rules, view, exitAction }, &window);
+    bar->setTheme(Theme::dark());
+    window.setMenuWidget(bar);
+    window.setCentralWidget(new QWidget(&window));
+    window.resize(1200, 600);
+    window.show();
+    pump(50);
+
+    const QFontMetricsF metrics(menubar::labelFont());
+    const auto widthOf = [&metrics](const QString& label, bool icon)
+    {
+        return static_cast<int>(std::ceil(12.0 + (icon ? 18.0 + 8.0 : 0.0) +
+                                          metrics.horizontalAdvance(label) + 12.0));
+    };
+
+    MenuBarButton* first = bar->findChild<MenuBarButton*>(QStringLiteral("menuNewGame"));
+    MenuBarButton* viewButton = bar->findChild<MenuBarButton*>(QStringLiteral("menuView"));
+    REQUIRE(first != nullptr);
+    REQUIRE(viewButton != nullptr);
+
+    REQUIRE(first->sizeHint().width() == widthOf(QStringLiteral("Joc & nou"), true));
+    REQUIRE(viewButton->sizeHint().width() == widthOf(QStringLiteral("Vedere & jurnal"), false));
+
+    // And an action renamed later, through setText().
+    settings->setText(QStringLiteral("Set && go"));
+    pump(10);
+
+    MenuBarButton* second = bar->findChild<MenuBarButton*>(QStringLiteral("menuSettings"));
+    REQUIRE(second->sizeHint().width() == widthOf(QStringLiteral("Set & go"), true));
 }
 
 TEST_CASE("A menu item's colours follow page.html's btn", "[menu-bar]")

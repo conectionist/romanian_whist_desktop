@@ -69,6 +69,12 @@ qreal shadowAt(qreal y);
 // The items' label font: Marcellus 17, through section 2.3's fallback chain.
 QFont labelFont();
 
+// What an item shows for a Qt text: a '&' marks a mnemonic and is not shown,
+// and "&&" is one literal '&'. A painted label has no underline to show a
+// mnemonic with, so the mark is dropped and nothing else (PR #35's review,
+// finding #15).
+QString labelOf(const QString& text);
+
 // What colour an item's icon and label take. .btn: the icon gold and the label
 // cream; both gold-bright under the cursor or the keyboard ("lit"); and, as the
 // corner buttons are, both muted when the item can't be used.
@@ -95,6 +101,9 @@ public:
 
     // Under the cursor, focused from the keyboard, or holding its menu open.
     bool isLit() const;
+
+    // What is drawn, and sized for: text(), mnemonics read as Qt reads them.
+    QString label() const;
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
