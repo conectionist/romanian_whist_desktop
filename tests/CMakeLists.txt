@@ -43,6 +43,7 @@ add_executable(desktop_tests
     TableViewTests.cpp
     HudTests.cpp
     MenuBarTests.cpp
+    RulesSheetTests.cpp
     ScoreboardTests.cpp
     ScreenshotTool.cpp
     ResizeTiming.cpp

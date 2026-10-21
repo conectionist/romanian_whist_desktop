@@ -37,6 +37,7 @@ class MainMenuPage;
 class MenuBar;
 class PauseOverlay;
 class RoundSheet;
+class RulesSheet;
 class TableScene;
 class TableView;
 class TrickPanelItem;
@@ -151,6 +152,14 @@ private slots:
     // this window produces, and the reason `returningToMenu` exists.
     void abandonToMenu();
 
+    // The menu bar's Rules: the sheet for the game lastConfig deals, over
+    // whatever is showing, holding a running game while it is up.
+    void showRules();
+
+    // Closes Rules or Settings, whichever is up, releasing its hold and giving
+    // the keyboard back to what is beneath.
+    void hideMenuSheets();
+
 private:
     void appendLine(const QString& line);
 
@@ -207,6 +216,12 @@ private:
 
     void showRoundSheet(const RoundResult& result);
     void hideRoundSheet();
+
+    // THE MENU BAR'S SHEET THAT IS UP, Rules or Settings, or null. They open over
+    // everything else and close back to it, as the mock-up's do, so whatever
+    // raises itself while one is up puts it back on top (keepMenuSheetOnTop()).
+    QWidget* openMenuSheet() const;
+    void keepMenuSheetOnTop();
 
     // GIVES THE KEYBOARD TO WHATEVER IS NOW ON TOP, after something over it went:
     // the pause menu's Resume, the game-over panel's default button, a holding
@@ -291,6 +306,9 @@ private:
     // Section 16.1's sheet, raised over the round it reports.
     RoundSheet* roundSheet = nullptr;
 
+    // The menu bar's Rules, the same arrangement again.
+    RulesSheet* rulesSheet = nullptr;
+
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this
     // is what drives its second source: the snapshot reaches it through
@@ -355,9 +373,11 @@ private:
     bool pauseMenuHolding = false;
     bool roundSheetHolding = false;
 
-    // A THIRD, since the redesign's phase 9: the setup dialog, opened from the
-    // menu bar over a game still running.
+    // TWO MORE, since the redesign's phase 9: the setup dialog, opened from the
+    // menu bar over a game still running, and the bar's Rules and Settings
+    // sheets (the owner's call, 2026-10-21: the bots wait while you read).
     bool dialogHolding = false;
+    bool sheetHolding = false;
 
     // Does the round sheet WAIT? From the dialog, per game - section 16.1's
     // dismissal, and off by default.

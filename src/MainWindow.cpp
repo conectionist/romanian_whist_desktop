@@ -14,6 +14,7 @@
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
+#include "ui/RulesSheet.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/GameEngine.h>
@@ -216,6 +217,14 @@ void MainWindow::buildTable()
     gameOverPanel->setTheme(theme);
     gameOverPanel->hide();
 
+    // THE MENU BAR'S RULES, the fourth overlay and the same arrangement. It opens
+    // over any of the three above and closes back to it.
+    rulesSheet = new RulesSheet(pages);
+    rulesSheet->setTheme(theme);
+    rulesSheet->hide();
+
+    connect(rulesSheet, &RulesSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
     // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
     // for a game that has already ended: stop() is idempotent, and a game that
     // reached gameOver emits no gameStopped for the returningToMenu latch to
@@ -417,6 +426,62 @@ void MainWindow::setPauseMenuVisible(bool visible)
 void MainWindow::showPauseMenu()
 {
     setPauseMenuVisible(true);
+
+    // EXIT OVER RULES OR SETTINGS: the pause menu goes up and the sheet comes
+    // down. In that order, so the game is never released between the two holds.
+    if(pauseOverlay->isVisible())
+        hideMenuSheets();
+}
+
+void MainWindow::showRules()
+{
+    hideMenuSheets();
+
+    rulesSheet->showRules(lastConfig);
+
+    rulesSheet->setGeometry(pages->rect());
+    rulesSheet->show();
+    rulesSheet->raise();
+
+    // ONLY A GAME IN PLAY IS HELD. Over the menu page there is nothing to hold,
+    // and over the game-over panel nothing left to.
+    sheetHolding = tableState == TableState::Playing;
+    applyHold();
+
+    rulesSheet->focusClose();
+}
+
+void MainWindow::hideMenuSheets()
+{
+    if(!openMenuSheet() && !sheetHolding)
+        return;
+
+    rulesSheet->hide();
+
+    sheetHolding = false;
+    applyHold();
+
+    restoreFocus();
+}
+
+QWidget* MainWindow::openMenuSheet() const
+{
+    if(rulesSheet && rulesSheet->isVisible())
+        return rulesSheet;
+
+    return nullptr;
+}
+
+void MainWindow::keepMenuSheetOnTop()
+{
+    // A round scored or a game ended under Rules: the hold lands at the game's
+    // next pause, and the last trick of a round or a game can finish first. The
+    // sheet the player is reading stays where it is.
+    if(QWidget* sheet = openMenuSheet())
+    {
+        sheet->raise();
+        restoreFocus();
+    }
 }
 
 void MainWindow::applyHold()
@@ -437,7 +502,7 @@ void MainWindow::applyHold()
     // So the two reasons are two members, this computes the hold from both, and
     // GameBridge is untouched - the arbitration belongs to the one object that
     // knows every reason there is.
-    controller.setPaused(pauseMenuHolding || roundSheetHolding || dialogHolding);
+    controller.setPaused(pauseMenuHolding || roundSheetHolding || dialogHolding || sheetHolding);
 }
 
 void MainWindow::showRoundSheet(const RoundResult& result)
@@ -450,6 +515,8 @@ void MainWindow::showRoundSheet(const RoundResult& result)
 
     if(roundSheetHolding)
         roundSheet->focusContinue();
+
+    keepMenuSheetOnTop();
 }
 
 void MainWindow::hideRoundSheet()
@@ -470,7 +537,14 @@ void MainWindow::hideRoundSheet()
 
 void MainWindow::restoreFocus()
 {
-    // TOP FIRST. The pause menu hides any round sheet on its way up, and a game
+    // The menu bar's sheets open over everything else.
+    if(rulesSheet && rulesSheet->isVisible())
+    {
+        rulesSheet->focusClose();
+        return;
+    }
+
+    // THEN THE REST, TOP FIRST. The pause menu hides any round sheet on its way up, and a game
     // that has ended has neither a sheet holding it nor a strip waiting, so at
     // most one of these is ever the answer - the order only says which wins if a
     // later change lets two stand at once.
@@ -502,6 +576,8 @@ void MainWindow::showGameOverPanel()
     gameOverPanel->show();
     gameOverPanel->raise();
     gameOverPanel->focusDefaultButton();
+
+    keepMenuSheetOnTop();
 }
 
 void MainWindow::abandonToMenu()
@@ -519,6 +595,10 @@ void MainWindow::abandonToMenu()
     roundSheet->hide();
     roundSheetHolding = false;
     updatePauseAction();
+
+    // And the menu bar's sheets, which can stand over the game-over panel.
+    rulesSheet->hide();
+    sheetHolding = false;
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
@@ -563,6 +643,9 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 
     if(roundSheet && roundSheet->isVisible())
         roundSheet->setGeometry(pages->rect());
+
+    if(rulesSheet && rulesSheet->isVisible())
+        rulesSheet->setGeometry(pages->rect());
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -609,17 +692,19 @@ void MainWindow::buildMenuBar()
     newGameAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_N));
     connect(newGameAction, &QAction::triggered, this, &MainWindow::showNewGameDialog);
 
-    // NOT YET: the redesign's phase 9 builds the two sheets these open after the
-    // bar, and an item that looks live and does nothing is its own defect.
+    // NOT YET: the redesign's phase 9 builds the sheet this opens after the bar,
+    // and an item that looks live and does nothing is its own defect.
     settingsAction = new QAction(tr("Settings"), this);
     settingsAction->setObjectName(QStringLiteral("settingsAction"));
     settingsAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_S));
     settingsAction->setEnabled(false);
 
+    // Live on every page: the rules for the game on the table, or on the menu
+    // page for the one New Game will offer.
     rulesAction = new QAction(tr("Rules"), this);
     rulesAction->setObjectName(QStringLiteral("rulesAction"));
     rulesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_R));
-    rulesAction->setEnabled(false);
+    connect(rulesAction, &QAction::triggered, this, &MainWindow::showRules);
 
     // THE PAUSE MENU'S WAY IN FOR THE MOUSE, and Esc is its keyboard half. The
     // mock-up's Exit "returns to the main menu"; it does so through the pause
@@ -723,6 +808,10 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     updatePauseAction();
     pauseMenuHolding = false;
     dialogHolding = false;
+
+    // AND THE MENU BAR'S SHEETS, which can be up over a game New Game replaces.
+    rulesSheet->hide();
+    sheetHolding = false;
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
@@ -956,17 +1045,25 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     // dismisses it again - so the key that opened it is the key that leaves.
     // Checked first because the digit path below subtracts Key_1 from whatever
     // arrives and would otherwise have to reason about the result.
+    //
+    // THE MENU BAR'S SHEETS FIRST, which open over the pause menu as over
+    // everything else: Esc closes the one on top, as the mock-up's does.
     if(event->key() == Qt::Key_Escape)
     {
-        setPauseMenuVisible(!pauseOverlay->isVisible());
+        if(openMenuSheet())
+            hideMenuSheets();
+        else
+            setPauseMenuVisible(!pauseOverlay->isVisible());
+
         return;
     }
 
     // THE TABLE'S KEYS ARE NOT LIVE WHILE THE MENU IS UP. The overlay swallows
     // the mouse by covering the table; the keyboard needs saying, because these
     // digits are read HERE on the window rather than on the fan - so a 3 pressed
-    // over the pause menu would otherwise play the third card.
-    if(pauseOverlay->isVisible())
+    // over the pause menu would otherwise play the third card. The same goes for
+    // the menu bar's sheets.
+    if(pauseOverlay->isVisible() || openMenuSheet())
     {
         QMainWindow::keyPressEvent(event);
         return;

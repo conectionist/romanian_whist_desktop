@@ -12,6 +12,7 @@
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
+#include "ui/RulesSheet.h"
 
 #include <QAction>
 #include <QApplication>
@@ -1044,4 +1045,175 @@ TEST_CASE("A cancelled New Game holds the game while open and leaves it running"
     pump(2000);
     REQUIRE(log->blockCount() > held);
     REQUIRE(window.isVisible());
+}
+
+// THE MENU BAR'S RULES (the redesign's phase 9): over a running game it holds the
+// game, as the pause menu does (the owner's call, 2026-10-21), and Esc closes it -
+// the sheet first, before the pause menu Esc otherwise toggles.
+TEST_CASE("Rules holds a watched game and Esc closes it", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    QAction* rulesItem = window.findChild<QAction*>("rulesAction");
+    REQUIRE(log != nullptr);
+    REQUIRE(pages != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(pause != nullptr);
+    REQUIRE(rulesItem != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+    REQUIRE(log->blockCount() > 1);
+
+    REQUIRE(rulesItem->isEnabled());
+    rulesItem->trigger();
+
+    REQUIRE(rules->isVisible());
+    REQUIRE(rules->geometry() == pages->rect());
+
+    // Across the middle of the hold, as the pause case measures it.
+    pump(600);
+    const int settled = log->blockCount();
+    pump(1800);
+    const int held = log->blockCount();
+
+    INFO("settled " << settled << ", held " << held);
+    REQUIRE(held == settled);
+
+    // Esc closes the sheet, and does not open the pause menu on the way.
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+
+    REQUIRE_FALSE(rules->isVisible());
+    REQUIRE_FALSE(pause->isVisible());
+
+    // And the game runs on.
+    pump(2000);
+    REQUIRE(log->blockCount() > held);
+}
+
+TEST_CASE("Exit over Rules raises the pause menu in its place", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    REQUIRE(log != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(pause != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+    REQUIRE(rules->isVisible());
+
+    QAction* exitItem = window.findChild<QAction*>("exitAction");
+    REQUIRE(exitItem->isEnabled());
+    exitItem->trigger();
+
+    REQUIRE(pause->isVisible());
+    REQUIRE_FALSE(rules->isVisible());
+
+    // STILL HELD, by the pause now: the sheet's hold went only once the pause
+    // menu's was taken.
+    pump(600);
+    const int settled = log->blockCount();
+    pump(1800);
+    REQUIRE(log->blockCount() == settled);
+}
+
+// The digit keys are read on the window, so the sheet covering the fan is not
+// what keeps them off it: the guard in keyPressEvent() is.
+TEST_CASE("No card is played from the keyboard under Rules", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    answerModalFastSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    REQUIRE(bidStrip != nullptr);
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    // 0 is always legal for the opener, which seat 0 is.
+    QPushButton* zero = bidButton(*bidStrip, 0u);
+    REQUIRE(zero != nullptr);
+    zero->click();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+    REQUIRE(pumpUntil(10000, [scene]{ return scene->handItem()->isPlayable(0); }));
+
+    window.findChild<QAction*>("rulesAction")->trigger();
+
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    REQUIRE(rules->isVisible());
+
+    QKeyEvent one(QEvent::KeyPress, Qt::Key_1, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &one);
+    pump(200);
+
+    // Still waiting on the card: the 1 under the sheet played nothing.
+    REQUIRE(scene->handItem()->isPlayable(0));
+
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+    REQUIRE_FALSE(rules->isVisible());
+
+    // With the sheet gone the same key plays it.
+    QCoreApplication::sendEvent(&window, &one);
+    pump(200);
+    REQUIRE_FALSE(scene->handItem()->isPlayable(0));
+}
+
+TEST_CASE("Rules opens on the menu page for the game New Game offers", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    QAction* rulesItem = window.findChild<QAction*>("rulesAction");
+    REQUIRE(pages != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(rulesItem != nullptr);
+
+    // Live with no game, unlike Exit.
+    REQUIRE(rulesItem->isEnabled());
+    REQUIRE_FALSE(window.findChild<QAction*>("exitAction")->isEnabled());
+
+    rulesItem->trigger();
+    REQUIRE(rules->isVisible());
+    REQUIRE(pages->currentIndex() == 0);
+
+    // The dialog's defaults are the game it would deal.
+    QLabel* text = rules->findChild<QLabel*>("rulesText");
+    REQUIRE(text != nullptr);
+
+    const QString first = rulessheet::linesFor(newgame::defaults()).front();
+    REQUIRE(text->text().contains(first.toHtmlEscaped()));
+
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    REQUIRE_FALSE(rules->isVisible());
+    REQUIRE(pages->currentIndex() == 0);
 }

@@ -152,6 +152,8 @@ qt_add_library(desktop_core STATIC
     src/ui/GameOverPanel.cpp
     src/ui/RoundSheet.h
     src/ui/RoundSheet.cpp
+    src/ui/RulesSheet.h
+    src/ui/RulesSheet.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
