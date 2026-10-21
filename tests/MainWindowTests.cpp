@@ -123,7 +123,7 @@ void answerModalShortWatchedGame(int afterMs)
 // dialog's defaults are already a seated game, so this leaves the radio alone
 // and moves only the slider - where pacingFor() scales every beat by zero.
 //
-// THE SPEED IS NOT A CONVENIENCE HERE. With a human seated botBeat() picks 700ms
+// THE SPEED IS NOT A CONVENIENCE HERE. With a human seated GameBridge::delayOf() picks 700ms
 // rather than the spectator's 250 (section 4.1's split), so three bots bidding
 // is some two seconds of a test waiting for nothing before the human is asked
 // for a card.

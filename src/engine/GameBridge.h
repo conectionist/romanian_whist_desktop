@@ -190,6 +190,17 @@ public:
     // Nothing clears this between games: prepare() builds a fresh bridge.
     void setPaused(bool paused);
 
+    // NEW DELAYS FOR THE GAME IN PLAY: the menu bar's Settings, the redesign's
+    // phase 9, applying the bot speed and the round sheet's wait at once (the
+    // owner's call, 2026-10-21). Called on the GUI thread, from
+    // GameController::setPacing(), in the same shape as setPaused() above.
+    //
+    // A BEAT ALREADY UNDER WAY TAKES THE NEW LENGTH TOO: pace() works its
+    // deadline out again from the delay it is waiting on, so a dwell slowed to
+    // its longest and sped to nothing ends now rather than seconds later. The
+    // wait after each round is read when the next round is scored.
+    void setPacing(Pacing pacing);
+
 private:
     // Snapshots on the GAME thread and emits the result by value. The GUI thread
     // must never reach into the engine, which has no thread safety at all.
@@ -218,7 +229,27 @@ private:
     // arrival, because then the hold is the beat and waiting out a dwell first
     // only delays the release. A pause that lands mid-delay still waits it out -
     // the body says why the two cases differ.
-    void pace(std::chrono::milliseconds delay);
+    //
+    // WHICH DELAY, NOT HOW LONG, since the redesign's phase 9: `pacing` can be
+    // changed from the GUI thread mid-game (setPacing()), so its lengths are read
+    // under pacingMutex, inside the wait, and nowhere else on this thread.
+    enum class Beat
+    {
+        // A bot's turn: Pacing::beat with a seat to wait for, spectatorBeat
+        // without one.
+        Bot,
+
+        // A finished trick or a scored round left on screen.
+        TrickDwell
+    };
+
+    void pace(Beat beat);
+
+    // The length of `beat`. CALLED WITH pacingMutex HELD.
+    std::chrono::milliseconds delayOf(Beat beat) const;
+
+    // Whether the game holds at each round's result. Locks pacingMutex.
+    bool waitsAfterEachRound();
 
     // Absent in a spectator game, which makes both helpers one-liners rather
     // than a special case sprinkled through the callbacks.
@@ -227,12 +258,11 @@ private:
         return humanSeat && seat == *humanSeat;
     }
 
-    std::chrono::milliseconds botBeat() const
-    {
-        return humanSeat ? pacing.beat : pacing.spectatorBeat;
-    }
-
     std::optional<romanian_whist::Seat> humanSeat;
+
+    // GUARDED BY pacingMutex since the redesign's phase 9, when Settings began
+    // writing it from the GUI thread mid-game. Read only through delayOf() and
+    // waitsAfterEachRound().
     Pacing pacing;
 
     // Game thread only: written in onRoundStarted, read by the provider.

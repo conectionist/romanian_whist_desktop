@@ -825,18 +825,18 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // optional decides three things at once and they must not be separable:
     // GameBridge stamps it onto every snapshot as humanSeat, which is what gives
     // canSeeHand() a viewer to be asked about; GameController builds a
-    // QtMoveProvider from it and fills that seat in start(); and botBeat() reads
+    // QtMoveProvider from it and fills that seat in start(); and delayOf() reads
     // it to choose which beat to pace at.
     //
     // THE GAME IS SLOWER FROM HERE, and correctly so. Pacing{} is unchanged, but
-    // botBeat() picks spectatorBeat (250ms) only when nobody is seated and
+    // delayOf() picks spectatorBeat (250ms) only when nobody is seated and
     // beat (700ms) when somebody is - section 4.1's split, which phases A and B
     // only ever saw one side of. A spectator watches; a player is waited for.
     // FROM THE DIALOG SINCE D1, both of them. The one optional decides three
     // things at once and they must not be separable: GameBridge stamps it onto
     // every snapshot as humanSeat, which is what gives canSeeHand() a viewer;
     // GameController builds a QtMoveProvider from it and fills that seat in
-    // start(); and botBeat() reads it to choose which beat to pace at.
+    // start(); and delayOf() reads it to choose which beat to pace at.
     //
     // NO MODAL DIALOG MAY RUN BETWEEN prepare() AND HERE, and that is the one
     // ordering trap in the reuse. prepare() calls stop() and then purges this

@@ -362,6 +362,12 @@ void GameController::setPaused(bool paused)
         gameBridge->setPaused(paused);
 }
 
+void GameController::setPacing(Pacing pacing)
+{
+    if(gameBridge)
+        gameBridge->setPacing(pacing);
+}
+
 bool GameController::isStopRequested() const
 {
     std::lock_guard lock(engineMutex);

@@ -1380,3 +1380,14 @@ TEST_CASE("A second game is not handed the first game's failure", "[controller]"
     QCoreApplication::processEvents();
     REQUIRE(failedCount == 0);
 }
+
+TEST_CASE("setPacing() on a controller with no game is a no-op", "[controller]")
+{
+    // Settings is on the menu bar over the menu page too, where there is no game
+    // and so no bridge: the next game takes its pacing from prepare().
+    GameController controller;
+
+    controller.setPacing(Pacing{});
+
+    SUCCEED("setPacing() before prepare() did not dereference a null bridge");
+}

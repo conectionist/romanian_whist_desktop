@@ -914,3 +914,110 @@ TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real
     REQUIRE(checker.unmarked > 0);
     REQUIRE(checker.wrong == 0);
 }
+
+// THE MENU BAR'S SETTINGS (the redesign's phase 9) apply the bot speed to the game
+// in play, the owner's call of 2026-10-21. Driven through onRoundScored(), whose
+// dwell is the longest beat there is, as the pacing cases above are.
+TEST_CASE("setPacing() cuts short a beat already under way", "[bridge]")
+{
+    // A DWELL OF THIRTY SECONDS, changed to nothing a moment in. A pace() that
+    // read its length once, on the way in, would sit the thirty out; one that
+    // works its deadline out again on the wake setPacing() sends comes back now.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, Pacing{ std::chrono::milliseconds(30000),
+                                            std::chrono::milliseconds(30000),
+                                            std::chrono::milliseconds(30000) });
+
+    std::atomic<bool> returned{false};
+
+    const auto started = std::chrono::steady_clock::now();
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    // Observed here, asserted after the join: a REQUIRE that unwinds past an
+    // unjoined thread is std::terminate (see the pause case above).
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool stillWaiting = !returned;
+
+    bridge.setPacing(instant());
+
+    // THE RESCUE, if the change does not land: a cancel ends the dwell either
+    // way, so a failure is a failed assertion rather than a thirty-second hang.
+    std::thread rescue([&]
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        bridge.cancelPacing();
+    });
+
+    worker.join();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    rescue.join();
+
+    REQUIRE(stillWaiting);
+    REQUIRE(returned);
+    REQUIRE(elapsed < std::chrono::seconds(3));
+}
+
+TEST_CASE("setPacing() lengthens the beats that follow", "[bridge]")
+{
+    // The other direction, and the same two-sided reading as "pace() actually
+    // waits": a bridge built instant takes no dwell, and one slowed afterwards
+    // takes the new one - so the change is READ, not merely accepted.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    auto started = std::chrono::steady_clock::now();
+    bridge.onRoundScored(engine);
+    REQUIRE(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(100));
+
+    bridge.setPacing(Pacing{ std::chrono::milliseconds(0),
+                             std::chrono::milliseconds(0),
+                             std::chrono::milliseconds(200) });
+
+    started = std::chrono::steady_clock::now();
+    bridge.onRoundScored(engine);
+    REQUIRE(std::chrono::steady_clock::now() - started >= std::chrono::milliseconds(100));
+}
+
+TEST_CASE("setPacing() turns the wait after each round on for the next round", "[bridge]")
+{
+    // Settings' "Wait for me after each round", turned on mid-game: the bridge
+    // holds itself at the next result, before its window could, as a game dealt
+    // with it on does (Pacing::waitAfterEachRound says why it must be here).
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    Pacing waiting = instant();
+    waiting.waitAfterEachRound = true;
+    bridge.setPacing(waiting);
+
+    std::atomic<bool> returned{false};
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    // Every delay is zero, so anything still inside onRoundScored() after this
+    // long is held.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool held = !returned;
+
+    // The window's Continue.
+    bridge.setPaused(false);
+    worker.join();
+
+    REQUIRE(held);
+    REQUIRE(returned);
+}

@@ -188,6 +188,11 @@ public:
     // pause, so there is nothing there to do.
     void setPaused(bool paused);
 
+    // NEW DELAYS FOR THE GAME IN PLAY, from the menu bar's Settings. Forwards to
+    // GameBridge::setPacing(); see there. A no-op with no game, like setPaused():
+    // the next game takes its pacing from prepare().
+    void setPacing(Pacing pacing);
+
     // Built by prepare(), destroyed by the next one. NOT the GUI's seam: GUI code
     // connects to this object's mirrored signals instead, which outlive a game -
     // see the signals block for what connecting here across a "play again" costs.
