@@ -1021,3 +1021,50 @@ TEST_CASE("setPacing() turns the wait after each round on for the next round", "
     REQUIRE(held);
     REQUIRE(returned);
 }
+
+TEST_CASE("The round result says whether the bridge held the game for it", "[bridge]")
+{
+    // PR #35's review, finding #6. The window kept its own copy of the round
+    // wait beside the bridge's, and decided whether its sheet was holding from
+    // that copy rather than from the hold the bridge had taken - two copies
+    // Settings has to keep in step mid-game. The result now carries the one the
+    // bridge acted on, read once.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    std::vector<RoundResult> results;
+    QObject::connect(&bridge, &GameBridge::roundScored,
+                     [&results](RoundResult result){ results.push_back(std::move(result)); });
+
+    // Unwaited: every delay is zero, so this returns at once, and held nothing.
+    bridge.onRoundScored(engine);
+
+    REQUIRE(results.size() == 1);
+    REQUIRE_FALSE(results.back().held);
+
+    // Waited, turned on the way Settings does it.
+    Pacing waiting = instant();
+    waiting.waitAfterEachRound = true;
+    bridge.setPacing(waiting);
+
+    std::atomic<bool> returned{false};
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool heldThread = !returned;
+
+    // The window's Continue.
+    bridge.setPaused(false);
+    worker.join();
+
+    REQUIRE(heldThread);
+    REQUIRE(results.size() == 2);
+    REQUIRE(results.back().held);
+}

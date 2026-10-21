@@ -418,10 +418,6 @@ private:
     bool dialogHolding = false;
     bool sheetHolding = false;
 
-    // Does the round sheet WAIT? From the dialog, per game - section 16.1's
-    // dismissal, and off by default.
-    bool waitAfterEachRound = false;
-
     // WHAT THE TABLE IS SHOWING, and the three states are not two. This was a
     // bool through D1 and the bool is what put the client in a dead end: a
     // finished game cleared it, the pause menu is gated on it, and so Menu and

@@ -335,12 +335,6 @@ void MainWindow::showNewGameDialog()
     // A FRESH GameSetup EVERY TIME, never a stashed one: it is move-only and
     // spent by the move into start(), so even the path where start() throws
     // needs the dialog's config re-built rather than a copy kept (section 13).
-    // THE SHEET'S DISMISSAL IS A PER-GAME SETTING, so it is read here with the
-    // rest of what the dialog answered rather than kept on the Config the window
-    // holds for pre-filling - those are the last game's settings, and this is
-    // the game being dealt.
-    waitAfterEachRound = lastConfig.waitAfterEachRound;
-
     startGame(newgame::buildDeal(lastConfig),
               newgame::humanSeatOf(lastConfig),
               pacingOf(lastConfig));
@@ -496,10 +490,8 @@ void MainWindow::applySettings(int botSpeed, bool wait)
     if(tableState != TableState::Playing)
         return;
 
-    // AND FOR THIS ONE. The window's copy of the wait and the bridge's are set
-    // together, here and on the GUI thread, before the next round is scored -
-    // see onRoundScored() for why either order of the two is safe.
-    waitAfterEachRound = wait;
+    // AND FOR THIS ONE. The bridge reads the wait as each round is scored, and
+    // tells the window what it read (RoundResult::held).
     controller.setPacing(pacingOf(lastConfig));
 }
 
@@ -1204,7 +1196,7 @@ void MainWindow::onRoundScored(RoundResult result)
     // Continue rather than naming a round to deal.
     const bool finalRound = result.roundNumber >= result.roundCount;
 
-    if(finalRound && !waitAfterEachRound)
+    if(finalRound && !result.held)
         return;
 
     // THE WINDOW'S RECORD OF A HOLD THE BRIDGE HAS ALREADY TAKEN. It is not what
@@ -1218,14 +1210,10 @@ void MainWindow::onRoundScored(RoundResult result)
     // taken, which is idempotent, and matters only when a pause menu is up at
     // the same time.
     //
-    // SETTINGS CAN CHANGE THE WAIT MID-GAME since the redesign's phase 9, so the
-    // window's copy and the bridge's can cross a round being scored, and either
-    // way round is harmless. Turned on just after the bridge read it: the hold
-    // set here lands at the game's pace(), mid-dwell, and the sheet waits for
-    // Continue all the same. Turned off just after the bridge took its hold: the
-    // applyHold() here releases it, and the sheet goes at the next frame, as an
-    // unwaited one does.
-    roundSheetHolding = waitAfterEachRound;
+    // FROM THE RESULT, which carries the wait as the bridge read it for this
+    // round. Settings can change the wait mid-game, so a copy kept here could
+    // disagree with the hold actually taken (PR #35's review, finding #6).
+    roundSheetHolding = result.held;
     updatePauseAction();
     applyHold();
 

@@ -256,10 +256,19 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     // shows the right round's numbers.
     publish(engine);
 
+    // THE WAIT, READ ONCE, and both the result and the hold below go by that one
+    // reading: Settings can change it at any moment, and the window learns
+    // whether its sheet is holding from the result rather than from a copy of
+    // its own (PR #35's review, finding #6).
+    const bool held = waitsAfterEachRound();
+
     // BUILT BEFORE THE PACE, on the game thread, out of an engine that is about
     // to move on. By onRoundComplete() the index has advanced and every number
     // above would be attributed to the next round.
-    emit roundScored(buildRoundResult(engine));
+    RoundResult result = buildRoundResult(engine);
+    result.held = held;
+
+    emit roundScored(result);
 
     // HELD BEFORE THE WAIT, ON THIS THREAD, and not by the window that shows the
     // sheet. The emit above is queued: a window that set the hold on receiving
@@ -268,7 +277,7 @@ void GameBridge::onRoundScored(const GameEngine& engine)
     //
     // The window RELEASES it, on Continue. A release that arrives late is
     // harmless; a hold that arrives late does not hold anything.
-    if(waitsAfterEachRound())
+    if(held)
         setPaused(true);
 
     // AND THE DWELL BELONGS HERE, on the frame that carries the result, not on
