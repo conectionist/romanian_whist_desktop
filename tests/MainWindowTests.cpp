@@ -853,12 +853,11 @@ TEST_CASE("The pause menu and the round sheet do not release each other",
     REQUIRE_FALSE(overlay->isVisible());
     REQUIRE(sheet->isVisible());
 
-    // And the Menu item, which is the same refusal by the other road.
-    window.findChild<QAction*>("menu")->trigger();
-    pump(100);
-
-    REQUIRE_FALSE(overlay->isVisible());
-    REQUIRE(sheet->isVisible());
+    // AND THE MENU ITEM, the other road, is greyed: the same refusal, shown before
+    // anyone asks (PR 34's review, #4). It is not triggered here. Qt drops the
+    // trigger of a disabled action before it reaches the window, so the refusal
+    // would pass whatever setPauseMenuVisible() did; Esc above is what reaches it.
+    REQUIRE_FALSE(window.findChild<QAction*>("menu")->isEnabled());
 
     // THE GAME IS STILL HELD after both attempts, which is what the hazard is
     // actually about: a menu that had opened and closed would have cleared the
