@@ -174,9 +174,10 @@ side of it; below, the same strokes as waves and the diamond, no dots (the inlin
 the human) sits at angle `90° + s·360°/n`, with y pointing down (so 90° is straight down). This is
 section 14's rule; the existing `seatlayout::seatCentres()` already encodes the order.
 
-**Name-panel positions** (top-left corner in table space; width 280, height 118). Hand-tuned per
-player count so every panel sits just outside the wooden rim (circle r ≈ 522) and clears the corner
-panels:
+**Name-panel positions** (top-left corner in table space of the mock-up's 280 × 118 panel).
+Hand-tuned per player count so every panel sits just outside the wooden rim (circle r ≈ 522) and
+clears the corner panels. **Every panel is now 259 × 118, centred where the mock-up's was**, so the
+racks stay put (the owner's call, 2026-10-21; see the name panel below):
 
 | n | seat 1 | seat 2 | seat 3 | seat 4 | seat 5 |
 |---|---|---|---|---|---|
@@ -187,11 +188,11 @@ panels:
 | 6 | (1, 700) | (96, 49) | (628, −140) | (1160, 49) | (1255, 700) |
 
 The 2-player row is not in the mock-up (it stops at 3): the opponent takes the top position, which
-follows directly from the 4- and 6-player rows. **Seat 0 (the human)**: left 618, top 1046, width
-300; centre (768, 1105).
+follows directly from the 4- and 6-player rows. **Seat 0 (the human)**: top 1046, centre
+(768, 1105). The mock-up's was 300 wide (left 618); it is now the others' 259.
 
 **Spectated game** (no human seat, `humanSeat < 0`): section 14 lays seat 0 out as though it were
-the human. Do the same: seat 0's panel goes in the human's spot (618, 1046) but it is drawn as an
+the human. Do the same: seat 0's panel goes in the human's spot but it is drawn as an
 opponent: a rack on the rim at angle 90° (bottom), no hand.
 
 **Name panel** (`.plaque`): panel style; padding 8 (left, top, bottom) and 16 (right); 12 gap.
@@ -199,8 +200,11 @@ opponent: a rack on the rim at angle 90° (bottom), no hand.
   replace its painter with a head-and-shoulders bust (see `portrait()` in `table.js` for shapes
   and per-seat colours; it is six hand-drawn variants indexed by seat, which matches avatar()'s
   existing per-seat contract).
-- Line 1: name, Marcellus 25, cream, followed by the total score in brackets in muted:
-  `Bogdan (44)`. No "AI" tag (see Q5).
+- Line 1: name, Marcellus 25, cream. No "AI" tag (see Q5). **No score after it** (the owner's call,
+  2026-10-21, replacing the mock-up's muted `Bogdan (44)`): the scoreboard has every seat's score.
+  So the text column is **as wide as the widest pill** ("Taken/Bid: 0/0", 133) and no wider, which
+  makes the panel 259 wide, yours included, and keeps the top-left seat clear of the scoreboard in
+  narrow windows even at the scoreboard's widest. *(Phase 8.)*
 - Line 2: a pill, Alegreya Sans 19, padding 2/12, fully rounded, 1 px border
   `rgba(201,164,92,0.4)`. Text **`Taken/Bid: w/b`** (tricks taken first, then the bid). States:
   before bidding "No bid yet", while this seat is bidding "Bidding…", neutral colours; once play has

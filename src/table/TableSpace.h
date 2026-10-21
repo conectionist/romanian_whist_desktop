@@ -120,9 +120,15 @@ inline constexpr qreal playedInset = 60.0;
 // so it goes in the gap between your card and your hand, half way.
 inline constexpr qreal leadMarkHumanY = handTop - playedInset / 2.0;
 
-// THE NAME PANELS (section 2.5). Every opponent's is this size; where each one
-// goes is seatlayout::panelRect(), from a table hand-tuned per player count.
-inline constexpr QSizeF panelSize(280.0, 118.0);
+// THE NAME PANELS (section 2.5). Where each one goes is seatlayout::panelRect(),
+// from a table hand-tuned per player count for the mock-up's panel of this size:
+// every panel is centred where that one was, so the racks stay where they were.
+inline constexpr QSizeF panelSpot(280.0, 118.0);
+
+// EVERY PANEL'S SIZE, yours included: the portrait, and a text column as wide as
+// the widest Taken/Bid pill and no wider, now the name has no score after it (the
+// owner's experiment of 2026-10-21). SeatItemTests holds the column to the pill.
+inline constexpr QSizeF panelSize(259.0, 118.0);
 
 // THE RACKS (section 2.6): each opponent's hand, standing in a wooden rack on the
 // rim. A rack's origin is on this circle, table.js's RIM_R - on the bead, between
@@ -133,10 +139,12 @@ inline constexpr QSizeF panelSize(280.0, 118.0);
 inline constexpr qreal rackRadius = 452.0;
 inline constexpr qreal rackCardHeight = 90.0;
 
-// The bottom seat's panel: yours, or seat 0's in a spectated game. Wider than the
-// others, centred on the table at (768, 1105), and it covers the bottom of your
-// hand - which section 2.8 intends.
-inline constexpr QRectF bottomPanel(618.0, 1046.0, 300.0, 118.0);
+// The bottom seat's panel: yours, or seat 0's in a spectated game. Centred on the
+// table at (768, 1105), and it covers the bottom of your hand - which section 2.8
+// intends. The mock-up's was 300 wide, for a longer name line than any other seat
+// has room for; with no score on it, it is the others' size.
+inline constexpr QRectF bottomPanel(768.0 - panelSize.width() / 2.0, 1046.0,
+                                    panelSize.width(), panelSize.height());
 
 // THE CORNER PANELS (sections 2.1 and 2.9 to 2.11): the scoreboard top-left, the
 // trick panel top-right, the two buttons bottom-left. PINNED TO THE WINDOW, NOT TO

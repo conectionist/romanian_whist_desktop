@@ -48,7 +48,8 @@ unsigned int stepsFromBottom(unsigned int seatCount, int humanSeat, unsigned int
 // A SEAT'S NAME PANEL, in table space: the redesign's section 2.5, which places
 // each panel by hand per player count so that it sits just outside the wooden rim
 // and clears the corner panels. The bottom seat gets tablespace::bottomPanel and
-// every other one a tablespace::panelSize at its spot.
+// every other one a tablespace::panelSize, centred on the mock-up's panel at its
+// spot.
 //
 // NOT ON A RING: no ellipse puts a 280-wide panel just
 // outside a circle at every angle, which is why the mock-up gave up on one. The

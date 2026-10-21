@@ -253,13 +253,16 @@ TEST_CASE("The panels are section 2.5's table", "[seat-layout]")
 
         const std::vector<QRectF> panels = panelsFor(seatCount, 0);
 
-        REQUIRE(panels.front() == QRectF(618, 1046, 300, 118));
+        REQUIRE(panels.front().size() == tablespace::panelSize);
+        REQUIRE(panels.front().top() == 1046);
         REQUIRE(panels.front().center() == QPointF(768, 1105));
 
+        // Each centred on the mock-up's 280 x 118 at its corner.
         for(unsigned int seat = 1 ; seat < seatCount ; seat++)
         {
             INFO("seat " << seat);
-            REQUIRE(panels[seat] == QRectF(corners[seatCount - 2][seat - 1], QSizeF(280, 118)));
+            REQUIRE(panels[seat].size() == tablespace::panelSize);
+            REQUIRE(panels[seat].center() == corners[seatCount - 2][seat - 1] + QPointF(140, 59));
         }
     }
 }

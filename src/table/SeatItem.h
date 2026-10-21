@@ -13,8 +13,8 @@
 
 #include <cstddef>
 
-// One seat's name panel (the table redesign's section 2.5): a portrait, the name
-// with the total score after it, the Taken/Bid pill, and the turn ring.
+// One seat's name panel (the table redesign's section 2.5): a portrait, the name,
+// the Taken/Bid pill, and the turn ring.
 //
 // A QGraphicsObject for the same reason CardItem is one - section 18.2 fades the
 // turn ring in over 120ms in phase E, which is a property animation on an object.
@@ -94,18 +94,17 @@ struct PillView
 // (section 18).
 PillView pillFor(const SeatView& seat, bool active, bool biddingOpen);
 
-// The name line, in three parts painted in three colours: the active seat's "▸ ",
-// the name, and " (44)", the total score.
+// The name line, in two parts painted in two colours: the active seat's "▸ " and
+// the name, elided against what the marker leaves of `width`.
 //
-// ONLY THE NAME IS ELIDED, against what the other two leave of `width`, so a long
-// name never hides the score. No " (you)" and no "AI" tag: the mock-up has
-// neither, and the bottom panel is yours by where it is (the owner's decision of
-// 2026-10-18; open question Q5).
+// NO SCORE AFTER THE NAME: the scoreboard has every seat's, so the panel can be
+// as narrow as its pill (the owner's experiment of 2026-10-21). No " (you)" and no
+// "AI" tag: the mock-up has neither, and the bottom panel is yours by where it is
+// (the owner's decision of 2026-10-18; open question Q5).
 struct NameLine
 {
     QString marker;
     QString name;
-    QString score;
 
     bool operator==(const NameLine&) const = default;
 };
@@ -145,8 +144,8 @@ public:
     // is a state nothing should be able to reach.
     void setSeat(const SeatView& seat, bool active, bool biddingOpen, const Theme& theme);
 
-    // The panel's size in TABLE units: tablespace::panelSize, or the bottom
-    // panel's, which is wider.
+    // The panel's size in TABLE units: tablespace::panelSize, which the bottom
+    // panel is too.
     void setPanelSize(QSizeF size);
 
     // Which of the Theme's portraits this seat wears. A fact about where the seat
