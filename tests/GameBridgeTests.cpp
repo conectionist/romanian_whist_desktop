@@ -947,17 +947,21 @@ TEST_CASE("setPacing() cuts short a beat already under way", "[bridge]")
 
     bridge.setPacing(instant());
 
-    // THE RESCUE, if the change does not land: a cancel ends the dwell either
-    // way, so a failure is a failed assertion rather than a thirty-second hang.
-    std::thread rescue([&]
-    {
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+    // BOUNDED, WITH A RESCUE only if the change does not land: a cancel ends the
+    // dwell either way, so a failure is a failed assertion rather than a
+    // thirty-second hang. Polled, as "cancelPacing() releases a PAUSED pace()"
+    // does it, so a pass does not wait the rescue's five seconds out (PR #35's
+    // review, finding #8: a thread that always slept them cost every run 5 s).
+    const auto deadline = started + std::chrono::seconds(5);
+    while(!returned && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    if(!returned)
         bridge.cancelPacing();
-    });
 
     worker.join();
-    const auto elapsed = std::chrono::steady_clock::now() - started;
-    rescue.join();
 
     REQUIRE(stillWaiting);
     REQUIRE(returned);
