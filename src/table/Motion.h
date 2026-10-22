@@ -2,6 +2,7 @@
 #define MOTION_H
 
 #include <QEasingCurve>
+#include <QPointF>
 #include <QtGlobal>
 
 // HOW MUCH THE TABLE MOVES (the table redesign's phase 12): the one setting that
@@ -66,6 +67,11 @@ inline bool animates(Pace pace)
 {
     return pace != Pace::Off;
 }
+
+// CSS's cubic-bezier(x1, y1, x2, y2), `first` and `second` its two control points: a
+// segment from (0, 0) to (1, 1), which is exactly what QEasingCurve::BezierSpline's first
+// segment is. Every curve the mock-up names goes through here.
+QEasingCurve cubicBezier(QPointF first, QPointF second);
 
 // table.js's two curves, as the CSS spells them: a card landing eases out, cubic-bezier(.2, .75,
 // .25, 1), and the trick clearing eases in, cubic-bezier(.5, 0, .75, 0).

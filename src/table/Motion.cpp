@@ -34,25 +34,20 @@ int motion::sweepDuration(Pace pace)
     return qRound(sweepMs * factorFor(pace));
 }
 
-// CSS's cubic-bezier(x1, y1, x2, y2) is a segment from (0, 0) to (1, 1) with these two
-// control points, which is exactly what QEasingCurve::BezierSpline's first segment is.
-namespace
-{
-QEasingCurve bezier(QPointF first, QPointF second)
+QEasingCurve motion::cubicBezier(QPointF first, QPointF second)
 {
     QEasingCurve curve(QEasingCurve::BezierSpline);
     curve.addCubicBezierSegment(first, second, QPointF(1.0, 1.0));
 
     return curve;
 }
-}
 
 QEasingCurve motion::flightCurve()
 {
-    return bezier(QPointF(0.2, 0.75), QPointF(0.25, 1.0));
+    return cubicBezier(QPointF(0.2, 0.75), QPointF(0.25, 1.0));
 }
 
 QEasingCurve motion::sweepCurve()
 {
-    return bezier(QPointF(0.5, 0.0), QPointF(0.75, 0.0));
+    return cubicBezier(QPointF(0.5, 0.0), QPointF(0.75, 0.0));
 }

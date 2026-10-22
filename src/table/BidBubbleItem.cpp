@@ -43,12 +43,7 @@ QFont bubbleFont()
 // CSS's `ease-out`: cubic-bezier(0, 0, .58, 1).
 qreal easeOut(qreal t)
 {
-    static const QEasingCurve curve = []
-    {
-        QEasingCurve made(QEasingCurve::BezierSpline);
-        made.addCubicBezierSegment(QPointF(0.0, 0.0), QPointF(0.58, 1.0), QPointF(1.0, 1.0));
-        return made;
-    }();
+    static const QEasingCurve curve = motion::cubicBezier(QPointF(0.0, 0.0), QPointF(0.58, 1.0));
 
     return curve.valueForProgress(std::clamp(t, 0.0, 1.0));
 }
