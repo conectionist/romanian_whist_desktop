@@ -1,5 +1,6 @@
 #include "TableScene.h"
 
+#include "table/BidStripItem.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
 #include "table/LeadMarkItem.h"
@@ -13,6 +14,9 @@
 #include "table/TrickItem.h"
 #include "table/TrickPanelItem.h"
 #include "table/Turn.h"
+
+#include <QGraphicsSceneHoverEvent>
+#include <QGraphicsSceneMouseEvent>
 
 #include <algorithm>
 
@@ -68,6 +72,11 @@ TableScene::TableScene(QObject* parent)
         button->hide();
         addItem(button);
     }
+
+    // THE BID STRIP (section 2.13), at the seats' scale and so on their chrome
+    // cache. It places itself, and shows only while it holds a prompt.
+    bidStrip = new BidStripItem(&panels);
+    addItem(bidStrip);
 }
 
 void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
@@ -87,6 +96,11 @@ void TableScene::setTheme(const Theme& palette)
     hand->setTheme(theme);
     history->setTheme(theme);
     lastTrick->setTheme(theme);
+
+    // Handed over by relayout() below whenever there is a snapshot - only a theme
+    // set before the first one has to reach the strip from here.
+    if(!snapshot)
+        bidStrip->setSnapshot(snapshot, theme);
 
     // The room is drawn by TableView::drawBackground() rather than held in an
     // item, so this has to say so - nothing else would repaint it. Invalidating
@@ -160,41 +174,40 @@ void TableScene::placeHud()
                       corner.y() - lastTrick->size().height());
 }
 
-std::optional<qreal> TableScene::overlayBottom() const
+bool TableScene::event(QEvent* event)
 {
-    if(!snapshot || snapshot->seats.empty())
-        return std::nullopt;
+    // A view sends the scene its mouse moves, with or without a button down, and
+    // a leave when the cursor goes off it; a test may send hover moves straight to
+    // the scene. All three say where the cursor is.
+    bool moved = true;
 
-    const unsigned int seatCount = static_cast<unsigned int>(snapshot->seats.size());
-
-    // The panel nearest the bottom, which is the human's whenever there is one
-    // - seatlayout puts the seat it is told about at bottom-centre. Found by
-    // MEASURING rather than by indexing humanSeat, so a spectator game, where
-    // seat 0 goes there instead, needs no branch.
-    std::optional<qreal> lowestTop;
-
-    for(unsigned int seat = 0 ; seat < seatCount ; seat++)
+    switch(event->type())
     {
-        const QRectF panel = seatlayout::panelRect(seatCount, snapshot->humanSeat, seat);
+    case QEvent::GraphicsSceneMouseMove:
+        cursor = static_cast<QGraphicsSceneMouseEvent*>(event)->scenePos();
+        break;
 
-        if(!panel.isEmpty())
-            lowestTop = std::max(lowestTop.value_or(panel.top()), panel.top());
+    case QEvent::GraphicsSceneHoverEnter:
+    case QEvent::GraphicsSceneHoverMove:
+        cursor = static_cast<QGraphicsSceneHoverEvent*>(event)->scenePos();
+        break;
+
+    case QEvent::GraphicsSceneHoverLeave:
+    case QEvent::GraphicsSceneLeave:
+        cursor.reset();
+        break;
+
+    default:
+        moved = false;
+        break;
     }
 
-    if(!lowestTop)
-        return std::nullopt;
+    // And the strip hears it: a bid it lit under a resting cursor is one the scene
+    // would never tell it the cursor had left (BidStripItem::followCursor()).
+    if(moved)
+        bidStrip->followCursor(cursor);
 
-    qreal bottom = *lowestTop;
-
-    // AND ABOVE THE HAND, which in table space sits higher than the panel it is
-    // drawn under: the strip must not cover the cards you are bidding on.
-    if(seatlayout::humanSeated(seatCount, snapshot->humanSeat))
-        bottom = std::min(bottom, tablespace::handTop);
-
-    // A GAP, so the strip does not sit flush against what it clears and read as
-    // one object with it. A fraction of the panel rather than a constant of its
-    // own, as it always was.
-    return bottom - tablespace::panelSize.height() / 8.0;
+    return QGraphicsScene::event(event);
 }
 
 void TableScene::relayout()
@@ -308,4 +321,7 @@ void TableScene::relayout()
     scoreboard->setSnapshot(*snapshot, theme);
     trickPanel->setSnapshot(snapshot, theme);
     placeHud();
+
+    // And the strip, which reads how the others have bid from the frame.
+    bidStrip->setSnapshot(snapshot, theme);
 }

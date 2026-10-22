@@ -11,7 +11,6 @@
 
 QT_BEGIN_NAMESPACE
 class QLabel;
-class QPushButton;
 QT_END_NAMESPACE
 
 // The menu bar's Rules (the redesign's phase 9): the rules at a glance, for the
@@ -61,7 +60,7 @@ signals:
 
 private:
     QLabel* rules = nullptr;
-    QPushButton* closeButton = nullptr;
+    SheetButton* closeButton = nullptr;
 };
 
 #endif

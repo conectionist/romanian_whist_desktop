@@ -2,11 +2,11 @@
 
 #include "MainWindow.h"
 #include "WindowDriving.h"
+#include "table/BidStripItem.h"
 #include "table/HandItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableView.h"
-#include "ui/BidStrip.h"
 #include "ui/GameOverPanel.h"
 #include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
@@ -52,9 +52,9 @@
 // thing that notices the log stopped moving.
 namespace
 {
-// The event-loop helpers and the bid lookup live in WindowDriving.h, shared with
+// The event-loop helpers and the bid click live in WindowDriving.h, shared with
 // tests/ScreenshotTool.cpp.
-using driving::bidButton;
+using driving::clickBid;
 using driving::pump;
 using driving::pumpUntil;
 
@@ -344,7 +344,10 @@ TEST_CASE("The window can be closed with the hand waiting on a card", "[main-win
     answerModalFastSeatedGame(300);
     window.findChild<QPushButton*>("newGame")->click();
 
-    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
     REQUIRE(bidStrip != nullptr);
     REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
 
@@ -353,19 +356,14 @@ TEST_CASE("The window can be closed with the hand waiting on a card", "[main-win
     // is what gets the game past bidding and into the play the rest of this case
     // is about.
     //
-    // FOUND BY THE BID IT OFFERS, not by position: findChildren() documents no
-    // ordering, and a case that clicks whichever button comes back first would
-    // go on passing while quietly exercising a different bid.
-    QPushButton* zero = bidButton(*bidStrip, 0u);
-    REQUIRE(zero != nullptr);
-    zero->click();
+    // CLICKED THROUGH THE SCENE, as a player clicks it: the strip has to be the
+    // item that takes the press.
+    REQUIRE(clickBid(*bidStrip, 0u));
 
     // A PLAYABLE FAN IS THE OBSERVABLE FORM OF "parked in playCard()". Nothing
     // else makes the hand clickable - a snapshot's hand carries no legality and
     // is drawn disabled (section 4.4) - so this is true exactly while the engine
     // is waiting on a card.
-    TableScene* scene = window.findChild<TableScene*>();
-    REQUIRE(scene != nullptr);
 
     REQUIRE(pumpUntil(10000, [scene]{ return scene->handItem()->isPlayable(0); }));
 
@@ -580,13 +578,18 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     REQUIRE(scene->lastSnapshot() == drawn);
 }
 
-TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
+TEST_CASE("Resuming gives the keyboard back to the table and its digits bid", "[main-window]")
 {
     // THE PAUSE TAKES FOCUS AND NOTHING GIVES IT BACK. focusDefault() puts the
     // keyboard on the Resume button so that Enter resumes; hiding that button
     // does not return it, so a pause taken while the strip was up left its digit
     // keys dead afterwards - with the buttons still working, which is exactly
     // the shape that looks finished.
+    //
+    // THE TABLE SINCE THE REDESIGN'S PHASE 10, which put the strip on the felt:
+    // its digits are read on the window, as the fan's are, and reach it from the
+    // table. Left on the button Qt hands it to next - the menu bar's New Game -
+    // Space would open the setup dialog over the game.
     //
     // A SEATED GAME, and the only case in this file that needs one: the strip is
     // shown while the engine is parked in the provider waiting for a bid, which
@@ -611,8 +614,12 @@ TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
 
     newGame->click();
 
-    BidStrip* bidStrip = window.findChild<BidStrip*>();
-    REQUIRE(bidStrip != nullptr);
+    TableScene* scene = window.findChild<TableScene*>();
+    TableView* table = window.findChild<TableView*>();
+    REQUIRE(scene != nullptr);
+    REQUIRE(table != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
 
     // Round 1 is one card and the human bids first at seat 0, so the strip is up
     // as soon as the deal is.
@@ -623,22 +630,29 @@ TEST_CASE("Resuming gives the keyboard back to the bid strip", "[main-window]")
     // stronger-looking assertion is the one that cannot be made here. This is
     // the question that is actually being asked anyway: which widget the window
     // would deliver a key press to.
-    REQUIRE(window.focusWidget() == bidStrip);
+    REQUIRE(window.focusWidget() == table);
 
     QAction* exitItem = window.findChild<QAction*>("exitAction");
     REQUIRE(exitItem != nullptr);
 
     exitItem->trigger();
     pump(100);
-    REQUIRE(window.focusWidget() != bidStrip);
+    REQUIRE(window.focusWidget() != table);
 
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("resume")->click();
     pump(100);
 
-    // The strip is still the thing being waited on, so it is still the thing the
-    // digits belong to.
+    // The strip is still the thing being waited on, so the keyboard is back where
+    // its digits reach it.
     REQUIRE(bidStrip->isVisible());
-    REQUIRE(window.focusWidget() == bidStrip);
+    REQUIRE(window.focusWidget() == table);
+
+    // And they do: a 0 pressed there, which the opener may always bid, bids it.
+    // Sent to the widget with the keyboard, which passes it up to the window.
+    QKeyEvent zero(QEvent::KeyPress, Qt::Key_0, Qt::NoModifier);
+    QCoreApplication::sendEvent(window.focusWidget(), &zero);
+
+    REQUIRE_FALSE(bidStrip->isVisible());
 }
 
 TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
@@ -663,10 +677,12 @@ TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
 
     window.findChild<QPushButton*>("newGame")->click();
 
-    BidStrip* bidStrip = window.findChild<BidStrip*>();
+    TableScene* scene = window.findChild<TableScene*>();
     QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
-    REQUIRE(bidStrip != nullptr);
+    REQUIRE(scene != nullptr);
     REQUIRE(log != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
     REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
 
     const int lines = log->blockCount();
@@ -713,10 +729,11 @@ TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
     pause->findChild<QPushButton*>("resume")->click();
     pump(100);
 
-    // Nothing was bid underneath, and the strip has the keyboard back.
+    // Nothing was bid underneath, and the table, where the strip's digits are
+    // read from, has the keyboard back.
     REQUIRE(bidStrip->isVisible());
     REQUIRE(log->blockCount() == lines);
-    REQUIRE(window.focusWidget() == bidStrip);
+    REQUIRE(window.focusWidget() == window.findChild<TableView*>());
 }
 
 TEST_CASE("Closing a sheet gives the keyboard to the page and not the menu bar", "[main-window]")
@@ -793,6 +810,118 @@ TEST_CASE("Closing a sheet gives the keyboard to the page and not the menu bar",
     pump(500);
 
     REQUIRE_FALSE(dialogOpened);
+}
+
+TEST_CASE("Abandoning while you bid leaves nothing of the bid on the menu page", "[main-window]")
+{
+    // PR #36's review, findings #1 and #2. The strip is an item in the scene since
+    // phase 10, so hiding the table's page no longer hides it - and the one clear
+    // on this path, onGameStopped()'s, never ran: abandonToMenu() purges the queued
+    // gameStopped with the rest of the abandoned game's signals. The menu page then
+    // took bid digits for a game that was gone, and closing Rules there sent the
+    // keyboard to the hidden table instead of to New Game.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    REQUIRE(pages != nullptr);
+    REQUIRE(newGame != nullptr);
+    REQUIRE(rules != nullptr);
+
+    // The dialog's defaults are a played game, so this accepts them unchanged.
+    QTimer::singleShot(300, []
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+            dialog->done(QDialog::Accepted);
+    });
+
+    newGame->click();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    pump(100);
+    window.findChild<QPushButton*>("mainMenu")->click();
+    pump(500);
+
+    REQUIRE(pages->currentIndex() == 0);
+    REQUIRE_FALSE(bidStrip->isVisible());
+    REQUIRE_FALSE(scene->handItem()->isPlayable(0));
+
+    // A digit on the menu page is nobody's bid.
+    QKeyEvent zero(QEvent::KeyPress, Qt::Key_0, Qt::NoModifier);
+    QCoreApplication::sendEvent(window.focusWidget(), &zero);
+    pump(50);
+
+    REQUIRE(pages->currentIndex() == 0);
+    REQUIRE_FALSE(bidStrip->isVisible());
+
+    // And a sheet closed there gives the keyboard to New Game, not the menu bar.
+    window.findChild<QAction*>("rulesAction")->trigger();
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    pump(50);
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+    REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+    REQUIRE(focus == newGame);
+}
+
+TEST_CASE("A held digit bids or plays once and its repeats do nothing", "[main-window]")
+{
+    // PR #36's review, finding #4. The bid digits and the card digits are read in
+    // the same handler, so a 2 held to bid could repeat into the fan once the card
+    // prompt arrived - with fast bots, inside the keyboard's repeat delay - and play
+    // a card nobody chose. Neither can be taken back.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    REQUIRE(newGame != nullptr);
+
+    answerModalFastSeatedGame(300);
+    newGame->click();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    HandItem* hand = scene->handItem();
+
+    // Round 1 is one card, and the human bids first and leads.
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    const auto press = [&window](int key, bool repeated)
+    {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier, QString(), repeated);
+        QCoreApplication::sendEvent(window.focusWidget(), &event);
+    };
+
+    press(Qt::Key_0, true);
+    REQUIRE(bidStrip->isVisible());
+
+    press(Qt::Key_0, false);
+    REQUIRE_FALSE(bidStrip->isVisible());
+
+    REQUIRE(pumpUntil(10000, [hand]{ return hand->isPlayable(0); }));
+
+    press(Qt::Key_1, true);
+    REQUIRE(hand->isPlayable(0));
+
+    press(Qt::Key_1, false);
+    REQUIRE_FALSE(hand->isPlayable(0));
 }
 
 TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
@@ -1444,17 +1573,15 @@ TEST_CASE("No card is played from the keyboard under Rules", "[main-window]")
     answerModalFastSeatedGame(300);
     window.findChild<QPushButton*>("newGame")->click();
 
-    BidStrip* bidStrip = window.findChild<BidStrip*>();
-    REQUIRE(bidStrip != nullptr);
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
     REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
 
     // 0 is always legal for the opener, which seat 0 is.
-    QPushButton* zero = bidButton(*bidStrip, 0u);
-    REQUIRE(zero != nullptr);
-    zero->click();
+    REQUIRE(clickBid(*bidStrip, 0u));
 
-    TableScene* scene = window.findChild<TableScene*>();
-    REQUIRE(scene != nullptr);
     REQUIRE(pumpUntil(10000, [scene]{ return scene->handItem()->isPlayable(0); }));
 
     window.findChild<QAction*>("rulesAction")->trigger();

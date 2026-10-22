@@ -100,8 +100,9 @@ MenuBarButton::MenuBarButton(std::optional<icons::Icon> _icon, QWidget* parent)
     // Repainted as the cursor comes and goes, which is all the hover look needs.
     setAttribute(Qt::WA_Hover);
 
-    // TAB ONLY, never a click: the bid strip holds the keyboard for its digit keys
-    // while you bid, and a click on New Game or Rules must not take it away.
+    // TAB ONLY, never a click: a click on New Game or Rules must not take the
+    // keyboard from the table, where Space and Enter do nothing - left on a bar
+    // button, Space would press it again.
     setFocusPolicy(Qt::TabFocus);
 
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);

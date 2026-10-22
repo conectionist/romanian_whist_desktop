@@ -29,7 +29,7 @@
 
 using namespace romanian_whist;
 
-// The split BidStrip.h argues for and the scoreboard follows, and the reason D1 needs
+// The split SnapshotLog.h argues for and the scoreboard follows, and the reason D1 needs
 // it more than either: the dialog's answers reach GameEngine::start(), which
 // throws five different ways by name, and every one of those is a crash on the
 // GUI thread rather than a message. The part with a right answer is tested here

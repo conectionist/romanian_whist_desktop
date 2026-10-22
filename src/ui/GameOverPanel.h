@@ -12,8 +12,6 @@
 
 QT_BEGIN_NAMESPACE
 class QLabel;
-class QPushButton;
-class QVBoxLayout;
 QT_END_NAMESPACE
 
 // Section 16.2's end of the game: the final standings, who won, and the two ways
@@ -82,10 +80,6 @@ signals:
     void mainMenuRequested();
 
 private:
-    // Empties the standings rows. Both faces below start from a clean panel, and
-    // a second game over must not append to the first one's table.
-    void clearRows();
-
     // One standing, spelled and laid out: place, name, score, and the star every
     // winner takes.
     //
@@ -97,21 +91,19 @@ private:
 
     QLabel* title = nullptr;
 
+    // The announcement, under the title where the mock-up's sheets keep their
+    // .meta line - or, on the failure face, what went wrong.
+    QLabel* announcement = nullptr;
+
     // The standings table, as labels in a grid. Not painted like the scoreboard
     // is: that panel repaints on every one of a game's ~1300 frames and this one
     // is built once at the end of a game, so the reason for painting there is
     // absent here - and labels keep the text selectable and reachable, which
     // section 20's accessibility pass will thank this for.
-    QWidget* rows = nullptr;
+    SheetTable* rows = nullptr;
 
-    QLabel* announcement = nullptr;
-
-    // How many standings are in the grid. See clearRows() for why this is a
-    // member and not QGridLayout::rowCount().
-    int placedRows = 0;
-
-    QPushButton* playAgain = nullptr;
-    QPushButton* mainMenu = nullptr;
+    SheetButton* playAgain = nullptr;
+    SheetButton* mainMenu = nullptr;
 };
 
 #endif

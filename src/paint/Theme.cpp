@@ -124,9 +124,8 @@ Theme::TablePalette tablePalette()
     table.warn = QColor(0xE6, 0xB9, 0x5C);
     table.bad = QColor(0xE5, 0x80, 0x6D);
 
-    // Assigned rather than repeated, as dark()'s accentText is: the black suits
-    // ARE the text colour, and a second copy of it is a second thing to keep in
-    // step.
+    // Assigned rather than repeated: the black suits ARE the text colour, and a
+    // second copy of it is a second thing to keep in step.
     table.redSuit = QColor(0xE0, 0x52, 0x4A);
     table.blackSuit = table.cream;
 
@@ -259,6 +258,22 @@ Theme::TablePalette tablePalette()
     table.menuGlint = rgba(201, 164, 92, 0.22);
     table.menuShadow = rgba(0, 0, 0, 0.45);
 
+    // Section 2.13, from page.html's .bidstrip .opt: box-shadow 0 4px 10px
+    // rgba(0, 0, 0, 0.45); under the cursor 0 0 0 2px gold-bright, 0 0 16px
+    // rgba(242, 211, 140, 0.5); and :disabled background #2a211a, color #6d604d,
+    // border-color #4d3d28.
+    table.bidShadow = rgba(0, 0, 0, 0.45);
+    table.bidGlow = rgba(242, 211, 140, 0.5);
+    table.bidDisabledFill = QColor(0x2A, 0x21, 0x1A);
+    table.bidDisabledText = QColor(0x6D, 0x60, 0x4D);
+    table.bidDisabledBorder = QColor(0x4D, 0x3D, 0x28);
+
+    // Section 2.13, from page.html's .scrim (background rgba(8, 5, 3, 0.62)) and
+    // .sheet th / td (border-bottom 1px rgba(201, 164, 92, 0.3) and 0.1).
+    table.scrim = rgba(8, 5, 3, 0.62);
+    table.sheetHeadRule = rgba(201, 164, 92, 0.3);
+    table.sheetRowRule = rgba(201, 164, 92, 0.1);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;
@@ -343,10 +358,10 @@ QPixmap cachedTexture(QPixmap* slot, const QString& path)
 //
 // ALL OF ThemeColours, not the colours the painter beneath it reads today. Which
 // members a painter depends on is not visible from the cache lookup, and the
-// answer changes: a per-colour key was how the avatar cache came to miss accent,
-// which paintAvatar() reads and seatPlaque alone did not cover. A copy of the
-// colours rather than a hash of them, so the comparison can neither collide nor
-// miss a member.
+// answer changes: a per-colour key was how the avatar cache came to miss the
+// accent, which paintAvatar() read then and the plaque colour alone did not
+// cover. A copy of the colours rather than a hash of them, so the comparison can
+// neither collide nor miss a member.
 //
 // The ratio through devicepixels::ratioKey() rather than compared as a float, so
 // two bit patterns of the same ratio are one key and the quantization is the one
@@ -434,29 +449,7 @@ Theme Theme::light()
 {
     Theme theme;
     theme.tableSurface = QColor(0x3D, 0x6B, 0x54);
-    theme.seatPlaque = QColor(0xF4, 0xF3, 0xEF);
-    theme.accent = QColor(0xE0, 0xA3, 0x2E);
-
-    // The same amber walked down until it reads as words on the plaque above:
-    // 5.4:1 against seatPlaque, where the accent itself is 2.0:1. Darkened along
-    // its own hue rather than swapped for a brown, so the called-out round is
-    // recognisably the accent colour and not a second one to learn.
-    theme.accentText = QColor(0x7A, 0x60, 0x19);
-
     theme.textPrimary = QColor(0x1C, 0x1F, 0x1D);
-    theme.dimmedOverlay = QColor(0x00, 0x00, 0x00, 110);
-    theme.bidOnTarget = QColor(0x2E, 0x7D, 0x4F);
-
-    // DARKENED IN C4a, from 0x8A6D1E, and by a hair rather than by design: the
-    // contrast case added with accentText measured the old amber at 4.41:1 on
-    // the plaque, which is under AA by less than a tenth and had been since B2.
-    // Same hue, five percent less light, 5.1:1 - the pill state a player learned
-    // is the pill state they still see.
-    theme.bidOwing = QColor(0x7F, 0x64, 0x1A);
-
-    theme.bidOver = QColor(0xA8, 0x3F, 0x2C);
-    theme.scorePositive = QColor(0x1E, 0x6B, 0x3F);
-    theme.scoreNegative = QColor(0x9C, 0x2F, 0x22);
 
     // The dark table in the light theme too - see Theme.h.
     theme.table = tablePalette();
@@ -465,48 +458,18 @@ Theme Theme::light()
     return theme;
 }
 
-// The surface changes tone; the accent brightens just enough to hold its
-// contrast against it. Nothing here is a recolouring of a card, which section 18
-// is explicit about: a card is white in the dark too.
+// The surface changes tone and the caption with it. Nothing here is a recolouring
+// of a card, which section 18 is explicit about: a card is white in the dark too.
 Theme Theme::dark()
 {
     Theme theme;
     theme.tableSurface = QColor(0x23, 0x40, 0x2F);
-    theme.seatPlaque = QColor(0x2A, 0x2E, 0x2C);
-    theme.accent = QColor(0xF0, 0xB6, 0x46);
-
-    // ONE COLOUR HERE, and the header says why: the lift this accent already
-    // took to hold against a dark plaque is the same lift text needs, so it
-    // measures 7.5:1 as it stands. Assigned rather than repeated as a literal,
-    // because a second copy of the value is a second thing to keep in step.
-    theme.accentText = theme.accent;
-
     theme.textPrimary = QColor(0xE8, 0xE6, 0xE1);
-    theme.dimmedOverlay = QColor(0x00, 0x00, 0x00, 140);
-
-    // Lifted rather than recoloured: the three states have to stay the same
-    // three colours a player has already learned, and only bright enough to
-    // hold against the darker plaque behind them.
-    theme.bidOnTarget = QColor(0x4C, 0xB3, 0x7B);
-    theme.bidOwing = QColor(0xD1, 0xA6, 0x3E);
-
-    // LIFTED FURTHER IN C4a, from 0xE06A53. The paragraph above is the rule and
-    // this was the one of the three that did not quite follow it: the red came
-    // out at 4.17:1 on the dark plaque where the green and the amber cleared 5,
-    // which is what "only bright enough" reads as when it is judged by eye. Same
-    // red, four percent more light, 4.7:1.
-    theme.bidOver = QColor(0xE3, 0x79, 0x64);
-    theme.scorePositive = QColor(0x5F, 0xC1, 0x88);
-    theme.scoreNegative = QColor(0xE8, 0x76, 0x5F);
     theme.table = tablePalette();
     theme.cache = std::make_shared<Cache>();
     return theme;
 }
 
-// Unknown reads as Light rather than as an error. It is what a platform that
-// does not report a scheme returns, which is a normal state and not a fault, and
-// section 20's preference is what overrides the guess for anyone it guesses
-// wrong for.
 Theme Theme::forScheme(Qt::ColorScheme scheme)
 {
     if(scheme == Qt::ColorScheme::Dark)

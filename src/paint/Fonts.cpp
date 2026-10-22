@@ -83,6 +83,21 @@ Sized sized(QFont font, qreal pixels)
     return { font, static_cast<qreal>(finest) };
 }
 
+QFont capitals(QFont font, qreal em)
+{
+    font.setCapitalization(QFont::AllUppercase);
+    font.setLetterSpacing(QFont::AbsoluteSpacing, em * font.pixelSize());
+    return font;
+}
+
+QFont tabular(QFont font)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    font.setFeature(QFont::Tag("tnum"), 1);
+#endif
+    return font;
+}
+
 QFont body()
 {
     return chain({ QStringLiteral("Alegreya Sans"), QStringLiteral("Gill Sans"),

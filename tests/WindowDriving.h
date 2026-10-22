@@ -1,12 +1,14 @@
 #ifndef WINDOW_DRIVING_H
 #define WINDOW_DRIVING_H
 
-#include "ui/BidStrip.h"
+#include "table/BidStripItem.h"
 
 #include <QApplication>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QGraphicsScene>
+#include <QGraphicsSceneMouseEvent>
 #include <QObject>
 #include <QPushButton>
 #include <QString>
@@ -71,18 +73,33 @@ inline bool pumpUntil(int limitMs, const std::function<bool()>& ready)
     return ready();
 }
 
-// A bid button, found by the bid it offers. Same lookup BidStripTests uses and
-// for the same reason: QObject::findChildren() promises no order, so position
-// in the list is not something a test can assert through.
-inline QPushButton* bidButton(const BidStrip& strip, unsigned int bet)
+// CLICKS A BID ON THE STRIP AS A PLAYER DOES: a press and a release through the
+// scene, at the middle of the bid's button, so the scene decides which item takes
+// them. Found by the bid it offers rather than by position. False when the strip
+// is not up or has no button for `bet`; a refused bid's click is made, and the
+// strip refuses it.
+inline bool clickBid(BidStripItem& strip, unsigned int bet)
 {
-    for(QPushButton* button : strip.findChildren<QPushButton*>())
-    {
-        if(button->text() == QString::number(bet))
-            return button;
-    }
+    QGraphicsScene* scene = strip.scene();
+    const QRectF button = strip.buttonRect(bet);
 
-    return nullptr;
+    if(!scene || !strip.isVisible() || button.isEmpty())
+        return false;
+
+    const QPointF at = strip.mapToScene(button.center());
+
+    QGraphicsSceneMouseEvent down(QEvent::GraphicsSceneMousePress);
+    down.setScenePos(at);
+    down.setButton(Qt::LeftButton);
+    down.setButtons(Qt::LeftButton);
+    QCoreApplication::sendEvent(scene, &down);
+
+    QGraphicsSceneMouseEvent up(QEvent::GraphicsSceneMouseRelease);
+    up.setScenePos(at);
+    up.setButton(Qt::LeftButton);
+    QCoreApplication::sendEvent(scene, &up);
+
+    return true;
 }
 
 // What answerModalStrictly() saw: whether the dialog it was waiting for came, and

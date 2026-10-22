@@ -2,7 +2,6 @@
 
 #include "ui/GameOverPanel.h"
 
-#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QString>
@@ -33,26 +32,21 @@ Standing standing(unsigned int seat, const std::string& name, int score, unsigne
     return Standing{ Seat{seat}, name, score, place };
 }
 
-// The labels of one row of the panel's grid, left to right: place, name, score,
-// star. Read back through the layout rather than through findChildren<QLabel*>(),
-// which would also return the title and the announcement - and would return them
-// in construction order rather than in the order they are shown.
+// The labels of one row of the panel's standings, left to right: place, name,
+// score, star. Read back through the table rather than through
+// findChildren<QLabel*>(), which would also return the title, the announcement and
+// the headings - and would return them in construction order rather than in the
+// order they are shown.
 QStringList rowTexts(const GameOverPanel& panel, int row)
 {
-    QWidget* rows = panel.findChild<QWidget*>("standings");
+    SheetTable* rows = panel.findChild<SheetTable*>("standings");
     REQUIRE(rows);
-
-    QGridLayout* grid = qobject_cast<QGridLayout*>(rows->layout());
-    REQUIRE(grid);
 
     QStringList cells;
 
     for(int column = 0 ; column < 4 ; column++)
     {
-        QLayoutItem* item = grid->itemAtPosition(row, column);
-        REQUIRE(item);
-
-        QLabel* label = qobject_cast<QLabel*>(item->widget());
+        QLabel* label = rows->cell(row, column);
         REQUIRE(label);
 
         cells << label->text();
@@ -63,10 +57,10 @@ QStringList rowTexts(const GameOverPanel& panel, int row)
 
 int rowCount(const GameOverPanel& panel)
 {
-    QWidget* rows = panel.findChild<QWidget*>("standings");
+    SheetTable* rows = panel.findChild<SheetTable*>("standings");
     REQUIRE(rows);
 
-    return rows->layout()->count() / 4;
+    return rows->rowCount();
 }
 }
 
@@ -176,6 +170,20 @@ TEST_CASE("Every winner is starred, from getWinners()", "[game-over]")
     REQUIRE(rowTexts(panel, 1).at(3) == QString::fromUtf8("★"));
 }
 
+TEST_CASE("A negative standing takes the sheets' minus sign", "[game-over]")
+{
+    // PR #36's review, finding #6: the round sheet's figures write U+2212, as wide
+    // as a digit in tabular figures, and the standings are the same kind of table.
+    const std::vector<Standing> standings{ standing(0, "Ana", 7, 1),
+                                           standing(1, "Bogdan", -12, 2) };
+
+    GameOverPanel panel;
+    panel.showResult(standings, { standings[0] });
+
+    REQUIRE(rowTexts(panel, 0).at(2) == QStringLiteral("7"));
+    REQUIRE(rowTexts(panel, 1).at(2) == QStringLiteral("\u221212"));
+}
+
 TEST_CASE("A second game over replaces the first one's table", "[game-over]")
 {
     // The panel outlives every game in it - it is a child of the stack, built
@@ -195,6 +203,26 @@ TEST_CASE("A second game over replaces the first one's table", "[game-over]")
 
     REQUIRE(rowCount(panel) == 2);
     REQUIRE(rowTexts(panel, 0) == QStringList{ "1.", "Dan", "8", QString::fromUtf8("★") });
+}
+
+TEST_CASE("A winner named in markup is announced as typed", "[game-over]")
+{
+    // PR #36's review, finding #5: the names come from the setup dialog as the
+    // player typed them, and the announcement once read "<b>Dan</b>" as bold. So
+    // does a failure's message, which is whatever an exception said.
+    const std::vector<Standing> standings{ standing(0, "<b>Dan</b>", 63, 1),
+                                           standing(1, "Ana", 40, 2) };
+
+    GameOverPanel panel;
+    panel.showResult(standings, { standings[0] });
+
+    QLabel* announcement = panel.findChild<QLabel*>("announcement");
+    REQUIRE(announcement);
+    REQUIRE(announcement->textFormat() == Qt::PlainText);
+    REQUIRE(announcement->text().startsWith(QStringLiteral("<b>Dan</b>")));
+
+    panel.showFailure(QStringLiteral("<i>bad</i> state"));
+    REQUIRE(announcement->textFormat() == Qt::PlainText);
 }
 
 TEST_CASE("The failure face shows no standings and no Play again", "[game-over]")

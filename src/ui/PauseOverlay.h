@@ -3,10 +3,6 @@
 
 #include "ui/Overlay.h"
 
-QT_BEGIN_NAMESPACE
-class QPushButton;
-QT_END_NAMESPACE
-
 // What the menu bar's Exit raises, and Esc. Resume, or abandon the game and go
 // back to the main menu. An Overlay, for the reasons recorded there - it began
 // as a modal QDialog, and this is the sheet that found out why it could not be.
@@ -30,8 +26,8 @@ signals:
     void mainMenuRequested();
 
 private:
-    QPushButton* resume = nullptr;
-    QPushButton* mainMenu = nullptr;
+    SheetButton* resume = nullptr;
+    SheetButton* mainMenu = nullptr;
 };
 
 #endif

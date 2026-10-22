@@ -60,6 +60,17 @@ struct Sized
 
 Sized sized(QFont font, qreal pixels);
 
+// IN CAPITALS, SPACED `em` OF THE FONT'S PIXEL SIZE, as page.html's .label and its
+// table headings are: CSS's letter-spacing is a fixed amount after every letter,
+// which is QFont::AbsoluteSpacing. The font's pixel size must already be set.
+QFont capitals(QFont font, qreal em);
+
+// TABULAR FIGURES (CSS's font-variant-numeric: tabular-nums), so a 1 and a 0 take
+// the same box and a column of numbers lines up on its own. A no-op before Qt 6.7,
+// where QFont::Tag arrived: CMakeLists.txt declares a floor of 6.5, and there the
+// digits stay proportional rather than failing to compile.
+QFont tabular(QFont font);
+
 // Where a line of text puts its baseline in a line box of `height` at `top`: CSS's
 // half-leading, which centres the font's ascent-plus-descent in the line box. In
 // one place because every panel that sets text the way the mock-up does - the

@@ -1,13 +1,12 @@
 #include "RoundSheet.h"
 
+#include "table/CardText.h"
+#include "table/HudText.h"
 #include "table/RoundText.h"
 
 #include <QBoxLayout>
 #include <QCoreApplication>
-#include <QFont>
-#include <QGridLayout>
 #include <QLabel>
-#include <QPushButton>
 
 namespace
 {
@@ -29,10 +28,25 @@ QString roundsheet::titleFor(const RoundResult& result)
     // this string, but the rule SnapshotLog.cpp states holds anyway - arg() fills
     // the lowest placeholder still standing, including one that arrived inside a
     // string it just substituted.
-    return QCoreApplication::translate("roundsheet", "Round %1 - %2 - %3")
+    return QCoreApplication::translate("roundsheet", "Round %1 · %2 · %3")
         .arg(QString::number(result.roundNumber),
              infostrip::cardsText(result.trickCount),
              infostrip::roundTypeText(result.roundType));
+}
+
+QString roundsheet::metaFor(const RoundResult& result)
+{
+    // hasTrump is false in an eight-card round, where `trump` is Card's default -
+    // a REAL two of clubs. Read unguarded, the sheet would name a trump the round
+    // never had.
+    const QString trump =
+        result.hasTrump
+            ? QCoreApplication::translate("roundsheet", "Trump %1").arg(cardtext::label(result.trump))
+            : QCoreApplication::translate("roundsheet", "No trump");
+
+    return QCoreApplication::translate("roundsheet",
+                                       "%1 · exact bid scores 5 + bid, a miss loses the difference")
+        .arg(trump);
 }
 
 QString roundsheet::arrowFor(const RoundSeatResult& seat)
@@ -42,8 +56,8 @@ QString roundsheet::arrowFor(const RoundSeatResult& seat)
     // them here is what makes the arrow show a before and an after rather than
     // one number twice.
     return QCoreApplication::translate("roundsheet", "%1 \xE2\x86\x92 %2")
-        .arg(QString::number(seat.totalScore),
-             QString::number(seat.totalScore + seat.roundScore));
+        .arg(sheet::number(seat.totalScore),
+             sheet::number(seat.totalScore + seat.roundScore));
 }
 
 QString roundsheet::roundScoreFor(const RoundSeatResult& seat)
@@ -53,8 +67,14 @@ QString roundsheet::roundScoreFor(const RoundSeatResult& seat)
     // redesign's phase 8 took the column away. A negative number
     // already carries its own minus; a positive one has to be given its plus, or
     // the two columns read as unrelated kinds of number.
-    return seat.roundScore > 0 ? QStringLiteral("+%1").arg(seat.roundScore)
-                               : QString::number(seat.roundScore);
+    if(seat.roundScore > 0)
+        return QStringLiteral("+%1").arg(seat.roundScore);
+
+    // The minus sign the Total column writes too (sheet::number()).
+    if(seat.roundScore < 0)
+        return sheet::number(seat.roundScore);
+
+    return QStringLiteral("0");
 }
 
 QStringList roundsheet::streakWarnings(const RoundResult& result)
@@ -101,177 +121,97 @@ RoundSheet::RoundSheet(QWidget* parent) : Overlay(parent)
     QVBoxLayout* inside = panelLayout();
 
     title = new QLabel(panel);
-    title->setAlignment(Qt::AlignCenter);
     title->setObjectName("roundTitle");
-    styleTitle(title, 1.2);
+    dress(title, sheet::Role::Title);
 
     inside->addWidget(title);
+
+    // The trump's glyph in its suit's colour, so rich text.
+    meta = new QLabel(panel);
+    meta->setObjectName("roundMeta");
+    meta->setTextFormat(Qt::RichText);
+    dress(meta, sheet::Role::Meta);
+
+    inside->addSpacing(2);
+    inside->addWidget(meta);
     inside->addSpacing(16);
 
-    // The grid is emptied and rebuilt per round, HEADINGS INCLUDED - see
-    // clearRows(), and GameOverPanel, which reached the same arrangement.
-    rows = new QWidget(panel);
-    rowLayout = new QGridLayout(rows);
-    rowLayout->setHorizontalSpacing(24);
+    // THE MOCK-UP'S FIVE COLUMNS, and the words the redesign's phase 8 left this
+    // sheet to settle with its look: Player, Bid, Taken, Round, Total - the sheet's
+    // own now, under its own context. The scoreboard says B, T and PTS in a panel
+    // with no room for words.
+    //
+    // A literal at every call site, for BidStripItem.h's reason: a wrapper of our
+    // own would hide these from lupdate.
+    rows = new SheetTable(panel);
+    rows->setObjectName("roundRows");
+    rows->setColumns({ { QCoreApplication::translate("roundsheet", "Player"), Qt::AlignLeft },
+                       { QCoreApplication::translate("roundsheet", "Bid"), Qt::AlignRight },
+                       { QCoreApplication::translate("roundsheet", "Taken"), Qt::AlignRight },
+                       { QCoreApplication::translate("roundsheet", "Round"), Qt::AlignRight },
+                       { QCoreApplication::translate("roundsheet", "Total"), Qt::AlignRight } });
 
     inside->addWidget(rows);
-    inside->addSpacing(12);
 
     warning = new QLabel(panel);
-    warning->setAlignment(Qt::AlignCenter);
     warning->setObjectName("streakWarning");
-    warning->setWordWrap(true);
+    dress(warning, sheet::Role::Note);
     warning->hide();
 
-    inside->addWidget(warning);
     inside->addSpacing(12);
+    inside->addWidget(warning);
 
-    continueButton = new QPushButton(
-        QCoreApplication::translate("roundsheet", "Continue"), panel);
+    continueButton = new SheetButton(QCoreApplication::translate("roundsheet", "Continue"),
+                                     SheetButton::Kind::Primary, panel);
     continueButton->setObjectName("continueRound");
     continueButton->setDefault(true);
-    continueButton->setMinimumWidth(180);
-    continueButton->setMinimumHeight(32);
 
-    QHBoxLayout* buttonRow = new QHBoxLayout;
-    buttonRow->addStretch(1);
-    buttonRow->addWidget(continueButton);
-    inside->addLayout(buttonRow);
+    addActions({ continueButton });
 
     connect(continueButton, &QPushButton::clicked, this, &RoundSheet::continueRequested);
 }
 
-void RoundSheet::clearRows()
-{
-    // EVERYTHING, HEADINGS AND ALL, which is why they are not built in the
-    // constructor. Keeping a persistent row 0 and removing only the seats below
-    // it needs the layout walked by position, and the first version of that read
-    // a widget it had just deleted to find its index. GameOverPanel takes the
-    // whole grid out and rebuilds; three heading labels per round is nothing
-    // beside getting that wrong.
-    //
-    // delete, NOT deleteLater(), and this is where the sheet parts company with
-    // GameOverPanel - which uses the deferred form and is right to.
-    //
-    // THE DIFFERENCE IS HOW OFTEN THIS RUNS. That panel builds its rows once per
-    // GAME; this one rebuilds them up to thirty-two times, and a widget taken
-    // out of a layout but not yet destroyed is still a child of `rows` sitting
-    // at its last geometry - so it goes on PAINTING until the event loop gets
-    // round to the deferred delete. Round two would be drawn over round one.
-    //
-    // Caught by the test that shows two rounds and counts the labels: it found
-    // two "Ana"s, which is exactly that ghost.
-    //
-    // Safe, because the usual reason for deleteLater() is absent: these are
-    // QLabels that emit nothing, and this runs from a queued signal handler
-    // rather than from a slot of one of the widgets being removed.
-    while(QLayoutItem* item = rowLayout->takeAt(0))
-    {
-        delete item->widget();
-        delete item;
-    }
-
-    // COUNTED HERE RATHER THAN ASKED OF THE LAYOUT. QGridLayout::rowCount()
-    // reports the rows it has ever ALLOCATED and never shrinks when items are
-    // taken out, so a second round reading it back would start writing below an
-    // empty grid.
-    placedRows = 0;
-}
-
-void RoundSheet::addHeadings()
-{
-    // The scoreboard's words where they are the same column - the bid - so a
-    // translator sees one string rather than two spellings to keep in step. The
-    // other three are this sheet's own since the redesign's phase 8 gave the
-    // scoreboard TAKEN and PTS and took its round score away; they keep the
-    // "scoreboard" context they were translated under, so the catalogue still has
-    // them. Phase 10 restyles this sheet and settles its words with its look.
-    //
-    // A literal at every call site, for BidStrip.h's reason: a wrapper of our own
-    // would hide these from lupdate.
-    const auto heading = [this](const QString& text, int column, Qt::Alignment align)
-    {
-        QLabel* label = new QLabel(text, rows);
-        label->setAlignment(align);
-
-        QFont bold = label->font();
-        bold.setBold(true);
-        label->setFont(bold);
-
-        rowLayout->addWidget(label, 0, column);
-    };
-
-    heading(QCoreApplication::translate("roundsheet", "Name"), 0, Qt::AlignLeft);
-    heading(QCoreApplication::translate("scoreboard", "Bid"), 1, Qt::AlignRight);
-    heading(QCoreApplication::translate("scoreboard", "Won"), 2, Qt::AlignRight);
-    heading(QCoreApplication::translate("scoreboard", "Round"), 3, Qt::AlignRight);
-    heading(QCoreApplication::translate("scoreboard", "Total"), 4, Qt::AlignRight);
-}
-
-void RoundSheet::addRow(const RoundSeatResult& seat)
-{
-    const int r = ++placedRows;
-
-    const auto cell = [this, r](const QString& text, int column, Qt::Alignment align)
-    {
-        QLabel* label = new QLabel(text, rows);
-        label->setAlignment(align);
-        rowLayout->addWidget(label, r, column);
-        return label;
-    };
-
-    // The human's row bold, as the scoreboard drew it until the table redesign's
-    // phase 8: a table of four names is read by finding your own first.
-    QLabel* name = cell(QString::fromStdString(seat.name), 0, Qt::AlignLeft);
-
-    if(seat.isHuman)
-    {
-        QFont bold = name->font();
-        bold.setBold(true);
-        name->setFont(bold);
-    }
-
-    cell(seat.hasBet ? QString::number(seat.bet) : QStringLiteral("-"), 1, Qt::AlignRight);
-    cell(QString::number(seat.tricksWon), 2, Qt::AlignRight);
-
-    QLabel* round = cell(roundsheet::roundScoreFor(seat), 3, Qt::AlignRight);
-
-    // THE COLOUR REINFORCES THE SIGN rather than replacing it (section 18), and
-    // it comes from Theme like every other colour in the client (section 18.1).
-    // Zero takes neither, because zero went neither way.
-    if(seat.roundScore != 0)
-    {
-        QPalette scheme = round->palette();
-        scheme.setColor(QPalette::WindowText,
-                        seat.roundScore > 0 ? theme().scorePositive : theme().scoreNegative);
-        round->setPalette(scheme);
-    }
-
-    cell(roundsheet::arrowFor(seat), 4, Qt::AlignRight);
-}
-
 void RoundSheet::showResult(const RoundResult& result)
 {
-    clearRows();
-    addHeadings();
-
     title->setText(roundsheet::titleFor(result));
+    meta->setText(sheet::withSuits(roundsheet::metaFor(result), theme().table));
+
+    // REFILLED, NOT APPENDED: the table outlives every round of every game, and a
+    // game with fewer seats can follow one with more.
+    rows->clearRows();
 
     for(const RoundSeatResult& seat : result.seats)
-        addRow(seat);
+    {
+        // THE COLOUR REINFORCES THE SIGN rather than replacing it (section 18).
+        // Zero takes neither, because zero went neither way.
+        SheetTable::Tone tone = SheetTable::Tone::Plain;
 
-    // ONE LABEL, NOT ONE PER LINE. The label already wraps and the panel is
-    // sized to what it holds below, so joining costs no layout - and at most six
-    // seats can be on four at once, which in practice is one and occasionally
-    // two.
+        if(seat.roundScore > 0)
+            tone = SheetTable::Tone::Good;
+        else if(seat.roundScore < 0)
+            tone = SheetTable::Tone::Bad;
+
+        // Your own name bold, as the scoreboard drew it until the table redesign's
+        // phase 8: a table of four names is read by finding your own first. A dash,
+        // not a zero, for a seat that never bid.
+        rows->addRow({ { QString::fromStdString(seat.name), SheetTable::Tone::Plain, seat.isHuman },
+                       { seat.hasBet ? QString::number(seat.bet) : hudtext::dash() },
+                       { QString::number(seat.tricksWon) },
+                       { roundsheet::roundScoreFor(seat), tone },
+                       { roundsheet::arrowFor(seat) } });
+    }
+
+    // ONE LABEL, NOT ONE PER LINE. The label already wraps and the sheet is sized
+    // to what it holds, so joining costs no layout - and at most six seats can be
+    // on four at once, which in practice is one and occasionally two.
     const QStringList lines = roundsheet::streakWarnings(result);
 
     warning->setText(lines.join(QLatin1Char('\n')));
     warning->setVisible(!lines.isEmpty());
 
-    // The panel is rebuilt per round and the seat count can differ between
-    // games, so it is sized to what it now holds rather than to what it held.
-    panel()->adjustSize();
+    // The seat count can differ between games, so the sheet is sized to what it
+    // now holds rather than to what it held.
+    placeSheet();
 }
 
 void RoundSheet::focusDefault()

@@ -49,7 +49,7 @@ tablespace::Placement cardPlacement(std::size_t count, std::size_t slot, QSizeF 
 // hand positions at once. A fan that only ever read the snapshot cannot be
 // clicked and shows nothing for the last two rounds of every default game.
 //
-// A QGraphicsObject in the scene, not a widget overlay like BidStrip. Two
+// A QGraphicsObject in the scene, not a widget over the view. Two
 // reasons, and the first is the one that would be expensive to undo: section
 // 18.2 animates a card from here to the table with QPropertyAnimation on
 // CardItem::pos, and the cards are already QGraphicsObjects. The second is that

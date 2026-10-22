@@ -6,6 +6,7 @@
 
 #include <QGraphicsItem>
 #include <QPixmap>
+#include <QPointF>
 #include <QRectF>
 
 #include <cstddef>
@@ -31,6 +32,15 @@ QRectF bounds();
 // gradients over the whole picture, a blurred shadow. TableTopItem below holds the
 // result and paints it again only when the ratio or the colours change.
 QPixmap render(const Theme& theme, qreal ratio);
+
+// THE LOGO PLAQUE ALONE (.panel.logo), centred on `centre` in the painter's units:
+// part of render()'s picture, and the main-menu page's title since the redesign's
+// phase 10. Drawn at section 2.4's 0.9 of its 270 x 142 frame, its drop shadow
+// included.
+void paintLogo(QPainter& painter, const Theme& theme, QPointF centre);
+
+// What paintLogo() covers about the centre it is given, its shadow included.
+QRectF logoBounds();
 
 } // namespace tabletop
 

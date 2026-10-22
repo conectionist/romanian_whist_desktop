@@ -6,7 +6,9 @@
 #include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
+#include <QColor>
 #include <QGraphicsObject>
+#include <QRectF>
 #include <QSizeF>
 #include <QString>
 
@@ -34,6 +36,24 @@ inline constexpr int labelSize = 21;
 // How big a button with this label is, in table units: its border, 22 of padding
 // either side, the 24-unit icon, 12 between the icon and the label, and the label.
 QSizeF sizeFor(const QString& label);
+
+// .btn's colours: the icon gold and the label cream; both gold-bright when lit -
+// under the cursor, or reached by the keyboard; and both muted when the button
+// cannot be used.
+struct Colours
+{
+    QColor icon;
+    QColor label;
+};
+
+Colours coloursFor(const Theme::TablePalette& palette, bool enabled, bool lit);
+
+// THE BUTTON'S FACE: its icon and its label, side by side and centred together in
+// `box` - which for a button as wide as sizeFor() says is 22 in from its left, as
+// .panel.btn's padding puts them. In the painter's units. The main-menu page's
+// buttons, which share a width, wear the same face (redesign phase 10).
+void paintFace(QPainter& painter, const QRectF& box, icons::Icon icon, const QString& label,
+               const Colours& colours);
 
 } // namespace tablebutton
 

@@ -16,6 +16,7 @@
 #include <optional>
 #include <vector>
 
+class BidStripItem;
 class HandItem;
 class LeadMarkItem;
 class ScoreboardItem;
@@ -74,25 +75,15 @@ public:
     // this, so the room and the table cannot be in two different themes.
     const Theme& currentTheme() const { return theme; }
 
-    // WHERE AN OVERLAY MUST STOP: the table-space y just above your hand - or, at
-    // a table with no hand, above the lowest name panel. Section 15.1's bid strip is
-    // bottom-aligned above it until the redesign's phase 10 moves the strip onto
-    // the felt. In SCENE units: TableView maps it to the viewport.
-    //
-    // IT HAS TO COME FROM HERE because the bottom of the table is not where the
-    // strip goes. Your hand and your own panel are both down there, and a strip
-    // pinned to the viewport's bottom edge draws straight through them - which is
-    // what C2's first run did, through the plaque.
-    //
-    // A FLOOR AND NO CEILING. The strip may rise over the trick, which is not a
-    // compromise: bidding finishes before the first card of the round is played,
-    // so the trick area is empty for the whole time the strip is up. And it may
-    // rise past the top of the table into the room above, which is the view's to
-    // give - so only the bottom is the scene's to say. The hand is a different
-    // matter, because you bid on the cards you are holding.
-    //
-    // Nothing before the first snapshot, and the caller falls back.
-    std::optional<qreal> overlayBottom() const;
+    // SECTION 2.13's BID STRIP, on the felt over the logo. Like the fan and the
+    // trick panel it has a second source the snapshot cannot supply - the prompt
+    // for your bid - and MainWindow hands that over through here.
+    BidStripItem* bidStripItem() const { return bidStrip; }
+
+    // WHERE THE CURSOR LAST WAS over a view of this scene, in table space, and
+    // nothing once it has left. The scene lights nothing under a cursor that has
+    // not moved, so an item shown under one asks here (BidStripItem::setPrompt()).
+    std::optional<QPointF> cursorPosition() const { return cursor; }
 
     // The table itself, and the renderer every card on it is drawn by. READ-ONLY
     // and for tests, which count what each of them paints to show that a resize
@@ -132,6 +123,10 @@ public:
     // Section 2.11's two buttons. Disabled until phase 11 gives them their sheets.
     TableButtonItem* historyButton() const { return history; }
     TableButtonItem* lastTrickButton() const { return lastTrick; }
+
+protected:
+    // Notes where the cursor is, for cursorPosition(), and passes every event on.
+    bool event(QEvent* event) override;
 
 private:
     // Puts every item where the snapshot says, in table space. Run on a new
@@ -198,6 +193,12 @@ private:
     TrickPanelItem* trickPanel = nullptr;
     TableButtonItem* history = nullptr;
     TableButtonItem* lastTrick = nullptr;
+
+    // The bid strip (tablespace::z::bidStrip), hidden until you are asked to bid.
+    BidStripItem* bidStrip = nullptr;
+
+    // See cursorPosition().
+    std::optional<QPointF> cursor;
 
     // Where pinHud() last said the viewport is: none before a view has fitted the
     // table.

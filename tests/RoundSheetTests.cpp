@@ -2,15 +2,18 @@
 
 #include "GameFixtures.h"
 
+#include "paint/Theme.h"
 #include "table/RoundText.h"
 #include "ui/RoundSheet.h"
 
 #include <QLabel>
+#include <QPalette>
 #include <QPushButton>
+#include <QStringList>
 
 #include <string>
 
-// The split BidStrip.h argues for and NewGameTests follows: the half with a
+// The split SnapshotLog.h argues for and NewGameTests follows: the half with a
 // right answer tested without a window, the widget after it.
 namespace
 {
@@ -102,10 +105,74 @@ TEST_CASE("The round score carries its own sign", "[round-sheet]")
     // well, and the sign is what survives a player who cannot tell the two
     // colours apart.
     REQUIRE(roundsheet::roundScoreFor(seatResult("Ana", 7, 0)) == QStringLiteral("+7"));
-    REQUIRE(roundsheet::roundScoreFor(seatResult("Ana", -1, 0)) == QStringLiteral("-1"));
+
+    // SECTION 2.13's MINUS SIGN, U+2212, and not a hyphen: it is as wide as the
+    // plus in tabular figures, so the column of scores lines up.
+    REQUIRE(roundsheet::roundScoreFor(seatResult("Ana", -1, 0)) == QStringLiteral("\u22121"));
 
     // Zero went neither way and takes neither sign.
     REQUIRE(roundsheet::roundScoreFor(seatResult("Ana", 0, 0)) == QStringLiteral("0"));
+}
+
+TEST_CASE("A negative total takes the round column's minus sign", "[round-sheet]")
+{
+    // PR #36's review, finding #6. The Round column wrote U+2212 and the Total
+    // column a hyphen, so the two minus signs of one sheet differed in glyph and
+    // width beside each other.
+    REQUIRE(roundsheet::arrowFor(seatResult("Ana", 5, -3)) == QStringLiteral("\u22123 \u2192 2"));
+    REQUIRE(roundsheet::arrowFor(seatResult("Ana", -4, 1)) == QStringLiteral("1 \u2192 \u22123"));
+}
+
+TEST_CASE("The line under the title names the trump or says there is none", "[round-sheet]")
+{
+    // The mock-up's .meta line: the trump the round was played to, and how it was
+    // scored, for a player reading the column of scores under it.
+    RoundResult result = roundResult({ seatResult("Ana", 7, 34) });
+    result.hasTrump = true;
+    result.trump = romanian_whist::Card(romanian_whist::Rank::King, romanian_whist::Suit::Hearts);
+
+    const QString meta = roundsheet::metaFor(result);
+
+    REQUIRE(meta.startsWith(QStringLiteral("Trump K\u2665")));
+    REQUIRE(meta.contains(QStringLiteral("exact bid scores 5 + bid")));
+
+    // AN EIGHT-CARD ROUND HAS NO TRUMP, and `trump` is then Card's default - a real
+    // two of clubs - which the sheet must not name.
+    result.hasTrump = false;
+
+    REQUIRE(roundsheet::metaFor(result).startsWith(QStringLiteral("No trump")));
+    REQUIRE_FALSE(roundsheet::metaFor(result).contains(QStringLiteral("2")));
+}
+
+TEST_CASE("The sheet's table has the mock-up's five headings", "[round-sheet]")
+{
+    RoundSheet sheet;
+    sheet.showResult(roundResult({ seatResult("Ana", 7, 34) }));
+
+    QStringList headings;
+
+    for(const QLabel* label : sheet.findChildren<QLabel*>())
+    {
+        for(const char* word : { "Player", "Bid", "Taken", "Round", "Total" })
+        {
+            if(label->text() == QString::fromUtf8(word))
+                headings << label->text();
+        }
+    }
+
+    REQUIRE(headings.size() == 5);
+
+    // The sign in red and green as well as in the text: the row's round score.
+    const QLabel* score = nullptr;
+
+    for(const QLabel* label : sheet.findChildren<QLabel*>())
+    {
+        if(label->text() == QStringLiteral("+7"))
+            score = label;
+    }
+
+    REQUIRE(score != nullptr);
+    REQUIRE(score->palette().color(QPalette::WindowText) == Theme::dark().table.good);
 }
 
 TEST_CASE("The streak warning fires on four, and only on four", "[round-sheet]")

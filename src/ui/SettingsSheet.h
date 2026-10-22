@@ -5,7 +5,6 @@
 
 QT_BEGIN_NAMESPACE
 class QCheckBox;
-class QPushButton;
 class QSlider;
 QT_END_NAMESPACE
 
@@ -19,7 +18,8 @@ QT_END_NAMESPACE
 // its pace; there is nothing to apply and nothing to cancel, so its one button is
 // Done.
 //
-// An Overlay, in today's look, for phase 10 to restyle with the others.
+// An Overlay, in section 2.13's look since the redesign's phase 10. Its slider and
+// box are Qt's own, drawn by the style from the sheet's dark palette.
 class SettingsSheet : public Overlay
 {
     Q_OBJECT
@@ -45,7 +45,7 @@ private:
 
     QSlider* speed = nullptr;
     QCheckBox* waitEachRound = nullptr;
-    QPushButton* done = nullptr;
+    SheetButton* done = nullptr;
 };
 
 #endif
