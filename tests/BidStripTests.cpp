@@ -6,10 +6,13 @@
 #include "engine/Prompts.h"
 #include "paint/Theme.h"
 #include "table/BidStripItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/SeatLayout.h"
+#include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableView.h"
+#include "table/TrickPanelItem.h"
 
 #include <QCoreApplication>
 #include <QGraphicsRectItem>
@@ -22,6 +25,7 @@
 #include <QPainter>
 #include <QPointF>
 #include <QRectF>
+#include <QSize>
 #include <QString>
 
 #include <cmath>
@@ -473,6 +477,55 @@ TEST_CASE("The strip lies on the felt clear of your hand and your panel", "[bid-
                 if(item != strip && !item->parentItem())
                     REQUIRE(item->zValue() < strip->zValue());
             }
+        }
+    }
+}
+
+// THE CORNER PANELS FOLLOW THE WINDOW and the strip does not: it is in table space
+// on the felt, and they are pinned to the window's corners. At a shape the panels
+// reach furthest into the table, the strip must still lie clear of all four, or the
+// strip (drawn over them) would hide a part of the scoreboard.
+TEST_CASE("The strip clears the corner panels at the sizes people play at", "[bid-strip]")
+{
+    const QSize windows[] = { QSize(1920, 1080), QSize(2560, 1440), QSize(1920, 1200),
+                              QSize(1440, 900) };
+
+    for(unsigned int seats = 2 ; seats <= 6 ; seats++)
+    {
+        TableScene scene;
+        scene.setTheme(Theme::dark());
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(biddingTable(seats)));
+
+        TableView view(&scene);
+        view.show();
+
+        BidStripItem* strip = scene.bidStripItem();
+        REQUIRE(strip != nullptr);
+
+        // The tallest strip: a forbidden bid's note is the longer sentence.
+        strip->setPrompt(promptFor(8, std::optional<unsigned int>(2u)));
+
+        const QRectF placed = strip->mapRectToScene(QRectF(QPointF(), strip->size()));
+
+        for(const QSize& window : windows)
+        {
+            INFO(seats << " seats, window " << window.width() << "x" << window.height());
+
+            view.resize(window);
+            QCoreApplication::processEvents();
+
+            // The panel's own rect, as HudTests measures it: its shadow is not part of
+            // what a reader loses to the strip.
+            const auto clear = [&placed](const auto& corner)
+            {
+                REQUIRE(corner.isVisible());
+                REQUIRE_FALSE(placed.intersects(corner.mapRectToScene(QRectF(QPointF(), corner.size()))));
+            };
+
+            clear(*scene.scoreboardItem());
+            clear(*scene.trickPanelItem());
+            clear(*scene.historyButton());
+            clear(*scene.lastTrickButton());
         }
     }
 }

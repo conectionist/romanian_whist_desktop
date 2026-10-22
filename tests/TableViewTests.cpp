@@ -69,9 +69,12 @@ GameSnapshot seatedTable(unsigned int seats, int humanSeat)
 }
 
 // Windows of every shape the scale has to handle: the screenshot size, a laptop,
-// the size the suite plays at, an ultra-wide, and one taller than it is wide.
+// the size the suite plays at, an ultra-wide, and one taller than it is wide. And,
+// since phase 12, the two other sizes the plan names: 16:10 at 1920 and 2560 x 1440.
+// `shapes[0]` stays the screenshot size, which a case below resizes to.
 const QSize shapes[] = { QSize(1920, 1080), QSize(1440, 900), QSize(1000, 700),
-                         QSize(2560, 1080), QSize(800, 1200) };
+                         QSize(2560, 1080), QSize(800, 1200), QSize(1920, 1200),
+                         QSize(2560, 1440) };
 
 }
 
