@@ -317,6 +317,17 @@ protected:
     // margins, and no taller than the page - past that, its body scrolls.
     void placeSheet();
 
+    // WHAT THE SHEET'S CONTENT HAS ACROSS, inside its border and padding: 658 at
+    // full width, less on a narrow page - and less the scroll bar when the body
+    // scrolls, since the bar takes its width from the body (PR #37's review,
+    // finding #3).
+    int contentWidth() const;
+
+    // Called by placeSheet() when contentWidth() has changed: the page narrowed or
+    // widened, or the body began or stopped scrolling. A sheet that fits its
+    // content to the width - the history's headings - fits it again here.
+    virtual void contentWidthChanged() {}
+
     // Scrolls the sheet's body until `widget`, inside it, is in view: nothing,
     // when the whole sheet fits the page.
     void reveal(QWidget* widget);
@@ -338,11 +349,19 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // The sheet's width, its border included: 720, or the page less its margins.
+    int sheetWidth() const;
+
     Theme palette = Theme::dark();
 
     QScrollArea* scroll = nullptr;
     QWidget* plaque = nullptr;
     QVBoxLayout* column = nullptr;
+
+    // Whether the body scrolls, as placeSheet() last decided; and the content width
+    // it last reported to contentWidthChanged().
+    bool bodyScrolls = false;
+    int reportedWidth = -1;
 
     // The panel's picture, with its drop shadow: the overlay repaints with every
     // frame of the table under a sheet that does not hold the game, and the two

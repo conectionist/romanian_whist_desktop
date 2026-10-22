@@ -65,12 +65,13 @@ signals:
     void closeRequested();
 
 protected:
-    // A narrower page narrows the sheet, and the names give way again to fit.
-    void resizeEvent(QResizeEvent* event) override;
+    // A narrower page narrows the sheet, and a scroll bar narrows its body: the
+    // names give way again to fit.
+    void contentWidthChanged() override;
 
 private:
-    // Shortens the names in the headings until the table fits the sheet as wide
-    // as the page now lets it be.
+    // Shortens the names in the headings until the table fits the sheet's content
+    // width (Overlay::contentWidth()).
     void fitColumns();
 
     QLabel* title = nullptr;

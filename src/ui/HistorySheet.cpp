@@ -7,8 +7,6 @@
 #include <QCoreApplication>
 #include <QLabel>
 
-#include <algorithm>
-
 QString historysheet::noteFor(const RoundSeatResult& seat)
 {
     const QString bid = seat.hasBet ? QString::number(seat.bet) : hudtext::dash();
@@ -147,18 +145,14 @@ void HistorySheet::fitColumns()
         return;
 
     // NEVER WIDER THAN THE SHEET: its body scrolls down, never across, so a
-    // six-seat table of long names shortens the names. The sheet is 720 wide, or
-    // the page less its margins where that is less (Overlay::placeSheet()).
-    const int page = width() > 0 ? width() - 2 * sheet::pageMargin : sheet::width;
-    const int across = std::min(sheet::width, page) - 2 * (sheet::border + sheet::paddingX);
-
-    rows->fitHeadingsTo(std::max(0, across));
+    // six-seat table of long names shortens the names - to the room beside the
+    // scroll bar, when a long game's history scrolls.
+    rows->fitHeadingsTo(contentWidth());
 }
 
-void HistorySheet::resizeEvent(QResizeEvent* event)
+void HistorySheet::contentWidthChanged()
 {
     fitColumns();
-    Overlay::resizeEvent(event);
 }
 
 void HistorySheet::focusDefault()

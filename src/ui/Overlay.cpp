@@ -15,6 +15,7 @@
 #include <QPainter>
 #include <QPalette>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QVariant>
 
 #include <algorithm>
@@ -574,6 +575,12 @@ void SheetTable::fitHeadingsTo(int width)
 
         label->setToolTip(shown == whole ? QString() : whole);
     }
+
+    // THE SHEET HEARS OF THE NEW WIDTH NOW, not when this table's own layout next
+    // runs: until then the layout it sits in answers with the width it had, and the
+    // sheet measured round that kept the body as wide as before (PR #37's review,
+    // finding #3).
+    updateGeometry();
 }
 
 QLabel* SheetTable::cell(int row, int column) const
@@ -840,10 +847,30 @@ QRect Overlay::sheetRect() const
     return scroll->geometry();
 }
 
+int Overlay::sheetWidth() const
+{
+    return std::min(sheet::width, std::max(0, width() - 2 * sheet::pageMargin));
+}
+
+int Overlay::contentWidth() const
+{
+    constexpr int padding = 2 * (sheet::border + sheet::paddingX);
+
+    // AS Qt HAS LAID THE BODY OUT, once it shows: how wide the scroll bar is, is the
+    // style's to say, and on macOS it floats over the body and takes nothing.
+    if(scroll->isVisible())
+        return std::max(0, scroll->viewport()->width() - padding);
+
+    // Hidden, by the bar's own width. showEvent() places the sheet again, and
+    // measures it then.
+    const int bar = bodyScrolls ? scroll->verticalScrollBar()->sizeHint().width() : 0;
+
+    return std::max(0, sheetWidth() - padding - bar);
+}
+
 void Overlay::placeSheet()
 {
-    const int room = std::max(0, width() - 2 * sheet::pageMargin);
-    const int across = std::min(sheet::width, room);
+    const int across = sheetWidth();
 
     // EVERY LAYOUT IN THE SHEET FORGETS WHAT IT MEASURED, the nested ones included.
     // A label's new text invalidates the layout it sits in, but a box layout keeps
@@ -859,9 +886,27 @@ void Overlay::placeSheet()
     if(wanted <= 0)
         wanted = plaque->sizeHint().height();
 
-    const int down = std::min(wanted, std::max(0, height() - 2 * sheet::pageMargin));
+    const int room = std::max(0, height() - 2 * sheet::pageMargin);
+    const int down = std::min(wanted, room);
+
+    // WHETHER THE BODY SCROLLS IS DECIDED HERE, not left to the scroll area, so the
+    // bar Qt shows and contentWidth() always agree.
+    bodyScrolls = wanted > room;
+
+    const Qt::ScrollBarPolicy bar = bodyScrolls ? Qt::ScrollBarAlwaysOn : Qt::ScrollBarAlwaysOff;
+
+    if(scroll->verticalScrollBarPolicy() != bar)
+        scroll->setVerticalScrollBarPolicy(bar);
 
     scroll->setGeometry((width() - across) / 2, (height() - down) / 2, across, down);
+
+    // Refitting changes the content, which places the sheet again - at the same
+    // width, so this does not come round twice.
+    if(const int now = contentWidth() ; now != reportedWidth)
+    {
+        reportedWidth = now;
+        contentWidthChanged();
+    }
 
     update();
 }

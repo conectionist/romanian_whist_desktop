@@ -3,6 +3,7 @@
 #include "paint/Theme.h"
 #include "ui/HistorySheet.h"
 #include "ui/NewGameDialog.h"
+#include "WindowDriving.h"
 
 #include <QCoreApplication>
 #include <QLabel>
@@ -267,6 +268,59 @@ TEST_CASE("A long history opens at its foot with Close in view", "[history]")
     QPushButton* close = sheet.findChild<QPushButton*>("closeHistory");
     REQUIRE(close != nullptr);
     REQUIRE(page.focusWidget() == close);
+}
+
+TEST_CASE("Six of the longest names fit a long history beside its scroll bar", "[history]")
+{
+    // PR #37's review, finding #3. A history that scrolls has its body narrowed by
+    // the scroll bar, and the headings had been fitted to the whole 658: the table
+    // ran under the bar, and the sheet, which never scrolls across, was cut off on
+    // the right.
+    const QString longest = QStringLiteral("Bartholomew Fairbank");
+    REQUIRE(longest.size() == newgame::MaximumNameLength);
+
+    std::vector<RoundSeatResult> seats;
+    std::vector<QString> names;
+
+    for(int i = 0 ; i < 6 ; i++)
+    {
+        seats.push_back(seatResult(longest.toStdString(), 8, 0, -18, -100));
+        names.push_back(longest);
+    }
+
+    std::vector<RoundResult> rounds;
+
+    for(unsigned int r = 1 ; r <= 32 ; r++)
+        rounds.push_back(roundOf(r, 1, seats));
+
+    QWidget page;
+    page.resize(1920, 1034);
+
+    HistorySheet sheet(&page);
+    sheet.hide();
+    page.show();
+    QCoreApplication::processEvents();
+
+    sheet.showHistory(rounds, names);
+    sheet.show();
+    sheet.raise();
+
+    // A moment, not one pass: the bar's arrival on show refits the headings, and
+    // the sheet takes a few passes to be laid out again round them.
+    driving::pump(50);
+
+    QScrollArea* scroll = sheet.findChild<QScrollArea*>();
+    REQUIRE(scroll != nullptr);
+    REQUIRE(scroll->verticalScrollBar()->isVisible());
+
+    const int body = scroll->viewport()->width();
+    SheetTable* rows = tableOf(sheet);
+
+    REQUIRE(body < sheet::width);
+    REQUIRE(scroll->widget()->minimumSizeHint().width() <= body);
+    REQUIRE(scroll->widget()->width() == body);
+    REQUIRE(rows->width() <= body - 2 * (sheet::border + sheet::paddingX));
+    REQUIRE(rows->heading(2)->toolTip() == longest);
 }
 
 TEST_CASE("The history's Close asks to close", "[history]")
