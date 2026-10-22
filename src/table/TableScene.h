@@ -8,6 +8,7 @@
 #include "paint/Theme.h"
 #include "table/Motion.h"
 #include "table/RackItem.h"
+#include "table/SeatLayout.h"
 
 #include <QGraphicsScene>
 #include <QPointF>
@@ -155,12 +156,16 @@ private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
     // business, and changes no position here.
-    void relayout();
+    //
+    // Returns every seat's place, found once here, for announceBids(); none
+    // before the first snapshot.
+    seatlayout::Places relayout();
 
     // A BID JUST MADE, between the last frame and `next`: each seat whose bid is in
     // now and was not then, in the same round, says it over its panel (phase 12).
     // Another table clears them all; another game is newGame()'s to clear.
-    void announceBids(const GameSnapshot* last, const GameSnapshot& next);
+    // `places` are relayout()'s for `next`.
+    void announceBids(const GameSnapshot* last, const GameSnapshot& next, const seatlayout::Places& places);
 
     // Grown when a game has more seats than the last one did, panels and racks
     // together. Six at most, and reused across games rather than rebuilt, for the

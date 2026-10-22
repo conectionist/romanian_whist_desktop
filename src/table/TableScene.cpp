@@ -87,11 +87,11 @@ void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
     const std::shared_ptr<const GameSnapshot> last = snapshot;
 
     snapshot = std::move(next);
-    relayout();
+    const seatlayout::Places places = relayout();
 
     // After relayout(), which grows the seats - and the bubbles with them - for a
-    // table larger than the last.
-    announceBids(last.get(), *snapshot);
+    // table larger than the last, and on the places it found for them.
+    announceBids(last.get(), *snapshot, places);
 }
 
 void TableScene::newGame()
@@ -102,7 +102,8 @@ void TableScene::newGame()
         bubble->dismiss();
 }
 
-void TableScene::announceBids(const GameSnapshot* last, const GameSnapshot& next)
+void TableScene::announceBids(const GameSnapshot* last, const GameSnapshot& next,
+                              const seatlayout::Places& places)
 {
     const std::size_t seatCount = next.seats.size();
 
@@ -122,9 +123,7 @@ void TableScene::announceBids(const GameSnapshot* last, const GameSnapshot& next
     if(next.roundNumber != last->roundNumber)
         return;
 
-    const seatlayout::Places places = seatlayout::places(static_cast<unsigned int>(seatCount), next.humanSeat);
-
-    for(std::size_t i = 0 ; i < seatCount && i < bubbles.size() ; i++)
+    for(std::size_t i = 0 ; i < seatCount && i < bubbles.size() && i < places.size() ; i++)
     {
         if(last->seats[i].hasBet || !next.seats[i].hasBet || !places[i])
             continue;
@@ -269,10 +268,10 @@ bool TableScene::event(QEvent* event)
     return QGraphicsScene::event(event);
 }
 
-void TableScene::relayout()
+seatlayout::Places TableScene::relayout()
 {
     if(!snapshot)
-        return;
+        return {};
 
     const std::size_t seatCount = snapshot->seats.size();
 
@@ -388,4 +387,6 @@ void TableScene::relayout()
 
     // And the strip, which reads how the others have bid from the frame.
     bidStrip->setSnapshot(snapshot, theme);
+
+    return places;
 }
