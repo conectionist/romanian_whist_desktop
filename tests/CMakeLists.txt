@@ -21,6 +21,8 @@ add_executable(desktop_tests
     NewGameTests.cpp
     GameOverTests.cpp
     RoundSheetTests.cpp
+    HistorySheetTests.cpp
+    LastTrickSheetTests.cpp
     MainWindowTests.cpp
     HandItemTests.cpp
     TrickPanelTests.cpp

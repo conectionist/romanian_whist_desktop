@@ -98,6 +98,10 @@ public:
 signals:
     void continueRequested();
 
+    // The quiet Round history beside Continue (the redesign's phase 11): the whole
+    // game so far, opened over this sheet and closed back to it.
+    void historyRequested();
+
 private:
     QLabel* title = nullptr;
     QLabel* meta = nullptr;
@@ -110,6 +114,7 @@ private:
     // fixed-height info strip whose B2b finding argues the other way.
     QLabel* warning = nullptr;
 
+    SheetButton* historyButton = nullptr;
     SheetButton* continueButton = nullptr;
 };
 

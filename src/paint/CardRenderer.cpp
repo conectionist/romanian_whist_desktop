@@ -210,7 +210,7 @@ CardRenderer::CardRenderer()
 // Out of line, where QSvgRenderer is a complete type for the map's unique_ptrs.
 CardRenderer::~CardRenderer() = default;
 
-QSize CardRenderer::sizeForHeight(qreal height) const
+QSize CardRenderer::sizeForHeight(qreal height)
 {
     if(height <= 0.0)
         return QSize();

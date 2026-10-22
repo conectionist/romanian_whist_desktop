@@ -59,15 +59,14 @@ TableScene::TableScene(QObject* parent)
     trickPanel->hide();
     addItem(trickPanel);
 
-    // THE CORNER BUTTONS (section 2.11), DISABLED UNTIL PHASE 11 builds the sheets
-    // they open: drawn where the mock-up has them, muted, taking no click.
+    // THE CORNER BUTTONS (section 2.11). MainWindow opens their sheets on a click
+    // (phase 11; phase 8 drew them disabled until there were sheets to open).
     history = new TableButtonItem(icons::Icon::RoundHistory, tr("Round history"), &panels);
     lastTrick = new TableButtonItem(icons::Icon::LastTrick, tr("Last trick"), &panels);
 
     for(TableButtonItem* button : { history, lastTrick })
     {
         button->setZValue(tablespace::z::hud);
-        button->setEnabled(false);
         button->setTheme(theme);
         button->hide();
         addItem(button);

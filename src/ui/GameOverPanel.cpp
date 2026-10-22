@@ -90,21 +90,29 @@ GameOverPanel::GameOverPanel(QWidget* parent) : Overlay(parent)
     mainMenu->setObjectName("gameOverMainMenu");
     mainMenu->setAutoDefault(false);
 
+    // ON BOTH FACES: a game that ended in an error still played the rounds it
+    // scored. Never the default.
+    history = new SheetButton(tr("Round history"), SheetButton::Kind::Quiet, panel);
+    history->setObjectName("gameOverHistory");
+    history->setAutoDefault(false);
+
     playAgain = new SheetButton(tr("Play again"), SheetButton::Kind::Primary, panel);
     playAgain->setObjectName("playAgain");
     playAgain->setDefault(true);
 
     // SIDE BY SIDE at the bottom right, the mock-up's sheets' place for them:
-    // two ways on from a game that has ended, the green one last.
+    // two ways on from a game that has ended, the green one last, and a look back
+    // between them.
     //
     // NO Close BUTTON, departing from section 16.2's mockup and recorded there.
     // That mockup predates D1's main-menu page: the window's X and the menu
     // page's Quit both already end the session, and D1 replaced the menu bar
     // with a page precisely so that leaving a GAME is not leaving the
     // APPLICATION.
-    addActions({ mainMenu, playAgain });
+    actions = addActions({ mainMenu, history, playAgain });
 
     connect(playAgain, &QPushButton::clicked, this, &GameOverPanel::playAgainRequested);
+    connect(history, &QPushButton::clicked, this, &GameOverPanel::historyRequested);
     connect(mainMenu, &QPushButton::clicked, this, &GameOverPanel::mainMenuRequested);
 }
 
@@ -138,6 +146,7 @@ void GameOverPanel::showResult(const std::vector<Standing>& standings,
 
     mainMenu->setKind(SheetButton::Kind::Quiet);
     mainMenu->setDefault(false);
+    placeMainMenu(false);
 
     placeSheet();
 }
@@ -162,8 +171,25 @@ void GameOverPanel::showFailure(const QString& what)
     playAgain->hide();
     mainMenu->setKind(SheetButton::Kind::Primary);
     mainMenu->setDefault(true);
+    placeMainMenu(true);
 
     placeSheet();
+}
+
+void GameOverPanel::placeMainMenu(bool last)
+{
+    // THE GREEN ONE LAST, as on every sheet: on the failure face Main menu is the
+    // green one, so it moves past Round history (PR #37's review, finding #1). The
+    // Tab order moves with it.
+    actions->removeWidget(mainMenu);
+
+    const int at = actions->indexOf(history);
+    actions->insertWidget(last ? at + 1 : at, mainMenu);
+
+    if(last)
+        QWidget::setTabOrder(history, mainMenu);
+    else
+        QWidget::setTabOrder(mainMenu, history);
 }
 
 void GameOverPanel::focusDefault()

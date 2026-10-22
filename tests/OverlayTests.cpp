@@ -1,12 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "paint/CardRenderer.h"
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
+#include "ui/NewGameDialog.h"
 #include "ui/Overlay.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
 #include "ui/RulesSheet.h"
 #include "ui/SettingsSheet.h"
+#include "WindowDriving.h"
 
 #include <QBoxLayout>
 #include <QCoreApplication>
@@ -19,13 +24,15 @@
 #include <QScrollArea>
 #include <QScrollBar>
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
 
 // What every sheet over the page shares (PR #35's review, finding #11): the pause
-// menu, the round sheet, the game-over panel, Rules and Settings.
+// menu, the round sheet, the game-over panel, Rules and Settings - and since phase
+// 11 the Round history and the Last trick.
 namespace
 {
 // The smallest sheet: one button on the plaque.
@@ -62,14 +69,19 @@ QImage ownPixels(QWidget& widget)
     return image;
 }
 
-// The five sheets, filled as they are filled in a game, each on a page of its own
-// of `size`: every one the window raises.
-struct FiveSheets
+// Every sheet, filled as it is filled in a game, each on a page of its own of
+// `size`: every one the window raises. Rules is the fourth.
+struct EverySheet
 {
+    // The last trick's art, FIRST so that it outlives the sheet drawn from it:
+    // members are destroyed in the reverse of their order here, and the pages
+    // delete the sheets (PR #37's review, finding #9).
+    CardRenderer cards;
+
     std::vector<std::unique_ptr<QWidget>> pages;
     std::vector<Overlay*> sheets;
 
-    explicit FiveSheets(QSize size)
+    explicit EverySheet(QSize size)
     {
         const auto page = [this, size]
         {
@@ -122,6 +134,42 @@ struct FiveSheets
         sheets.push_back(rules);
 
         sheets.push_back(new SettingsSheet(page()));
+
+        // Three rounds of a six-seat game of the longest names the setup dialog
+        // takes: the widest history there can be, short enough to fit unscrolled.
+        HistorySheet* history = new HistorySheet(page());
+        std::vector<RoundResult> rounds;
+        std::vector<QString> names;
+
+        for(unsigned int r = 1 ; r <= 3 ; r++)
+        {
+            RoundResult scored = result;
+            scored.roundNumber = r;
+            scored.trickCount = 1;
+
+            for(RoundSeatResult& seat : scored.seats)
+                seat.name = "Bartholomew Fairbank";
+
+            rounds.push_back(scored);
+        }
+
+        for(std::size_t i = 0 ; i < 6 ; i++)
+            names.push_back(QStringLiteral("Bartholomew Fairbank"));
+
+        history->showHistory(rounds, names);
+        sheets.push_back(history);
+
+        LastTrickSheet* last = new LastTrickSheet(page());
+        last->setCards(&cards);
+        lasttrick::Trick trick;
+        trick.roundNumber = 7;
+
+        for(unsigned int i = 0 ; i < 6 ; i++)
+            trick.cards.push_back({ romanian_whist::Card(romanian_whist::Rank::Ace, romanian_whist::Suit::Spades),
+                                    i, QStringLiteral("Bartholomew Fairbank"), i == 2 });
+
+        last->showTrick(trick, 7);
+        sheets.push_back(last);
 
         for(Overlay* sheet : sheets)
         {
@@ -202,9 +250,9 @@ TEST_CASE("A sheet is section 2.13's 720 wide and centred on the page", "[overla
 // smallest page is the table's minimum viewport, 709 x 495.
 TEST_CASE("Every sheet stays on the page at the smallest window and Rules scrolls there", "[overlay]")
 {
-    FiveSheets five(QSize(709, 495));
+    EverySheet every(QSize(709, 495));
 
-    for(Overlay* sheet : five.sheets)
+    for(Overlay* sheet : every.sheets)
     {
         INFO(sheet->metaObject()->className());
 
@@ -216,18 +264,64 @@ TEST_CASE("Every sheet stays on the page at the smallest window and Rules scroll
 
     // The longest of them, the rules of a game that deals both special rounds,
     // scrolls rather than leaving the page.
-    QScrollArea* scroll = five.sheets[3]->findChild<QScrollArea*>();
+    QScrollArea* scroll = every.sheets[3]->findChild<QScrollArea*>();
     REQUIRE(scroll != nullptr);
     REQUIRE(scroll->verticalScrollBar()->maximum() > 0);
 
     // And at the screenshot's size, none does.
-    FiveSheets roomy(QSize(1920, 1034));
+    EverySheet roomy(QSize(1920, 1034));
 
     for(Overlay* sheet : roomy.sheets)
     {
         INFO(sheet->metaObject()->className());
         REQUIRE(sheet->findChild<QScrollArea*>()->verticalScrollBar()->maximum() == 0);
         REQUIRE(sheet->sheetRect().width() == sheet::width);
+    }
+}
+
+// AN OPEN SHEET AT REST LAYS NOTHING OUT. placeSheet() runs on each of the body's
+// layout requests and invalidates the body's layouts, which posts another: a sheet
+// left open was laid out again on every turn of the event loop, about 1,300 times
+// a second, keeping a core busy (found during PR #37's review fixes).
+TEST_CASE("An open sheet stops laying itself out once it is laid out", "[overlay]")
+{
+    // A layout request counted as it reaches the body.
+    class Requests : public QObject
+    {
+    public:
+        int count = 0;
+
+    protected:
+        bool eventFilter(QObject*, QEvent* event) override
+        {
+            if(event->type() == QEvent::LayoutRequest)
+                count++;
+
+            return false;
+        }
+    };
+
+    // Roomy, and at the smallest window, where Rules scrolls.
+    for(const QSize size : { QSize(1920, 1034), QSize(709, 495) })
+    {
+        EverySheet every(size);
+        driving::pump(100);
+
+        std::vector<std::unique_ptr<Requests>> counted;
+
+        for(Overlay* sheet : every.sheets)
+        {
+            counted.push_back(std::make_unique<Requests>());
+            sheet->findChild<QScrollArea*>()->widget()->installEventFilter(counted.back().get());
+        }
+
+        driving::pump(300);
+
+        for(std::size_t i = 0 ; i < every.sheets.size() ; i++)
+        {
+            INFO(every.sheets[i]->metaObject()->className() << " at " << size.width() << "x" << size.height());
+            REQUIRE(counted[i]->count == 0);
+        }
     }
 }
 
@@ -413,8 +507,8 @@ TEST_CASE("The keyboard scrolls a sheet whose body does not fit", "[overlay]")
     // actions moved out of the scroll area - a footer that stays put, say - would
     // put the top of the rules out of the keyboard's reach once a Tab to Close had
     // scrolled to the bottom.
-    FiveSheets five(QSize(709, 495));
-    Overlay* rules = five.sheets[3];
+    EverySheet every(QSize(709, 495));
+    Overlay* rules = every.sheets[3];
 
     QScrollArea* scroll = rules->findChild<QScrollArea*>();
     REQUIRE(scroll != nullptr);
@@ -457,9 +551,9 @@ TEST_CASE("A sheet's words are plain text unless the line asks for rich", "[over
     // as markup, and the announcement, the streak warning and a crash's message all
     // carry what a player typed or an exception said. Only the two lines that build
     // their own markup, escaped, are rich.
-    FiveSheets five(QSize(1920, 1034));
+    EverySheet every(QSize(1920, 1034));
 
-    for(Overlay* sheet : five.sheets)
+    for(Overlay* sheet : every.sheets)
     {
         for(const QLabel* label : sheet->findChildren<QLabel*>())
         {
@@ -485,6 +579,167 @@ TEST_CASE("A sheet table shows a name as typed, markup and all", "[overlay]")
 
     REQUIRE(table.cell(0, 0)->textFormat() == Qt::PlainText);
     REQUIRE(table.cell(0, 0)->text() == QStringLiteral("<b>Dan</b>"));
+}
+
+TEST_CASE("A cell's note follows its text in muted type and both stay plain", "[overlay]")
+{
+    // Phase 11's history writes "+6 1/1": the round's score in its tone, and after
+    // it - on the same line, smaller - taken over bid in .note's muted, whatever
+    // the score's colour.
+    SheetTable table;
+    table.setColumns({ { QStringLiteral("Round"), Qt::AlignLeft }, { QStringLiteral("Ana") } });
+    table.addRow({ { QStringLiteral("1") },
+                   { QStringLiteral("+6"), SheetTable::Tone::Good, false, QStringLiteral("1/1") } });
+    table.addRow({ { QStringLiteral("2") }, { QStringLiteral("+6"), SheetTable::Tone::Good } });
+
+    QLabel* noted = table.cell(0, 1);
+    REQUIRE(noted != nullptr);
+
+    // The text is the score alone, and the note is apart from it.
+    REQUIRE(noted->text() == QStringLiteral("+6"));
+    REQUIRE(table.note(0, 1) == QStringLiteral("1/1"));
+    REQUIRE(table.note(1, 1).isEmpty());
+    REQUIRE(noted->textFormat() == Qt::PlainText);
+
+    // The note takes room of its own.
+    REQUIRE(noted->sizeHint().width() > table.cell(1, 1)->sizeHint().width());
+
+    table.resize(300, table.sizeHint().height());
+    table.show();
+    QCoreApplication::processEvents();
+
+    // Painted: the score's green, then the note's muted to the right of it.
+    const QImage image = ownPixels(*noted);
+    const Theme::TablePalette palette = Theme::dark().table;
+
+    int lastGood = -1;
+    int firstMuted = image.width();
+
+    for(int y = 0 ; y < image.height() ; y++)
+    {
+        for(int x = 0 ; x < image.width() ; x++)
+        {
+            // A glyph's strokes are thin at these sizes: the mostly opaque pixels,
+            // by their colour alone.
+            QColor pixel = image.pixelColor(x, y);
+
+            if(pixel.alpha() < 200)
+                continue;
+
+            pixel.setAlpha(255);
+
+            if(near(pixel, palette.good, 6))
+                lastGood = std::max(lastGood, x);
+            else if(near(pixel, palette.muted, 6))
+                firstMuted = std::min(firstMuted, x);
+        }
+    }
+
+    REQUIRE(lastGood >= 0);
+    REQUIRE(firstMuted < image.width());
+    REQUIRE(lastGood < firstMuted);
+}
+
+TEST_CASE("A note row runs across the whole table", "[overlay]")
+{
+    // The mock-up's empty history: a line spanning every column.
+    SheetTable table;
+    table.setColumns({ { QStringLiteral("Round"), Qt::AlignLeft }, { QStringLiteral("Cards") },
+                       { QStringLiteral("Ana") }, { QStringLiteral("Bogdan") } });
+    table.addNote(QStringLiteral("No rounds finished yet."));
+    table.addRow({ { QStringLiteral("Total"), SheetTable::Tone::Plain, true } });
+
+    table.resize(500, table.sizeHint().height());
+    table.show();
+    QCoreApplication::processEvents();
+
+    REQUIRE(table.rowCount() == 2);
+    REQUIRE(table.cell(0, 0)->text() == QStringLiteral("No rounds finished yet."));
+    REQUIRE(table.cell(0, 1) == nullptr);
+    REQUIRE(table.cell(0, 0)->width() == table.width());
+    REQUIRE(table.cell(0, 0)->palette().color(QPalette::WindowText) == Theme::dark().table.muted);
+
+    // And sizes no column by itself: the first is no wider than its heading and
+    // the Total under it need.
+    REQUIRE(table.cell(1, 0)->width() < table.cell(0, 0)->sizeHint().width());
+}
+
+TEST_CASE("Names give way in their headings for the table to fit its width", "[overlay]")
+{
+    // A six-seat history of names as long as the setup dialog takes: the sheet
+    // never scrolls across, so the names shorten, and keep their whole selves for
+    // the tooltip.
+    const QString longest = QStringLiteral("Bartholomew Fairbank");
+    REQUIRE(longest.size() == newgame::MaximumNameLength);
+
+    std::vector<SheetTable::Column> columns = { { QStringLiteral("Round"), Qt::AlignLeft },
+                                                { QStringLiteral("Cards") } };
+
+    for(int i = 0 ; i < 5 ; i++)
+        columns.push_back({ longest, Qt::AlignRight, true });
+
+    columns.push_back({ QStringLiteral("Ana"), Qt::AlignRight, true });
+
+    SheetTable table;
+    table.setColumns(columns);
+    table.addRow({ { QStringLiteral("30") }, { QStringLiteral("1") },
+                   { QStringLiteral("\u221218"), SheetTable::Tone::Bad, false, QStringLiteral("0/8") } });
+
+    REQUIRE(table.sizeHint().width() > sheet::contentWidth);
+
+    table.fitHeadingsTo(sheet::contentWidth);
+
+    REQUIRE(table.sizeHint().width() <= sheet::contentWidth);
+
+    QLabel* shortened = table.heading(2);
+    REQUIRE(shortened->text() != longest);
+    REQUIRE(shortened->text().endsWith(QChar(0x2026)));
+    REQUIRE(shortened->toolTip() == longest);
+
+    // A short name needs no shortening, and no tooltip to say what it was.
+    REQUIRE(table.heading(7)->text() == QStringLiteral("Ana"));
+    REQUIRE(table.heading(7)->toolTip().isEmpty());
+
+    // The columns that may not give way do not.
+    REQUIRE(table.heading(0)->text() == QStringLiteral("Round"));
+
+    // Filled again, the headings come back whole.
+    table.clearRows();
+    REQUIRE(table.heading(2)->text() == longest);
+}
+
+TEST_CASE("A column wider than its share keeps its cells and the other names give way more", "[overlay]")
+{
+    // Six long names over one column whose cell is far wider than an even share.
+    // That column keeps its cell's width, and the other five share what is left,
+    // so the table still fits. The first build gave every other column the even
+    // share regardless, and the wide column pushed the table past its width.
+    const QString longest = QStringLiteral("Bartholomew Fairbank");
+
+    std::vector<SheetTable::Column> columns = { { QStringLiteral("Round"), Qt::AlignLeft },
+                                                { QStringLiteral("Cards") } };
+
+    for(int i = 0 ; i < 6 ; i++)
+        columns.push_back({ longest, Qt::AlignRight, true });
+
+    SheetTable table;
+    table.setColumns(columns);
+    table.addRow({ { QStringLiteral("1") }, { QStringLiteral("1") },
+                   { QStringLiteral("+5"), SheetTable::Tone::Good, false,
+                     QStringLiteral("0/0 0/0 0/0 0/0 0/0 0/0") } });
+
+    const int wide = table.cell(0, 2)->sizeHint().width();
+    REQUIRE(wide > sheet::contentWidth / 8);
+
+    table.fitHeadingsTo(sheet::contentWidth);
+
+    REQUIRE(table.sizeHint().width() <= sheet::contentWidth);
+
+    // The wide column's heading gives way only as far as its cell, the others
+    // further.
+    REQUIRE(table.heading(2)->sizeHint().width() <= wide);
+    REQUIRE(table.heading(3)->sizeHint().width() < wide);
+    REQUIRE(table.heading(3)->toolTip() == longest);
 }
 
 TEST_CASE("A press on an overlay goes no further", "[overlay]")

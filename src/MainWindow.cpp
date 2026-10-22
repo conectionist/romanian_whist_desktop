@@ -4,11 +4,14 @@
 #include "paint/Theme.h"
 #include "table/BidStripItem.h"
 #include "table/HandItem.h"
+#include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
 #include "ui/MainMenuPage.h"
 #include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
@@ -21,15 +24,20 @@
 #include <romanian_whist/GameEngine.h>
 
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QDockWidget>
+#include <QGraphicsSceneEvent>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QStackedWidget>
 #include <QShortcut>
 #include <QStyleHints>
+#include <QTimer>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -155,8 +163,10 @@ void MainWindow::buildTable()
     // handle here: it has the same second source, the prompt for your card.
     trickPanel = scene->trickPanelItem();
 
-    // THE CORNER BUTTONS ARE LEFT UNCONNECTED, and the scene builds them disabled:
-    // Round history and Last trick open the sheets phase 11 builds.
+    // THE CORNER BUTTONS, in the scene as the panels are: Round history and Last
+    // trick, which open their sheets below (phase 11).
+    connect(scene->historyButton(), &TableButtonItem::clicked, this, &MainWindow::showHistory);
+    connect(scene->lastTrickButton(), &TableButtonItem::clicked, this, &MainWindow::showLastTrick);
 
     scene->setTheme(theme);
 
@@ -242,7 +252,35 @@ void MainWindow::buildTable()
     connect(settingsSheet, &SettingsSheet::settingsChanged, this, &MainWindow::applySettings);
     connect(settingsSheet, &SettingsSheet::closeRequested, this, &MainWindow::hideMenuSheets);
 
-    menuSheets = { rulesSheet, settingsSheet };
+    // THE CORNER BUTTONS' TWO, opened as Rules is. The last trick is drawn from
+    // the table's own card art, whose pictures it shares.
+    historySheet = new HistorySheet(pages);
+    historySheet->setTheme(theme);
+    historySheet->hide();
+
+    connect(historySheet, &HistorySheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    lastTrickSheet = new LastTrickSheet(pages);
+    lastTrickSheet->setTheme(theme);
+    lastTrickSheet->setCards(&scene->cardRenderer());
+    lastTrickSheet->hide();
+
+    connect(lastTrickSheet, &LastTrickSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    menuSheets = { rulesSheet, settingsSheet, historySheet, lastTrickSheet };
+
+    // EVERY SHEET, as it comes up, lets the table's lit things go out under it.
+    sheets = { pauseOverlay, roundSheet, gameOverPanel, rulesSheet, settingsSheet, historySheet,
+               lastTrickSheet };
+
+    for(Overlay* sheet : sheets)
+        sheet->installEventFilter(this);
+
+    // AND THE HISTORY FROM THE TWO SHEETS THAT REPORT SCORES: over the round sheet,
+    // whose hold it keeps, and over the standings, which otherwise cover the table's
+    // own button. Each closes back to the sheet it opened from.
+    connect(roundSheet, &RoundSheet::historyRequested, this, &MainWindow::showHistory);
+    connect(gameOverPanel, &GameOverPanel::historyRequested, this, &MainWindow::showHistory);
 
     // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
     // for a game that has already ended: stop() is idempotent, and a game that
@@ -495,6 +533,36 @@ void MainWindow::applySettings(int botSpeed, bool wait)
     controller.setPacing(pacingOf(lastConfig));
 }
 
+void MainWindow::showHistory()
+{
+    fillHistory();
+    showMenuSheet(historySheet);
+}
+
+void MainWindow::fillHistory()
+{
+    // THE NAMES FROM THE TABLE, in seat order, so the columns are headed before
+    // the first round is scored.
+    std::vector<QString> names;
+
+    if(const std::shared_ptr<const GameSnapshot> snapshot = scene->lastSnapshot())
+    {
+        for(const SeatView& seat : snapshot->seats)
+            names.push_back(QString::fromStdString(seat.name));
+    }
+
+    historySheet->showHistory(roundHistory, names);
+}
+
+void MainWindow::showLastTrick()
+{
+    // The round on the table, which says whether the trick's own needs naming.
+    const std::shared_ptr<const GameSnapshot> snapshot = scene->lastSnapshot();
+
+    lastTrickSheet->showTrick(lastTrick.last(), snapshot ? snapshot->roundNumber : 0);
+    showMenuSheet(lastTrickSheet);
+}
+
 void MainWindow::hideMenuSheets()
 {
     if(!openMenuSheet() && !sheetHolding)
@@ -570,7 +638,11 @@ void MainWindow::showRoundSheet(const RoundResult& result)
     roundSheet->show();
     roundSheet->raise();
 
-    if(roundSheetHolding)
+    // A SHEET THAT WAITS FOR YOU TAKES THE KEYBOARD - but not from under the history
+    // or Rules, open over it. Taken, it was handed back to the sheet on top, whose
+    // default scrolled the history to its foot under a reader of its first rounds
+    // (PR #37's review, finding #4). Closing that sheet gives it to Continue.
+    if(roundSheetHolding && !openMenuSheet())
         roundSheet->focusDefault();
 
     keepMenuSheetOnTop();
@@ -598,10 +670,12 @@ void MainWindow::hideRoundSheet()
 void MainWindow::restoreFocus(bool hadKeyboard)
 {
     // The sheet on top keeps the keyboard where it already is inside it - on its
-    // Main menu, say - and otherwise takes it.
+    // Main menu, say - and otherwise takes it. When what went had the keyboard,
+    // the sheet did not have it before the hide: Qt put it there, on its first
+    // control, and the sheet takes it at its default.
     if(Overlay* sheet = activeOverlay())
     {
-        if(!holdsKeyboard(sheet))
+        if(hadKeyboard || !holdsKeyboard(sheet))
             sheet->focusDefault();
 
         return;
@@ -632,6 +706,46 @@ void MainWindow::restoreFocus(bool hadKeyboard)
         menuPage->focusNewGame();
     else
         table->setFocus(Qt::OtherFocusReason);
+}
+
+void MainWindow::leaveTable()
+{
+    // NAMING THE VIEW'S VIEWPORT, which the scene reads the view through: a leave
+    // naming no widget crashes it.
+    QGraphicsSceneEvent leave(QEvent::GraphicsSceneLeave);
+    leave.setWidget(table->viewport());
+    QCoreApplication::sendEvent(scene, &leave);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    // ONCE THE EVENT UNDER WAY IS DONE, not now. A corner button's sheet opens
+    // from inside the scene's mouse release, and the scene ends a release by
+    // sending a hover at where it happened (QGraphicsScene::mouseReleaseEvent()),
+    // which lit the button again straight after a leave sent from here.
+    //
+    // ONLY FOR THE SHEET THAT FIRST COVERS THE TABLE, and only if it is still up
+    // by then (leaveTable()).
+    Overlay* shown = event->type() == QEvent::Show ? qobject_cast<Overlay*>(watched) : nullptr;
+
+    if(shown)
+    {
+        const bool alreadyCovered = std::any_of(sheets.begin(), sheets.end(), [shown](const Overlay* sheet)
+        {
+            return sheet != shown && sheet->isVisible();
+        });
+
+        if(!alreadyCovered)
+        {
+            QTimer::singleShot(0, this, [this, sheet = QPointer<Overlay>(shown)]
+            {
+                if(sheet && sheet->isVisible())
+                    leaveTable();
+            });
+        }
+    }
+
+    return QMainWindow::eventFilter(watched, event);
 }
 
 bool MainWindow::holdsKeyboard(const QWidget* widget) const
@@ -682,7 +796,10 @@ void MainWindow::showGameOverPanel()
 {
     gameOverPanel->show();
     gameOverPanel->raise();
-    gameOverPanel->focusDefault();
+
+    // Not from under an open sheet, as the round sheet (showRoundSheet()).
+    if(!openMenuSheet())
+        gameOverPanel->focusDefault();
 
     keepMenuSheetOnTop();
 }
@@ -909,6 +1026,10 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // AND THE MENU BAR'S SHEETS, which can be up over a game New Game replaces.
     dropMenuSheets();
 
+    // AND WHAT THE CORNER BUTTONS SHOW: the last game's rounds and its last trick.
+    roundHistory.clear();
+    lastTrick.clear();
+
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
     returningToMenu = false;
@@ -1018,6 +1139,14 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     // thing they click.
     scene->setSnapshot(snapshot);
     hand->setPlayable(false);
+
+    // THE LAST TRICK, kept from the frame that finishes it. A hold lands at the
+    // game's next pause, so a frame or two can still arrive under an open sheet;
+    // it shows the trick they finish rather than one already gone by.
+    lastTrick.observe(*snapshot);
+
+    if(lastTrickSheet->isVisible())
+        lastTrickSheet->showTrick(lastTrick.last(), snapshot->roundNumber);
 }
 
 // THE GAME THREAD IS PARKED IN makeBet() FROM HERE UNTIL onBidChosen(), which is
@@ -1272,6 +1401,14 @@ void MainWindow::onGameStopped()
 
 void MainWindow::onRoundScored(RoundResult result)
 {
+    // INTO THE HISTORY BEFORE ANYTHING ELSE, the final round of an unattended game
+    // included: it gets no sheet below, and the standings' Round history is where
+    // it is read. An open history takes it in, as the hold may land after it.
+    roundHistory.push_back(result);
+
+    if(historySheet->isVisible())
+        fillHistory();
+
     // THE LAST ROUND OF AN UNATTENDED GAME GETS NO SHEET. Its numbers are the
     // ones the game-over panel is about to show in full, and a sheet that
     // flashed for a dwell and was replaced would be two panels in a second.

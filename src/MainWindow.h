@@ -6,6 +6,7 @@
 #include "engine/Prompts.h"
 #include "engine/RoundResult.h"
 #include "paint/Theme.h"
+#include "ui/LastTrick.h"
 #include "ui/NewGameDialog.h"
 
 #include <QMainWindow>
@@ -33,6 +34,8 @@ class BidStripItem;
 class CardArtWindow;
 class GameOverPanel;
 class HandItem;
+class HistorySheet;
+class LastTrickSheet;
 class MainMenuPage;
 class MenuBar;
 class Overlay;
@@ -95,6 +98,10 @@ protected:
     // also catches Tab from the menu bar and the log. The bar is still reached
     // by its Alt shortcuts.
     bool focusNextPrevChild(bool next) override;
+
+    // A sheet's showing, for leaveTable(): when it covers a table no other sheet
+    // already covers.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 
 private slots:
@@ -176,6 +183,12 @@ private slots:
     // keyboard back to what is beneath.
     void hideMenuSheets();
 
+    // THE TABLE'S CORNER BUTTONS (the redesign's phase 11), as the menu bar's
+    // sheets: over whatever is showing, holding a game in play while up. Round
+    // history also opens from the round sheet and the standings, over them.
+    void showHistory();
+    void showLastTrick();
+
 private:
     void appendLine(const QString& line);
 
@@ -233,6 +246,10 @@ private:
     void showRoundSheet(const RoundResult& result);
     void hideRoundSheet();
 
+    // Fills the history sheet from roundHistory and the table's names, without
+    // opening it: showHistory() opens it, and a round scored under it refills it.
+    void fillHistory();
+
     // THE MENU BAR'S SHEET THAT IS UP, one of menuSheets, or null. They open
     // over everything else and close back to it, as the mock-up's do, so
     // whatever raises itself while one is up puts it back on top
@@ -261,7 +278,26 @@ private:
     // falling back to the table then took the keyboard from wherever the player
     // had put it, the log for one, once a round. Read it with holdsKeyboard()
     // BEFORE the hide, which is when Qt moves the keyboard on.
+    //
+    // AND THE SHEET BENEATH AT ITS DEFAULT, when what went had the keyboard -
+    // not wherever Qt's hide put it, which is the first control in that sheet: the
+    // round sheet's Round history since phase 11, so Enter after closing the
+    // history opened it again rather than Continuing (found in the running app).
     void restoreFocus(bool hadKeyboard);
+
+    // THE TABLE LETS GO OF THE CURSOR when a sheet comes over it: the scene is
+    // told the cursor has left, so nothing stays lit under the dim - a corner
+    // button above all, which its own sheet opens over while the cursor rests on
+    // it. The scene hears of a cursor only from the view, and the view hears
+    // nothing until the mouse next moves (found in the running app, phase 11).
+    // eventFilter() sends it once the event under way is done.
+    //
+    // ONCE, AND ONLY WHILE THE SHEET IS UP (PR #37's review, finding #2). A sheet
+    // over another sends nothing: the table had its leave, and another would close
+    // the tooltip of a shortened name in the history. Nor does a sheet gone again by
+    // then - an unwaited round sheet at top speed - which would put out a card lit
+    // under a cursor that never left it.
+    void leaveTable();
 
     // Whether the keyboard is on `widget` or inside it. Null holds nothing.
     bool holdsKeyboard(const QWidget* widget) const;
@@ -352,10 +388,31 @@ private:
     RulesSheet* rulesSheet = nullptr;
     SettingsSheet* settingsSheet = nullptr;
 
-    // EVERY SHEET THE MENU BAR OPENS, in one list, so that one more - phase 11's
-    // Round history and Last trick - is added here and nowhere else:
-    // showMenuSheet(), dropMenuSheets() and openMenuSheet() all go through it.
+    // The table's Round history and Last trick (phase 11), the same arrangement
+    // again: opened from its corner buttons, and the history from the round sheet
+    // and the standings too.
+    HistorySheet* historySheet = nullptr;
+    LastTrickSheet* lastTrickSheet = nullptr;
+
+    // EVERY SHEET THE MENU BAR AND THE CORNER BUTTONS OPEN, in one list, so that
+    // one more is added here and nowhere else: showMenuSheet(), dropMenuSheets()
+    // and openMenuSheet() all go through it.
     std::vector<Overlay*> menuSheets;
+
+    // AND EVERY SHEET AT ALL, those and the pause menu, the round sheet and the
+    // standings: the seven whose showing covers the table (eventFilter()).
+    std::vector<Overlay*> sheets;
+
+    // THE GAME'S ROUNDS SO FAR, one RoundResult each, as onRoundScored() delivers
+    // them: the only record of what a round was worth, since the engine keeps
+    // none (RoundResult.h). Here rather than on the bridge, which would be writing
+    // it on the game thread for this one to read. Emptied by startGame().
+    std::vector<RoundResult> roundHistory;
+
+    // THE LAST TRICK FINISHED IN THE GAME, in whichever round, read off the frames
+    // render() draws. Emptied by startGame(), and by nothing else: a new game's
+    // round 1 has the old one's number.
+    lasttrick::Tracker lastTrick;
 
     // THE FAN, owned by the scene rather than by this window - it is a
     // QGraphicsObject in the table, not a widget. Held as a handle because this

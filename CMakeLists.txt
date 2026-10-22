@@ -155,6 +155,12 @@ qt_add_library(desktop_core STATIC
     src/ui/GameOverPanel.cpp
     src/ui/RoundSheet.h
     src/ui/RoundSheet.cpp
+    src/ui/HistorySheet.h
+    src/ui/HistorySheet.cpp
+    src/ui/LastTrick.h
+    src/ui/LastTrick.cpp
+    src/ui/LastTrickSheet.h
+    src/ui/LastTrickSheet.cpp
     src/ui/RulesSheet.h
     src/ui/RulesSheet.cpp
     src/ui/SettingsSheet.h

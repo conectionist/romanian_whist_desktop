@@ -4,10 +4,13 @@
 #include "WindowDriving.h"
 #include "table/BidStripItem.h"
 #include "table/HandItem.h"
+#include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableView.h"
 #include "ui/GameOverPanel.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
 #include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
@@ -20,11 +23,15 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QDockWidget>
+#include <QGraphicsSceneMouseEvent>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -177,6 +184,102 @@ void answerModalWaitingWatchedGame(int afterMs)
         dialog->done(QDialog::Accepted);
     });
 }
+
+// A PLAYED GAME WITH NOTHING YET PLAYED IN IT, whatever the last game was: seated,
+// as fast as it goes, and not waiting after a round - so it parks at your first
+// bid, round 1's, with no trick won and no round scored. A new game's round 1 is
+// the same number as the last game's, which is what makes it the test of what the
+// window clears.
+void answerModalFreshSeatedGame(int afterMs)
+{
+    QTimer::singleShot(afterMs, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QRadioButton* play = dialog->findChild<QRadioButton*>("playing"))
+            play->setChecked(true);
+
+        if(QSlider* speed = dialog->findChild<QSlider*>("speed"))
+            speed->setValue(newgame::FastestSpeed);
+
+        if(QCheckBox* wait = dialog->findChild<QCheckBox*>("waitEachRound"))
+            wait->setChecked(false);
+
+        dialog->done(QDialog::Accepted);
+    });
+}
+
+// A CLICK ON ONE OF THE TABLE'S CORNER BUTTONS, through its scene as a player's
+// goes: the button has to be shown, enabled and on top there to take it.
+void clickCorner(TableButtonItem* button)
+{
+    QGraphicsScene* scene = button->scene();
+    REQUIRE(scene != nullptr);
+    REQUIRE(button->isVisible());
+
+    const QPointF middle = button->mapRectToScene(QRectF(QPointF(), button->size())).center();
+
+    QGraphicsSceneMouseEvent down(QEvent::GraphicsSceneMousePress);
+    down.setScenePos(middle);
+    down.setButton(Qt::LeftButton);
+    down.setButtons(Qt::LeftButton);
+    QCoreApplication::sendEvent(scene, &down);
+
+    QGraphicsSceneMouseEvent up(QEvent::GraphicsSceneMouseRelease);
+    up.setScenePos(middle);
+    up.setButton(Qt::LeftButton);
+    QCoreApplication::sendEvent(scene, &up);
+}
+
+// WHAT Qt DOES IN A LIVE WINDOW when the widget with the keyboard is hidden: it
+// hands the keyboard on through the window's own Tab handling, which under a sheet
+// lands on the first control of the sheet beneath. The offscreen platform's windows
+// are never active, so Qt does nothing there and the window's own restoreFocus()
+// looked right in every test - this does what Qt does, at the same moment (found in
+// the running app, phase 11).
+class KeyboardMovedOnHide : public QObject
+{
+public:
+    explicit KeyboardMovedOnHide(QWidget* to) : to(to) {}
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if(event->type() == QEvent::Hide)
+            to->setFocus(Qt::TabFocusReason);
+
+        return false;
+    }
+
+private:
+    QWidget* to;
+};
+
+// The rows under the history's headings, its Total row included.
+int historyRows(const HistorySheet* sheet)
+{
+    SheetTable* rows = sheet->findChild<SheetTable*>("historyRows");
+    REQUIRE(rows != nullptr);
+    return rows->rowCount();
+}
+
+// How many times the scene has been told the cursor left it.
+class SceneLeaves : public QObject
+{
+public:
+    int count = 0;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if(event->type() == QEvent::GraphicsSceneLeave)
+            count++;
+
+        return false;
+    }
+};
 
 }
 
@@ -1835,4 +1938,439 @@ TEST_CASE("Play again leaves the keyboard on the table and not the menu bar", "[
     REQUIRE_FALSE(panel->isVisible());
     REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
     REQUIRE(focus == table);
+}
+
+TEST_CASE("Round history counts the rounds and a new game empties it", "[main-window]")
+{
+    // The redesign's phase 11. The window keeps every RoundResult as it arrives,
+    // and the round sheet's quiet Round history opens them over it - keeping its
+    // hold, and closing back to it with the keyboard on Continue.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    RoundSheet* round = window.findChild<RoundSheet*>();
+    HistorySheet* history = window.findChild<HistorySheet*>();
+    REQUIRE(log != nullptr);
+    REQUIRE(round != nullptr);
+    REQUIRE(history != nullptr);
+
+    answerModalWaitingWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    REQUIRE(pumpUntil(20000, [round]{ return round->isVisible(); }));
+
+    QPushButton* fromRound = round->findChild<QPushButton*>("roundHistory");
+    QPushButton* continueButton = round->findChild<QPushButton*>("continueRound");
+    QPushButton* close = history->findChild<QPushButton*>("closeHistory");
+    REQUIRE(fromRound != nullptr);
+    REQUIRE(continueButton != nullptr);
+    REQUIRE(close != nullptr);
+
+    fromRound->click();
+
+    REQUIRE(history->isVisible());
+    REQUIRE(historyRows(history) == 2);
+
+    // Closed, the round sheet is still up and still holding, and Enter is
+    // Continue's again - though Qt hands the keyboard to the round sheet's first
+    // button, Round history, as the history goes: Enter there opened it again.
+    KeyboardMovedOnHide qtsMove(fromRound);
+    history->installEventFilter(&qtsMove);
+
+    const int atSheet = log->blockCount();
+    close->click();
+    pump(600);
+
+    history->removeEventFilter(&qtsMove);
+
+    REQUIRE_FALSE(history->isVisible());
+    REQUIRE(round->isVisible());
+    REQUIRE(log->blockCount() == atSheet);
+    REQUIRE(window.focusWidget() == continueButton);
+
+    // The next round's sheet: two rounds now.
+    continueButton->click();
+    REQUIRE(pumpUntil(20000, [&]{ return round->isVisible() && log->blockCount() > atSheet; }));
+
+    fromRound->click();
+    REQUIRE(historyRows(history) == 3);
+    close->click();
+
+    // A NEW GAME STARTS WITH NO HISTORY: the table's own button finds nothing but
+    // the line that says so.
+    answerModalFreshSeatedGame(300);
+    window.findChild<QAction*>("newGameAction")->trigger();
+
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(scene != nullptr);
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    clickCorner(scene->historyButton());
+    REQUIRE(history->isVisible());
+
+    SheetTable* rows = history->findChild<SheetTable*>("historyRows");
+    REQUIRE(rows->cell(0, 0)->text() == QStringLiteral("No rounds finished yet."));
+}
+
+TEST_CASE("The table's Round history holds a watched game and Esc closes it", "[main-window]")
+{
+    // The corner button, as the menu bar's Rules: over the table, holding a game
+    // in play while it is up.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
+    HistorySheet* history = window.findChild<HistorySheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(log != nullptr);
+    REQUIRE(history != nullptr);
+    REQUIRE(pause != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(2000);
+    REQUIRE(log->blockCount() > 1);
+
+    clickCorner(scene->historyButton());
+    REQUIRE(history->isVisible());
+
+    // Across the middle of the hold, as the Rules case measures it.
+    pump(600);
+    const int settled = log->blockCount();
+    pump(1800);
+    const int held = log->blockCount();
+
+    INFO("settled " << settled << ", held " << held);
+    REQUIRE(held == settled);
+
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+
+    REQUIRE_FALSE(history->isVisible());
+    REQUIRE_FALSE(pause->isVisible());
+
+    pump(2000);
+    REQUIRE(log->blockCount() > held);
+}
+
+TEST_CASE("The standings open the whole history and its last round", "[main-window]")
+{
+    // An unattended game's final round gets no round sheet (onRoundScored()), so
+    // the standings' Round history is where it is read - and it must be there.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    HistorySheet* history = window.findChild<HistorySheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(panel != nullptr);
+    REQUIRE(history != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalShortWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    REQUIRE(pumpUntil(60000, [panel]{ return panel->isVisible(); }));
+
+    const unsigned int rounds = scene->lastSnapshot()->roundCount;
+    REQUIRE(rounds > 0);
+
+    panel->findChild<QPushButton*>("gameOverHistory")->click();
+
+    REQUIRE(history->isVisible());
+    REQUIRE(historyRows(history) == static_cast<int>(rounds) + 1);
+
+    SheetTable* rows = history->findChild<SheetTable*>("historyRows");
+    REQUIRE(rows->cell(static_cast<int>(rounds) - 1, 0)->text() == QString::number(rounds));
+
+    // Closed, back to the standings, the keyboard on Play again - not on Main
+    // menu, their first button, where Qt hands it as the history goes and where
+    // Enter would leave the game.
+    KeyboardMovedOnHide qtsMove(panel->findChild<QPushButton*>("gameOverMainMenu"));
+    history->installEventFilter(&qtsMove);
+
+    history->findChild<QPushButton*>("closeHistory")->click();
+    pump(50);
+
+    history->removeEventFilter(&qtsMove);
+
+    REQUIRE(panel->isVisible());
+    REQUIRE(window.focusWidget() == panel->findChild<QPushButton*>("playAgain"));
+}
+
+TEST_CASE("Last trick keeps the trick just won and a new game starts with none", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    RoundSheet* round = window.findChild<RoundSheet*>();
+    LastTrickSheet* last = window.findChild<LastTrickSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(round != nullptr);
+    REQUIRE(last != nullptr);
+    REQUIRE(scene != nullptr);
+
+    // Held at the first round's sheet: its one trick, a card from every seat.
+    answerModalWaitingWatchedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    REQUIRE(pumpUntil(20000, [round]{ return round->isVisible(); }));
+
+    // The sheet's dim covers the corner, so the button's own signal, as a click on
+    // it sends.
+    emit scene->lastTrickButton()->clicked();
+
+    REQUIRE(last->isVisible());
+    REQUIRE(last->shownTrick().has_value());
+    REQUIRE(last->shownTrick()->roundNumber == 1);
+    REQUIRE(last->shownTrick()->cards.size() == scene->lastSnapshot()->seats.size());
+
+    // Esc closes it, back to the round sheet.
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &escape);
+
+    REQUIRE_FALSE(last->isVisible());
+    REQUIRE(round->isVisible());
+
+    // A NEW GAME'S FIRST ROUND IS ROUND 1 TOO, and the last trick outlasts its
+    // round, so only the window's clearing forgets the old game's trick: a seated
+    // game, parked at your first bid with nothing played.
+    answerModalFreshSeatedGame(300);
+    window.findChild<QAction*>("newGameAction")->trigger();
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    clickCorner(scene->lastTrickButton());
+
+    REQUIRE(last->isVisible());
+    REQUIRE_FALSE(last->shownTrick().has_value());
+    REQUIRE(last->findChild<QLabel*>("lastTrickMeta")->text()
+            == QStringLiteral("No trick has finished yet."));
+}
+
+TEST_CASE("At a new round the last trick is the last round's and says so", "[main-window]")
+{
+    // The owner's call, 2026-10-22: "Last trick" is the last trick played, not
+    // this round's. Round 1 of a seated game is one card; you bid and play it, and
+    // at round 2's bid the last trick is round 1's, named as such.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    LastTrickSheet* last = window.findChild<LastTrickSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(last != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalFreshSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    HandItem* hand = scene->handItem();
+
+    // You bid first in round 1, so any bid stands.
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+    REQUIRE(clickBid(*bidStrip, 0));
+
+    REQUIRE(pumpUntil(10000, [hand]{ return hand->isPlayable(0); }));
+    hand->activate(0);
+
+    // Round 2, parked at your bid.
+    REQUIRE(pumpUntil(10000, [&]
+    {
+        return bidStrip->isVisible() && scene->lastSnapshot()->roundNumber == 2;
+    }));
+
+    clickCorner(scene->lastTrickButton());
+
+    REQUIRE(last->isVisible());
+    REQUIRE(last->shownTrick().has_value());
+    REQUIRE(last->shownTrick()->roundNumber == 1);
+    REQUIRE(last->shownTrick()->cards.size() == scene->lastSnapshot()->seats.size());
+    REQUIRE(last->findChild<QLabel*>("lastTrickMeta")->text().endsWith(QStringLiteral("round 1")));
+}
+
+TEST_CASE("A corner button goes out under the sheet it opens", "[main-window]")
+{
+    // The button is lit under the cursor and clicked; its sheet comes up over it
+    // with the cursor still resting there. The scene hears of the cursor only from
+    // the view, which hears nothing until the mouse moves, so the button stayed lit
+    // under the dim (found in the running app, phase 11). As the mock-up's does,
+    // it goes out.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    LastTrickSheet* last = window.findChild<LastTrickSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(last != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    TableButtonItem* button = scene->lastTrickButton();
+    REQUIRE(pumpUntil(10000, [button]{ return button->isVisible(); }));
+
+    // A mouse move over it, through the view as a real one comes.
+    TableView* view = window.findChild<TableView*>();
+    REQUIRE(view != nullptr);
+
+    const QPointF middle = button->mapRectToScene(QRectF(QPointF(), button->size())).center();
+    const QPoint at = view->mapFromScene(middle);
+
+    QMouseEvent move(QEvent::MouseMove, QPointF(at), QPointF(view->viewport()->mapToGlobal(at)),
+                     Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(view->viewport(), &move);
+
+    REQUIRE(button->isHovered());
+
+    clickCorner(button);
+    pump(50);
+
+    REQUIRE(last->isVisible());
+    REQUIRE_FALSE(button->isHovered());
+}
+
+TEST_CASE("A sheet tells the table once and only while it is up", "[main-window]")
+{
+    // PR #37's review, finding #2. Every leave closes the application's tooltip, so
+    // a round sheet coming under the history closed the one that shows a shortened
+    // name whole; and an unwaited round sheet at top speed, gone again before its
+    // leave was sent, put out a card lit under a cursor that had not moved.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    TableScene* scene = window.findChild<TableScene*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    RoundSheet* round = window.findChild<RoundSheet*>();
+    REQUIRE(scene != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(settings != nullptr);
+    REQUIRE(round != nullptr);
+
+    SceneLeaves leaves;
+    scene->installEventFilter(&leaves);
+
+    // The first sheet over the table: one leave.
+    rules->show();
+    pump(50);
+    REQUIRE(leaves.count == 1);
+
+    // A sheet over a sheet: the table is already covered.
+    round->show();
+    pump(50);
+    REQUIRE(leaves.count == 1);
+
+    round->hide();
+    rules->hide();
+    pump(50);
+
+    // A sheet gone again before its leave was due: nothing.
+    settings->show();
+    settings->hide();
+    pump(50);
+    REQUIRE(leaves.count == 1);
+
+    scene->removeEventFilter(&leaves);
+}
+
+TEST_CASE("Rounds scored under the history leave the reader where they were", "[main-window]")
+{
+    // PR #37's review, finding #4. The hold lands at the game's next pause, so a
+    // round can be scored under a history just opened. At its foot, the reader kept
+    // reading there while the new rows went out of view below; scrolled up to the
+    // first rounds, a round that waited took the keyboard and handed it back, and
+    // the history's default threw the reader to its foot.
+    //
+    // THE ROUNDS ARE DELIVERED AS THE BRIDGE DELIVERS THEM, to onRoundScored(), over
+    // a seated game parked at your first bid: nothing else moves while they arrive.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    HistorySheet* history = window.findChild<HistorySheet*>();
+    RoundSheet* round = window.findChild<RoundSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(history != nullptr);
+    REQUIRE(round != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalFreshSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    clickCorner(scene->historyButton());
+    REQUIRE(history->isVisible());
+
+    QPushButton* close = history->findChild<QPushButton*>("closeHistory");
+    QPushButton* continueButton = round->findChild<QPushButton*>("continueRound");
+    QScrollBar* bar = history->findChild<QScrollArea*>()->verticalScrollBar();
+    REQUIRE(close != nullptr);
+    REQUIRE(continueButton != nullptr);
+    REQUIRE(window.focusWidget() == close);
+
+    const auto score = [&window](unsigned int number, bool held)
+    {
+        RoundResult result;
+        result.roundNumber = number;
+        result.roundCount = 40;
+        result.trickCount = 1;
+        result.held = held;
+
+        REQUIRE(QMetaObject::invokeMethod(&window, "onRoundScored", Qt::DirectConnection,
+                                          Q_ARG(RoundResult, result)));
+        pump(20);
+    };
+
+    // At its foot, it stays there as the rows come.
+    for(unsigned int r = 1 ; r <= 30 ; r++)
+        score(r, false);
+
+    REQUIRE(bar->maximum() > 0);
+    REQUIRE(bar->value() == bar->maximum());
+
+    // Scrolled up to the first rounds, it stays there through a round that waits,
+    // and keeps the keyboard; the round sheet waits beneath.
+    bar->setValue(0);
+    score(31, true);
+
+    REQUIRE(round->isVisible());
+    REQUIRE(bar->value() == 0);
+    REQUIRE(window.focusWidget() == close);
+
+    // Closed, the keyboard goes to the waiting sheet's Continue - though Qt hands it
+    // to that sheet's first button as the history goes.
+    KeyboardMovedOnHide qtsMove(round->findChild<QPushButton*>("roundHistory"));
+    history->installEventFilter(&qtsMove);
+
+    close->click();
+    pump(50);
+
+    history->removeEventFilter(&qtsMove);
+
+    REQUIRE_FALSE(history->isVisible());
+    REQUIRE(window.focusWidget() == continueButton);
 }

@@ -16,6 +16,7 @@
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
+class QHBoxLayout;
 class QLabel;
 class QScrollArea;
 class QVBoxLayout;
@@ -43,6 +44,9 @@ inline constexpr int border = 1;
 inline constexpr int paddingTop = 26;
 inline constexpr int paddingX = 30;
 inline constexpr int paddingBottom = 24;
+
+// What a full-width sheet has across inside its border and padding: 658.
+inline constexpr int contentWidth = width - 2 * (border + paddingX);
 
 // What a line of a sheet is, which says how it is set (page.html):
 enum class Role
@@ -133,18 +137,27 @@ public:
     {
         QString heading;
         Qt::Alignment alignment = Qt::AlignRight;
+
+        // A heading that may be shortened, with an ellipsis, to fit the table into
+        // a width: a player's name over a column of numbers (fitHeadingsTo()).
+        bool elide = false;
     };
 
     // A cell's colour: the text's own, or a score's - green for a gain and red for
     // a loss, which reinforces the sign it carries rather than replacing it
-    // (section 18).
+    // (section 18) - or the muted of a line that says there is nothing to show.
     enum class Tone
     {
         Plain,
         Good,
-        Bad
+        Bad,
+        Muted
     };
 
+    // Given its first few parts - { text, tone, strong } - a cell takes the
+    // defaults for the rest. Every part after the text has an initializer of its
+    // own, `note` included, which is what keeps -Wmissing-field-initializers quiet
+    // at every table.
     struct Cell
     {
         QString text;
@@ -152,6 +165,11 @@ public:
 
         // Bold: your own row, or a winner's.
         bool strong = false;
+
+        // A SECOND, SMALLER PART AFTER THE TEXT, in .note's muted 15 on the text's
+        // baseline: the history's "+6 1/1", where the tone colours the score and
+        // the note stays muted whatever it is. Plain text, as the cell's own.
+        QString note{};
     };
 
     explicit SheetTable(QWidget* parent = nullptr);
@@ -161,13 +179,32 @@ public:
 
     void addRow(const std::vector<Cell>& cells);
 
+    // ONE LINE ACROSS EVERY COLUMN, muted, in .note's 15: the mock-up's
+    // `colspan` row that says a table has nothing in it yet. Counted as a row,
+    // whose one cell is in column 0.
+    void addNote(const QString& text);
+
     // Every row but the headings.
     void clearRows();
+
+    // SHORTENS THE HEADINGS THAT MAY BE, so the table is no wider than `width`:
+    // what the other columns need is set aside, and the rest shared out evenly
+    // between the elided ones - but a column whose cells are wider than its share
+    // keeps its cells' width, and the others share what that leaves. Measured by
+    // each heading's own size, as the layout measures it. A shortened heading ends
+    // in an ellipsis and keeps its whole text as its tooltip. Run after the rows
+    // are in; filling the table again (setColumns(), clearRows()) restores the
+    // headings whole. Cells too wide to fit at all still overflow.
+    void fitHeadingsTo(int width);
 
     // The rows added since the last clear, not counting the headings; and one
     // row's cell, 0 being the first row under them. READ by the sheets' tests.
     int rowCount() const { return static_cast<int>(rows.size()); }
     QLabel* cell(int row, int column) const;
+
+    // A cell's note, empty for none; and a column's heading. READ by tests.
+    QString note(int row, int column) const;
+    QLabel* heading(int column) const;
 
     void setColours(const Theme::TablePalette& palette);
 
@@ -266,18 +303,41 @@ protected:
     void dress(QLabel* label, sheet::Role role);
 
     // The sheet's buttons, at the bottom right, 12 apart and 20 below what is
-    // above them, in the order given: the primary one last.
-    void addActions(std::initializer_list<SheetButton*> buttons);
+    // above them, in the order given: the primary one last. Returns their row, for
+    // a sheet whose primary button changes (GameOverPanel's failure face).
+    QHBoxLayout* addActions(std::initializer_list<SheetButton*> buttons);
 
     // Sizes the sheet to what it now holds, and centres it: called when its
     // content changes. No wider than section 2.13's 720 or the page less its
     // margins, and no taller than the page - past that, its body scrolls.
     void placeSheet();
 
+    // WHAT THE SHEET'S CONTENT HAS ACROSS, inside its border and padding: 658 at
+    // full width, less on a narrow page - and less the scroll bar when the body
+    // scrolls, since the bar takes its width from the body (PR #37's review,
+    // finding #3).
+    int contentWidth() const;
+
+    // Called by placeSheet() when contentWidth() has changed: the page narrowed or
+    // widened, or the body began or stopped scrolling. A sheet that fits its
+    // content to the width - the history's headings - fits it again here.
+    virtual void contentWidthChanged() {}
+
+    // Scrolls the sheet's body until `widget`, inside it, is in view: nothing,
+    // when the whole sheet fits the page.
+    void reveal(QWidget* widget);
+
+    // KEEPS THE READER'S PLACE AS THE BODY GROWS, for a sheet whose rows arrive while
+    // it is open (the history): one at the foot is kept there, so the new rows come
+    // into view, and one scrolled up stays where they are (PR #37's review, finding
+    // #4). Called once, by a sheet that wants it.
+    void keepFootInView();
+
     // The dim, then the panel round the sheet.
     void paintEvent(QPaintEvent* event) override;
 
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
     // SWALLOWED, and not left to the default. QWidget::mousePressEvent() ignores
     // the event, which propagates to the PARENT rather than to the widgets
@@ -290,11 +350,23 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // The sheet's width, its border included: 720, or the page less its margins.
+    int sheetWidth() const;
+
     Theme palette = Theme::dark();
 
     QScrollArea* scroll = nullptr;
     QWidget* plaque = nullptr;
     QVBoxLayout* column = nullptr;
+
+    // Whether the body scrolls, as placeSheet() last decided; and the content width
+    // it last reported to contentWidthChanged().
+    bool bodyScrolls = false;
+    int reportedWidth = -1;
+
+    // Whether the body was last left at its foot - or does not scroll at all
+    // (keepFootInView()).
+    bool atFoot = true;
 
     // The panel's picture, with its drop shadow: the overlay repaints with every
     // frame of the table under a sheet that does not hold the game, and the two

@@ -80,7 +80,11 @@ public:
     // card HEIGHT because section 18.1 makes every table metric derive from it;
     // turning that height into the size to ask for is this class's half, so that
     // art with a different aspect changes one function rather than the layout.
-    QSize sizeForHeight(qreal height) const;
+    //
+    // STATIC, since the aspect is the art's and not a renderer's: a sheet that has
+    // no renderer yet still lays out cards of the right shape (PR #37's review,
+    // finding #7).
+    static QSize sizeForHeight(qreal height);
 
     // How many pictures this has painted rather than found in its cache: faces
     // and backs both. READ-ONLY and for tests, which are how a window being resized

@@ -6,6 +6,7 @@
 #include "table/RoundText.h"
 #include "ui/RoundSheet.h"
 
+#include <QCoreApplication>
 #include <QLabel>
 #include <QPalette>
 #include <QPushButton>
@@ -330,4 +331,34 @@ TEST_CASE("The sheet shows the streak warning only when there is one", "[round-s
     // worse than none at all - it names a streak that has just been broken.
     sheet.showResult(roundResult({ seatResult("Ana", 7, 33) }));
     REQUIRE(warningLabel()->text().isEmpty());
+}
+
+TEST_CASE("The round sheet's quiet Round history sits before Continue", "[round-sheet]")
+{
+    // The mock-up's [Round history] beside its deal button (phase 11): the whole
+    // game so far, without taking Enter from Continue.
+    RoundSheet sheet;
+    sheet.showResult(roundResult({ seatResult("Ana", 7, 34) }));
+
+    QPushButton* history = sheet.findChild<QPushButton*>("roundHistory");
+    QPushButton* continueButton = sheet.findChild<QPushButton*>("continueRound");
+    REQUIRE(history != nullptr);
+    REQUIRE(continueButton != nullptr);
+
+    REQUIRE(static_cast<SheetButton*>(history)->kind() == SheetButton::Kind::Quiet);
+    REQUIRE(continueButton->isDefault());
+    REQUIRE_FALSE(history->isDefault());
+    REQUIRE_FALSE(history->autoDefault());
+
+    sheet.resize(1280, 754);
+    sheet.show();
+    QCoreApplication::processEvents();
+
+    REQUIRE(history->geometry().right() < continueButton->geometry().left());
+
+    int asked = 0;
+    QObject::connect(&sheet, &RoundSheet::historyRequested, [&asked] { asked++; });
+
+    history->click();
+    REQUIRE(asked == 1);
 }

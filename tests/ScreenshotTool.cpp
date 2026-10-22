@@ -13,6 +13,8 @@
 #include "table/TrickPanelItem.h"
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
@@ -691,7 +693,8 @@ TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
 // sheet-pause.png, sheet-round.png, sheet-game-over.png, sheet-rules.png and
 // sheet-settings.png: each of the five sheets over a table, on a page of 1920 x
 // 1034 - the window less its menu bar, as table-empty.png is. The mock-up has no
-// pictures of its sheets, so these are looked at as they are.
+// pictures of its sheets, so these are looked at as they are. Phase 11 adds
+// sheet-history.png and sheet-last-trick.png.
 //
 // A FIXTURE TABLE, NOT A GAME: a round sheet that waits and a game's end are a
 // whole game away, and what is being looked at is the sheet, not the moment. The
@@ -746,6 +749,104 @@ RoundResult sheetRound()
     return result;
 }
 
+// TWELVE ROUNDS OF THE SIX-SEAT SCHEDULE: six of one card, then two to seven. You,
+// Ana and Bogdan hit all five rounds of two to six cards, and the engine's ten for
+// it lands in the round of six, a +16 or +17; one-card rounds count for no streak
+// (RULES.md).
+std::vector<RoundResult> sheetHistory()
+{
+    const unsigned int cards[] = { 1, 1, 1, 1, 1, 1, 2, 3, 4, 5, 6, 7 };
+
+    // Per round, per seat: the bid and the tricks taken.
+    const int bets[12][6] = { { 0, 1, 0, 0, 1, 0 }, { 1, 0, 0, 1, 0, 0 }, { 0, 0, 1, 0, 0, 1 },
+                              { 1, 1, 0, 0, 0, 0 }, { 0, 0, 0, 1, 1, 0 }, { 0, 1, 1, 0, 0, 0 },
+                              { 1, 1, 0, 0, 1, 0 }, { 0, 1, 1, 0, 1, 1 }, { 1, 2, 0, 1, 1, 0 },
+                              { 1, 1, 2, 0, 2, 1 }, { 2, 2, 1, 1, 1, 0 }, { 2, 1, 2, 1, 2, 1 } };
+    const int taken[12][6] = { { 0, 1, 0, 0, 0, 0 }, { 1, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 1 },
+                               { 0, 1, 0, 0, 0, 0 }, { 0, 0, 0, 1, 0, 0 }, { 0, 1, 0, 0, 0, 0 },
+                               { 1, 1, 0, 0, 0, 0 }, { 0, 1, 1, 0, 0, 1 }, { 1, 2, 0, 1, 0, 0 },
+                               { 1, 1, 2, 0, 1, 0 }, { 2, 2, 1, 0, 1, 0 }, { 2, 1, 1, 1, 1, 1 } };
+
+    std::vector<RoundResult> rounds;
+    int totals[6] = {};
+    int hits[6] = {};
+    int misses[6] = {};
+
+    for(unsigned int r = 0 ; r < 12 ; r++)
+    {
+        RoundResult round;
+        round.roundNumber = r + 1;
+        round.roundCount = 32;
+        round.trickCount = cards[r];
+
+        for(std::size_t i = 0 ; i < 6 ; i++)
+        {
+            const int bet = bets[r][i];
+            const int won = taken[r][i];
+            const bool exact = bet == won;
+
+            int worth = exact ? 5 + bet : -std::abs(bet - won);
+
+            // The engine's streaks: rounds of one card count for neither.
+            if(cards[r] > 1)
+            {
+                hits[i] = exact ? hits[i] + 1 : 0;
+                misses[i] = exact ? 0 : misses[i] + 1;
+
+                if(hits[i] == 5)
+                    worth += 10;
+
+                if(misses[i] == 5)
+                    worth -= 10;
+            }
+
+            RoundSeatResult seat;
+            seat.name = sheetNames[i];
+            seat.seatIndex = static_cast<unsigned int>(i);
+            seat.isHuman = i == 0;
+            seat.hasBet = true;
+            seat.bet = static_cast<unsigned int>(bet);
+            seat.tricksWon = static_cast<unsigned int>(won);
+            seat.roundScore = worth;
+            seat.totalScore = totals[i];
+            round.seats.push_back(seat);
+
+            totals[i] += worth;
+        }
+
+        rounds.push_back(round);
+    }
+
+    return rounds;
+}
+
+// A FINISHED TRICK OF HEARTS led by Bogdan, which Dan took with the Ace from the
+// middle of the row.
+lasttrick::Trick sheetTrick()
+{
+    using romanian_whist::Card;
+    using romanian_whist::Rank;
+    using romanian_whist::Suit;
+
+    lasttrick::Trick trick;
+    trick.roundNumber = 10;
+    trick.humanSeat = 0;
+
+    const std::pair<unsigned int, Card> played[] = {
+        { 2, Card(Rank::Nine, Suit::Hearts) },
+        { 3, Card(Rank::King, Suit::Hearts) },
+        { 4, Card(Rank::Ace, Suit::Hearts) },
+        { 5, Card(Rank::Seven, Suit::Hearts) },
+        { 0, Card(Rank::Ten, Suit::Hearts) },
+        { 1, Card(Rank::Queen, Suit::Spades) }
+    };
+
+    for(const auto& [seat, card] : played)
+        trick.cards.push_back({ card, seat, QString::fromUtf8(sheetNames[seat]), seat == 4 });
+
+    return trick;
+}
+
 }
 
 TEST_CASE("Screenshots of the sheets", "[.screenshot]")
@@ -753,12 +854,14 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
-    QWidget page;
-    page.resize(1920, 1034);
-
+    // THE SCENE FIRST, so that its card art outlives the last trick's sheet, which
+    // draws from it and which the page deletes (PR #37's review, finding #9).
     TableScene scene;
     scene.setTheme(Theme::dark());
     scene.setSnapshot(std::make_shared<const GameSnapshot>(sheetTable()));
+
+    QWidget page;
+    page.resize(1920, 1034);
 
     TableView view(&scene, &page);
     view.setGeometry(page.rect());
@@ -786,12 +889,27 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
     SettingsSheet* settings = new SettingsSheet(&page);
     settings->setValues(newgame::DefaultSpeed, true);
 
+    // Phase 11's two: the game's first twelve rounds, and a trick won mid-row.
+    HistorySheet* history = new HistorySheet(&page);
+    std::vector<QString> names;
+
+    for(const char* name : sheetNames)
+        names.push_back(QString::fromUtf8(name));
+
+    history->showHistory(sheetHistory(), names);
+
+    LastTrickSheet* last = new LastTrickSheet(&page);
+    last->setCards(&scene.cardRenderer());
+    last->showTrick(sheetTrick(), 10);
+
     const std::vector<std::pair<const char*, Overlay*>> shots = {
         { "sheet-pause.png", pause },
         { "sheet-round.png", round },
         { "sheet-game-over.png", over },
         { "sheet-rules.png", rules },
-        { "sheet-settings.png", settings }
+        { "sheet-settings.png", settings },
+        { "sheet-history.png", history },
+        { "sheet-last-trick.png", last }
     };
 
     for(const auto& [file, sheet] : shots)

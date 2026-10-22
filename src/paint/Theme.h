@@ -268,6 +268,10 @@ struct ThemeColours
         QColor sheetHeadRule;
         QColor sheetRowRule;
 
+        // THE LAST TRICK's winner (phase 11): a gold-bright ring round its card, and
+        // round that this glow.
+        QColor sheetWinGlow;
+
         bool operator==(const TablePalette&) const = default;
     };
 

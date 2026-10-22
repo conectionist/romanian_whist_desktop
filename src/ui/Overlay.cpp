@@ -5,6 +5,7 @@
 #include "paint/Paths.h"
 
 #include <QBoxLayout>
+#include <QCoreApplication>
 #include <QEvent>
 #include <QFontMetricsF>
 #include <QGridLayout>
@@ -15,6 +16,7 @@
 #include <QPainter>
 #include <QPalette>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QVariant>
 
 #include <algorithm>
@@ -88,6 +90,102 @@ void setTextColour(QWidget* widget, const QColor& colour)
     scheme.setColor(QPalette::Text, colour);
     widget->setPalette(scheme);
 }
+
+QFont noteFont()
+{
+    QFont font = fonts::tabular(fonts::body());
+    font.setPixelSize(notePixels);
+    return font;
+}
+
+// A TABLE'S CELL: its text and, when it has one, a note after it - .note's smaller
+// muted type on the text's own baseline, as page.html's inline <span class="note">
+// sits beside the score in the history's "+6 1/1".
+//
+// A QLabel STILL, so a cell reads as one and its text() is the text alone; and two
+// parts painted on one baseline rather than two labels side by side, which a box
+// layout would centre each on its own and leave a pixel apart. NOT rich text: a
+// cell's words stay plain (PR #36's review, finding #5), and the note's colour is
+// its own whatever tone the text takes.
+class CellLabel : public QLabel
+{
+public:
+    CellLabel(const QString& text, QWidget* parent) : QLabel(text, parent) {}
+
+    const QString& note() const { return noteText; }
+
+    void setNote(const QString& text)
+    {
+        noteText = text;
+        updateGeometry();
+        update();
+    }
+
+    void setNoteColour(const QColor& colour)
+    {
+        noteColour = colour;
+        update();
+    }
+
+    QSize sizeHint() const override { return widened(QLabel::sizeHint()); }
+    QSize minimumSizeHint() const override { return widened(QLabel::minimumSizeHint()); }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        if(noteText.isEmpty())
+        {
+            QLabel::paintEvent(event);
+            return;
+        }
+
+        QPainter painter(this);
+
+        const QRectF box = contentsRect();
+        const QFont small = noteFont();
+        const QFontMetricsF main(font());
+        const QFontMetricsF side(small);
+
+        const qreal across = main.horizontalAdvance(text()) + gap() + side.horizontalAdvance(noteText);
+
+        qreal x = box.left();
+
+        if(alignment() & Qt::AlignRight)
+            x = box.right() - across;
+        else if(alignment() & Qt::AlignHCenter)
+            x = box.left() + (box.width() - across) / 2.0;
+
+        // Centred down the cell as the label centres its text, and the note on the
+        // same baseline.
+        const qreal baseline = fonts::baselineIn(main, box.top(), box.height());
+
+        painter.setFont(font());
+        painter.setPen(palette().color(QPalette::WindowText));
+        painter.drawText(QPointF(x, baseline), text());
+
+        painter.setFont(small);
+        painter.setPen(noteColour);
+        painter.drawText(QPointF(x + main.horizontalAdvance(text()) + gap(), baseline), noteText);
+    }
+
+private:
+    // The space between the two, which the mock-up writes as one: a space of the
+    // text's font.
+    qreal gap() const { return QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' ')); }
+
+    QSize widened(QSize size) const
+    {
+        if(noteText.isEmpty())
+            return size;
+
+        const qreal extra = gap() + QFontMetricsF(noteFont()).horizontalAdvance(noteText);
+        size.rwidth() += static_cast<int>(std::ceil(extra));
+        return size;
+    }
+
+    QString noteText;
+    QColor noteColour;
+};
 
 }
 
@@ -349,6 +447,13 @@ void SheetTable::addRow(const std::vector<Cell>& cells)
         label->setFont(cellFont(given.strong));
         colour(label, given.tone);
 
+        if(!given.note.isEmpty())
+        {
+            CellLabel* noted = static_cast<CellLabel*>(label);
+            noted->setNote(given.note);
+            noted->setNoteColour(colours.muted);
+        }
+
         labels.push_back(label);
         shades.push_back(given.tone);
     }
@@ -359,12 +464,151 @@ void SheetTable::addRow(const std::vector<Cell>& cells)
     update();
 }
 
+void SheetTable::addNote(const QString& text)
+{
+    if(columns.empty())
+        return;
+
+    const int row = static_cast<int>(rows.size()) + 1;
+
+    // Laid in column 0 and then stretched across them all, so the grid sizes no
+    // column by it: a sentence would otherwise widen the first column to its own
+    // length.
+    QLabel* label = addLabel(text, row, 0, false);
+    grid->removeWidget(label);
+    grid->addWidget(label, row, 0, 1, std::max<int>(1, static_cast<int>(columns.size())));
+
+    label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    label->setFont(noteFont());
+    colour(label, Tone::Muted);
+
+    rows.push_back({ label });
+    tones.push_back({ Tone::Muted });
+
+    update();
+}
+
+void SheetTable::fitHeadingsTo(int width)
+{
+    // WHAT EACH COLUMN'S CELLS NEED, which do not shorten. A note row spans every
+    // column and asks for nothing of any one.
+    std::vector<int> cells(columns.size(), 0);
+
+    for(std::size_t c = 0 ; c < columns.size() ; c++)
+    {
+        for(const std::vector<QLabel*>& row : rows)
+        {
+            if(row.size() == columns.size())
+                cells[c] = std::max(cells[c], row[c]->sizeHint().width());
+        }
+    }
+
+    // THE COLUMNS THAT MAY NOT GIVE WAY TAKE WHAT THEY NEED FIRST, heading and
+    // cells alike; the ones that may share the rest.
+    int available = width;
+    int sharing = 0;
+
+    for(std::size_t c = 0 ; c < columns.size() ; c++)
+    {
+        if(columns[c].elide)
+            sharing++;
+        else
+            available -= std::max(cells[c], headings[c]->sizeHint().width());
+    }
+
+    if(sharing == 0)
+        return;
+
+    // EACH SHARING COLUMN'S WIDTH: an even share - or, where its cells are wider
+    // than that, its cells' width, and the others share what that leaves.
+    std::vector<int> target(columns.size(), -1);
+    bool settled = false;
+
+    while(!settled)
+    {
+        settled = true;
+        const int share = sharing > 0 ? available / sharing : 0;
+
+        for(std::size_t c = 0 ; c < columns.size() ; c++)
+        {
+            if(columns[c].elide && target[c] < 0 && cells[c] > share)
+            {
+                target[c] = cells[c];
+                available -= cells[c];
+                sharing--;
+                settled = false;
+            }
+        }
+
+        if(settled)
+        {
+            for(std::size_t c = 0 ; c < columns.size() ; c++)
+            {
+                if(columns[c].elide && target[c] < 0)
+                    target[c] = share;
+            }
+        }
+    }
+
+    const QFontMetrics metrics(headingFont());
+
+    for(std::size_t c = 0 ; c < columns.size() ; c++)
+    {
+        if(!columns[c].elide)
+            continue;
+
+        QLabel* label = headings[c];
+        const QString whole = columns[c].heading;
+
+        // MEASURED AS THE LAYOUT MEASURES IT, by the label's own size - not by the
+        // font's advance, which it can exceed: shortened by the advance, six names
+        // put the history three pixels past its sheet on Windows, where on Linux
+        // they had a pixel a column to spare (found on CI, phase 11). So the name
+        // is shortened, a pixel at a time, until the label fits.
+        QString shown = whole;
+        label->setText(shown);
+
+        for(int room = target[c] - 2 * cellPaddingX ; label->sizeHint().width() > target[c] && room >= 0 ; room--)
+        {
+            shown = metrics.elidedText(whole, Qt::ElideRight, room);
+            label->setText(shown);
+        }
+
+        label->setToolTip(shown == whole ? QString() : whole);
+    }
+
+    // THE SHEET HEARS OF THE NEW WIDTH NOW, not when this table's own layout next
+    // runs: until then the layout it sits in answers with the width it had, and the
+    // sheet measured round that kept the body as wide as before (PR #37's review,
+    // finding #3).
+    updateGeometry();
+}
+
 QLabel* SheetTable::cell(int row, int column) const
 {
-    if(row < 0 || row >= rowCount() || column < 0 || column >= static_cast<int>(columns.size()))
+    if(row < 0 || row >= rowCount() || column < 0)
         return nullptr;
 
-    return rows[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
+    const std::vector<QLabel*>& cells = rows[static_cast<std::size_t>(row)];
+
+    if(column >= static_cast<int>(cells.size()))
+        return nullptr;
+
+    return cells[static_cast<std::size_t>(column)];
+}
+
+QString SheetTable::note(int row, int column) const
+{
+    const CellLabel* label = dynamic_cast<const CellLabel*>(cell(row, column));
+    return label ? label->note() : QString();
+}
+
+QLabel* SheetTable::heading(int column) const
+{
+    if(column < 0 || column >= static_cast<int>(headings.size()))
+        return nullptr;
+
+    return headings[static_cast<std::size_t>(column)];
 }
 
 void SheetTable::setColours(const Theme::TablePalette& palette)
@@ -377,7 +621,12 @@ void SheetTable::setColours(const Theme::TablePalette& palette)
     for(std::size_t r = 0 ; r < rows.size() ; r++)
     {
         for(std::size_t c = 0 ; c < rows[r].size() ; c++)
+        {
             colour(rows[r][c], tones[r][c]);
+
+            if(CellLabel* noted = dynamic_cast<CellLabel*>(rows[r][c]))
+                noted->setNoteColour(colours.muted);
+        }
     }
 
     update();
@@ -385,7 +634,8 @@ void SheetTable::setColours(const Theme::TablePalette& palette)
 
 QLabel* SheetTable::addLabel(const QString& text, int row, int column, bool heading)
 {
-    QLabel* label = new QLabel(text, this);
+    // A heading is a plain label; a cell may carry a note after its text.
+    QLabel* label = heading ? new QLabel(text, this) : new CellLabel(text, this);
 
     // PLAIN, because a cell holds a player's name as they typed it, and Qt's
     // AutoText would read "<b>Dan</b>" as markup (PR #36's review, finding #5). A
@@ -409,6 +659,13 @@ QLabel* SheetTable::addLabel(const QString& text, int row, int column, bool head
     }
 
     grid->addWidget(label, row, column);
+
+    // SHOWN NOW, not on the event loop's next turn, which is when Qt shows a child
+    // added to a shown parent: until then the layout counts it as nothing. The
+    // history, filled again while open, measured for a moment as though empty, and
+    // its scroll range fell to nothing and took the reader's place with it (PR #37's
+    // review, finding #4). In a hidden sheet, it shows when the sheet does.
+    label->show();
     return label;
 }
 
@@ -426,6 +683,10 @@ void SheetTable::colour(QLabel* label, Tone tone)
 
     case Tone::Bad:
         setTextColour(label, colours.bad);
+        break;
+
+    case Tone::Muted:
+        setTextColour(label, colours.muted);
         break;
     }
 }
@@ -570,7 +831,7 @@ void Overlay::dress(QLabel* label, sheet::Role role)
     setTextColour(label, sheet::colourFor(role, palette.table));
 }
 
-void Overlay::addActions(std::initializer_list<SheetButton*> buttons)
+QHBoxLayout* Overlay::addActions(std::initializer_list<SheetButton*> buttons)
 {
     column->addSpacing(actionsAbove);
 
@@ -585,6 +846,8 @@ void Overlay::addActions(std::initializer_list<SheetButton*> buttons)
     }
 
     column->addLayout(actions);
+
+    return actions;
 }
 
 QRect Overlay::sheetRect() const
@@ -592,10 +855,30 @@ QRect Overlay::sheetRect() const
     return scroll->geometry();
 }
 
+int Overlay::sheetWidth() const
+{
+    return std::min(sheet::width, std::max(0, width() - 2 * sheet::pageMargin));
+}
+
+int Overlay::contentWidth() const
+{
+    constexpr int padding = 2 * (sheet::border + sheet::paddingX);
+
+    // AS Qt HAS LAID THE BODY OUT, once it shows: how wide the scroll bar is, is the
+    // style's to say, and on macOS it floats over the body and takes nothing.
+    if(scroll->isVisible())
+        return std::max(0, scroll->viewport()->width() - padding);
+
+    // Hidden, by the bar's own width. showEvent() places the sheet again, and
+    // measures it then.
+    const int bar = bodyScrolls ? scroll->verticalScrollBar()->sizeHint().width() : 0;
+
+    return std::max(0, sheetWidth() - padding - bar);
+}
+
 void Overlay::placeSheet()
 {
-    const int room = std::max(0, width() - 2 * sheet::pageMargin);
-    const int across = std::min(sheet::width, room);
+    const int across = sheetWidth();
 
     // EVERY LAYOUT IN THE SHEET FORGETS WHAT IT MEASURED, the nested ones included.
     // A label's new text invalidates the layout it sits in, but a box layout keeps
@@ -611,11 +894,57 @@ void Overlay::placeSheet()
     if(wanted <= 0)
         wanted = plaque->sizeHint().height();
 
-    const int down = std::min(wanted, std::max(0, height() - 2 * sheet::pageMargin));
+    const int room = std::max(0, height() - 2 * sheet::pageMargin);
+    const int down = std::min(wanted, room);
+
+    // WHETHER THE BODY SCROLLS IS DECIDED HERE, not left to the scroll area, so the
+    // bar Qt shows and contentWidth() always agree.
+    bodyScrolls = wanted > room;
+
+    const Qt::ScrollBarPolicy bar = bodyScrolls ? Qt::ScrollBarAlwaysOn : Qt::ScrollBarAlwaysOff;
+
+    if(scroll->verticalScrollBarPolicy() != bar)
+        scroll->setVerticalScrollBarPolicy(bar);
 
     scroll->setGeometry((width() - across) / 2, (height() - down) / 2, across, down);
 
+    // Refitting changes the content, which places the sheet again - at the same
+    // width, so this does not come round twice.
+    if(const int now = contentWidth() ; now != reportedWidth)
+    {
+        reportedWidth = now;
+        contentWidthChanged();
+    }
+
     update();
+}
+
+void Overlay::reveal(QWidget* widget)
+{
+    // LAID OUT FIRST. A sheet just shown has posted its layout, not run it, so its
+    // widgets are still where they were last placed - nowhere, the first time -
+    // and there would be nothing to scroll to.
+    column->activate();
+
+    scroll->ensureWidgetVisible(widget);
+}
+
+void Overlay::keepFootInView()
+{
+    QScrollBar* bar = scroll->verticalScrollBar();
+
+    connect(bar, &QScrollBar::valueChanged, this, [this, bar](int value)
+    {
+        atFoot = value >= bar->maximum();
+    });
+
+    // Qt keeps the value as the range grows, which left a reader at the foot
+    // reading on there while the new rows went out of view below it.
+    connect(bar, &QScrollBar::rangeChanged, this, [this, bar](int, int maximum)
+    {
+        if(atFoot)
+            bar->setValue(maximum);
+    });
 }
 
 bool Overlay::focusNextInside(bool next)
@@ -684,6 +1013,18 @@ void Overlay::resizeEvent(QResizeEvent* event)
     placeSheet();
 }
 
+void Overlay::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+
+    // MEASURED AGAIN NOW THAT IT SHOWS. A sheet the window has kept hidden since it
+    // was built has never shown its widgets, and a layout counts a widget that has
+    // never been shown as nothing: filled while hidden, the history measured 194
+    // tall for thirty rows. Its layout put that right a moment later, but a sheet
+    // opened at its foot (reveal()) had already scrolled by the wrong size.
+    placeSheet();
+}
+
 void Overlay::mousePressEvent(QMouseEvent* event)
 {
     event->accept();
@@ -695,8 +1036,17 @@ bool Overlay::eventFilter(QObject* watched, QEvent* event)
         setGeometry(parentWidget()->rect());
 
     // The sheet's words or rows changed, so its height may have.
+    //
+    // AND ONCE IS ENOUGH. placeSheet() invalidates the body's layouts, which posts the
+    // body another layout request - but the one being handled lays it out as soon as
+    // this returns. Left in the queue, that one came round to here again, and an
+    // open sheet was laid out on every turn of the event loop, about 1,300 times a
+    // second (found during PR #37's review fixes).
     if(watched == plaque && event->type() == QEvent::LayoutRequest)
+    {
         placeSheet();
+        QCoreApplication::removePostedEvents(plaque, QEvent::LayoutRequest);
+    }
 
     return QWidget::eventFilter(watched, event);
 }

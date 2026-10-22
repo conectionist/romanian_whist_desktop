@@ -68,7 +68,7 @@ public:
     // THE OTHER ENDING, and it is here so that the failure path is not the dead
     // end this class was written to remove. The run slot caught something, so
     // there are no standings to show and nothing to play again from - the error
-    // takes the announcement's place and Main menu is the only button.
+    // takes the announcement's place and Main menu, the green one now, goes last.
     void showFailure(const QString& what);
 
     // The button the face on show leads with: Play again on the ordinary
@@ -79,6 +79,12 @@ signals:
     void playAgainRequested();
     void mainMenuRequested();
 
+    // The quiet Round history between the two (the redesign's phase 11, by the
+    // owner's call of 2026-10-22): the game's every round, which this panel's dim
+    // otherwise keeps the table's own button from. Opened over the panel and closed
+    // back to it.
+    void historyRequested();
+
 private:
     // One standing, spelled and laid out: place, name, score, and the star every
     // winner takes.
@@ -88,6 +94,10 @@ private:
     // 47, 47, 31, 28 reads 1, 1, 3, 4 - a counter would number that table
     // 1, 2, 3, 4 and quietly rank players the engine had ranked equal.
     void addRow(const romanian_whist::Standing& standing, bool isWinner);
+
+    // Main menu before Round history, or - on the failure face, where it is the
+    // green one - after it.
+    void placeMainMenu(bool last);
 
     QLabel* title = nullptr;
 
@@ -103,7 +113,11 @@ private:
     SheetTable* rows = nullptr;
 
     SheetButton* playAgain = nullptr;
+    SheetButton* history = nullptr;
     SheetButton* mainMenu = nullptr;
+
+    // The buttons' row, which placeMainMenu() reorders.
+    QHBoxLayout* actions = nullptr;
 };
 
 #endif
