@@ -79,11 +79,11 @@ QString lasttrick::metaFor(const std::optional<Trick>& trick, unsigned int curre
     return QCoreApplication::translate("lasttrick", "%1 took it").arg(winner->name);
 }
 
-QSizeF lasttrick::cardSize(const CardRenderer& cards)
+QSizeF lasttrick::cardSize()
 {
     // The art's own shape, asked of the one place that knows it, at a height
     // large enough that rounding does not bend it.
-    const QSize probe = cards.sizeForHeight(1000.0);
+    const QSize probe = CardRenderer::sizeForHeight(1000.0);
 
     return QSizeF(cardWidth, cardWidth * probe.height() / probe.width());
 }
@@ -94,18 +94,6 @@ QRectF lasttrick::cardRect(std::size_t i, QSizeF card)
 }
 
 // ---- the widget ----
-
-namespace
-{
-// Without the art, the row keeps a card's place at the shape the client's art has.
-QSizeF cardSizeOf(const CardRenderer* renderer)
-{
-    if(renderer)
-        return lasttrick::cardSize(*renderer);
-
-    return QSizeF(lasttrick::cardWidth, lasttrick::cardWidth * 242.6669922 / 167.0869141);
-}
-}
 
 LastTrickSheet::LastTrickSheet(QWidget* parent) : Overlay(parent)
 {
@@ -181,7 +169,7 @@ QSize LastTrickSheet::rowSize() const
     if(count == 0)
         return QSize(0, 0);
 
-    const QSizeF card = cardSizeOf(renderer);
+    const QSizeF card = lasttrick::cardSize();
     const QFontMetricsF names(sheet::fontFor(sheet::Role::Note));
 
     const qreal across = static_cast<qreal>(count) * card.width()
@@ -211,7 +199,7 @@ void LastTrickSheet::paintCards(QPainter& painter) const
         return;
 
     const Theme::TablePalette& colours = theme().table;
-    const QSizeF size = cardSizeOf(renderer);
+    const QSizeF size = lasttrick::cardSize();
     const QPointF origin = row->geometry().topLeft();
     const qreal ratio = painter.device()->devicePixelRatioF();
 

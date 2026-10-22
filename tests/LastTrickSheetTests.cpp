@@ -212,7 +212,7 @@ TEST_CASE("The last trick shows each card over its player in play order", "[last
     REQUIRE(meta->text() == QStringLiteral("Seat 1 took it"));
 
     // .mini's row: six cards 88 wide, 12 apart, the names under them.
-    const QSizeF card = lasttrick::cardSize(cards);
+    const QSizeF card = lasttrick::cardSize();
     REQUIRE(card.width() == 88.0);
     REQUIRE(std::abs(card.height() - 127.8) < 0.5);
 
@@ -236,6 +236,33 @@ TEST_CASE("The last trick shows each card over its player in play order", "[last
 
     REQUIRE(goldAt(-1.0));
     REQUIRE_FALSE(goldAt(lasttrick::cardRect(1, card).left() - 1.0));
+}
+
+// THE ART'S SHAPE FROM THE ONE PLACE THAT KNOWS IT, with a renderer or without:
+// the sheet without one kept a copy of the art's numbers (PR #37's review, finding
+// #7), which a change of art would have left behind.
+TEST_CASE("Without its art, the last trick keeps the art's card shape", "[last-trick]")
+{
+    CardRenderer cards;
+
+    lasttrick::Tracker tracker;
+    tracker.observe(finishedTrick());
+
+    QWidget page;
+    page.resize(1920, 1034);
+
+    LastTrickSheet drawn(&page);
+    drawn.setCards(&cards);
+    drawn.showTrick(tracker.last(), 10);
+
+    LastTrickSheet bare(&page);
+    bare.showTrick(tracker.last(), 10);
+
+    page.show();
+    QCoreApplication::processEvents();
+
+    REQUIRE_FALSE(drawn.cardsArea().isEmpty());
+    REQUIRE(bare.cardsArea().size() == drawn.cardsArea().size());
 }
 
 TEST_CASE("The last trick with none finished shows no cards", "[last-trick]")

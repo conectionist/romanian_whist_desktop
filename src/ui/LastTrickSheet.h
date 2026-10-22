@@ -97,8 +97,9 @@ inline constexpr qreal nameAbove = 6.0;
 inline constexpr qreal ringWidth = 2.0;
 inline constexpr qreal glowBlur = 16.0;
 
-// The size of a card in the sheet: 88 wide, as tall as `cards`' art makes it.
-QSizeF cardSize(const CardRenderer& cards);
+// The size of a card in the sheet: 88 wide, as tall as the art makes it
+// (CardRenderer::sizeForHeight()) - with or without a renderer to draw it.
+QSizeF cardSize();
 
 // The i-th card's rect, from the row's top-left.
 QRectF cardRect(std::size_t i, QSizeF card);
