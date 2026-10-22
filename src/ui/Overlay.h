@@ -12,6 +12,7 @@
 #include <QWidget>
 
 #include <initializer_list>
+#include <utility>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -43,6 +44,9 @@ inline constexpr int border = 1;
 inline constexpr int paddingTop = 26;
 inline constexpr int paddingX = 30;
 inline constexpr int paddingBottom = 24;
+
+// What a full-width sheet has across inside its border and padding: 658.
+inline constexpr int contentWidth = width - 2 * (border + paddingX);
 
 // What a line of a sheet is, which says how it is set (page.html):
 enum class Role
@@ -133,25 +137,43 @@ public:
     {
         QString heading;
         Qt::Alignment alignment = Qt::AlignRight;
+
+        // A heading that may be shortened, with an ellipsis, to fit the table into
+        // a width: a player's name over a column of numbers (fitHeadingsTo()).
+        bool elide = false;
     };
 
     // A cell's colour: the text's own, or a score's - green for a gain and red for
     // a loss, which reinforces the sign it carries rather than replacing it
-    // (section 18).
+    // (section 18) - or the muted of a line that says there is nothing to show.
     enum class Tone
     {
         Plain,
         Good,
-        Bad
+        Bad,
+        Muted
     };
 
     struct Cell
     {
+        // A constructor rather than an aggregate, so a cell given its first few
+        // parts - { text, tone, strong } - takes the defaults for the rest without
+        // -Wmissing-field-initializers objecting at every table in the client.
+        Cell(QString text = QString(), Tone tone = Tone::Plain, bool strong = false,
+             QString note = QString())
+            : text(std::move(text)), tone(tone), strong(strong), note(std::move(note))
+        {}
+
         QString text;
         Tone tone = Tone::Plain;
 
         // Bold: your own row, or a winner's.
         bool strong = false;
+
+        // A SECOND, SMALLER PART AFTER THE TEXT, in .note's muted 15 on the text's
+        // baseline: the history's "+6 1/1", where the tone colours the score and
+        // the note stays muted whatever it is. Plain text, as the cell's own.
+        QString note;
     };
 
     explicit SheetTable(QWidget* parent = nullptr);
@@ -161,13 +183,30 @@ public:
 
     void addRow(const std::vector<Cell>& cells);
 
+    // ONE LINE ACROSS EVERY COLUMN, muted, in .note's 15: the mock-up's
+    // `colspan` row that says a table has nothing in it yet. Counted as a row,
+    // whose one cell is in column 0.
+    void addNote(const QString& text);
+
     // Every row but the headings.
     void clearRows();
+
+    // SHORTENS THE HEADINGS THAT MAY BE, so the table is no wider than `width`:
+    // what the other columns need is set aside, and the rest shared out evenly
+    // between the elided ones. A shortened heading ends in an ellipsis and keeps
+    // its whole text as its tooltip. Run after the rows are in, since a column is
+    // as wide as its widest cell; filling the table again (setColumns(),
+    // clearRows()) restores the headings whole.
+    void fitHeadingsTo(int width);
 
     // The rows added since the last clear, not counting the headings; and one
     // row's cell, 0 being the first row under them. READ by the sheets' tests.
     int rowCount() const { return static_cast<int>(rows.size()); }
     QLabel* cell(int row, int column) const;
+
+    // A cell's note, empty for none; and a column's heading. READ by tests.
+    QString note(int row, int column) const;
+    QLabel* heading(int column) const;
 
     void setColours(const Theme::TablePalette& palette);
 
@@ -273,6 +312,10 @@ protected:
     // content changes. No wider than section 2.13's 720 or the page less its
     // margins, and no taller than the page - past that, its body scrolls.
     void placeSheet();
+
+    // Scrolls the sheet's body until `widget`, inside it, is in view: nothing,
+    // when the whole sheet fits the page.
+    void reveal(QWidget* widget);
 
     // The dim, then the panel round the sheet.
     void paintEvent(QPaintEvent* event) override;

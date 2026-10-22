@@ -2,6 +2,7 @@
 
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
+#include "ui/NewGameDialog.h"
 #include "ui/Overlay.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
@@ -19,6 +20,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -485,6 +487,133 @@ TEST_CASE("A sheet table shows a name as typed, markup and all", "[overlay]")
 
     REQUIRE(table.cell(0, 0)->textFormat() == Qt::PlainText);
     REQUIRE(table.cell(0, 0)->text() == QStringLiteral("<b>Dan</b>"));
+}
+
+TEST_CASE("A cell's note follows its text in muted type and both stay plain", "[overlay]")
+{
+    // Phase 11's history writes "+6 1/1": the round's score in its tone, and after
+    // it - on the same line, smaller - taken over bid in .note's muted, whatever
+    // the score's colour.
+    SheetTable table;
+    table.setColumns({ { QStringLiteral("Round"), Qt::AlignLeft }, { QStringLiteral("Ana") } });
+    table.addRow({ { QStringLiteral("1") },
+                   { QStringLiteral("+6"), SheetTable::Tone::Good, false, QStringLiteral("1/1") } });
+    table.addRow({ { QStringLiteral("2") }, { QStringLiteral("+6"), SheetTable::Tone::Good } });
+
+    QLabel* noted = table.cell(0, 1);
+    REQUIRE(noted != nullptr);
+
+    // The text is the score alone, and the note is apart from it.
+    REQUIRE(noted->text() == QStringLiteral("+6"));
+    REQUIRE(table.note(0, 1) == QStringLiteral("1/1"));
+    REQUIRE(table.note(1, 1).isEmpty());
+    REQUIRE(noted->textFormat() == Qt::PlainText);
+
+    // The note takes room of its own.
+    REQUIRE(noted->sizeHint().width() > table.cell(1, 1)->sizeHint().width());
+
+    table.resize(300, table.sizeHint().height());
+    table.show();
+    QCoreApplication::processEvents();
+
+    // Painted: the score's green, then the note's muted to the right of it.
+    const QImage image = ownPixels(*noted);
+    const Theme::TablePalette palette = Theme::dark().table;
+
+    int lastGood = -1;
+    int firstMuted = image.width();
+
+    for(int y = 0 ; y < image.height() ; y++)
+    {
+        for(int x = 0 ; x < image.width() ; x++)
+        {
+            // A glyph's strokes are thin at these sizes: the mostly opaque pixels,
+            // by their colour alone.
+            QColor pixel = image.pixelColor(x, y);
+
+            if(pixel.alpha() < 200)
+                continue;
+
+            pixel.setAlpha(255);
+
+            if(near(pixel, palette.good, 6))
+                lastGood = std::max(lastGood, x);
+            else if(near(pixel, palette.muted, 6))
+                firstMuted = std::min(firstMuted, x);
+        }
+    }
+
+    REQUIRE(lastGood >= 0);
+    REQUIRE(firstMuted < image.width());
+    REQUIRE(lastGood < firstMuted);
+}
+
+TEST_CASE("A note row runs across the whole table", "[overlay]")
+{
+    // The mock-up's empty history: a line spanning every column.
+    SheetTable table;
+    table.setColumns({ { QStringLiteral("Round"), Qt::AlignLeft }, { QStringLiteral("Cards") },
+                       { QStringLiteral("Ana") }, { QStringLiteral("Bogdan") } });
+    table.addNote(QStringLiteral("No rounds finished yet."));
+    table.addRow({ { QStringLiteral("Total"), SheetTable::Tone::Plain, true } });
+
+    table.resize(500, table.sizeHint().height());
+    table.show();
+    QCoreApplication::processEvents();
+
+    REQUIRE(table.rowCount() == 2);
+    REQUIRE(table.cell(0, 0)->text() == QStringLiteral("No rounds finished yet."));
+    REQUIRE(table.cell(0, 1) == nullptr);
+    REQUIRE(table.cell(0, 0)->width() == table.width());
+    REQUIRE(table.cell(0, 0)->palette().color(QPalette::WindowText) == Theme::dark().table.muted);
+
+    // And sizes no column by itself: the first is no wider than its heading and
+    // the Total under it need.
+    REQUIRE(table.cell(1, 0)->width() < table.cell(0, 0)->sizeHint().width());
+}
+
+TEST_CASE("Names give way in their headings for the table to fit its width", "[overlay]")
+{
+    // A six-seat history of names as long as the setup dialog takes: the sheet
+    // never scrolls across, so the names shorten, and keep their whole selves for
+    // the tooltip.
+    const QString longest = QStringLiteral("Bartholomew Fairbank");
+    REQUIRE(longest.size() == newgame::MaximumNameLength);
+
+    std::vector<SheetTable::Column> columns = { { QStringLiteral("Round"), Qt::AlignLeft },
+                                                { QStringLiteral("Cards") } };
+
+    for(int i = 0 ; i < 5 ; i++)
+        columns.push_back({ longest, Qt::AlignRight, true });
+
+    columns.push_back({ QStringLiteral("Ana"), Qt::AlignRight, true });
+
+    SheetTable table;
+    table.setColumns(columns);
+    table.addRow({ { QStringLiteral("30") }, { QStringLiteral("1") },
+                   { QStringLiteral("\u221218"), SheetTable::Tone::Bad, false, QStringLiteral("0/8") } });
+
+    REQUIRE(table.sizeHint().width() > sheet::contentWidth);
+
+    table.fitHeadingsTo(sheet::contentWidth);
+
+    REQUIRE(table.sizeHint().width() <= sheet::contentWidth);
+
+    QLabel* shortened = table.heading(2);
+    REQUIRE(shortened->text() != longest);
+    REQUIRE(shortened->text().endsWith(QChar(0x2026)));
+    REQUIRE(shortened->toolTip() == longest);
+
+    // A short name needs no shortening, and no tooltip to say what it was.
+    REQUIRE(table.heading(7)->text() == QStringLiteral("Ana"));
+    REQUIRE(table.heading(7)->toolTip().isEmpty());
+
+    // The columns that may not give way do not.
+    REQUIRE(table.heading(0)->text() == QStringLiteral("Round"));
+
+    // Filled again, the headings come back whole.
+    table.clearRows();
+    REQUIRE(table.heading(2)->text() == longest);
 }
 
 TEST_CASE("A press on an overlay goes no further", "[overlay]")

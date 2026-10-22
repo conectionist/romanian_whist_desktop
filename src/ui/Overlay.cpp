@@ -89,6 +89,102 @@ void setTextColour(QWidget* widget, const QColor& colour)
     widget->setPalette(scheme);
 }
 
+QFont noteFont()
+{
+    QFont font = fonts::tabular(fonts::body());
+    font.setPixelSize(notePixels);
+    return font;
+}
+
+// A TABLE'S CELL: its text and, when it has one, a note after it - .note's smaller
+// muted type on the text's own baseline, as page.html's inline <span class="note">
+// sits beside the score in the history's "+6 1/1".
+//
+// A QLabel STILL, so a cell reads as one and its text() is the text alone; and two
+// parts painted on one baseline rather than two labels side by side, which a box
+// layout would centre each on its own and leave a pixel apart. NOT rich text: a
+// cell's words stay plain (PR #36's review, finding #5), and the note's colour is
+// its own whatever tone the text takes.
+class CellLabel : public QLabel
+{
+public:
+    CellLabel(const QString& text, QWidget* parent) : QLabel(text, parent) {}
+
+    const QString& note() const { return noteText; }
+
+    void setNote(const QString& text)
+    {
+        noteText = text;
+        updateGeometry();
+        update();
+    }
+
+    void setNoteColour(const QColor& colour)
+    {
+        noteColour = colour;
+        update();
+    }
+
+    QSize sizeHint() const override { return widened(QLabel::sizeHint()); }
+    QSize minimumSizeHint() const override { return widened(QLabel::minimumSizeHint()); }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        if(noteText.isEmpty())
+        {
+            QLabel::paintEvent(event);
+            return;
+        }
+
+        QPainter painter(this);
+
+        const QRectF box = contentsRect();
+        const QFont small = noteFont();
+        const QFontMetricsF main(font());
+        const QFontMetricsF side(small);
+
+        const qreal across = main.horizontalAdvance(text()) + gap() + side.horizontalAdvance(noteText);
+
+        qreal x = box.left();
+
+        if(alignment() & Qt::AlignRight)
+            x = box.right() - across;
+        else if(alignment() & Qt::AlignHCenter)
+            x = box.left() + (box.width() - across) / 2.0;
+
+        // Centred down the cell as the label centres its text, and the note on the
+        // same baseline.
+        const qreal baseline = fonts::baselineIn(main, box.top(), box.height());
+
+        painter.setFont(font());
+        painter.setPen(palette().color(QPalette::WindowText));
+        painter.drawText(QPointF(x, baseline), text());
+
+        painter.setFont(small);
+        painter.setPen(noteColour);
+        painter.drawText(QPointF(x + main.horizontalAdvance(text()) + gap(), baseline), noteText);
+    }
+
+private:
+    // The space between the two, which the mock-up writes as one: a space of the
+    // text's font.
+    qreal gap() const { return QFontMetricsF(font()).horizontalAdvance(QLatin1Char(' ')); }
+
+    QSize widened(QSize size) const
+    {
+        if(noteText.isEmpty())
+            return size;
+
+        const qreal extra = gap() + QFontMetricsF(noteFont()).horizontalAdvance(noteText);
+        size.rwidth() += static_cast<int>(std::ceil(extra));
+        return size;
+    }
+
+    QString noteText;
+    QColor noteColour;
+};
+
 }
 
 namespace
@@ -349,6 +445,13 @@ void SheetTable::addRow(const std::vector<Cell>& cells)
         label->setFont(cellFont(given.strong));
         colour(label, given.tone);
 
+        if(!given.note.isEmpty())
+        {
+            CellLabel* noted = static_cast<CellLabel*>(label);
+            noted->setNote(given.note);
+            noted->setNoteColour(colours.muted);
+        }
+
         labels.push_back(label);
         shades.push_back(given.tone);
     }
@@ -359,12 +462,116 @@ void SheetTable::addRow(const std::vector<Cell>& cells)
     update();
 }
 
+void SheetTable::addNote(const QString& text)
+{
+    if(columns.empty())
+        return;
+
+    const int row = static_cast<int>(rows.size()) + 1;
+
+    // Laid in column 0 and then stretched across them all, so the grid sizes no
+    // column by it: a sentence would otherwise widen the first column to its own
+    // length.
+    QLabel* label = addLabel(text, row, 0, false);
+    grid->removeWidget(label);
+    grid->addWidget(label, row, 0, 1, std::max<int>(1, static_cast<int>(columns.size())));
+
+    label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    label->setFont(noteFont());
+    colour(label, Tone::Muted);
+
+    rows.push_back({ label });
+    tones.push_back({ Tone::Muted });
+
+    update();
+}
+
+void SheetTable::fitHeadingsTo(int width)
+{
+    // WHAT EACH COLUMN NEEDS AS IT STANDS: its widest label, heading or cell. A
+    // note row spans every column and asks for nothing of any one.
+    std::vector<int> widest(columns.size(), 0);
+
+    for(std::size_t c = 0 ; c < columns.size() ; c++)
+    {
+        widest[c] = headings[c]->sizeHint().width();
+
+        for(const std::vector<QLabel*>& row : rows)
+        {
+            if(row.size() == columns.size())
+                widest[c] = std::max(widest[c], row[c]->sizeHint().width());
+        }
+    }
+
+    int fixed = 0;
+    int shared = 0;
+
+    for(std::size_t c = 0 ; c < columns.size() ; c++)
+    {
+        if(columns[c].elide)
+            shared++;
+        else
+            fixed += widest[c];
+    }
+
+    if(shared == 0)
+        return;
+
+    const int share = (width - fixed) / shared;
+    const QFontMetrics metrics(headingFont());
+
+    for(std::size_t c = 0 ; c < columns.size() ; c++)
+    {
+        if(!columns[c].elide)
+            continue;
+
+        QLabel* label = headings[c];
+        const QString whole = columns[c].heading;
+
+        // The heading's own room, less its padding - and never less than its
+        // column's cells need, which do not shorten.
+        int room = share - 2 * cellPaddingX;
+
+        for(const std::vector<QLabel*>& row : rows)
+        {
+            if(row.size() == columns.size())
+                room = std::max(room, row[c]->sizeHint().width() - 2 * cellPaddingX);
+        }
+
+        // MEASURED IN THE HEADING'S OWN FONT, its capitals and spacing included,
+        // which QFontMetrics lays out as the label does.
+        const QString shown = metrics.elidedText(whole, Qt::ElideRight, std::max(0, room));
+
+        label->setText(shown);
+        label->setToolTip(shown == whole ? QString() : whole);
+    }
+}
+
 QLabel* SheetTable::cell(int row, int column) const
 {
-    if(row < 0 || row >= rowCount() || column < 0 || column >= static_cast<int>(columns.size()))
+    if(row < 0 || row >= rowCount() || column < 0)
         return nullptr;
 
-    return rows[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
+    const std::vector<QLabel*>& cells = rows[static_cast<std::size_t>(row)];
+
+    if(column >= static_cast<int>(cells.size()))
+        return nullptr;
+
+    return cells[static_cast<std::size_t>(column)];
+}
+
+QString SheetTable::note(int row, int column) const
+{
+    const CellLabel* label = dynamic_cast<const CellLabel*>(cell(row, column));
+    return label ? label->note() : QString();
+}
+
+QLabel* SheetTable::heading(int column) const
+{
+    if(column < 0 || column >= static_cast<int>(headings.size()))
+        return nullptr;
+
+    return headings[static_cast<std::size_t>(column)];
 }
 
 void SheetTable::setColours(const Theme::TablePalette& palette)
@@ -377,7 +584,12 @@ void SheetTable::setColours(const Theme::TablePalette& palette)
     for(std::size_t r = 0 ; r < rows.size() ; r++)
     {
         for(std::size_t c = 0 ; c < rows[r].size() ; c++)
+        {
             colour(rows[r][c], tones[r][c]);
+
+            if(CellLabel* noted = dynamic_cast<CellLabel*>(rows[r][c]))
+                noted->setNoteColour(colours.muted);
+        }
     }
 
     update();
@@ -385,7 +597,8 @@ void SheetTable::setColours(const Theme::TablePalette& palette)
 
 QLabel* SheetTable::addLabel(const QString& text, int row, int column, bool heading)
 {
-    QLabel* label = new QLabel(text, this);
+    // A heading is a plain label; a cell may carry a note after its text.
+    QLabel* label = heading ? new QLabel(text, this) : new CellLabel(text, this);
 
     // PLAIN, because a cell holds a player's name as they typed it, and Qt's
     // AutoText would read "<b>Dan</b>" as markup (PR #36's review, finding #5). A
@@ -426,6 +639,10 @@ void SheetTable::colour(QLabel* label, Tone tone)
 
     case Tone::Bad:
         setTextColour(label, colours.bad);
+        break;
+
+    case Tone::Muted:
+        setTextColour(label, colours.muted);
         break;
     }
 }
@@ -616,6 +833,11 @@ void Overlay::placeSheet()
     scroll->setGeometry((width() - across) / 2, (height() - down) / 2, across, down);
 
     update();
+}
+
+void Overlay::reveal(QWidget* widget)
+{
+    scroll->ensureWidgetVisible(widget);
 }
 
 bool Overlay::focusNextInside(bool next)
