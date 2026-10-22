@@ -659,6 +659,40 @@ TEST_CASE("Names give way in their headings for the table to fit its width", "[o
     REQUIRE(table.heading(2)->text() == longest);
 }
 
+TEST_CASE("A column wider than its share keeps its cells and the other names give way more", "[overlay]")
+{
+    // Six long names over one column whose cell is far wider than an even share.
+    // That column keeps its cell's width, and the other five share what is left,
+    // so the table still fits. The first build gave every other column the even
+    // share regardless, and the wide column pushed the table past its width.
+    const QString longest = QStringLiteral("Bartholomew Fairbank");
+
+    std::vector<SheetTable::Column> columns = { { QStringLiteral("Round"), Qt::AlignLeft },
+                                                { QStringLiteral("Cards") } };
+
+    for(int i = 0 ; i < 6 ; i++)
+        columns.push_back({ longest, Qt::AlignRight, true });
+
+    SheetTable table;
+    table.setColumns(columns);
+    table.addRow({ { QStringLiteral("1") }, { QStringLiteral("1") },
+                   { QStringLiteral("+5"), SheetTable::Tone::Good, false,
+                     QStringLiteral("0/0 0/0 0/0 0/0 0/0 0/0") } });
+
+    const int wide = table.cell(0, 2)->sizeHint().width();
+    REQUIRE(wide > sheet::contentWidth / 8);
+
+    table.fitHeadingsTo(sheet::contentWidth);
+
+    REQUIRE(table.sizeHint().width() <= sheet::contentWidth);
+
+    // The wide column's heading gives way only as far as its cell, the others
+    // further.
+    REQUIRE(table.heading(2)->sizeHint().width() <= wide);
+    REQUIRE(table.heading(3)->sizeHint().width() < wide);
+    REQUIRE(table.heading(3)->toolTip() == longest);
+}
+
 TEST_CASE("A press on an overlay goes no further", "[overlay]")
 {
     QWidget page;

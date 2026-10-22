@@ -1688,7 +1688,7 @@ Done when: both buttons open working sheets.
 
 **Outcome:**
 
-- **The count is 559 tests** (532 + 27, two rewritten, none retired), passing on the `default`,
+- **The count is 560 tests** (532 + 28, two rewritten, none retired), passing on the `default`,
   `release` and `clang` presets with Qt 6.11.2 and building without a warning. (Phase 10's outcome
   above says 521; its review round brought it to 532.) Commit by commit:
   - **The sheet table, 532 → 535**: three `OverlayTests` cases for what the history needs of
@@ -1706,6 +1706,11 @@ Done when: both buttons open working sheets.
     final round before `onRoundScored()`'s early return, measuring a sheet again on show, the sheet
     beneath taking the keyboard at its default, and the queued leave each fail their test without it.
     Put back, the per-round reset fails both of the last trick's new round cases.
+  - **The headings fit on Windows, 559 → 560**: the PR's Windows build failed "Six of the longest
+    names fit the history's sheet", the table 661 wide for 658 (see the pitfalls). The fit now
+    measures each heading by the label's own size, and a column whose cells are wider than an even
+    share keeps them while the others share the rest. The new `OverlayTests` case is that wide
+    column, which the first fit pushed past the sheet on any platform.
 - **Three decisions by the owner, 2026-10-22:**
   - **The history's cell is `taken/bid`**, as the seat pill reads ("+6 1/1"), not the mock-up's
     bid/taken; the meta line is "Score per round, then taken/bid". A slash reads as progress.
@@ -1792,6 +1797,11 @@ Done when: both buttons open working sheets.
     (`QGraphicsScene::mouseReleaseEvent()`). A corner button's sheet opens from inside the release,
     so a leave sent as the sheet showed was undone at once and the button stayed lit under the dim.
     The leave is queued.
+  - **A label can be wider than the font's advance of its text.** The first fit shortened each name
+    until `QFontMetrics::horizontalAdvance()` fitted, and the layout measures `QLabel::sizeHint()`.
+    On Linux the two differ by exactly the label's padding, leaving a pixel a column to spare; on
+    Windows (the CI's Qt 6.10.3 and MSVC) the same table measured 13 px wider than on Linux, 3 px
+    past its sheet. Measure by the label, as the layout does.
   - **`-Wmissing-field-initializers` fires on a partly braced aggregate** even when every member left
     out has a default member initializer, once two or more are given: `{ text, tone, strong }` after
     a fourth field was added. A constructor with defaults is quiet.

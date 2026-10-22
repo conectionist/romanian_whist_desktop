@@ -488,36 +488,66 @@ void SheetTable::addNote(const QString& text)
 
 void SheetTable::fitHeadingsTo(int width)
 {
-    // WHAT EACH COLUMN NEEDS AS IT STANDS: its widest label, heading or cell. A
-    // note row spans every column and asks for nothing of any one.
-    std::vector<int> widest(columns.size(), 0);
+    // WHAT EACH COLUMN'S CELLS NEED, which do not shorten. A note row spans every
+    // column and asks for nothing of any one.
+    std::vector<int> cells(columns.size(), 0);
 
     for(std::size_t c = 0 ; c < columns.size() ; c++)
     {
-        widest[c] = headings[c]->sizeHint().width();
-
         for(const std::vector<QLabel*>& row : rows)
         {
             if(row.size() == columns.size())
-                widest[c] = std::max(widest[c], row[c]->sizeHint().width());
+                cells[c] = std::max(cells[c], row[c]->sizeHint().width());
         }
     }
 
-    int fixed = 0;
-    int shared = 0;
+    // THE COLUMNS THAT MAY NOT GIVE WAY TAKE WHAT THEY NEED FIRST, heading and
+    // cells alike; the ones that may share the rest.
+    int available = width;
+    int sharing = 0;
 
     for(std::size_t c = 0 ; c < columns.size() ; c++)
     {
         if(columns[c].elide)
-            shared++;
+            sharing++;
         else
-            fixed += widest[c];
+            available -= std::max(cells[c], headings[c]->sizeHint().width());
     }
 
-    if(shared == 0)
+    if(sharing == 0)
         return;
 
-    const int share = (width - fixed) / shared;
+    // EACH SHARING COLUMN'S WIDTH: an even share - or, where its cells are wider
+    // than that, its cells' width, and the others share what that leaves.
+    std::vector<int> target(columns.size(), -1);
+    bool settled = false;
+
+    while(!settled)
+    {
+        settled = true;
+        const int share = sharing > 0 ? available / sharing : 0;
+
+        for(std::size_t c = 0 ; c < columns.size() ; c++)
+        {
+            if(columns[c].elide && target[c] < 0 && cells[c] > share)
+            {
+                target[c] = cells[c];
+                available -= cells[c];
+                sharing--;
+                settled = false;
+            }
+        }
+
+        if(settled)
+        {
+            for(std::size_t c = 0 ; c < columns.size() ; c++)
+            {
+                if(columns[c].elide && target[c] < 0)
+                    target[c] = share;
+            }
+        }
+    }
+
     const QFontMetrics metrics(headingFont());
 
     for(std::size_t c = 0 ; c < columns.size() ; c++)
@@ -528,21 +558,20 @@ void SheetTable::fitHeadingsTo(int width)
         QLabel* label = headings[c];
         const QString whole = columns[c].heading;
 
-        // The heading's own room, less its padding - and never less than its
-        // column's cells need, which do not shorten.
-        int room = share - 2 * cellPaddingX;
+        // MEASURED AS THE LAYOUT MEASURES IT, by the label's own size - not by the
+        // font's advance, which it can exceed: shortened by the advance, six names
+        // put the history three pixels past its sheet on Windows, where on Linux
+        // they had a pixel a column to spare (found on CI, phase 11). So the name
+        // is shortened, a pixel at a time, until the label fits.
+        QString shown = whole;
+        label->setText(shown);
 
-        for(const std::vector<QLabel*>& row : rows)
+        for(int room = target[c] - 2 * cellPaddingX ; label->sizeHint().width() > target[c] && room >= 0 ; room--)
         {
-            if(row.size() == columns.size())
-                room = std::max(room, row[c]->sizeHint().width() - 2 * cellPaddingX);
+            shown = metrics.elidedText(whole, Qt::ElideRight, room);
+            label->setText(shown);
         }
 
-        // MEASURED IN THE HEADING'S OWN FONT, its capitals and spacing included,
-        // which QFontMetrics lays out as the label does.
-        const QString shown = metrics.elidedText(whole, Qt::ElideRight, std::max(0, room));
-
-        label->setText(shown);
         label->setToolTip(shown == whole ? QString() : whole);
     }
 }

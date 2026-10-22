@@ -193,10 +193,12 @@ public:
 
     // SHORTENS THE HEADINGS THAT MAY BE, so the table is no wider than `width`:
     // what the other columns need is set aside, and the rest shared out evenly
-    // between the elided ones. A shortened heading ends in an ellipsis and keeps
-    // its whole text as its tooltip. Run after the rows are in, since a column is
-    // as wide as its widest cell; filling the table again (setColumns(),
-    // clearRows()) restores the headings whole.
+    // between the elided ones - but a column whose cells are wider than its share
+    // keeps its cells' width, and the others share what that leaves. Measured by
+    // each heading's own size, as the layout measures it. A shortened heading ends
+    // in an ellipsis and keeps its whole text as its tooltip. Run after the rows
+    // are in; filling the table again (setColumns(), clearRows()) restores the
+    // headings whole. Cells too wide to fit at all still overflow.
     void fitHeadingsTo(int width);
 
     // The rows added since the last clear, not counting the headings; and one
