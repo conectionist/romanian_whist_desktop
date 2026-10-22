@@ -595,3 +595,63 @@ TEST_CASE("Turning motion off mid-sweep takes the cards off at once", "[trick-mo
     for(CardItem* card : cardsOf(trick))
         REQUIRE_FALSE(card->isVisible());
 }
+
+// ---- a new game (PR #38's review, findings #1 and #3) ----
+
+// THE NEXT GAME'S FIRST FRAME LOOKS LIKE THE FRAME THAT CLEARS A TRICK: the same
+// round, as many seats, and a bare felt. clear() is what tells them apart.
+TEST_CASE("A new game forgets the last game's trick", "[trick-motion]")
+{
+    LoneTrick lone;
+    TrickItem& trick = *lone.trick;
+
+    dealtFull(trick, 2);
+    trick.clear();
+
+    for(CardItem* card : cardsOf(trick))
+        REQUIRE_FALSE(card->isVisible());
+
+    setTrickOf(trick, tableOf(4, 0, {}, {}, 5));
+
+    REQUIRE_FALSE(trick.isFlying());
+
+    for(CardItem* card : cardsOf(trick))
+        REQUIRE_FALSE(card->isVisible());
+}
+
+TEST_CASE("A sweep under way ends with the game", "[trick-motion]")
+{
+    LoneTrick lone;
+    TrickItem& trick = *lone.trick;
+
+    dealtFull(trick, 3);
+    setTrickOf(trick, tableOf(4, 0, {}, {}, 5));
+    REQUIRE(trick.isFlying());
+
+    trick.clear();
+
+    REQUIRE_FALSE(trick.isFlying());
+
+    for(CardItem* card : cardsOf(trick))
+        REQUIRE_FALSE(card->isVisible());
+}
+
+// The review's case, through the scene as MainWindow::startGame() drives it: a game
+// left during the dwell after a round-1 trick, and another dealt for as many seats.
+TEST_CASE("A new game's first frame sweeps nothing of the last game's", "[trick-motion]")
+{
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setMotion(motion::Pace::Normal);
+
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(tableOf(4, 0, fullTrick(2))));
+    REQUIRE_FALSE(scene.trickItem()->isFlying());
+
+    scene.newGame();
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(tableOf(4, 0)));
+
+    REQUIRE_FALSE(scene.trickItem()->isFlying());
+
+    for(CardItem* card : cardsOf(*scene.trickItem()))
+        REQUIRE_FALSE(card->isVisible());
+}

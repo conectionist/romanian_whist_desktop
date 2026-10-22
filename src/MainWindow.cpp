@@ -1014,6 +1014,10 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     hand->setPlayable(false);
     trickPanel->clearPrompt();
 
+    // AND WHAT THE TABLE HAD IN MOTION: the last game's trick, its sweep, and its
+    // bid bubbles, which the new game's first frame cannot be told apart from.
+    scene->newGame();
+
     // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
     // lives on. Reachable since phase 9: the menu bar's New Game stays live
     // while the pause menu is up, so a game can be dealt from under it.

@@ -94,12 +94,23 @@ void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
     announceBids(last.get(), *snapshot);
 }
 
+void TableScene::newGame()
+{
+    trick->clear();
+
+    for(BidBubbleItem* bubble : bubbles)
+        bubble->dismiss();
+}
+
 void TableScene::announceBids(const GameSnapshot* last, const GameSnapshot& next)
 {
     const std::size_t seatCount = next.seats.size();
 
-    // ANOTHER GAME OR ANOTHER TABLE: what the last one was saying is over.
-    if(!last || last->seats.size() != seatCount || next.roundNumber < last->roundNumber)
+    // NO FRAME TO COMPARE WITH, OR ANOTHER TABLE: what the last one was saying is
+    // over, and its seats are not these. Another game is newGame()'s to clear: the
+    // round number cannot say so, since a game abandoned in round 1 is followed by
+    // another game's round 1.
+    if(!last || last->seats.size() != seatCount)
     {
         for(BidBubbleItem* bubble : bubbles)
             bubble->dismiss();

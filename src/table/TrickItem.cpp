@@ -348,6 +348,20 @@ void TrickItem::finishAll()
         finish(i);
 }
 
+void TrickItem::clear()
+{
+    finishAll();
+
+    for(CardItem* item : cards)
+        item->hide();
+
+    shown.clear();
+    shownRound = 0;
+    seen = false;
+
+    updateStacking();
+}
+
 void TrickItem::updateStacking()
 {
     bool leavingYourHand = false;

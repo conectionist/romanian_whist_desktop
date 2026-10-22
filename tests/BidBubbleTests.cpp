@@ -210,7 +210,24 @@ TEST_CASE("A new game and a new round say nothing of the last", "[bubble]")
 
     SECTION("a new game clears what was being said")
     {
+        scene.newGame();
+        REQUIRE_FALSE(scene.bidBubble(3)->isVisible());
+
         show(scene, bidding(4, {}, 1));
+        REQUIRE_FALSE(scene.bidBubble(3)->isVisible());
+    }
+
+    // PR #38's review, finding #2: the round number cannot tell this game from the
+    // last, so newGame() is what does.
+    SECTION("a new game in the same round clears it too, and says its own bids")
+    {
+        scene.newGame();
+        show(scene, bidding(4, {}, 7));
+        REQUIRE_FALSE(scene.bidBubble(3)->isVisible());
+
+        show(scene, bidding(4, { 1 }, 7));
+        REQUIRE(scene.bidBubble(1)->isVisible());
+        REQUIRE(scene.bidBubble(1)->text() == QStringLiteral("Bids 2"));
         REQUIRE_FALSE(scene.bidBubble(3)->isVisible());
     }
 

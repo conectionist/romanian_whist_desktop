@@ -128,6 +128,12 @@ public:
     void setTrick(const GameSnapshot& snapshot, const seatlayout::Places& places, const Theme& theme,
                   const HandPlace& fromHand = {});
 
+    // A NEW GAME: the felt goes bare, every flight and sweep ends, and the next frame
+    // is a first frame, with nothing to fly from or sweep. Without it, a new game's
+    // first frame in the same round, with as many seats, read as the frame that
+    // cleared the last game's final trick and swept it (PR #38's review, finding #1).
+    void clear();
+
     // HOW MUCH THE TRICK MOVES. Off by default, so an item on its own places every
     // card at once; TableScene hands over Settings' choice. Going to Off ends every
     // flight where it was going.

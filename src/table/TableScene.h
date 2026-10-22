@@ -58,6 +58,13 @@ public:
     // to blank the table by dropping one.
     void setSnapshot(std::shared_ptr<const GameSnapshot> snapshot);
 
+    // A NEW GAME IS ABOUT TO BE DEALT (MainWindow::startGame()): what the last one
+    // had in motion ends here - the trick on the felt, its sweep, and every bid
+    // bubble. A snapshot carries nothing that names its game, so the scene cannot
+    // tell the next game's first frame from the last game's next one, and guessing
+    // from the round number let both through (PR #38's review, findings #1-#3).
+    void newGame();
+
     // THE FAN, which has a second source the snapshot cannot supply. Everything
     // else on this table is drawn from the snapshot and only the snapshot, and
     // the hand is the documented exception (section 4.0): between turns it
@@ -151,8 +158,8 @@ private:
     void relayout();
 
     // A BID JUST MADE, between the last frame and `next`: each seat whose bid is in
-    // now and was not then, in the same round, says it over its panel (phase 12). A
-    // new game, or another table, clears them all.
+    // now and was not then, in the same round, says it over its panel (phase 12).
+    // Another table clears them all; another game is newGame()'s to clear.
     void announceBids(const GameSnapshot* last, const GameSnapshot& next);
 
     // Grown when a game has more seats than the last one did, panels and racks
