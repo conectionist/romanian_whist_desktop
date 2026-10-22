@@ -854,12 +854,14 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
-    QWidget page;
-    page.resize(1920, 1034);
-
+    // THE SCENE FIRST, so that its card art outlives the last trick's sheet, which
+    // draws from it and which the page deletes (PR #37's review, finding #9).
     TableScene scene;
     scene.setTheme(Theme::dark());
     scene.setSnapshot(std::make_shared<const GameSnapshot>(sheetTable()));
+
+    QWidget page;
+    page.resize(1920, 1034);
 
     TableView view(&scene, &page);
     view.setGeometry(page.rect());

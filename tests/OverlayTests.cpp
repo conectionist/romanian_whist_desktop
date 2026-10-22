@@ -73,11 +73,13 @@ QImage ownPixels(QWidget& widget)
 // `size`: every one the window raises. Rules is the fourth.
 struct EverySheet
 {
+    // The last trick's art, FIRST so that it outlives the sheet drawn from it:
+    // members are destroyed in the reverse of their order here, and the pages
+    // delete the sheets (PR #37's review, finding #9).
+    CardRenderer cards;
+
     std::vector<std::unique_ptr<QWidget>> pages;
     std::vector<Overlay*> sheets;
-
-    // The last trick's art, which outlives the sheet drawn from it.
-    CardRenderer cards;
 
     explicit EverySheet(QSize size)
     {
