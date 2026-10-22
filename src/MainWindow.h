@@ -6,7 +6,7 @@
 #include "engine/Prompts.h"
 #include "engine/RoundResult.h"
 #include "paint/Theme.h"
-#include "ui/LastTrickSheet.h"
+#include "ui/LastTrick.h"
 #include "ui/NewGameDialog.h"
 
 #include <QMainWindow>

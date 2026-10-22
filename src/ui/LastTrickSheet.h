@@ -1,10 +1,8 @@
 #ifndef LAST_TRICK_SHEET_H
 #define LAST_TRICK_SHEET_H
 
-#include "core/GameSnapshot.h"
+#include "ui/LastTrick.h"
 #include "ui/Overlay.h"
-
-#include <romanian_whist/Card.h>
 
 #include <QRectF>
 #include <QSizeF>
@@ -12,7 +10,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <vector>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -23,62 +20,12 @@ class CardRenderer;
 // THE LAST TRICK (the table redesign's phase 11): the trick most recently won in
 // the game, its cards in the order they were played, each over its player's name
 // and the winner's ringed in gold. The mock-up's showLastTrick(), but not only this
-// round's (see Tracker).
+// round's (see Tracker, in LastTrick.h).
 //
 // Translated through QCoreApplication::translate() under the context "lasttrick",
 // for the reason table/ScoreboardItem.h gives.
 namespace lasttrick
 {
-
-// One card of a trick as the sheet shows it.
-struct Played
-{
-    romanian_whist::Card card{};
-    unsigned int seatIndex = 0;
-    QString name;
-
-    // The engine's ranking, never recomputed (PlayedCardView::isWinning): on a
-    // finished trick, the card that took it.
-    bool isWinning = false;
-};
-
-struct Trick
-{
-    // The round it was won in, 1-based as the snapshot counts.
-    unsigned int roundNumber = 0;
-
-    // Your seat, or -1 when you are watching: whose win is "You took it".
-    int humanSeat = -1;
-
-    // In play order, the leader's first.
-    std::vector<Played> cards;
-};
-
-// WHAT THE WINDOW KEEPS OF THE TABLE: the last trick finished, in whichever round,
-// read off the frames as they pass.
-//
-// A FINISHED TRICK IS A FRAME WITH A CARD FROM EVERY SEAT. The bridge publishes one
-// as the trick is won, while it is still the engine's current trick
-// (GameBridge::onTrickWon()), and its isWinning is the engine's winner. Taken the
-// moment it is complete, so while it is still on the felt the sheet shows that
-// same trick; the frames of the next trick, partly played, leave it be.
-//
-// KEPT ACROSS ROUNDS, by the owner's call of 2026-10-22: "Last trick" reads as the
-// last trick played, and at the start of a round that is the last round's final
-// trick. The mock-up forgets it when it deals, and so did phase 11 at first, which
-// left the button saying nothing had finished at every round's start. Only a new
-// game forgets it, through clear().
-class Tracker
-{
-public:
-    void observe(const GameSnapshot& snapshot);
-    void clear() { kept.reset(); }
-
-    const std::optional<Trick>& last() const { return kept; }
-
-private:
-    std::optional<Trick> kept;
-};
 
 // THE LINE UNDER THE TITLE: who took it - "You took it", or "Ana took it" - and,
 // for a trick from a round before `currentRound`, which one: "Ana took it · round
