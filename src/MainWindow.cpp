@@ -24,14 +24,17 @@
 #include <romanian_whist/GameEngine.h>
 
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QDockWidget>
+#include <QGraphicsSceneEvent>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
 #include <QShortcut>
 #include <QStyleHints>
+#include <QTimer>
 
 #include <cstdint>
 #include <memory>
@@ -263,6 +266,15 @@ void MainWindow::buildTable()
     connect(lastTrickSheet, &LastTrickSheet::closeRequested, this, &MainWindow::hideMenuSheets);
 
     menuSheets = { rulesSheet, settingsSheet, historySheet, lastTrickSheet };
+
+    // EVERY SHEET, as it comes up, lets the table's lit things go out under it.
+    for(Overlay* sheet : { static_cast<Overlay*>(pauseOverlay), static_cast<Overlay*>(roundSheet),
+                           static_cast<Overlay*>(gameOverPanel), static_cast<Overlay*>(rulesSheet),
+                           static_cast<Overlay*>(settingsSheet), static_cast<Overlay*>(historySheet),
+                           static_cast<Overlay*>(lastTrickSheet) })
+    {
+        sheet->installEventFilter(this);
+    }
 
     // AND THE HISTORY FROM THE TWO SHEETS THAT REPORT SCORES: over the round sheet,
     // whose hold it keeps, and over the standings, which otherwise cover the table's
@@ -651,10 +663,12 @@ void MainWindow::hideRoundSheet()
 void MainWindow::restoreFocus(bool hadKeyboard)
 {
     // The sheet on top keeps the keyboard where it already is inside it - on its
-    // Main menu, say - and otherwise takes it.
+    // Main menu, say - and otherwise takes it. When what went had the keyboard,
+    // the sheet did not have it before the hide: Qt put it there, on its first
+    // control, and the sheet takes it at its default.
     if(Overlay* sheet = activeOverlay())
     {
-        if(!holdsKeyboard(sheet))
+        if(hadKeyboard || !holdsKeyboard(sheet))
             sheet->focusDefault();
 
         return;
@@ -685,6 +699,27 @@ void MainWindow::restoreFocus(bool hadKeyboard)
         menuPage->focusNewGame();
     else
         table->setFocus(Qt::OtherFocusReason);
+}
+
+void MainWindow::leaveTable()
+{
+    // NAMING THE VIEW'S VIEWPORT, which the scene reads the view through: a leave
+    // naming no widget crashes it.
+    QGraphicsSceneEvent leave(QEvent::GraphicsSceneLeave);
+    leave.setWidget(table->viewport());
+    QCoreApplication::sendEvent(scene, &leave);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    // ONCE THE EVENT UNDER WAY IS DONE, not now. A corner button's sheet opens
+    // from inside the scene's mouse release, and the scene ends a release by
+    // sending a hover at where it happened (QGraphicsScene::mouseReleaseEvent()),
+    // which lit the button again straight after a leave sent from here.
+    if(event->type() == QEvent::Show && qobject_cast<Overlay*>(watched))
+        QTimer::singleShot(0, this, &MainWindow::leaveTable);
+
+    return QMainWindow::eventFilter(watched, event);
 }
 
 bool MainWindow::holdsKeyboard(const QWidget* widget) const

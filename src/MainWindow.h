@@ -99,6 +99,9 @@ protected:
     // by its Alt shortcuts.
     bool focusNextPrevChild(bool next) override;
 
+    // Every sheet's showing, for leaveTable().
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 
 private slots:
     void render(std::shared_ptr<const GameSnapshot> snapshot);
@@ -274,7 +277,20 @@ private:
     // falling back to the table then took the keyboard from wherever the player
     // had put it, the log for one, once a round. Read it with holdsKeyboard()
     // BEFORE the hide, which is when Qt moves the keyboard on.
+    //
+    // AND THE SHEET BENEATH AT ITS DEFAULT, when what went had the keyboard -
+    // not wherever Qt's hide put it, which is the first control in that sheet: the
+    // round sheet's Round history since phase 11, so Enter after closing the
+    // history opened it again rather than Continuing (found in the running app).
     void restoreFocus(bool hadKeyboard);
+
+    // THE TABLE LETS GO OF THE CURSOR when a sheet comes over it: the scene is
+    // told the cursor has left, so nothing stays lit under the dim - a corner
+    // button above all, which its own sheet opens over while the cursor rests on
+    // it. The scene hears of a cursor only from the view, and the view hears
+    // nothing until the mouse next moves (found in the running app, phase 11).
+    // eventFilter() sends it once the event under way is done.
+    void leaveTable();
 
     // Whether the keyboard is on `widget` or inside it. Null holds nothing.
     bool holdsKeyboard(const QWidget* widget) const;

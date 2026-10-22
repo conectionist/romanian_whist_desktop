@@ -25,6 +25,7 @@
 #include <QDockWidget>
 #include <QGraphicsSceneMouseEvent>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -229,6 +230,30 @@ void clickCorner(TableButtonItem* button)
     up.setButton(Qt::LeftButton);
     QCoreApplication::sendEvent(scene, &up);
 }
+
+// WHAT Qt DOES IN A LIVE WINDOW when the widget with the keyboard is hidden: it
+// hands the keyboard on through the window's own Tab handling, which under a sheet
+// lands on the first control of the sheet beneath. The offscreen platform's windows
+// are never active, so Qt does nothing there and the window's own restoreFocus()
+// looked right in every test - this does what Qt does, at the same moment (found in
+// the running app, phase 11).
+class KeyboardMovedOnHide : public QObject
+{
+public:
+    explicit KeyboardMovedOnHide(QWidget* to) : to(to) {}
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if(event->type() == QEvent::Hide)
+            to->setFocus(Qt::TabFocusReason);
+
+        return false;
+    }
+
+private:
+    QWidget* to;
+};
 
 // The rows under the history's headings, its Total row included.
 int historyRows(const HistorySheet* sheet)
@@ -1932,10 +1957,16 @@ TEST_CASE("Round history counts the rounds and a new game empties it", "[main-wi
     REQUIRE(historyRows(history) == 2);
 
     // Closed, the round sheet is still up and still holding, and Enter is
-    // Continue's again.
+    // Continue's again - though Qt hands the keyboard to the round sheet's first
+    // button, Round history, as the history goes: Enter there opened it again.
+    KeyboardMovedOnHide qtsMove(fromRound);
+    history->installEventFilter(&qtsMove);
+
     const int atSheet = log->blockCount();
     close->click();
     pump(600);
+
+    history->removeEventFilter(&qtsMove);
 
     REQUIRE_FALSE(history->isVisible());
     REQUIRE(round->isVisible());
@@ -2045,9 +2076,16 @@ TEST_CASE("The standings open the whole history and its last round", "[main-wind
     SheetTable* rows = history->findChild<SheetTable*>("historyRows");
     REQUIRE(rows->cell(static_cast<int>(rounds) - 1, 0)->text() == QString::number(rounds));
 
-    // Closed, back to the standings, the keyboard on Play again.
+    // Closed, back to the standings, the keyboard on Play again - not on Main
+    // menu, their first button, where Qt hands it as the history goes and where
+    // Enter would leave the game.
+    KeyboardMovedOnHide qtsMove(panel->findChild<QPushButton*>("gameOverMainMenu"));
+    history->installEventFilter(&qtsMove);
+
     history->findChild<QPushButton*>("closeHistory")->click();
     pump(50);
+
+    history->removeEventFilter(&qtsMove);
 
     REQUIRE(panel->isVisible());
     REQUIRE(window.focusWidget() == panel->findChild<QPushButton*>("playAgain"));
@@ -2104,4 +2142,47 @@ TEST_CASE("Last trick keeps the trick just won and a new game starts with none",
     REQUIRE_FALSE(last->shownTrick().has_value());
     REQUIRE(last->findChild<QLabel*>("lastTrickMeta")->text()
             == QStringLiteral("No trick has finished yet this round."));
+}
+
+TEST_CASE("A corner button goes out under the sheet it opens", "[main-window]")
+{
+    // The button is lit under the cursor and clicked; its sheet comes up over it
+    // with the cursor still resting there. The scene hears of the cursor only from
+    // the view, which hears nothing until the mouse moves, so the button stayed lit
+    // under the dim (found in the running app, phase 11). As the mock-up's does,
+    // it goes out.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    LastTrickSheet* last = window.findChild<LastTrickSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(last != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    TableButtonItem* button = scene->lastTrickButton();
+    REQUIRE(pumpUntil(10000, [button]{ return button->isVisible(); }));
+
+    // A mouse move over it, through the view as a real one comes.
+    TableView* view = window.findChild<TableView*>();
+    REQUIRE(view != nullptr);
+
+    const QPointF middle = button->mapRectToScene(QRectF(QPointF(), button->size())).center();
+    const QPoint at = view->mapFromScene(middle);
+
+    QMouseEvent move(QEvent::MouseMove, QPointF(at), QPointF(view->viewport()->mapToGlobal(at)),
+                     Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(view->viewport(), &move);
+
+    REQUIRE(button->isHovered());
+
+    clickCorner(button);
+    pump(50);
+
+    REQUIRE(last->isVisible());
+    REQUIRE_FALSE(button->isHovered());
 }
