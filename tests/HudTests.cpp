@@ -2,6 +2,7 @@
 
 #include "TableFixtures.h"
 
+#include "paint/CardRenderer.h"
 #include "paint/Fonts.h"
 #include "paint/Icons.h"
 #include "paint/Theme.h"
@@ -339,6 +340,58 @@ TEST_CASE("The corner buttons are live once a game is on the table", "[hud]")
 
         hoverAt(scene, QPointF(768.0, 512.0));
     }
+}
+
+// A SCREEN WITH ANOTHER PIXEL RATIO (phase 12). The window dragged from a 1x screen
+// to a 2x one repaints at the new ratio, and everything on the scoreboard, its trump
+// card included, has to be drawn again at it: docs/KNOWN_ISSUES.md recorded the old
+// info strip keeping the first screen's card. The scoreboard's picture is keyed on
+// the ratio it is painted at, trump and all, so this holds it to that.
+TEST_CASE("The scoreboard is drawn again at a new pixel ratio and not otherwise", "[hud]")
+{
+    CardRenderer renderer;
+    QGraphicsScene scene;
+
+    auto* board = new ScoreboardItem(&renderer, nullptr);
+    board->setSnapshot(tableOf(4), Theme::dark());
+    board->setScale(tablespace::hudScale);
+    scene.addItem(board);
+
+    const QRectF source = board->mapRectToScene(QRectF(QPointF(), board->size()));
+
+    const auto renderAt = [&](qreal ratio)
+    {
+        QImage image((source.size() * ratio).toSize(), QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(ratio);
+        image.fill(Qt::transparent);
+
+        QPainter painter(&image);
+        scene.render(&painter, QRectF(QPointF(), source.size()), source);
+        painter.end();
+
+        return image;
+    };
+
+    REQUIRE(board->shown().trump.hasCard);
+
+    renderAt(1.0);
+    const std::size_t first = board->compositions();
+    const std::size_t faces = renderer.rasterizations();
+
+    REQUIRE(first >= 1);
+
+    // The same ratio again: nothing to compose.
+    renderAt(1.0);
+    REQUIRE(board->compositions() == first);
+
+    // Another screen: the picture, and the trump card inside it, at the new ratio.
+    renderAt(2.0);
+    REQUIRE(board->compositions() == first + 1);
+    REQUIRE(renderer.rasterizations() > faces);
+
+    // And back again, the memo holding one ratio at a time.
+    renderAt(1.0);
+    REQUIRE(board->compositions() == first + 2);
 }
 
 // SECTION 2.1: 8 pixels in from the window's left and bottom edges, whatever its

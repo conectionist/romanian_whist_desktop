@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "CardStringMaker.h"
 
@@ -499,6 +500,13 @@ TEST_CASE("A turned rack is drawn on whole pixels", "[rack]")
     // The left rack of four, turned a quarter turn, at a rim point that is not on
     // a whole pixel: it is drawn exactly as the same rack at the nearest whole
     // pixel, rather than filtered between pixels.
+    //
+    // AT THE HiDPI RATIOS TOO (phase 12): the whole pixel there is 2/3 or 1/2 of a
+    // unit, so the nearest one is worked out per ratio.
+    const qreal ratio = GENERATE(1.0, 1.5, 2.0);
+
+    INFO("ratio " << ratio);
+
     const CardRenderer renderer;
 
     const auto drawnAt = [&](QPointF at)
@@ -512,7 +520,8 @@ TEST_CASE("A turned rack is drawn on whole pixels", "[rack]")
 
         const QRectF all(0.0, 0.0, 400.0, 300.0);
 
-        QImage image(all.size().toSize(), QImage::Format_ARGB32_Premultiplied);
+        QImage image((all.size() * ratio).toSize(), QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(ratio);
         image.fill(Qt::transparent);
 
         QPainter painter(&image);
@@ -522,7 +531,14 @@ TEST_CASE("A turned rack is drawn on whole pixels", "[rack]")
         return image;
     };
 
-    REQUIRE(drawnAt(QPointF(200.3, 150.6)) == drawnAt(QPointF(200.0, 151.0)));
+    const auto nearest = [ratio](QPointF at)
+    {
+        return QPointF(std::round(at.x() * ratio) / ratio, std::round(at.y() * ratio) / ratio);
+    };
+
+    const QPointF off(200.3, 150.6);
+
+    REQUIRE(drawnAt(off) == drawnAt(nearest(off)));
 }
 
 TEST_CASE("A snapshot that changes nothing in a rack composes nothing", "[rack]")

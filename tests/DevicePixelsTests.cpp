@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "paint/DevicePixels.h"
 
@@ -140,7 +141,11 @@ TEST_CASE("A snapped point lands on a whole device pixel", "[device-pixels]")
 // number of pixels from an anchor - at a ratio where the two grids differ.
 TEST_CASE("A canvas covers its area from a whole pixel of its anchor", "[device-pixels]")
 {
-    const qreal ratio = 0.78;
+    // 0.78 is a resized window's; 1.5 and 2 are the HiDPI screens' (phase 12).
+    const qreal ratio = GENERATE(0.78, 1.5, 2.0);
+
+    INFO("ratio " << ratio);
+
     const QRectF area(-60.3, -80.1, 120.6, 170.2);
 
     SECTION("anchored on the origin")

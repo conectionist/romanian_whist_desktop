@@ -356,6 +356,11 @@ screen or font — and it is the entry in `KNOWN_ISSUES.md`, which exists becaus
 a way past a change guard that is there for a good reason, and phase E owns the rest of §18.1's
 device-pixel-ratio work anyway.
 
+> **RESOLVED BY THE TABLE REDESIGN, CHECKED IN ITS PHASE 12.** The strip is gone (phase 8 merged it
+> into the scoreboard), and the scoreboard's picture, its trump card included, is keyed on the ratio
+> it is painted at, as every picture on the table is. `HudTests`' "The scoreboard is drawn again at
+> a new pixel ratio and not otherwise" holds it. The entry was deleted from `KNOWN_ISSUES.md`.
+
 **Done when:** a spectated game is watchable and legible end to end — which for a *spectated* game
 means no hand at the bottom, per the box above; the window resizes without the
 layout breaking; the round result gets a beat you can actually read and no card lands on top of
@@ -905,9 +910,10 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
       same layout function that places static items.**
 - [ ] `RoundHistoryDialog` (§16.3), `PreferencesDialog` + `QSettings` (§20), dark mode, reduce
       motion, streak pips, keyboard map.
-- [ ] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
+- [x] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
       `KNOWN_ISSUES.md`, deferred out of B2b and belonging here because it is §18.1's
-      device-pixel-ratio work rather than anything about the strip.
+      device-pixel-ratio work rather than anything about the strip. *Gone with the strip in the
+      table redesign (phase 8); phase 12 tested the scoreboard that replaced it.*
 
 
 > **A snapshot published while a prompt is live re-opens C3's hang, and this is the phase that could
@@ -996,7 +1002,7 @@ Symptom first, because that is what you have.
 | The clock jumps instead of ticking | `elapsed` is riding on the snapshot | §19 |
 | The trick shows the wrong names on the last trick of a round | Seats recomputed from the leader instead of read off `PlayedCardView::seatIndex` | §14 |
 | Cards soften on a HiDPI display | The pixmap cache is not keyed on `dpr` | §18.1 |
-| The trump card is soft after the window moves to another screen | Known and deferred — `InfoStrip` rasterizes only inside `refresh()`, which the change guard skips when the round has not moved | `KNOWN_ISSUES.md` |
+| The trump card is soft after the window moves to another screen | A picture held across a ratio change. The old `InfoStrip` rasterized only inside `refresh()`, which the change guard skips when the round has not moved. The redesign's scoreboard keys its picture on the ratio it is painted at | §18.1, `HudTests` |
 | The table or an avatar is soft while the cards beside it are crisp | `Theme::background()`/`avatar()` were handed a logical size and never told the ratio — both halves (rasterize at `size * dpr`, then `setDevicePixelRatio`) have to be on one path | §18.1 |
 | A new rank is drawn as the card back | The back shared the faces' index space (`indexOf` is `rank * 4 + suit`, the back was 52). It has its own key bit now — and note a `static_assert` **cannot** catch this: C++ cannot name "the last enumerator", so the assert has to spell `Rank::Ace`, which is still 12 after a rank is appended after it | §18.1 |
 | A use-after-free at shutdown, only on one machine | Member declaration order — the engine must be declared last | §21.2 |

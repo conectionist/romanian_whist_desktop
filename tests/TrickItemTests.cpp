@@ -1,5 +1,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "table/TrickItem.h"
 #include "table/CardItem.h"
@@ -738,10 +739,15 @@ TEST_CASE("A played card's shadow lies whole pixels from the card's corner", "[t
 {
     // At a view scale of 0.78 the card's corner is off the grid (-55.2 units is
     // -43.06 pixels), so a picture cornered on the origin's grid would sit a
-    // fraction of a pixel from the art CardItem lays at that corner.
+    // fraction of a pixel from the art CardItem lays at that corner. 1.5 and 2 are
+    // the HiDPI ratios (phase 12): -55.2 is -82.8 and -110.4 pixels there, off the
+    // grid again.
     const Theme theme = Theme::dark();
     const QSizeF size(110.4, 160.0);
-    const qreal ratio = 0.78;
+    const qreal ratio = GENERATE(0.78, 1.5, 2.0);
+
+    INFO("ratio " << ratio);
+
     const QPointF cardCorner = cardshadow::cardRect(size).topLeft();
 
     for(const cardshadow::Look look : { cardshadow::Look::Played, cardshadow::Look::Winning })
