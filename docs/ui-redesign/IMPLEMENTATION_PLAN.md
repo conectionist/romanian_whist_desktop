@@ -1678,11 +1678,17 @@ Files: `src/MainWindow.*`, new `src/ui/HistorySheet.*` and `src/ui/LastTrickShee
 3. Tests: history accumulates and resets; the last-trick store keeps only complete tricks and resets
    per round.
 
+> **AMENDED IN PHASE 11, by the owner's call of 2026-10-22: the last trick outlasts its round.**
+> "Last trick" reads as the last trick played, so at the start of a round it is the last round's
+> final trick, not nothing. Only a new game forgets it. A trick from an earlier round names its
+> round: "Ana took it · round 4". With no trick finished in the game yet, the sheet says "No trick
+> has finished yet." The mock-up forgets it when it deals, as step 2 above did.
+
 Done when: both buttons open working sheets.
 
 **Outcome:**
 
-- **The count is 557 tests** (532 + 25, one rewritten, none retired), passing on the `default`,
+- **The count is 559 tests** (532 + 27, two rewritten, none retired), passing on the `default`,
   `release` and `clang` presets with Qt 6.11.2 and building without a warning. (Phase 10's outcome
   above says 521; its review round brought it to 532.) Commit by commit:
   - **The sheet table, 532 → 535**: three `OverlayTests` cases for what the history needs of
@@ -1692,17 +1698,25 @@ Done when: both buttons open working sheets.
     fixture covers all seven sheets now. **Rewritten:** `HudTests`' "The corner buttons are disabled
     until they have sheets to open" is "The corner buttons are live once a game is on the table".
   - **Two fixes the running app found, 556 → 557**: see the pitfalls.
+  - **The last trick across rounds, 557 → 559** (the owner's call after the PR opened): a
+    `LastTrickSheetTests` case for the round named, and a `MainWindowTests` case that plays round
+    1 and opens Last trick at round 2's bid. **Rewritten:** "A new round forgets the last round's
+    trick" is "The last trick outlasts its round".
   - **Checked by taking each fix out:** the history's clear on New Game, the trick's, recording the
     final round before `onRoundScored()`'s early return, measuring a sheet again on show, the sheet
     beneath taking the keyboard at its default, and the queued leave each fail their test without it.
-- **Two decisions by the owner, 2026-10-22:**
+    Put back, the per-round reset fails both of the last trick's new round cases.
+- **Three decisions by the owner, 2026-10-22:**
   - **The history's cell is `taken/bid`**, as the seat pill reads ("+6 1/1"), not the mock-up's
     bid/taken; the meta line is "Score per round, then taken/bid". A slash reads as progress.
   - **The standings carry a quiet Round history** between Main menu and Play again, on both faces.
     Their dim covers the corner button, and otherwise nothing shows the game's rounds once it ends.
+  - **The last trick outlasts its round** (the amendment above): at a round's start it is the last
+    round's, named as such, where the first build said nothing had finished.
 - **Defaults taken, not asked:**
-  - **Last trick with no trick finished this round opens its sheet**, saying "No trick has finished
-    yet this round.", with no cards. The mock-up shows a toast; the client has none.
+  - **Last trick with no trick finished yet opens its sheet**, saying "No trick has finished yet.",
+    with no cards - only before a game's first trick, since the amendment. The mock-up shows a
+    toast; the client has none.
   - **The history keeps the mock-up's columns**: Round, Cards, a column per seat. Section 16.3 of
     `QT_CLIENT_PLAN_proposal1.md` also had Type and Trump.
   - **A long name gives way in its heading**, with an ellipsis and the whole name as the tooltip,
@@ -1722,8 +1736,9 @@ Done when: both buttons open working sheets.
     never a sum of the rows. `RoundResult.h`'s "nothing accumulates these" note is updated.
   - **`lasttrick::Tracker`** (`src/ui/LastTrickSheet.h`) keeps the last frame with a card from every
     seat - the one `GameBridge::onTrickWon()` publishes - with the engine's `isWinning`. Partly
-    played frames leave it be; a frame of another round forgets it. `render()` feeds it, and
-    `startGame()` clears it, since a new game's round 1 has the old one's number.
+    played frames leave it be, and so does a new round. `render()` feeds it, and `startGame()`
+    clears it, the only thing that does. `lasttrick::metaFor()` names the trick's round when it is
+    not the one on the table.
   - **Both sheets are menu sheets** (`menuSheets`): over everything, holding a game in play, closed
     by Esc. An open one refills if a round or a trick lands under it before the hold does.
   - **`SheetTable`** gained a cell's `note` (a smaller muted part on the text's baseline, painted by
@@ -1742,13 +1757,14 @@ Done when: both buttons open working sheets.
   - `menu.png` differs by up to 7 levels in the logo's lettering, the known band phase 10 saw in
     `table-3-players.png`; nothing in this phase draws the logo.
 - **Checked in the running app**, on a nested Xephyr screen driven by xdotool, before the PR:
-  - both corner buttons at your first bid: "No trick has finished yet this round." and an empty
-    history headed by the four names;
+  - both corner buttons at your first bid: no last trick, and an empty history headed by the four
+    names;
   - Last trick in the middle of an eight-card round, the first trick ringed on its winner; a digit
     under the sheet played nothing;
   - Round history from a waiting round sheet, Esc back to it, and Enter continuing to round 2.
 
-  It found the two pitfalls below that no offscreen test had.
+  It found the two pitfalls below that no offscreen test had. The last trick across rounds came
+  after this run; its window test plays round 1 and opens Last trick at round 2's bid.
 - **What later phases take from here:**
   - **Phase 12's translations** have new contexts: `historysheet`, `lasttrick`, and new strings in
     `roundsheet` and `GameOverPanel`.
