@@ -38,6 +38,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QTranslator>
 
 #include <array>
 #include <cmath>
@@ -376,8 +377,32 @@ QString shotsDirectory()
 }
 }
 
+namespace
+{
+// WHIST_SHOTS_QM: a compiled translation to take the pictures in (phase 12), such as
+// the build's romanian_whist_desktop_ro_RO.qm. Installed once, before the first
+// window is built, and left for the rest of the run - the screenshot cases run on
+// their own, by their tag. Unset, the pictures are in the source language.
+void translateShots()
+{
+    static QTranslator* installed = nullptr;
+
+    if(installed || qEnvironmentVariableIsEmpty("WHIST_SHOTS_QM"))
+        return;
+
+    installed = new QTranslator(QCoreApplication::instance());
+
+    INFO("WHIST_SHOTS_QM=" << qEnvironmentVariable("WHIST_SHOTS_QM").toStdString());
+    REQUIRE(installed->load(qEnvironmentVariable("WHIST_SHOTS_QM")));
+
+    QCoreApplication::installTranslator(installed);
+}
+}
+
 TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 {
+    translateShots();
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -490,6 +515,8 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 // the gold circle and the logo can be compared pixel for pixel.
 TEST_CASE("A screenshot of the empty table at the mock-up's own scale", "[.screenshot]")
 {
+    translateShots();
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -631,6 +658,8 @@ GameSnapshot handMoment(const HandShot& shot)
 
 TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
 {
+    translateShots();
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -867,6 +896,8 @@ lasttrick::Trick sheetTrick()
 
 TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 {
+    translateShots();
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -958,6 +989,8 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 // mock-up, which has no menu page.
 TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
 {
+    translateShots();
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 

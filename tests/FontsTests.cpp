@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QRawFont>
 #include <QGuiApplication>
 #include <QString>
 #include <QStringList>
@@ -103,4 +104,51 @@ TEST_CASE("The default font is none of the bundled typefaces", "[fonts]")
 
     for(const QFont& font : { fonts::logo(), fonts::heading(), fonts::body() })
         REQUIRE_FALSE(family.startsWith(font.families().first()));
+}
+
+// ROMANIAN'S LETTERS (phase 12), in the faces the Romanian draft is drawn in. ș and ț
+// are the comma-below letters, U+0219 and U+021B, not the older cedilla ş and ţ.
+namespace
+{
+const QString romanianLetters = QStringLiteral("ăâîșțĂÂÎȘȚ");
+
+// The letters the face's own file has, not what Qt would borrow from another face.
+QString missingFrom(QFont font)
+{
+    font.setPixelSize(24);
+
+    const QRawFont raw = QRawFont::fromFont(font);
+    QString missing;
+
+    for(const QChar letter : romanianLetters)
+    {
+        if(!raw.supportsCharacter(letter))
+            missing += letter;
+    }
+
+    return missing;
+}
+}
+
+TEST_CASE("The body and logo faces draw every Romanian letter", "[fonts]")
+{
+    QFont bold = fonts::body();
+    bold.setWeight(QFont::Bold);
+
+    for(const QFont& face : { fonts::body(), bold, fonts::logo() })
+    {
+        INFO(face.family().toStdString() << " lacks " << missingFrom(face).toStdString());
+        REQUIRE(missingFrom(face).isEmpty());
+    }
+}
+
+// MARCELLUS HAS NO ș OR ț (it has ş and ţ, with a cedilla), so Qt draws those two
+// in another face wherever a heading uses them: a name, a title, a button. The owner
+// means to replace Marcellus. THIS CASE IS EXPECTED TO FAIL until then, and the day
+// it passes - a heading face with both letters - Catch2 reports it as failing: take
+// the [!shouldfail] tag off, and it guards the new face.
+TEST_CASE("The heading face draws every Romanian letter", "[fonts][!shouldfail]")
+{
+    INFO(fonts::heading().family().toStdString() << " lacks " << missingFrom(fonts::heading()).toStdString());
+    REQUIRE(missingFrom(fonts::heading()).isEmpty());
 }
