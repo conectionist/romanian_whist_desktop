@@ -942,3 +942,48 @@ TEST_CASE("The tests' own player picks slot zero in a blind round", "[hand]")
 
     REQUIRE(fixtures::firstLegalSlot(prompt) == 0);
 }
+
+// WHERE A CARD STANDS IN THE FAN (phase 12), which the trick flies it from when it is
+// played: its slot's placement, the slot the card is in rather than any other.
+TEST_CASE("A card's resting place in the fan is its own slot's", "[hand]")
+{
+    Fanned fan(promptOf({ true, true, true }));
+    const QSizeF size = fan.renderer.sizeForHeight(kCardHeight);
+
+    const std::optional<tablespace::Placement> king = fan.item.restingPlacement(HeartsKing);
+    REQUIRE(king.has_value());
+
+    const tablespace::Placement slot = handitem::cardPlacement(3, 1, size);
+    REQUIRE(king->centre == slot.centre);
+    REQUIRE(king->rotation == slot.rotation);
+
+    // A card the fan does not hold has no place in it.
+    REQUIRE_FALSE(fan.item.restingPlacement(Card(Rank::Two, Suit::Clubs)).has_value());
+}
+
+TEST_CASE("A fan of backs places any card at its middle", "[hand]")
+{
+    PlayPrompt blind;
+    blind.promptId = 9;
+    blind.blind = true;
+    blind.handIndex = { 0, 1, 2 };
+
+    Fanned fan(blind);
+    const QSizeF size = fan.renderer.sizeForHeight(kCardHeight);
+
+    const std::optional<tablespace::Placement> place = fan.item.restingPlacement(HeartsKing);
+    REQUIRE(place.has_value());
+    REQUIRE(place->centre == handitem::cardPlacement(3, 1, size).centre);
+}
+
+TEST_CASE("A hidden or empty fan has no resting place to give", "[hand]")
+{
+    Fanned fan(promptOf({ true, true }));
+
+    fan.item.hide();
+    REQUIRE_FALSE(fan.item.restingPlacement(SpadesAce).has_value());
+
+    fan.item.show();
+    fan.item.clear();
+    REQUIRE_FALSE(fan.item.restingPlacement(SpadesAce).has_value());
+}

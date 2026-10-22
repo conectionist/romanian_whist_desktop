@@ -17,4 +17,13 @@ inline void turnTo(QGraphicsItem& item, qreal degrees)
         item.setRotation(degrees);
 }
 
+// SCALES `item` TO `factor`, AND ONLY WHEN IT CHANGES, for the same reason:
+// setScale() prepares a geometry change before it compares. A played card at rest
+// is set to 1 on every snapshot since a card can be left mid-flight (phase 12).
+inline void scaleTo(QGraphicsItem& item, qreal factor)
+{
+    if(item.scale() != factor)
+        item.setScale(factor);
+}
+
 #endif

@@ -17,6 +17,7 @@
 #include <optional>
 #include <vector>
 
+class BidBubbleItem;
 class BidStripItem;
 class HandItem;
 class LeadMarkItem;
@@ -110,6 +111,13 @@ public:
     // The lead rhombus, READ-ONLY and for tests in the same way.
     const LeadMarkItem* leadMarkItem() const { return leadMark; }
 
+    // The trick, and with it the cards in flight: for tests in the same way.
+    const TrickItem* trickItem() const { return trick; }
+
+    // SEAT `seat`'S BID BUBBLE (phase 12), shown for a moment as its bid is made:
+    // READ-ONLY and for tests in the same way. Null for a seat the table has never had.
+    BidBubbleItem* bidBubble(std::size_t seat) const { return seat < bubbles.size() ? bubbles[seat] : nullptr; }
+
     // PINS THE CORNER PANELS TO THE WINDOW (section 2.1): `visible` is the part of
     // the scene the viewport shows, in table space, and `scale` the view's pixels
     // per table unit. Each panel goes tablespace::hudInset pixels in from its
@@ -141,6 +149,11 @@ private:
     // snapshot and a new theme and on nothing else: a resize is the view's
     // business, and changes no position here.
     void relayout();
+
+    // A BID JUST MADE, between the last frame and `next`: each seat whose bid is in
+    // now and was not then, in the same round, says it over its panel (phase 12). A
+    // new game, or another table, clears them all.
+    void announceBids(const GameSnapshot* last, const GameSnapshot& next);
 
     // Grown when a game has more seats than the last one did, panels and racks
     // together. Six at most, and reused across games rather than rebuilt, for the
@@ -189,6 +202,9 @@ private:
     // Every seat's rack, indexed as `seats` is. Yours is built with the rest and
     // never shown: your hand is the fan at the bottom (section 2.6).
     std::vector<RackItem*> racks;
+
+    // Every seat's bid bubble, indexed as `seats` is.
+    std::vector<BidBubbleItem*> bubbles;
 
     TrickItem* trick = nullptr;
 

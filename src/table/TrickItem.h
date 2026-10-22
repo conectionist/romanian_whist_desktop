@@ -4,17 +4,22 @@
 #include "core/GameSnapshot.h"
 #include "paint/CardShadow.h"
 #include "paint/Theme.h"
+#include "table/Motion.h"
 #include "table/SeatLayout.h"
 #include "table/TableSpace.h"
+
+#include <romanian_whist/Card.h>
 
 #include <QGraphicsObject>
 #include <QPointF>
 
+#include <functional>
 #include <optional>
 #include <vector>
 
 class CardItem;
 class CardRenderer;
+class QVariantAnimation;
 
 // WHERE THE TRICK GOES, which is the part of it with a right answer - so free
 // functions, the split rackitem and seatlayout follow, checked with no scene.
@@ -82,6 +87,21 @@ std::optional<unsigned int> leadSeat(const GameSnapshot& snapshot);
 //
 // IT DRAWS NOTHING ITSELF: the cards are its children, and the lead rhombus is
 // LeadMarkItem, a rung above them in tablespace::z.
+//
+// A CARD FLIES TO THE FELT (phase 12), when the pace says so and a frame adds one
+// to the trick the last frame showed: from your hand for yours, from the owner's
+// panel for a bot's, as table.js's animateIn() does. THE SCENE'S OWN, and nothing
+// the game waits for: it is worked out from two frames side by side, and a frame
+// that does not agree with it - a trick cleared, a new round, a card that is not the
+// one flying - ends it where it was going. The target is always where
+// trickitem::cardPlacement() puts the card, so a flight and a card at rest end in the
+// same place by construction.
+//
+// AND A FINISHED TRICK SWEEPS TO ITS WINNER as the felt clears (table.js sweep()):
+// the frame after the full trick has an empty table, and the cards it no longer
+// shows shrink and fade toward the winner's panel. Not at a round's end - the last
+// trick stays under the round sheet, as it always has - and not past the next card
+// put down, which ends the sweep where it was going.
 class TrickItem : public QGraphicsObject
 {
     Q_OBJECT
@@ -92,21 +112,111 @@ public:
     explicit TrickItem(const CardRenderer* renderer, cardshadow::Cache* shadows = nullptr,
                        QGraphicsItem* parent = nullptr);
 
+    // WHERE A CARD OF YOURS STOOD IN THE FAN, asked at the moment a card of yours is
+    // new on the felt, before the fan is redrawn without it: HandItem::
+    // restingPlacement(). Empty for a table with no fan, or a card it does not hold,
+    // and the card then flies from your panel as a bot's does.
+    using HandPlace = std::function<std::optional<tablespace::Placement>(const romanian_whist::Card&)>;
+
     // Every card on the table, each where trickitem::cardPlacement() puts it.
     // `places` is every seat's, seatlayout::places() for the snapshot's table, as
     // TableScene has already worked them out for the racks.
-    void setTrick(const GameSnapshot& snapshot, const seatlayout::Places& places, const Theme& theme);
+    //
+    // A card new since the last frame - the same round, the last table a prefix of
+    // this one - flies to its place when the pace animates (setPace()); every other
+    // card is placed at once. `fromHand` is asked only for a card new in this frame.
+    void setTrick(const GameSnapshot& snapshot, const seatlayout::Places& places, const Theme& theme,
+                  const HandPlace& fromHand = {});
+
+    // HOW MUCH THE TRICK MOVES. Off by default, so an item on its own places every
+    // card at once; TableScene hands over Settings' choice. Going to Off ends every
+    // flight where it was going.
+    void setPace(motion::Pace pace);
+    motion::Pace pace() const { return currentPace; }
+
+    // THE ANIMATION BEHIND card `index`'s flight, null for a card at rest: for tests,
+    // which drive it with pause() and setCurrentTime() rather than sleep. Never null
+    // while a flight is under way.
+    QVariantAnimation* flight(std::size_t index) const;
+    bool isFlying() const;
 
     QRectF boundingRect() const override;
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
+    // One card's flight: what it starts from, what it ends at, and the clock between.
+    // `to` is rewritten by every frame the card is still flying in, so a flight is
+    // always on its way to where the card now belongs.
+    struct Tween
+    {
+        tablespace::Placement from;
+        tablespace::Placement to;
+        qreal fromScale = 1.0;
+        qreal fromOpacity = 1.0;
+        qreal toScale = 1.0;
+        qreal toOpacity = 1.0;
+
+        // Whether the card is in the air, whether it left your hand (which is what
+        // takes the trick over the fan: tablespace::z::flyingCard), and whether it is
+        // leaving the felt in a sweep, to be hidden when it gets there.
+        bool active = false;
+        bool fromHand = false;
+        bool leaving = false;
+
+        QVariantAnimation* clock = nullptr;
+    };
+
     // Grown on demand and then reused for the life of the scene, never cleared
-    // and rebuilt per frame: six items at most, ~1300 frames a game, and phase
-    // E needs a CardItem that outlives the frame it appeared in so that its pos
-    // can be animated toward the next one.
+    // and rebuilt per frame: six items at most, ~1300 frames a game. A CardItem that
+    // outlives the frame it appeared in is what a flight needs - and so does each
+    // keep its animation, which is reused rather than made again for every card.
     CardItem* cardAt(std::size_t index);
+
+    // What the last frame showed, to tell which cards a new one adds.
+    struct Shown
+    {
+        unsigned int seat = 0;
+        romanian_whist::Card card{};
+        bool winning = false;
+    };
+
+    // WHETHER THE FLIGHTS UNDER WAY AGREE WITH THIS FRAME, and where its new cards
+    // begin. A frame agrees when the same round's last table is a prefix of this
+    // one - equal, or with cards added. It does not when a trick was cleared, a new
+    // round came, or a card is not the one that was there.
+    struct Arrivals
+    {
+        bool agrees = false;
+        std::size_t first = 0;
+    };
+
+    Arrivals arrivalsFor(const GameSnapshot& snapshot) const;
+
+    // Starts card `index` on its flight to `place`, from where a card of its owner's
+    // comes: `fromHand` for yours, the owner's panel for the rest.
+    void launch(std::size_t index, const seatlayout::Place& seat, const tablespace::Placement& place,
+                qreal cardHeight, const romanian_whist::Card& card, const HandPlace& fromHand);
+
+    // Whether this frame clears a finished trick the last frame showed, in the same
+    // round, so it sweeps to its winner; and if so, the winner's seat.
+    std::optional<unsigned int> sweepWinner(const GameSnapshot& snapshot) const;
+
+    // Sends every card the last frame showed toward `winner`'s panel.
+    void sweep(const seatlayout::Place& winner);
+
+    // Ends every sweep under way: the cards it was carrying off are hidden.
+    void finishLeaving();
+
+    // One tick of card `index`'s flight, `progress` from 0 to 1 after the curve.
+    void step(std::size_t index, qreal progress);
+
+    // Ends card `index`'s flight where it was going. Safe for a card at rest.
+    void finish(std::size_t index);
+    void finishAll();
+
+    // The trick's rung: over your hand while a card of yours is leaving it.
+    void updateStacking();
 
     const CardRenderer* renderer;
 
@@ -114,6 +224,17 @@ private:
     cardshadow::Cache* shadows;
 
     std::vector<CardItem*> cards;
+
+    // Parallel to `cards`.
+    std::vector<Tween> tweens;
+
+    motion::Pace currentPace = motion::Pace::Off;
+
+    // The last frame shown, and the round it was in. `seen` is false until the first,
+    // which has nothing to fly from.
+    bool seen = false;
+    unsigned int shownRound = 0;
+    std::vector<Shown> shown;
 };
 
 #endif

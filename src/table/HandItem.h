@@ -112,6 +112,16 @@ public:
     // and the two must not answer it differently.
     bool isPlayable(std::size_t slot) const;
 
+    // WHERE `card` STANDS IN THE FAN, at rest, for the trick to fly it from: its
+    // slot's placement. In a round where the fan is backs - Forehead, Hidden - the
+    // card played is not known to the fan, and there is only the one: the middle
+    // slot. None for a hand that is not shown, a card not in it, or a fan with no
+    // size yet.
+    //
+    // THE RISE IS NOT INCLUDED: clicking a card ends the prompt's claim on the fan
+    // (setPlayable(false)), and with it the raised card drops back to rest.
+    std::optional<tablespace::Placement> restingPlacement(const romanian_whist::Card& card) const;
+
     // Plays a slot as though it had been clicked. The digit keys go through here
     // rather than emitting the signal themselves, so both paths run one rule.
     void activate(std::size_t slot);

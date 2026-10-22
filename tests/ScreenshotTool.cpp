@@ -5,6 +5,7 @@
 #include "WindowDriving.h"
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
+#include "table/BidBubbleItem.h"
 #include "table/BidStripItem.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
@@ -325,6 +326,16 @@ void capture(MainWindow& window, const TableScene& scene, const Capture& shot, c
 
     const std::shared_ptr<const GameSnapshot> s = scene.lastSnapshot();
     REQUIRE(s != nullptr);
+
+    // NO BID BUBBLES (phase 12). The game is played at the bots' top speed, so this
+    // round's bids are a few milliseconds old and still being said - 1.5 s even with
+    // motion off. A player at that speed sees them too; the pictures compare against
+    // the mock-up's, which show the table between bids.
+    for(std::size_t seat = 0 ; seat < s->seats.size() ; seat++)
+    {
+        if(BidBubbleItem* bubble = scene.bidBubble(seat))
+            bubble->dismiss();
+    }
 
     const QPixmap picture = window.grab();
     const QString path = QDir(dir).filePath(QString::fromUtf8(shot.file));

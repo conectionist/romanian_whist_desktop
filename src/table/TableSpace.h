@@ -215,12 +215,24 @@ inline constexpr qreal playedCards = 20.0;
 inline constexpr qreal leadMark = 30.0;
 inline constexpr qreal hand = 40.0;
 
+// A CARD LEAVING YOUR HAND, over the fan it leaves (phase 12). It starts among the
+// fan's own cards, which are drawn at `hand`, and has to pass over the ones beside
+// it; but under your plaque, which covers the bottom of the fan and so covers the
+// start of its flight too. The trick takes this rung only while such a card is in
+// the air, and `playedCards` otherwise.
+inline constexpr qreal flyingCard = 45.0;
+
 // YOUR PLAQUE OVER YOUR HAND. It overlaps the bottom of your fan (section 2.8:
 // "the human's panel covers the bottom of the hand; that is intended"), and it is
 // the plaque that has to win - it carries your name and your pill.
 inline constexpr qreal humanPanel = 50.0;
 
 inline constexpr qreal panels = 60.0;
+
+// A BOT'S BID FLOATING OVER ITS PANEL for a moment (phase 12): over every panel,
+// since the top of one panel's bubble can overlap the panel above it in a crowded
+// table, and under the corner panels, which are the ones being read.
+inline constexpr qreal bubbles = 65.0;
 
 // The corner panels, over everything on the table: in a window too narrow for
 // them they overlap a seat's panel, and they are the ones being read.

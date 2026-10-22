@@ -32,6 +32,8 @@ add_executable(desktop_tests
     DevicePixelsTests.cpp
     TableSpaceTests.cpp
     MotionTests.cpp
+    TrickMotionTests.cpp
+    BidBubbleTests.cpp
     TableTopTests.cpp
     ShadowsTests.cpp
     PanelTests.cpp

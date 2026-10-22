@@ -220,6 +220,32 @@ bool HandItem::isPlayable(std::size_t slot) const
     return playable && slot < fan.size() && fan[slot].legal;
 }
 
+std::optional<tablespace::Placement> HandItem::restingPlacement(const romanian_whist::Card& card) const
+{
+    if(!isVisible() || fan.empty() || cardHeight <= 0.0)
+        return std::nullopt;
+
+    std::optional<std::size_t> slot;
+
+    if(backs > 0)
+    {
+        slot = (fan.size() - 1) / 2;
+    }
+    else
+    {
+        for(std::size_t i = 0 ; i < entries.size() && i < fan.size() ; i++)
+        {
+            if(entries[i].card == card)
+                slot = i;
+        }
+    }
+
+    if(!slot)
+        return std::nullopt;
+
+    return handitem::cardPlacement(fan.size(), *slot, renderer->sizeForHeight(cardHeight));
+}
+
 void HandItem::activate(std::size_t slot)
 {
     if(!isPlayable(slot))
