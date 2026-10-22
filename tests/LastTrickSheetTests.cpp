@@ -241,7 +241,7 @@ TEST_CASE("The last trick shows each card over its player in play order", "[last
 // THE ART'S SHAPE FROM THE ONE PLACE THAT KNOWS IT, with a renderer or without:
 // the sheet without one kept a copy of the art's numbers (PR #37's review, finding
 // #7), which a change of art would have left behind.
-TEST_CASE("Without its art, the last trick keeps the art's card shape", "[last-trick]")
+TEST_CASE("Without its art the last trick keeps the art's card shape", "[last-trick]")
 {
     CardRenderer cards;
 

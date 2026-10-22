@@ -2248,7 +2248,7 @@ TEST_CASE("A corner button goes out under the sheet it opens", "[main-window]")
     REQUIRE_FALSE(button->isHovered());
 }
 
-TEST_CASE("A sheet tells the table once, and only while it is up", "[main-window]")
+TEST_CASE("A sheet tells the table once and only while it is up", "[main-window]")
 {
     // PR #37's review, finding #2. Every leave closes the application's tooltip, so
     // a round sheet coming under the history closed the one that shows a shortened
