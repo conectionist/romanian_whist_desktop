@@ -98,6 +98,8 @@ qt_add_library(desktop_core STATIC
 
     src/table/TableSpace.h
     src/table/TableSpace.cpp
+    src/table/Motion.h
+    src/table/Motion.cpp
     src/table/TableTopItem.h
     src/table/TableTopItem.cpp
     src/table/SeatLayout.h

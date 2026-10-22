@@ -6,6 +6,7 @@
 #include "paint/CardShadow.h"
 #include "paint/Panel.h"
 #include "paint/Theme.h"
+#include "table/Motion.h"
 #include "table/RackItem.h"
 
 #include <QGraphicsScene>
@@ -70,6 +71,13 @@ public:
     std::shared_ptr<const GameSnapshot> lastSnapshot() const { return snapshot; }
 
     void setTheme(const Theme& theme);
+
+    // HOW MUCH THE TABLE MOVES (the redesign's phase 12): Settings' "Card
+    // animations", handed over by MainWindow, live, as the pace is. OFF UNTIL SAID
+    // OTHERWISE, so a scene built on its own - in a test, or the screenshot tool -
+    // shows each frame at once, finished; the window sets the shipped default.
+    void setMotion(motion::Pace pace);
+    motion::Pace motionPace() const { return animationPace; }
 
     // The theme the table is drawn in. TableView draws the room behind it from
     // this, so the room and the table cannot be in two different themes.
@@ -144,6 +152,9 @@ private:
     void placeHud();
 
     Theme theme = Theme::light();
+
+    // See setMotion().
+    motion::Pace animationPace = motion::Pace::Off;
 
     // BY VALUE, so its cache lives as long as the scene and a repaint costs
     // nothing after the first. Declared before the items, which hold a pointer

@@ -405,6 +405,11 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
             TableScene* scene = window.findChild<TableScene*>();
             REQUIRE(scene != nullptr);
 
+            // EACH PICTURE IS A SETTLED MOMENT: with the cards' motion off, the frame
+            // the game published is the frame shot, not a card half way to the felt. The
+            // window's own pace (phase 12's Card animations) is left as it ships.
+            scene->setMotion(motion::Pace::Off);
+
             BidStripItem* bidStrip = scene->bidStripItem();
             REQUIRE(bidStrip != nullptr);
 
@@ -887,7 +892,7 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
     rules->showRules(shotConfig(6));
 
     SettingsSheet* settings = new SettingsSheet(&page);
-    settings->setValues(newgame::DefaultSpeed, true);
+    settings->setValues(newgame::DefaultSpeed, true, motion::defaultPace);
 
     // Phase 11's two: the game's first twelve rounds, and a trick won mid-row.
     HistorySheet* history = new HistorySheet(&page);

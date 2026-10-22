@@ -87,6 +87,11 @@ void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
     relayout();
 }
 
+void TableScene::setMotion(motion::Pace pace)
+{
+    animationPace = pace;
+}
+
 void TableScene::setTheme(const Theme& palette)
 {
     theme = palette;
