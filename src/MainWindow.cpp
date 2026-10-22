@@ -556,7 +556,10 @@ void MainWindow::fillHistory()
 
 void MainWindow::showLastTrick()
 {
-    lastTrickSheet->showTrick(lastTrick.last());
+    // The round on the table, which says whether the trick's own needs naming.
+    const std::shared_ptr<const GameSnapshot> table = scene->lastSnapshot();
+
+    lastTrickSheet->showTrick(lastTrick.last(), table ? table->roundNumber : 0);
     showMenuSheet(lastTrickSheet);
 }
 
@@ -1117,7 +1120,7 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     lastTrick.observe(*snapshot);
 
     if(lastTrickSheet->isVisible())
-        lastTrickSheet->showTrick(lastTrick.last());
+        lastTrickSheet->showTrick(lastTrick.last(), snapshot->roundNumber);
 }
 
 // THE GAME THREAD IS PARKED IN makeBet() FROM HERE UNTIL onBidChosen(), which is

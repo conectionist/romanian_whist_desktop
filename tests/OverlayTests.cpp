@@ -165,7 +165,7 @@ struct EverySheet
             trick.cards.push_back({ romanian_whist::Card(romanian_whist::Rank::Ace, romanian_whist::Suit::Spades),
                                     i, QStringLiteral("Bartholomew Fairbank"), i == 2 });
 
-        last->showTrick(trick);
+        last->showTrick(trick, 7);
         sheets.push_back(last);
 
         for(Overlay* sheet : sheets)

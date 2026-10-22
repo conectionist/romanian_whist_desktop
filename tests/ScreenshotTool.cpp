@@ -898,7 +898,7 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 
     LastTrickSheet* last = new LastTrickSheet(&page);
     last->setCards(&scene.cardRenderer());
-    last->showTrick(sheetTrick());
+    last->showTrick(sheetTrick(), 10);
 
     const std::vector<std::pair<const char*, Overlay*>> shots = {
         { "sheet-pause.png", pause },

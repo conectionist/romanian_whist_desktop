@@ -20,9 +20,10 @@ QT_END_NAMESPACE
 
 class CardRenderer;
 
-// THE LAST TRICK (the table redesign's phase 11): the trick most recently won this
-// round, its cards in the order they were played, each over its player's name and
-// the winner's ringed in gold. The mock-up's showLastTrick().
+// THE LAST TRICK (the table redesign's phase 11): the trick most recently won in
+// the game, its cards in the order they were played, each over its player's name
+// and the winner's ringed in gold. The mock-up's showLastTrick(), but not only this
+// round's (see Tracker).
 //
 // Translated through QCoreApplication::translate() under the context "lasttrick",
 // for the reason table/ScoreboardItem.h gives.
@@ -53,8 +54,8 @@ struct Trick
     std::vector<Played> cards;
 };
 
-// WHAT THE WINDOW KEEPS OF THE TABLE: the last trick finished this round, read off
-// the frames as they pass.
+// WHAT THE WINDOW KEEPS OF THE TABLE: the last trick finished, in whichever round,
+// read off the frames as they pass.
 //
 // A FINISHED TRICK IS A FRAME WITH A CARD FROM EVERY SEAT. The bridge publishes one
 // as the trick is won, while it is still the engine's current trick
@@ -62,8 +63,11 @@ struct Trick
 // moment it is complete, so while it is still on the felt the sheet shows that
 // same trick; the frames of the next trick, partly played, leave it be.
 //
-// FORGOTTEN AT A NEW ROUND, as the mock-up's is when it deals: a frame naming
-// another round drops it, and the first trick of that round is the next one kept.
+// KEPT ACROSS ROUNDS, by the owner's call of 2026-10-22: "Last trick" reads as the
+// last trick played, and at the start of a round that is the last round's final
+// trick. The mock-up forgets it when it deals, and so did phase 11 at first, which
+// left the button saying nothing had finished at every round's start. Only a new
+// game forgets it, through clear().
 class Tracker
 {
 public:
@@ -76,11 +80,12 @@ private:
     std::optional<Trick> kept;
 };
 
-// THE LINE UNDER THE TITLE: who took it - "You took it", or "Ana took it" - or,
-// with no trick finished this round, "No trick has finished yet this round.". Your
+// THE LINE UNDER THE TITLE: who took it - "You took it", or "Ana took it" - and,
+// for a trick from a round before `currentRound`, which one: "Ana took it · round
+// 4". With no trick finished in the game yet, "No trick has finished yet.". Your
 // own seat is "You", as in every sentence on the table (section 2.10); a game you
 // watch has no "You". Whole sentences, so a translator can agree the verb.
-QString metaFor(const std::optional<Trick>& trick);
+QString metaFor(const std::optional<Trick>& trick, unsigned int currentRound);
 
 // .sheet .mini: each card 88 wide at the art's own shape, 12 apart, and its
 // player's name in .note's 15 under it, 6 below the card. The winner is ringed
@@ -113,9 +118,10 @@ public:
     // Until it is given one the sheet draws its names but no cards.
     void setCards(const CardRenderer* renderer);
 
-    // Fills the sheet: the trick's cards, or - with none finished this round - the
-    // line that says so, and no cards.
-    void showTrick(const std::optional<lasttrick::Trick>& trick);
+    // Fills the sheet: the trick's cards, or - with none finished yet - the line
+    // that says so, and no cards. `currentRound` is the round on the table, which
+    // says whether the trick needs its round named.
+    void showTrick(const std::optional<lasttrick::Trick>& trick, unsigned int currentRound);
 
     // Close, so Enter closes.
     void focusDefault() override;

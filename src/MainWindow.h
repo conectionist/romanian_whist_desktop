@@ -398,8 +398,9 @@ private:
     // it on the game thread for this one to read. Emptied by startGame().
     std::vector<RoundResult> roundHistory;
 
-    // THE LAST TRICK FINISHED THIS ROUND, read off the frames render() draws.
-    // Emptied by startGame(), and by a new round itself.
+    // THE LAST TRICK FINISHED IN THE GAME, in whichever round, read off the frames
+    // render() draws. Emptied by startGame(), and by nothing else: a new game's
+    // round 1 has the old one's number.
     lasttrick::Tracker lastTrick;
 
     // THE FAN, owned by the scene rather than by this window - it is a

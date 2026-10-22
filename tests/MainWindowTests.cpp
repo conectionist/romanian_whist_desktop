@@ -2127,9 +2127,9 @@ TEST_CASE("Last trick keeps the trick just won and a new game starts with none",
     REQUIRE_FALSE(last->isVisible());
     REQUIRE(round->isVisible());
 
-    // A NEW GAME'S FIRST ROUND IS ROUND 1 TOO, so only the window's clearing can
-    // forget the old game's trick: a seated game, parked at your first bid with
-    // nothing played.
+    // A NEW GAME'S FIRST ROUND IS ROUND 1 TOO, and the last trick outlasts its
+    // round, so only the window's clearing forgets the old game's trick: a seated
+    // game, parked at your first bid with nothing played.
     answerModalFreshSeatedGame(300);
     window.findChild<QAction*>("newGameAction")->trigger();
 
@@ -2141,7 +2141,50 @@ TEST_CASE("Last trick keeps the trick just won and a new game starts with none",
     REQUIRE(last->isVisible());
     REQUIRE_FALSE(last->shownTrick().has_value());
     REQUIRE(last->findChild<QLabel*>("lastTrickMeta")->text()
-            == QStringLiteral("No trick has finished yet this round."));
+            == QStringLiteral("No trick has finished yet."));
+}
+
+TEST_CASE("At a new round the last trick is the last round's and says so", "[main-window]")
+{
+    // The owner's call, 2026-10-22: "Last trick" is the last trick played, not
+    // this round's. Round 1 of a seated game is one card; you bid and play it, and
+    // at round 2's bid the last trick is round 1's, named as such.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    LastTrickSheet* last = window.findChild<LastTrickSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(last != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalFreshSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    HandItem* hand = scene->handItem();
+
+    // You bid first in round 1, so any bid stands.
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+    REQUIRE(clickBid(*bidStrip, 0));
+
+    REQUIRE(pumpUntil(10000, [hand]{ return hand->isPlayable(0); }));
+    hand->activate(0);
+
+    // Round 2, parked at your bid.
+    REQUIRE(pumpUntil(10000, [&]
+    {
+        return bidStrip->isVisible() && scene->lastSnapshot()->roundNumber == 2;
+    }));
+
+    clickCorner(scene->lastTrickButton());
+
+    REQUIRE(last->isVisible());
+    REQUIRE(last->shownTrick().has_value());
+    REQUIRE(last->shownTrick()->roundNumber == 1);
+    REQUIRE(last->shownTrick()->cards.size() == scene->lastSnapshot()->seats.size());
+    REQUIRE(last->findChild<QLabel*>("lastTrickMeta")->text().endsWith(QStringLiteral("round 1")));
 }
 
 TEST_CASE("A corner button goes out under the sheet it opens", "[main-window]")

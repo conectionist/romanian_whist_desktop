@@ -100,8 +100,11 @@ TEST_CASE("The kept trick outlasts the next one's first cards", "[last-trick]")
     REQUIRE(tracker.last().has_value());
 }
 
-TEST_CASE("A new round forgets the last round's trick", "[last-trick]")
+TEST_CASE("The last trick outlasts its round", "[last-trick]")
 {
+    // THE OWNER'S CALL, 2026-10-22: "Last trick" is the last trick played, so at the
+    // start of a round it is the last round's final trick. The mock-up forgets it
+    // when it deals, and phase 11 first did too.
     lasttrick::Tracker tracker;
     tracker.observe(finishedTrick());
 
@@ -112,17 +115,21 @@ TEST_CASE("A new round forgets the last round's trick", "[last-trick]")
     dealt.table.clear();
 
     tracker.observe(dealt);
-    REQUIRE_FALSE(tracker.last().has_value());
+    REQUIRE(tracker.last().has_value());
+    REQUIRE(tracker.last()->roundNumber == 10);
+    REQUIRE(tracker.last()->cards.front().card == Card(Rank::King, Suit::Spades));
 
-    // Its first trick finished is the next one kept.
+    // The new round's first trick finished takes its place.
     GameSnapshot first = finishedTrick();
     first.roundNumber = 11;
+    first.table.front().card = Card(Rank::Ace, Suit::Spades);
 
     tracker.observe(first);
     REQUIRE(tracker.last().has_value());
     REQUIRE(tracker.last()->roundNumber == 11);
+    REQUIRE(tracker.last()->cards.front().card == Card(Rank::Ace, Suit::Spades));
 
-    // And clear() forgets it outright, as a new game does.
+    // And only clear() forgets it, as a new game does.
     tracker.clear();
     REQUIRE_FALSE(tracker.last().has_value());
 }
@@ -136,22 +143,47 @@ TEST_CASE("The last trick says who took it and You for you", "[last-trick]")
                     { Card(Rank::King, Suit::Hearts), 0, QStringLiteral("Dan"), true },
                     { Card(Rank::Two, Suit::Hearts), 1, QStringLiteral("Bogdan"), false } };
 
-    REQUIRE(lasttrick::metaFor(trick) == QStringLiteral("You took it"));
+    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("You took it"));
 
     trick.cards[1].isWinning = false;
     trick.cards[0].isWinning = true;
 
-    REQUIRE(lasttrick::metaFor(trick) == QStringLiteral("Ana took it"));
+    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("Ana took it"));
 
     // A game you watch has no You: your seat's number is the bots', by name.
     trick.humanSeat = -1;
     trick.cards[0].isWinning = false;
     trick.cards[1].isWinning = true;
 
-    REQUIRE(lasttrick::metaFor(trick) == QStringLiteral("Dan took it"));
+    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("Dan took it"));
 
-    // And with nothing finished this round, the mock-up's sentence.
-    REQUIRE(lasttrick::metaFor(std::nullopt) == QStringLiteral("No trick has finished yet this round."));
+    // And with nothing finished in the game yet, the mock-up's sentence, less its
+    // "this round".
+    REQUIRE(lasttrick::metaFor(std::nullopt, 1) == QStringLiteral("No trick has finished yet."));
+}
+
+TEST_CASE("A trick from an earlier round says which round it was", "[last-trick]")
+{
+    // At the start of round 4 the last trick is round 3's, and its cards alone do
+    // not say so.
+    lasttrick::Trick trick;
+    trick.roundNumber = 3;
+    trick.humanSeat = 0;
+    trick.cards = { { Card(Rank::Ten, Suit::Hearts), 2, QStringLiteral("Ana"), true },
+                    { Card(Rank::Two, Suit::Hearts), 0, QStringLiteral("Dan"), false } };
+
+    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("Ana took it \u00B7 round 3"));
+
+    trick.cards[0].isWinning = false;
+    trick.cards[1].isWinning = true;
+
+    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("You took it \u00B7 round 3"));
+
+    // A name with a placeholder in it is not filled in by the round.
+    trick.humanSeat = -1;
+    trick.cards[1].name = QStringLiteral("Dan %2");
+
+    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("Dan %2 took it \u00B7 round 3"));
 }
 
 TEST_CASE("The last trick shows each card over its player in play order", "[last-trick]")
@@ -167,7 +199,7 @@ TEST_CASE("The last trick shows each card over its player in play order", "[last
 
     lasttrick::Tracker tracker;
     tracker.observe(finishedTrick());
-    sheet.showTrick(tracker.last());
+    sheet.showTrick(tracker.last(), 10);
 
     page.show();
     QCoreApplication::processEvents();
@@ -209,14 +241,14 @@ TEST_CASE("The last trick shows each card over its player in play order", "[last
 TEST_CASE("The last trick with none finished shows no cards", "[last-trick]")
 {
     LastTrickSheet sheet;
-    sheet.showTrick(std::nullopt);
+    sheet.showTrick(std::nullopt, 1);
 
     REQUIRE_FALSE(sheet.shownTrick().has_value());
     REQUIRE(sheet.cardsArea().isEmpty());
 
     QLabel* meta = sheet.findChild<QLabel*>("lastTrickMeta");
     REQUIRE(meta != nullptr);
-    REQUIRE(meta->text() == QStringLiteral("No trick has finished yet this round."));
+    REQUIRE(meta->text() == QStringLiteral("No trick has finished yet."));
 }
 
 TEST_CASE("The last trick's Close asks to close", "[last-trick]")

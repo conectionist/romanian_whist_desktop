@@ -19,11 +19,6 @@
 
 void lasttrick::Tracker::observe(const GameSnapshot& snapshot)
 {
-    // A NEW ROUND FORGETS THE OLD ONE'S TRICK, from its first frame on - before
-    // anything else is asked, so a round with nothing finished in it says so.
-    if(kept && kept->roundNumber != snapshot.roundNumber)
-        kept.reset();
-
     // ONLY A FINISHED TRICK: a card from every seat. Partly played tables, the
     // next trick's included, leave the kept one as it is.
     if(snapshot.seats.empty() || snapshot.table.size() != snapshot.seats.size())
@@ -49,10 +44,10 @@ void lasttrick::Tracker::observe(const GameSnapshot& snapshot)
     kept = std::move(trick);
 }
 
-QString lasttrick::metaFor(const std::optional<Trick>& trick)
+QString lasttrick::metaFor(const std::optional<Trick>& trick, unsigned int currentRound)
 {
     if(!trick || trick->cards.empty())
-        return QCoreApplication::translate("lasttrick", "No trick has finished yet this round.");
+        return QCoreApplication::translate("lasttrick", "No trick has finished yet.");
 
     const auto winner = std::find_if(trick->cards.begin(), trick->cards.end(),
                                      [](const Played& played) { return played.isWinning; });
@@ -62,7 +57,23 @@ QString lasttrick::metaFor(const std::optional<Trick>& trick)
     if(winner == trick->cards.end())
         return QString();
 
-    if(trick->humanSeat >= 0 && static_cast<unsigned int>(trick->humanSeat) == winner->seatIndex)
+    const bool yours = trick->humanSeat >= 0
+                    && static_cast<unsigned int>(trick->humanSeat) == winner->seatIndex;
+
+    // THE ROUND NAMED WHEN IT IS NOT THIS ONE: at the start of a round the last
+    // trick is the last round's, and the cards alone do not say so.
+    if(trick->roundNumber != currentRound)
+    {
+        const QString round = QString::number(trick->roundNumber);
+
+        if(yours)
+            return QCoreApplication::translate("lasttrick", "You took it · round %1").arg(round);
+
+        // One arg() taking both, so a name with a %2 in it is not filled in.
+        return QCoreApplication::translate("lasttrick", "%1 took it · round %2").arg(winner->name, round);
+    }
+
+    if(yours)
         return QCoreApplication::translate("lasttrick", "You took it");
 
     return QCoreApplication::translate("lasttrick", "%1 took it").arg(winner->name);
@@ -130,7 +141,7 @@ LastTrickSheet::LastTrickSheet(QWidget* parent) : Overlay(parent)
 
     connect(closeButton, &QPushButton::clicked, this, &LastTrickSheet::closeRequested);
 
-    showTrick(std::nullopt);
+    showTrick(std::nullopt, 0);
 }
 
 void LastTrickSheet::setCards(const CardRenderer* cards)
@@ -140,11 +151,11 @@ void LastTrickSheet::setCards(const CardRenderer* cards)
     panel()->update();
 }
 
-void LastTrickSheet::showTrick(const std::optional<lasttrick::Trick>& trick)
+void LastTrickSheet::showTrick(const std::optional<lasttrick::Trick>& trick, unsigned int currentRound)
 {
     shown = trick;
 
-    meta->setText(lasttrick::metaFor(trick));
+    meta->setText(lasttrick::metaFor(trick, currentRound));
 
     row->setFixedSize(rowSize());
     row->setVisible(shown && !shown->cards.empty());
