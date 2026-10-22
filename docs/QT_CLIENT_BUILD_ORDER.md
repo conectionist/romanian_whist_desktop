@@ -906,10 +906,16 @@ Mostly independent; do it in any order. **Except one group, which is not polish:
       only this phase can wake up.
 - [ ] The clock (§19) — the contrasting case: pure GUI-thread state on a `QTimer`, and it must stay
       off the snapshot.
-- [ ] `QPropertyAnimation` on `CardItem::pos`, to §18.2's budget. **Animation targets go through the
-      same layout function that places static items.**
+- [x] `QPropertyAnimation` on `CardItem::pos`, to §18.2's budget. **Animation targets go through the
+      same layout function that places static items.** *Built in the table redesign's phase 12, as
+      a `QVariantAnimation` per card in `TrickItem`: a card's flight to the felt and the trick's sweep
+      to its winner, at Settings' "Card animations" pace (§18.2's amendment).*
 - [ ] `RoundHistoryDialog` (§16.3), `PreferencesDialog` + `QSettings` (§20), dark mode, reduce
-      motion, streak pips, keyboard map.
+      motion, streak pips, keyboard map. *The table redesign built four of the six: the round
+      history as `HistorySheet` (phase 11), the table page dark whatever the system's scheme (phase
+      1, its Q1), reduce motion as "Card animations: Off" (phase 12), and streaks as the
+      scoreboard's RUN column (phase 8). Still open: `PreferencesDialog` + `QSettings`, and a
+      keyboard map.*
 - [x] **`InfoStrip` re-rasterizes on a screen or font change** — the one entry in
       `KNOWN_ISSUES.md`, deferred out of B2b and belonging here because it is §18.1's
       device-pixel-ratio work rather than anything about the strip. *Gone with the strip in the

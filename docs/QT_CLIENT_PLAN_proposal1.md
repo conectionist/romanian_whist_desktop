@@ -2051,6 +2051,25 @@ About box prints the client version and the linked engine version, exactly as th
 > card game is a single focused activity, which is this section's own argument, and a menu bar is
 > where an IDE keeps its commands.
 
+
+> **AMENDED IN THE TABLE REDESIGN (`docs/ui-redesign/`, phases 2-12): the four regions are one table
+> page.** The table fills the window under a menu bar, and what the info strip, the scoreboard and
+> the prompt bar said is in panels pinned to the window's corners, drawn in the table's scene at the
+> table's scale:
+>
+> - **Top left, the scoreboard**: the round, the cards dealt and the round type; the bid tension; a
+>   row per seat in bid order (B, T, PTS and a RUN streak column); the trump stacked under them. It
+>   is the info strip and the scoreboard in one. Still **never animated**.
+> - **Top right, the trick panel**: the trick, its leader and suit, who is winning, and the prompt
+>   bar's sentence. The prompt bar is gone.
+> - **Bottom left, two buttons**: Round history (§16.3) and Last trick.
+> - **No status bar, and no clock yet.** §19 still says where `elapsed` must live when it comes.
+> - **The menu bar is the redesign's own** (`MenuBar`, the window's menu widget): New Game, Settings
+>   and Rules on the left, View (Log, Card art) and Exit on the right. Exit opens the pause menu, as
+>   Esc does; D1's Menu button went with the prompt bar. The menu page and the pause menu stand.
+> - **The table is a fixed table space scaled to the window** (the redesign's section 2.1), so no
+>   layout is recomputed on a resize.
+
 **Abandoning, quitting, closing the window and starting a second game all route through
 `GameController::stop()`** (§6), and none is a special path: they are the same three calls in the
 same order, which is the whole reason §6 insists `stop()` be idempotent.
@@ -2224,6 +2243,26 @@ squeezes.
 > back. A fan that only ever reads the snapshot cannot be clicked and is empty for the last two
 > rounds of every default game. Nothing in this part changes that.
 
+
+> **AMENDED IN THE TABLE REDESIGN (phases 4-7): the table is the mock-up's.** The rules above hold -
+> clockwise from you, seats off the trick, `isWinning` never recomputed, the hand's two sources -
+> and the picture changed:
+>
+> - **The seats are not on an ellipse.** Each panel is placed from a table per player count
+>   (`seatlayout::panelRect()`, the redesign's section 2.5), outside the wooden rim. They are still
+>   computed, never read off the art, in table units the view scales.
+> - **The plaque** is a portrait, the name and a pill, **"Taken/Bid: 1/2"**, green on target, amber
+>   while owing, red when over: the numbers carry it, so colour is not the only cue. There is no
+>   "(you)" and no score on it (the owner's calls, 2026-10-18 and 2026-10-21); the scoreboard has
+>   the scores. The turn ring is 3 px of gold-bright with a glow, and a "▸" before the name.
+> - **The cards-left stack is a rack**: each opponent's face-down hand stands in a wooden rack on
+>   the rim, leaning towards its owner.
+> - **A played card lies in front of its owner's rack**, turned to line up with it; yours just above
+>   your hand. The winner is ringed in gold from the second card down.
+> - **The lead pip is a gold rhombus** on the felt's gold circle, in line with the leader's rack, and
+>   only while the engine's phase is Playing (`GameSnapshot::phase`).
+> - **Your hand fans on the bottom of the rim**, the mock-up's arc, overlapping by about half.
+
 ## 15. Bidding, playing, and the end of a trick
 
 ### 15.1 Bidding
@@ -2265,6 +2304,19 @@ because otherwise the final bid is only ever seen when a bot made it.
 tricks — someone is going to be wrong."* `betsPlaced` and `betSum` are already on the snapshot. The
 over/under is the whole tension of the round and the terminal only implies it.
 
+
+> **AMENDED IN THE TABLE REDESIGN (phases 8, 10 and 12).**
+>
+> - **The strip lies on the felt**, over the logo: `BidStripItem`, a painted item in the table's
+>   scene, not a widget rising over the bottom. It asks "How many tricks will you take?". **Its digit
+>   keys are read by the window** (`bidstrip::answerKey()`), as the hand's are.
+> - **Its note is never empty**: the forbidden bid's reason when there is one, and otherwise how the
+>   bids stand, "2 bid so far, totalling 3 of 6 tricks."
+> - **The bid tension** reads "Bids so far: 3 of 6 tricks" while bidding, then "Bids total 7 for 6
+>   tricks: over by 1" (or under), on the scoreboard's third line.
+> - **"Briefly on the seat plaque" is a bubble**, "Bids 2" or "You bid 2", over the panel for 1.6 s
+>   (`BidBubbleItem`, phase 12).
+
 ### 15.2 Playing a card
 
 - **Legal cards are lit; illegal cards are dimmed and unclickable.** Legality is
@@ -2285,6 +2337,19 @@ over/under is the whole tension of the round and the terminal only implies it.
 slot, and the display slot goes through `activePrompt.handIndex[slot]` into
 `provider->submit(activePrompt.promptId, …)`. Nothing else is ever sent back, and no path skips the
 `promptId`.
+
+
+> **AMENDED IN THE TABLE REDESIGN (phases 7, 8 and 12).**
+>
+> - **The trick panel says why**, top right: "Your turn. You must follow ♠.", "Your turn. No ♠, you
+>   must trump.", "Your turn. You lead.", "Your turn. Any card."
+> - **The keyboard is the digits**: 1-8 play the card at that place in the fan. The ← → selection
+>   was never built.
+> - **The card flies** from where it stood in the fan to its place on the felt, at Settings' "Card
+>   animations" pace: 360 ms by default, the mock-up's, and 180 ms at Quick, this section's figure
+>   (§18.2's amendment). The fan does not close behind it; it is drawn again without the card.
+> - **The cursor** is a pointing hand over a card you can play and "not allowed" over one you
+>   cannot, on your turn.
 
 ### 15.3 The end of a trick
 
@@ -2329,6 +2394,14 @@ for.
 > One thing D1 measured that this box does not say: **a pause cannot be seen on a seated game at
 > its own turn.** The game thread is parked in the provider, not in `pace()`, so there is nothing to
 > hold and Resume is a no-op. That is correct, and it means any test of a pause needs bots to pace.
+
+
+> **AMENDED IN THE TABLE REDESIGN (phases 8 and 12).** The trick panel says "Ana wins the trick." and
+> the winner lifts, ringed in gold. **The sweep** starts as the dwell ends: the frame that clears the
+> felt sends the trick to the winner's panel, shrinking and fading, 480 ms at the default pace. It is
+> the scene's own and the game does not wait for it; the next card down ends it where it was going.
+> A round's last trick is not swept: it stays under the round sheet. "Wait for me between tricks"
+> and "Skip to end of round" are still not built.
 
 ## 16. The end of a round, the end of the game, and the history
 
@@ -2392,6 +2465,12 @@ A sheet slides down over the table:
   > of its call sites. Note that the fastest speed hides this defect exactly as it hid the one
   > above — a test that pins either has to run at a **non-zero** dwell.
 
+
+> **AMENDED IN THE TABLE REDESIGN (phases 10 and 11).** The sheet is centred over the page in the
+> redesign's look (`Overlay`) and appears rather than sliding. Its title is "Round 7 · 6 cards ·
+> Normal", over a line with the trump and the scoring rule, and the columns are PLAYER, BID, TAKEN,
+> ROUND and TOTAL. A quiet **Round history** button goes before Continue.
+
 ### 16.2 The end of the game
 
 ```
@@ -2435,6 +2514,13 @@ A sheet slides down over the table:
 screen after the loop ends and a GUI cannot: `run()` returning happens on the game thread, inside a
 slot the GUI never sees. §4.1 publishes the final snapshot *before* emitting `gameOver` for exactly
 this reason — the panel is drawn over the final state.
+
+
+> **AMENDED IN THE TABLE REDESIGN (phases 10-12).** The panel is a sheet in the redesign's look, the
+> announcement over PLACE, PLAYER and TOTAL, and both its faces carry a quiet **Round history**
+> between Main menu and Play again. The points take Qt's `%n` so a translation can choose its
+> plural; Qt fills `%n` in for a count of zero or more only, so a winner below zero is "Bogdan wins
+> with a score of -12."
 
 ### 16.3 Round history
 
@@ -2481,6 +2567,18 @@ still reports the cards actually played in it.
 > thread is inside `pace()` for the whole time the sheet is up, so nothing else is published until it
 > is dismissed.
 
+
+> **AMENDED IN THE TABLE REDESIGN (phase 11): built, in `MainWindow`, as the mock-up's sheet.**
+>
+> - `MainWindow::roundHistory` appends each `RoundResult` first thing in `onRoundScored()`, on the
+>   GUI thread, so an unwaited game's last round is in it; `startGame()` empties it. The totals are
+>   the engine's, never a sum of the rows.
+> - **`HistorySheet` has the mock-up's columns**: Round, Cards, and one per seat with the round's
+>   score (signed and coloured) and taken/bid small and muted, then a totals row. Type and Trump are
+>   not in it.
+> - **It opens from the Round history corner button, the round sheet and the standings**, not from a
+>   View menu, and it holds a game in play while it is up.
+
 ## 17. Forehead and Hidden, drawn
 
 These are the two rounds where a GUI beats the terminal outright, because "you cannot see your own
@@ -2512,6 +2610,12 @@ Play itself is unchanged: one card in hand, no decision, so it plays out with th
 the face-down back is still a button, and clicking it is what unparks the engine. A widget that
 draws nothing here stalls the last two rounds of every default game (§8, phase C).
 
+
+> **AMENDED IN THE TABLE REDESIGN (phases 5 and 8).** Every other seat's card is in its **rack** on
+> the rim: face up in a Forehead round, a back in a Hidden one. The rule for *whether* a face shows
+> is unchanged (`SeatView::hand`). The round type is named on the scoreboard's second line ("1 card
+> dealt · Forehead"), called out in colour as the info strip did.
+
 ## 18. Visual language
 
 **Not a skeuomorphic casino.** Flat, calm, high contrast; a felt-toned surface rather than a
@@ -2533,6 +2637,18 @@ photograph of felt.
 > `.hcard.illegal .face`). At 45% opacity the cards of a hand, which overlap by about half, showed the
 > card beneath through each dimmed one. The owner's decision, 2026-10-20. Grey-on-white stays ruled
 > out, for the reason above. `CardRenderer::State::Dimmed` is where it is drawn.
+
+
+> **AMENDED IN THE TABLE REDESIGN: the table page is the mock-up's look, and dark only** (its open
+> question Q1). The rows above are superseded where they differ:
+>
+> - **The surface is textured**: a wooden rim and a felt top from two generated textures
+>   (`tools/generate_table_textures.py`), with a gold circle and the logo on the felt.
+> - **Typography is bundled**: Cinzel Decorative for the logo, Marcellus for names, titles and
+>   buttons, Alegreya Sans for the rest (OFL). The platform font is left to the dialogs.
+> - **Every colour is a `Theme::TablePalette` token** (the redesign's section 2.2).
+> - **The active seat** has a 3 px gold-bright ring with a glow, and the "▸".
+> - **The winning card** lifts, with a 2 px gold-bright ring, a glow and a deeper shadow.
 
 ### 18.1 The two seams that make all of this replaceable
 
@@ -2588,6 +2704,16 @@ Three rules follow, and each one is a change that is cheap only if it was cheap 
   prompt bar. A `QGraphicsItem::paint()` override is invisible to it. Theme the scene through
   `Theme`; use QSS only for the widgets around it.
 
+
+> **AMENDED IN THE TABLE REDESIGN: the seams held, and grew.** `Theme` keeps every colour
+> (`ThemeColours`, `TablePalette`), adds `woodTexture()`, `feltTexture()` and `room()`, and its
+> `avatar()` draws a head-and-shoulders bust per seat at a ratio it is given. **`cardHeightFor()` is
+> gone**: card sizes are fixed table units (`src/table/TableSpace.h`) and the view scales the whole
+> table. `CardRenderer::back()` draws the mock-up's back. Every picture is rasterized at
+> `devicepixels::effectiveRatio()`, the device's ratio times the view's scale, and cached by it, so
+> it is sharp at any size and on any screen. The scoreboard and the prompt bar are painted scene items
+> now, so stylesheets reach none of the table.
+
 **Dark mode falls out of the palette object** rather than from hard-coded colours, and the surface
 changes tone rather than the cards changing colour — a card is white in the dark too.
 
@@ -2620,6 +2746,28 @@ Bot **thinking time** is not an animation but a pace, and it is `Pacing::beat` /
 > the model of `submit()` and `cancelPacing()` and for §5's reason. It arrives in the same phase as
 > the pacing controls, and for the same cause: shortening the beat is what first makes
 > `stateChanged`'s lack of coalescing visible.
+
+
+> **AMENDED IN THE TABLE REDESIGN'S PHASE 12: what was built.**
+>
+> - **One preference, Settings' "Card animations"**: Off, Quick, Normal (the default) and Slow.
+>   **Off is "Reduce motion".** The platform half is not built: Qt 6.11 has no setting to read
+>   (`QAccessibilityHints` reports contrast only). Held in memory, as the other settings are (§20).
+> - **The lengths are the mock-up's at Normal**: a card to the table 360 ms, easing out
+>   (`cubic-bezier(.2, .75, .25, 1)`), and the sweep to the winner 480 ms, easing in
+>   (`cubic-bezier(.5, 0, .75, 0)`). Quick halves them, 180 and 240 ms, which is this table's
+>   budget; Slow is 1.6 times Normal. `src/table/Motion.h` has the numbers.
+> - **A bid's bubble** shows for 1.6 s whatever the pace: it is reading time. At Off it is held
+>   still for 1.5 s.
+> - **Not built**: the bid strip and the round sheet in and out, the turn ring's fade, and the
+>   hover's ease.
+> - **Targets go through the layout functions** (`trickitem::cardPlacement()`,
+>   `handitem::cardPlacement()`, `seatlayout::place()`), as this section asks.
+> - **Interruptible, and open loop.** The scene works the motion out from two frames side by side; a
+>   frame that disagrees with an animation ends it where it was going, and one that repeats the felt
+>   leaves it running. **The game thread does not wait**: the handshake in the box above is not
+>   built, and the redesign changed none of the bridge. At fast bot speeds an animation is cut short
+>   instead. The scene never publishes a frame or calls the window's `render()` for one.
 
 ## 19. The clock, and what else does not belong in the snapshot
 
