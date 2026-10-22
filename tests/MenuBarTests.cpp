@@ -5,6 +5,7 @@
 #include "paint/Theme.h"
 #include "ui/MenuBar.h"
 
+#include <QCursor>
 #include <QAction>
 #include <QFontMetricsF>
 #include <QImage>
@@ -12,6 +13,7 @@
 #include <QMainWindow>
 #include <QMenu>
 #include <QPixmap>
+#include <QWidget>
 
 #include <cmath>
 #include <cstdlib>
@@ -348,4 +350,21 @@ TEST_CASE("The menu bar's shadow paints the glint over the shadow", "[menu-bar]"
     REQUIRE(top > middle);
     REQUIRE(middle > bottom);
     REQUIRE(bottom < 0.01);
+}
+
+// page.html's .btn: `cursor: pointer`, and the plain arrow on a greyed item (phase 12).
+TEST_CASE("A menu item points only while it can be pressed", "[menu-bar]")
+{
+    // On a bar, as every item is: Qt keeps a window's cursor flag set.
+    QWidget bar;
+    MenuBarButton& button = *new MenuBarButton(icons::Icon::Exit, &bar);
+
+    REQUIRE(button.testAttribute(Qt::WA_SetCursor));
+    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
+
+    button.setEnabled(false);
+    REQUIRE_FALSE(button.testAttribute(Qt::WA_SetCursor));
+
+    button.setEnabled(true);
+    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
 }

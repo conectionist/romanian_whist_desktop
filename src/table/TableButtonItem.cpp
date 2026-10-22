@@ -3,6 +3,7 @@
 #include "paint/DevicePixels.h"
 #include "paint/Fonts.h"
 
+#include <QCursor>
 #include <QFont>
 #include <QFontMetricsF>
 #include <QGraphicsSceneMouseEvent>
@@ -76,6 +77,9 @@ TableButtonItem::TableButtonItem(icons::Icon _icon, const QString& label, panel:
 {
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::LeftButton);
+
+    // page.html's .btn: `cursor: pointer`, while it can be pressed (itemChange()).
+    setCursor(Qt::PointingHandCursor);
 }
 
 void TableButtonItem::setTheme(const Theme& palette)
@@ -146,6 +150,12 @@ QVariant TableButtonItem::itemChange(GraphicsItemChange change, const QVariant& 
         // as the constructor set them.
         if(!value.toBool())
             hovered = false;
+
+        // The pointing hand only while a click would do something.
+        if(value.toBool())
+            setCursor(Qt::PointingHandCursor);
+        else
+            unsetCursor();
 
         memo.invalidate();
         update();

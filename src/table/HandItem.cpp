@@ -4,6 +4,7 @@
 #include "table/CardItem.h"
 #include "table/Turn.h"
 
+#include <QCursor>
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QtMath>
@@ -338,6 +339,18 @@ void HandItem::layOut()
     showLift();
 }
 
+void HandItem::showCursor()
+{
+    const std::optional<std::size_t> slot = playable && cursor ? slotAt(*cursor) : std::nullopt;
+
+    if(!slot)
+        unsetCursor();
+    else if(isPlayable(*slot))
+        setCursor(Qt::PointingHandCursor);
+    else
+        setCursor(Qt::ForbiddenCursor);
+}
+
 void HandItem::showLift()
 {
     // Every card casts the hand's shadow; the one under the cursor is raised, and
@@ -345,6 +358,8 @@ void HandItem::showLift()
     // the fan's geometry.
     for(std::size_t i = 0 ; i < fan.size() ; i++)
         fan[i].item->setHeld(hovered && *hovered == i, theme.table, shadows);
+
+    showCursor();
 }
 
 std::optional<std::size_t> HandItem::slotAt(QPointF position) const
@@ -405,7 +420,12 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
     const std::optional<std::size_t> next = liftAt(cursor);
 
     if(next == hovered)
+    {
+        // The card under the cursor may still have changed - from one dimmed card
+        // to the next, or onto the gap between - and the cursor with it.
+        showCursor();
         return;
+    }
 
     hovered = next;
 
@@ -415,6 +435,7 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 void HandItem::hoverLeaveEvent(QGraphicsSceneHoverEvent*)
 {
     cursor.reset();
+    unsetCursor();
 
     if(!hovered)
         return;

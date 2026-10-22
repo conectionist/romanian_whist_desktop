@@ -9,6 +9,7 @@
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 
+#include <QCursor>
 #include <QCoreApplication>
 #include <QFont>
 #include <QGraphicsSceneHoverEvent>
@@ -505,6 +506,18 @@ std::optional<unsigned int> BidStripItem::offeredAt(std::optional<QPointF> point
 
 void BidStripItem::hoverAt(std::optional<QPointF> point)
 {
+    // page.html's .opt `cursor: pointer`, and .opt:disabled's `not-allowed` over the
+    // struck-out bid; the plain arrow anywhere else on the strip.
+    const std::optional<unsigned int> under =
+        prompt && point ? bidUnder(firstBid, showing.highest, *point) : std::nullopt;
+
+    if(!under)
+        unsetCursor();
+    else if(bidstrip::offers(showing, *under))
+        setCursor(Qt::PointingHandCursor);
+    else
+        setCursor(Qt::ForbiddenCursor);
+
     const std::optional<unsigned int> now = offeredAt(point);
 
     if(now == hovered)

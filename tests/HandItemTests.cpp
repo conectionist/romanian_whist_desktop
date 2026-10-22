@@ -12,6 +12,7 @@
 #include "table/HandItem.h"
 #include "table/TableSpace.h"
 
+#include <QCursor>
 #include <QGraphicsScene>
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
@@ -986,4 +987,57 @@ TEST_CASE("A hidden or empty fan has no resting place to give", "[hand]")
     fan.item.show();
     fan.item.clear();
     REQUIRE_FALSE(fan.item.restingPlacement(SpadesAce).has_value());
+}
+
+// .hcard.playable `cursor: pointer` and .hcard.illegal `not-allowed`, on your turn
+// only (phase 12). The last card is on top, so its middle is on it alone.
+//
+// Asked through QGraphicsItem: HandItem's own `cursor` is where the mouse last was.
+namespace
+{
+Qt::CursorShape pointerOf(const QGraphicsItem& item)
+{
+    return item.cursor().shape();
+}
+}
+
+TEST_CASE("The cursor points at a card you can play and refuses one you cannot", "[hand]")
+{
+    SECTION("a legal card")
+    {
+        Fanned fan(promptOf({ true, true, true }));
+        fan.hoverAt(fan.cards().back()->pos());
+
+        REQUIRE(fan.item.hasCursor());
+        REQUIRE(pointerOf(fan.item) == Qt::PointingHandCursor);
+
+        fan.leave();
+        REQUIRE_FALSE(fan.item.hasCursor());
+    }
+
+    SECTION("an illegal card")
+    {
+        Fanned fan(promptOf({ true, true, false }));
+        fan.hoverAt(fan.cards().back()->pos());
+
+        REQUIRE(pointerOf(fan.item) == Qt::ForbiddenCursor);
+    }
+
+    SECTION("between turns, nothing to promise")
+    {
+        Fanned fan(promptOf({ true, true, true }), false);
+        fan.hoverAt(fan.cards().back()->pos());
+
+        REQUIRE_FALSE(fan.item.hasCursor());
+    }
+
+    SECTION("the turn ending under a still cursor")
+    {
+        Fanned fan(promptOf({ true, true, true }));
+        fan.hoverAt(fan.cards().back()->pos());
+        REQUIRE(fan.item.hasCursor());
+
+        fan.item.setPlayable(false);
+        REQUIRE_FALSE(fan.item.hasCursor());
+    }
 }

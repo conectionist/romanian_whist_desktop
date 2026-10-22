@@ -164,6 +164,11 @@ private:
     void layOut();
     void showLift();
 
+    // page.html's .hcard.playable `cursor: pointer` and .hcard.illegal
+    // `not-allowed`, over the card the cursor is on, on your turn; the plain arrow
+    // otherwise. From slotAt(), so it is the card a click would reach.
+    void showCursor();
+
     // WHICH SLOT IS UNDER A POINT, and it is not "the first whose box contains
     // it". The cards overlap by about half and later ones are drawn ON TOP, so
     // the card a player is pointing at is the LAST one that contains the point.

@@ -14,6 +14,7 @@
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 
+#include <QCursor>
 #include <QCoreApplication>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
@@ -712,4 +713,23 @@ TEST_CASE("The tests' own bidder bids one when zero is forbidden", "[bid-strip]"
 TEST_CASE("The tests' own bidder bids zero when nothing is forbidden", "[bid-strip]")
 {
     REQUIRE(fixtures::lowestLegalBid(promptFor(1)) == 0);
+}
+
+// .opt `cursor: pointer`, .opt:disabled `not-allowed`, the plain arrow between them
+// (phase 12).
+TEST_CASE("The cursor points at a bid and refuses the struck-out one", "[bid-strip]")
+{
+    LoneStrip lone;
+    lone.strip->setPrompt(promptFor(4, std::optional<unsigned int>(2u)));
+
+    hoverAt(lone.scene, lone.on(1));
+    REQUIRE(lone.strip->hasCursor());
+    REQUIRE(lone.strip->cursor().shape() == Qt::PointingHandCursor);
+
+    hoverAt(lone.scene, lone.on(2));
+    REQUIRE(lone.strip->cursor().shape() == Qt::ForbiddenCursor);
+
+    // Between two bids: no button, no promise.
+    hoverAt(lone.scene, (lone.on(0) + lone.on(1)) / 2.0);
+    REQUIRE_FALSE(lone.strip->hasCursor());
 }

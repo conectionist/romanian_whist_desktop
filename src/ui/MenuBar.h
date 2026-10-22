@@ -117,6 +117,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
 private:
     std::optional<icons::Icon> icon;

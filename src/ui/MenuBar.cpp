@@ -1,8 +1,11 @@
 #include "MenuBar.h"
 
+#include "ui/LitButton.h"
+
 #include "paint/Fonts.h"
 #include "paint/Shadows.h"
 
+#include <QEvent>
 #include <QAction>
 #include <QBoxLayout>
 #include <QFontMetricsF>
@@ -106,6 +109,17 @@ MenuBarButton::MenuBarButton(std::optional<icons::Icon> _icon, QWidget* parent)
     setFocusPolicy(Qt::TabFocus);
 
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+    litbutton::pointWhenEnabled(*this);
+}
+
+void MenuBarButton::changeEvent(QEvent* event)
+{
+    // Exit greys while there is nothing to pause, and takes the plain arrow with it.
+    if(event->type() == QEvent::EnabledChange)
+        litbutton::pointWhenEnabled(*this);
+
+    QToolButton::changeEvent(event);
 }
 
 void MenuBarButton::setTheme(const Theme& _theme)

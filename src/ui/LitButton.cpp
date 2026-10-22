@@ -1,11 +1,30 @@
 #include "LitButton.h"
 
+#include <QEvent>
 #include <QFocusEvent>
+
+void litbutton::pointWhenEnabled(QWidget& widget)
+{
+    if(widget.isEnabled())
+        widget.setCursor(Qt::PointingHandCursor);
+    else
+        widget.unsetCursor();
+}
 
 LitButton::LitButton(const QString& text, QWidget* parent) : QPushButton(text, parent)
 {
     // Repainted as the cursor comes and goes, which is all the lit look needs.
     setAttribute(Qt::WA_Hover);
+
+    litbutton::pointWhenEnabled(*this);
+}
+
+void LitButton::changeEvent(QEvent* event)
+{
+    if(event->type() == QEvent::EnabledChange)
+        litbutton::pointWhenEnabled(*this);
+
+    QPushButton::changeEvent(event);
 }
 
 bool LitButton::isLit() const

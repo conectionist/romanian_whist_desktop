@@ -13,6 +13,7 @@
 #include "ui/SettingsSheet.h"
 #include "WindowDriving.h"
 
+#include <QCursor>
 #include <QBoxLayout>
 #include <QCoreApplication>
 #include <QFocusEvent>
@@ -841,4 +842,20 @@ TEST_CASE("Tab inside an overlay wraps round and skips what it cannot stop on", 
     outside->setFocus();
     REQUIRE(sheet.focusNextInside(false));
     REQUIRE(window.focusWidget() == third);
+}
+
+// .sheet .actions button: `cursor: pointer` (phase 12), and none on a greyed one.
+TEST_CASE("A sheet button points only while it can be pressed", "[overlay]")
+{
+    // In a page, as every sheet button is: Qt keeps a window's cursor flag set.
+    QWidget page;
+    SheetButton& button = *new SheetButton(QStringLiteral("Continue"), SheetButton::Kind::Primary, &page);
+
+    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
+
+    button.setEnabled(false);
+    REQUIRE_FALSE(button.testAttribute(Qt::WA_SetCursor));
+
+    button.setEnabled(true);
+    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
 }

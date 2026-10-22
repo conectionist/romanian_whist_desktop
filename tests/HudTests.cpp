@@ -14,6 +14,7 @@
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 
+#include <QCursor>
 #include <QCoreApplication>
 #include <QFontMetricsF>
 #include <QGraphicsRectItem>
@@ -537,4 +538,19 @@ TEST_CASE("The trick panel stays eight pixels in from the top-right corner", "[h
         // 264 units, drawn 1.2 times the table, as page.html's .trickinfo is.
         REQUIRE(std::abs(placed.width() - trickpanel::width * tablespace::hudScale * scale) < 1e-6);
     }
+}
+
+// page.html's .btn: `cursor: pointer` while a click would do something (phase 12).
+TEST_CASE("A corner button points only while it can be pressed", "[hud]")
+{
+    LoneButton lone;
+
+    REQUIRE(lone.button->hasCursor());
+    REQUIRE(lone.button->cursor().shape() == Qt::PointingHandCursor);
+
+    lone.button->setEnabled(false);
+    REQUIRE_FALSE(lone.button->hasCursor());
+
+    lone.button->setEnabled(true);
+    REQUIRE(lone.button->cursor().shape() == Qt::PointingHandCursor);
 }
