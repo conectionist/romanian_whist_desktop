@@ -17,11 +17,26 @@ QString winnerAnnouncement(const std::vector<Standing>& winners)
 
     // Every winner is on the same score by construction, so the front one's is
     // the score the sentence names however many there are.
-    const QString points = QString::number(winners.front().score);
+    //
+    // %n, NOT %2 (phase 12): a final score is often past 19, and Romanian says
+    // "47 de puncte" there but "5 puncte" below - three plural forms, which only
+    // the translator's %n can choose between. Untranslated, %n is the number, so
+    // the English reads as it did.
+    //
+    // BELOW ZERO, ANOTHER SENTENCE: Qt fills %n in only for a count of zero or
+    // more, and leaves a negative one as "%n". "A score of -12" counts nothing, so
+    // it needs no plural form in any language.
+    const int points = winners.front().score;
+    const QString score = QString::number(points);
 
     if(winners.size() == 1)
-        return QCoreApplication::translate("gameover", "%1 wins with %2 points.")
-            .arg(QString::fromStdString(winners.front().name), points);
+    {
+        const QString name = QString::fromStdString(winners.front().name);
+
+        return points < 0
+                   ? QCoreApplication::translate("gameover", "%1 wins with a score of %2.").arg(name, score)
+                   : QCoreApplication::translate("gameover", "%1 wins with %n points.", nullptr, points).arg(name);
+    }
 
     // "Ana and Bogdan", "Ana, Bogdan and Cristi" - the last name joined with
     // "and" rather than a comma, however many there are.
@@ -42,8 +57,10 @@ QString winnerAnnouncement(const std::vector<Standing>& winners)
         names += QString::fromStdString(winners[i].name);
     }
 
-    return QCoreApplication::translate("gameover", "%1 tie for first with %2 points.")
-        .arg(names, points);
+    return points < 0
+               ? QCoreApplication::translate("gameover", "%1 tie for first with a score of %2.").arg(names, score)
+               : QCoreApplication::translate("gameover", "%1 tie for first with %n points.", nullptr, points)
+                     .arg(names);
 }
 
 } // namespace gameover

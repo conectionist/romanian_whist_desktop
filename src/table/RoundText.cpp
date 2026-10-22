@@ -15,6 +15,12 @@ QString infostrip::cardsText(unsigned int trickCount)
     // lupdate two strings to collect. Languages whose plural rules need more than
     // two forms are the reason %n exists, and the day one is added this becomes
     // the thing to revisit.
+    //
+    // REVISITED IN THE REDESIGN'S PHASE 12, with Romanian: three forms, the third
+    // ("20 de cărți") only from 20 up. A hand is never more than 8 cards, so these
+    // two strings serve it, as do the tricks and bids counted the same way. What can
+    // pass 19 - a final score, a game's rounds, the minutes a game takes - is %n:
+    // GameOverPanel.cpp, RulesSheet.cpp and NewGameDialog.cpp.
     return trickCount == 1 ? QCoreApplication::translate("infostrip", "1 card")
                            : QCoreApplication::translate("infostrip", "%1 cards")
                                  .arg(trickCount);

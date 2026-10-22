@@ -332,9 +332,14 @@ QString newgame::summaryText(const Config& config)
     if(minutes < 1)
         return QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
 
-    return QCoreApplication::translate("newgame", "%1 - about %2 minutes")
-        .arg(QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds)),
-             QString::number(minutes));
+    // %n FOR THE MINUTES TOO (phase 12): an estimate is often past 19, where Romanian
+    // says "25 de minute". One minute is "a minute", in English as in Romanian.
+    const QString count = QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
+
+    if(minutes == 1)
+        return QCoreApplication::translate("newgame", "%1 - about a minute").arg(count);
+
+    return QCoreApplication::translate("newgame", "%1 - about %n minutes", "", minutes).arg(count);
 }
 
 std::optional<QString> newgame::firstError(const Config& config)

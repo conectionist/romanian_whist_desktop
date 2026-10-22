@@ -280,8 +280,22 @@ target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 # ---------------------------------------------------------------------------
 # Embeds the compiled .qm under :/i18n/, which is where main.cpp looks for it.
 # Also defines an update_translations target that refreshes the .ts from source.
+#
+# SOURCE_TARGETS NAMES THE LIBRARY. The executable's only source is main.cpp, and
+# every string the player reads is in desktop_core; left to choose, lupdate also
+# reads the tests, whose translate() calls are there to compare against, and the
+# engine, which has none. Locations are relative so the .ts does not carry this
+# machine's paths.
+#
+# AND NOT THE .qrc FILES, which lupdate otherwise reads as C++ and warns about the
+# apostrophes in their comments.
+set_property(TARGET romanian_whist_desktop PROPERTY
+    QT_EXCLUDE_SOURCES_FROM_TRANSLATION ${WHIST_DESKTOP_RESOURCES})
+
 qt_add_translations(romanian_whist_desktop
     TS_FILES i18n/romanian_whist_desktop_ro_RO.ts
+    SOURCE_TARGETS desktop_core romanian_whist_desktop
+    LUPDATE_OPTIONS -locations relative
 )
 
 # ---------------------------------------------------------------------------
