@@ -11,6 +11,7 @@
 #include "ui/RoundSheet.h"
 #include "ui/RulesSheet.h"
 #include "ui/SettingsSheet.h"
+#include "RestingMouse.h"
 #include "WindowDriving.h"
 
 #include <QCursor>
@@ -844,18 +845,27 @@ TEST_CASE("Tab inside an overlay wraps round and skips what it cannot stop on", 
     REQUIRE(window.focusWidget() == third);
 }
 
-// .sheet .actions button: `cursor: pointer` (phase 12), and none on a greyed one.
+// .sheet .actions button: `cursor: pointer` (phase 12), and the plain arrow on a
+// greyed one - Qt's, as the menu bar's is (MenuBarTests): a disabled widget shows
+// its parent's cursor, so the button sets its pointing hand once (PR #38's review,
+// finding #10). Read off the window, under a mouse resting on the button.
 TEST_CASE("A sheet button points only while it can be pressed", "[overlay]")
 {
-    // In a page, as every sheet button is: Qt keeps a window's cursor flag set.
     QWidget page;
-    SheetButton& button = *new SheetButton(QStringLiteral("Continue"), SheetButton::Kind::Primary, &page);
+    page.resize(320, 120);
 
-    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
+    SheetButton& button = *new SheetButton(QStringLiteral("Continue"), SheetButton::Kind::Primary, &page);
+    button.resize(button.sizeHint());
+
+    page.show();
+    QCoreApplication::processEvents();
+
+    restOn(button);
+    REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 
     button.setEnabled(false);
-    REQUIRE_FALSE(button.testAttribute(Qt::WA_SetCursor));
+    REQUIRE(shownOver(button) == Qt::ArrowCursor);
 
     button.setEnabled(true);
-    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
+    REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 }

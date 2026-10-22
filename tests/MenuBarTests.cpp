@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "RestingMouse.h"
 #include "WindowDriving.h"
 #include "paint/Theme.h"
 #include "ui/MenuBar.h"
@@ -353,18 +354,28 @@ TEST_CASE("The menu bar's shadow paints the glint over the shadow", "[menu-bar]"
 }
 
 // page.html's .btn: `cursor: pointer`, and the plain arrow on a greyed item (phase 12).
+//
+// WHAT THE WINDOW SHOWS, read under a mouse resting on the item while it greys and
+// comes back - Exit does, as a game comes and goes. The arrow is Qt's: a disabled
+// widget shows its parent's cursor (QWidgetPrivate::setEnabled_helper()), so the
+// item sets its pointing hand once (PR #38's review, finding #10).
 TEST_CASE("A menu item points only while it can be pressed", "[menu-bar]")
 {
-    // On a bar, as every item is: Qt keeps a window's cursor flag set.
     QWidget bar;
-    MenuBarButton& button = *new MenuBarButton(icons::Icon::Exit, &bar);
+    bar.resize(240, 60);
 
-    REQUIRE(button.testAttribute(Qt::WA_SetCursor));
-    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
+    MenuBarButton& button = *new MenuBarButton(icons::Icon::Exit, &bar);
+    button.resize(button.sizeHint());
+
+    bar.show();
+    QCoreApplication::processEvents();
+
+    restOn(button);
+    REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 
     button.setEnabled(false);
-    REQUIRE_FALSE(button.testAttribute(Qt::WA_SetCursor));
+    REQUIRE(shownOver(button) == Qt::ArrowCursor);
 
     button.setEnabled(true);
-    REQUIRE(button.cursor().shape() == Qt::PointingHandCursor);
+    REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 }

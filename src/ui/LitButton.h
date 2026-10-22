@@ -4,15 +4,6 @@
 #include <QPushButton>
 #include <QString>
 
-// THE MOCK-UP'S `cursor: pointer` on every button (phase 12): a pointing hand
-// while the button can be pressed, and the plain arrow while it is greyed, which
-// says nothing would happen. For the widgets on the page; the table's items set
-// theirs in the scene.
-namespace litbutton
-{
-void pointWhenEnabled(QWidget& widget);
-}
-
 // A QPushButton that knows when it looks lit, as the mock-up's buttons do under
 // :hover and :focus-visible: under the cursor, held down, or with the keyboard
 // brought to it by Tab. NOT merely focused: a sheet or page puts the keyboard on
@@ -24,6 +15,10 @@ void pointWhenEnabled(QWidget& widget);
 // themselves lit by it, and carried a copy each until PR #36's review (finding
 // #12). The menu bar's buttons do not: they are QToolButtons, reached only by Tab,
 // with a rule of their own (MenuBarButton::isLit()).
+//
+// AND THE MOCK-UP'S `cursor: pointer` (phase 12): a pointing hand, set once. Greyed,
+// the button shows the plain arrow without being told: Qt gives a disabled widget
+// its parent's cursor (PR #38's review, finding #10).
 class LitButton : public QPushButton
 {
     Q_OBJECT
@@ -34,7 +29,6 @@ public:
     bool isLit() const;
 
 protected:
-    void changeEvent(QEvent* event) override;
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
 

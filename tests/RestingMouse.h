@@ -9,6 +9,8 @@
 #include <QMouseEvent>
 #include <QPoint>
 #include <QPointF>
+#include <QWidget>
+#include <QWindow>
 
 // A VIEW WITH THE MOUSE RESTING ON IT, over scene point `at`, as far as Qt can tell:
 // the view is under the mouse and the cursor is there. shown() is the cursor the
@@ -38,9 +40,12 @@ struct RestingMouse
         const QPoint local = view.mapFromScene(at);
         const QPoint global = view.viewport()->mapToGlobal(local);
 
+        // Taken now: the offscreen platform queues an enter and a move for it, which
+        // left for later would reach whatever window a later test has there.
         QCursor::setPos(global);
+        QCoreApplication::processEvents();
 
-        // Set here rather than left to an enter event the test does not wait for.
+        // Set here rather than left to that enter, which needs the view exposed.
         view.setAttribute(Qt::WA_UnderMouse, true);
 
         QMouseEvent move(QEvent::MouseMove, QPointF(local), QPointF(global), Qt::NoButton, Qt::NoButton,
@@ -50,5 +55,22 @@ struct RestingMouse
 
     Qt::CursorShape shown() const { return view.viewport()->cursor().shape(); }
 };
+
+// AND FOR A WIDGET: the mouse moved onto the middle of `widget`, through the window
+// system as a player's is (the offscreen platform's QCursor::setPos() sends the
+// enter and the move), so QApplication picks the window's cursor from the widget
+// under it. The widget's window must be shown.
+inline void restOn(QWidget& widget)
+{
+    QCursor::setPos(widget.mapToGlobal(widget.rect().center()));
+    QCoreApplication::processEvents();
+}
+
+// The cursor the window `widget` is in shows: the one a player sees, where the
+// widget's own cursor() is only what it asked for.
+inline Qt::CursorShape shownOver(const QWidget& widget)
+{
+    return widget.window()->windowHandle()->cursor().shape();
+}
 
 #endif

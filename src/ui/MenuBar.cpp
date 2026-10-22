@@ -1,11 +1,8 @@
 #include "MenuBar.h"
 
-#include "ui/LitButton.h"
-
 #include "paint/Fonts.h"
 #include "paint/Shadows.h"
 
-#include <QEvent>
 #include <QAction>
 #include <QBoxLayout>
 #include <QFontMetricsF>
@@ -110,16 +107,10 @@ MenuBarButton::MenuBarButton(std::optional<icons::Icon> _icon, QWidget* parent)
 
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
-    litbutton::pointWhenEnabled(*this);
-}
-
-void MenuBarButton::changeEvent(QEvent* event)
-{
-    // Exit greys while there is nothing to pause, and takes the plain arrow with it.
-    if(event->type() == QEvent::EnabledChange)
-        litbutton::pointWhenEnabled(*this);
-
-    QToolButton::changeEvent(event);
+    // page.html's .btn `cursor: pointer`. Exit greys while there is nothing to pause,
+    // and Qt shows the plain arrow over it then: a disabled widget takes its
+    // parent's cursor.
+    setCursor(Qt::PointingHandCursor);
 }
 
 void MenuBarButton::setTheme(const Theme& _theme)
