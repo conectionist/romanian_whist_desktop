@@ -6,10 +6,10 @@
 #include "paint/Shadows.h"
 #include "paint/TextRuns.h"
 #include "table/HudText.h"
+#include "table/ItemCursor.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 
-#include <QCursor>
 #include <QCoreApplication>
 #include <QFont>
 #include <QGraphicsSceneHoverEvent>
@@ -436,6 +436,10 @@ void BidStripItem::clearPrompt()
         memo.invalidate();
     }
 
+    // AND THE POINTING HAND, before the strip goes: hiding an item never changes the
+    // view's cursor (PR #38's review, finding #4).
+    itemcursor::show(*this, std::nullopt);
+
     hide();
 }
 
@@ -512,11 +516,11 @@ void BidStripItem::hoverAt(std::optional<QPointF> point)
         prompt && point ? bidUnder(firstBid, showing.highest, *point) : std::nullopt;
 
     if(!under)
-        unsetCursor();
+        itemcursor::show(*this, std::nullopt);
     else if(bidstrip::offers(showing, *under))
-        setCursor(Qt::PointingHandCursor);
+        itemcursor::show(*this, Qt::PointingHandCursor);
     else
-        setCursor(Qt::ForbiddenCursor);
+        itemcursor::show(*this, Qt::ForbiddenCursor);
 
     const std::optional<unsigned int> now = offeredAt(point);
 

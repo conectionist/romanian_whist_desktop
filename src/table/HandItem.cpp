@@ -2,9 +2,9 @@
 
 #include "paint/CardRenderer.h"
 #include "table/CardItem.h"
+#include "table/ItemCursor.h"
 #include "table/Turn.h"
 
-#include <QCursor>
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
 #include <QtMath>
@@ -344,11 +344,11 @@ void HandItem::showCursor()
     const std::optional<std::size_t> slot = playable && cursor ? slotAt(*cursor) : std::nullopt;
 
     if(!slot)
-        unsetCursor();
+        itemcursor::show(*this, std::nullopt);
     else if(isPlayable(*slot))
-        setCursor(Qt::PointingHandCursor);
+        itemcursor::show(*this, Qt::PointingHandCursor);
     else
-        setCursor(Qt::ForbiddenCursor);
+        itemcursor::show(*this, Qt::ForbiddenCursor);
 }
 
 void HandItem::showLift()
@@ -435,7 +435,7 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 void HandItem::hoverLeaveEvent(QGraphicsSceneHoverEvent*)
 {
     cursor.reset();
-    unsetCursor();
+    itemcursor::show(*this, std::nullopt);
 
     if(!hovered)
         return;

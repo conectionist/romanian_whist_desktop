@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "GameFixtures.h"
+#include "RestingMouse.h"
 
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
@@ -732,4 +733,21 @@ TEST_CASE("The cursor points at a bid and refuses the struck-out one", "[bid-str
     // Between two bids: no button, no promise.
     hoverAt(lone.scene, (lone.on(0) + lone.on(1)) / 2.0);
     REQUIRE_FALSE(lone.strip->hasCursor());
+}
+
+// THE STRIP GOES WHEN YOU BID, and the pointing hand with it. Hiding an item never
+// touches the view's cursor, so the hand stayed over the felt where the strip had
+// been until the mouse moved (PR #38's review, finding #4).
+TEST_CASE("The pointing hand goes with the strip once you bid", "[bid-strip]")
+{
+    LoneStrip lone;
+    lone.strip->setPrompt(promptFor(4));
+
+    RestingMouse mouse(lone.scene, lone.on(1));
+
+    hoverAt(lone.scene, lone.on(1));
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    lone.strip->clearPrompt();
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
 }

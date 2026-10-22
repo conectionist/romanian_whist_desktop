@@ -3,6 +3,7 @@
 
 #include "CardStringMaker.h"
 #include "GameFixtures.h"
+#include "RestingMouse.h"
 
 #include "paint/CardRenderer.h"
 #include "paint/CardShadow.h"
@@ -1040,4 +1041,23 @@ TEST_CASE("The cursor points at a card you can play and refuses one you cannot",
         fan.item.setPlayable(false);
         REQUIRE_FALSE(fan.item.hasCursor());
     }
+}
+
+// AND WHAT THE VIEW SHOWS, which the case above cannot see. A card is a child of the
+// fan, drawn over it, and QGraphicsItem::unsetCursor() puts the view's cursor back
+// only when the item itself is topmost under the mouse: the pointing hand stayed
+// over a fan that could no longer be clicked until the mouse moved (PR #38's review,
+// finding #4).
+TEST_CASE("The pointing hand goes the moment your turn ends", "[hand]")
+{
+    Fanned fan(promptOf({ true, true, true }));
+    const QPointF onTop = fan.cards().back()->pos();
+
+    RestingMouse mouse(fan.scene, fan.item.mapToScene(onTop));
+
+    fan.hoverAt(onTop);
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    fan.item.setPlayable(false);
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
 }
