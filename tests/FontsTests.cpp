@@ -15,14 +15,14 @@
 // application starts in, not one a test set up for itself.
 
 // FONT EMBEDDING FAILS AS QUIETLY AS ANY RESOURCE: a missing face is not an
-// error anywhere, only text in Georgia where Marcellus was meant. Asking the
+// error anywhere, only text in Georgia where Belleza was meant. Asking the
 // database is the one place the difference is a yes or a no.
 TEST_CASE("The bundled typefaces are registered", "[fonts]")
 {
     const QStringList families = QFontDatabase::families();
 
     REQUIRE(families.contains(QStringLiteral("Cinzel Decorative")));
-    REQUIRE(families.contains(QStringLiteral("Marcellus")));
+    REQUIRE(families.contains(QStringLiteral("Belleza")));
     REQUIRE(families.contains(QStringLiteral("Alegreya Sans")));
 
     // ALL THREE WEIGHTS RESOLVE TO REAL FACES, asked the way a widget will ask.
@@ -142,12 +142,11 @@ TEST_CASE("The body and logo faces draw every Romanian letter", "[fonts]")
     }
 }
 
-// MARCELLUS HAS NO ș OR ț (it has ş and ţ, with a cedilla), so Qt draws those two
-// in another face wherever a heading uses them: a name, a title, a button. The owner
-// means to replace Marcellus. THIS CASE IS EXPECTED TO FAIL until then, and the day
-// it passes - a heading face with both letters - Catch2 reports it as failing: take
-// the [!shouldfail] tag off, and it guards the new face.
-TEST_CASE("The heading face draws every Romanian letter", "[fonts][!shouldfail]")
+// THE HEADINGS TOO: a name, a title, a button. Marcellus, the mock-up's heading face,
+// has no ș or ț (only ş and ţ, with a cedilla), so Qt drew those two in another face;
+// this case was expected to fail until Belleza replaced it (phase 12's follow-up), and
+// now it guards whatever heading face comes next.
+TEST_CASE("The heading face draws every Romanian letter", "[fonts]")
 {
     INFO(fonts::heading().family().toStdString() << " lacks " << missingFrom(fonts::heading()).toStdString());
     REQUIRE(missingFrom(fonts::heading()).isEmpty());

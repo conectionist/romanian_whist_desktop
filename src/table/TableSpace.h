@@ -49,7 +49,7 @@ inline constexpr qreal marginTop = 10.0;
 inline constexpr qreal marginBottom = 8.0;
 
 // THE SMALLEST SCALE THE TABLE IS DRAWN AT. Below it the panels' names fall under
-// nine pixels (Marcellus 25, seatitem::nameSize) and the Taken/Bid pill under
+// nine pixels (the heading face at 25, seatitem::nameSize) and the Taken/Bid pill under
 // seven, which is past reading - and nothing else would stop it: the table is a
 // fixed space the view scales, so a small window used to draw it as small as it
 // liked. Decided by the owner on 2026-10-17 at 0.30, for the old plaque's larger

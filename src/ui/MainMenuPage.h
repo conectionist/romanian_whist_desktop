@@ -13,7 +13,7 @@
 #include <vector>
 
 // One of the menu page's two buttons: section 2.11's .panel.btn - a gold line icon
-// and a Marcellus label on the table's panel - in device-independent pixels, as
+// and a heading-face label on the table's panel - in device-independent pixels, as
 // the sheets are.
 //
 // IT PAINTS ITS FACE AND NOTHING ELSE. The panel behind it has a drop shadow that

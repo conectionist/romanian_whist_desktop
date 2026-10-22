@@ -30,9 +30,11 @@ to read that mark before it is photographed. A check that fails, or a script tha
 (a table.js change that renames setPlayers(), say), draws a red banner saying why, and
 this stops with the same words and leaves the committed picture alone.
 
-THE FONTS ARE THE CLIENT'S OWN TTFs (resources/fonts/), as data URIs. The page loads its
-fonts from Google Fonts, which needs a network and can change under us, and Chrome will
-not load a font from a file:// URL into a file:// page.
+THE FONTS ARE TTFs ON DISK, as data URIs: the client's own (resources/fonts/), and
+Marcellus, which the client dropped for Belleza after phase 12 and the mock-up keeps
+(fonts/marcellus/ beside this script). The page loads its fonts from Google Fonts, which
+needs a network and can change under us, and Chrome will not load a font from a file://
+URL into a file:// page.
 
 Needs google-chrome or chromium on the PATH, and Pillow.
 """
@@ -82,7 +84,8 @@ FACES = [
     ('Alegreya Sans', 500, 'alegreya-sans/AlegreyaSans-Medium.ttf'),
     ('Alegreya Sans', 700, 'alegreya-sans/AlegreyaSans-Bold.ttf'),
     ('Cinzel Decorative', 700, 'cinzel-decorative/CinzelDecorative-Bold.ttf'),
-    ('Marcellus', 400, 'marcellus/Marcellus-Regular.ttf'),
+    # The mock-up's own: the client's headings are Belleza since phase 12's follow-up.
+    ('Marcellus', 400, pathlib.Path(__file__).resolve().parent / 'fonts' / 'marcellus' / 'Marcellus-Regular.ttf'),
 ]
 
 # The fonts; no transitions, so nothing is caught half way; and the two base rules the

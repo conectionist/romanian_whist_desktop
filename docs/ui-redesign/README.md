@@ -11,5 +11,5 @@ opponents' cards standing in racks on the rim, and panels pinned to the window c
 
 Status: built. Phases 0 to 12 are complete in the client; each phase's outcome, and the owner's
 decisions along the way, are in the plan. Left open after phase 12: the Romanian translation is a
-draft for review, the logo keeps its English words in it, and the heading face (Marcellus) is to be
-replaced - it has no ș or ț.
+draft for review, and the logo keeps its English words in it. The client's headings are Belleza
+where the mock-up's are Marcellus, which has no ș or ț.

@@ -139,7 +139,7 @@ const QSize shapes[] = { QSize(1920, 1080), QSize(1440, 900), QSize(1000, 700),
 TEST_CASE("A button is as wide as its icon and its label", "[hud]")
 {
     // .panel.btn: a border of 1 and padding of 22 either side, the 24-unit icon and
-    // 12 after it, then the label in Marcellus 21. 76 tall, border included.
+    // 12 after it, then the label in the heading face at 21. 76 tall, border included.
     QFont label = fonts::heading();
     label.setPixelSize(tablebutton::labelSize);
 

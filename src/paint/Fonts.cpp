@@ -58,7 +58,7 @@ QFont logo()
 
 QFont heading()
 {
-    return chain({ QStringLiteral("Marcellus"), QStringLiteral("Cinzel"),
+    return chain({ QStringLiteral("Belleza"), QStringLiteral("Cinzel"),
                    QStringLiteral("Georgia") },
                  QFont::Serif);
 }

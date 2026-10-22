@@ -127,9 +127,9 @@ TEST_CASE("A menu item is as wide as its padding icon and label", "[menu-bar]")
     REQUIRE(view->width() ==
             static_cast<int>(std::ceil(12.0 + metrics.horizontalAdvance(view->label()) + 12.0)));
 
-    // The label's font is Marcellus 17, through section 2.3's chain.
+    // The label's font is Belleza 17 (page.html's Marcellus 17), through section 2.3's chain.
     REQUIRE(menubar::labelFont().pixelSize() == 17);
-    REQUIRE(menubar::labelFont().families().front() == QStringLiteral("Marcellus"));
+    REQUIRE(menubar::labelFont().families().front() == QStringLiteral("Belleza"));
 }
 
 TEST_CASE("A label reads mnemonics the way Qt does", "[menu-bar]")

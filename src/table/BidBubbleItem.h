@@ -26,7 +26,7 @@ namespace bidbubble
 // The words: yours, or anyone else's.
 QString textFor(bool yours, unsigned int bet);
 
-// The pill's size for `text`: Marcellus 19 inside 4 above and below, 14 either side.
+// The pill's size for `text`: the heading face at 19 inside 4 above and below, 14 either side.
 QSizeF sizeFor(const QString& text);
 
 // WHERE IT GOES over a panel whose rect is `panel`, in table space: centred on it,

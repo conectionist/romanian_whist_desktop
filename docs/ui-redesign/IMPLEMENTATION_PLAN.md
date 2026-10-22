@@ -141,6 +141,15 @@ their `OFL.txt`, register them in a `.qrc`, and load them once at startup with
 `QFontDatabase::addApplicationFont`. If fetching them is impossible from the build environment, keep
 the code path and the fallbacks, and leave a clear note; do not block the rest of the work on fonts.
 
+> **AMENDED AFTER PHASE 12, by the owner's call of 2026-10-22: the client's headings are Belleza.**
+> Marcellus has no ș or ț (only ş and ţ, with a cedilla), which the Romanian translation needs, and
+> its 0 and 1 read as O and I on the bid buttons and in "Round 10 of 32". Six OFL faces with both
+> letters and lining digits were set in the running app (Forum, Belleza, Tenor Sans, EB Garamond,
+> Spectral, Cinzel); Belleza, flared as Marcellus is and about as wide, was chosen. Same sizes,
+> same fallback chain. **The mock-up keeps Marcellus**: it is the approved target, and its capture
+> script reads the file from `mockup/source/fonts/marcellus/`. Where this document and the code's
+> comments quote page.html ("Marcellus 25"), the client draws that size in Belleza.
+
 All sizes below are in **table-space units** (they scale with the table), not points.
 
 ### 2.4 Table
@@ -1889,9 +1898,9 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
 **Outcome:**
 
 - **The count is 613 tests** (566 + 47, one rewritten, none retired), passing on the `default`,
-  `release` and `clang` presets with Qt 6.11.2 and building without a warning. One of them is
-  expected to fail and reported so: the heading face's Romanian letters (see the pitfalls). Commit
-  by commit:
+  `release` and `clang` presets with Qt 6.11.2 and building without a warning. The heading face's
+  Romanian-letters case was expected to fail and reported so until the follow-up below replaced
+  Marcellus with Belleza; it passes now, untagged. Commit by commit:
   - **Window sizes, 566 → 567**: the fit and corner-panel cases also run at 2560×1440 and
     1920×1200, and a new `BidStripTests` case holds the strip clear of the four corner panels.
   - **HiDPI, 567 → 568**: the whole-pixel cases (a played card's shadow, a turned rack, a canvas)
@@ -1913,6 +1922,8 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     compiles unfinished translations by default.
   - **The correct ș and ț**, mapped to nothing, the stage set for the heading face that replaces
     Marcellus (see the pitfalls).
+  - **The follow-up: Belleza replaces Marcellus** in the client (section 2.3's amendment). The mock-up
+    keeps Marcellus.
 - **Defaults taken, not asked:**
   - **No sweep at a round's end.** The last trick stays under the round sheet, as it always has; the
     next round's bare felt takes it off at once.
@@ -1994,9 +2005,9 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - **`QWidget::unsetCursor()` leaves `WA_SetCursor` set on a top-level widget.** A test of a
     button's cursor needs the button in a parent.
   - **`HandItem`'s private `cursor`** (where the mouse last was) hides `QGraphicsItem::cursor()`.
-  - **Marcellus has no ș or ț** (U+0219, U+021B), only ş and ţ with a cedilla, so Qt draws those two
-    in another face in a heading. `FontsTests`' heading case is `[!shouldfail]` until a face that
-    has them replaces it, and Catch2 reports it the day it passes.
+  - **Marcellus has no ș or ț** (U+0219, U+021B), only ş and ţ with a cedilla, so Qt drew those two
+    in another face in a heading. `FontsTests`' heading case was `[!shouldfail]` until Belleza
+    replaced it; it now guards the heading face.
   - **The screenshot tool plays at the bots' top speed**, so a round's bids are milliseconds old
     when its table is shot, and their bubbles still up.
 - **Left open:**
@@ -2004,7 +2015,6 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     (the PR lists it): levată, atu, licitație, rundă, the suits, Forehead and Hidden.
   - **The logo's Romanian.**
   - **2x textures**, if the owner wants them after the numbers above.
-  - **Replacing Marcellus** (its 0 and 1 also read as O and I).
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
 
 ---

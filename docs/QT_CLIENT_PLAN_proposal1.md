@@ -2644,8 +2644,9 @@ photograph of felt.
 >
 > - **The surface is textured**: a wooden rim and a felt top from two generated textures
 >   (`tools/generate_table_textures.py`), with a gold circle and the logo on the felt.
-> - **Typography is bundled**: Cinzel Decorative for the logo, Marcellus for names, titles and
->   buttons, Alegreya Sans for the rest (OFL). The platform font is left to the dialogs.
+> - **Typography is bundled**: Cinzel Decorative for the logo, Belleza for names, titles and
+>   buttons (the mock-up's Marcellus until after phase 12: it has no ș or ț), Alegreya Sans for the
+>   rest (OFL). The platform font is left to the dialogs.
 > - **Every colour is a `Theme::TablePalette` token** (the redesign's section 2.2).
 > - **The active seat** has a 3 px gold-bright ring with a glow, and the "▸".
 > - **The winning card** lifts, with a 2 px gold-bright ring, a glow and a deeper shadow.

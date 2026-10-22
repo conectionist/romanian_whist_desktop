@@ -66,7 +66,8 @@ int shadowHeight();
 // by its offset. About 0.77 at the edge itself and nothing at shadowHeight().
 qreal shadowAt(qreal y);
 
-// The items' label font: Marcellus 17, through section 2.3's fallback chain.
+// The items' label font: Belleza 17 (page.html's Marcellus 17), through section 2.3's
+// fallback chain.
 QFont labelFont();
 
 // What an item shows for a Qt text: a '&' marks a mnemonic and is not shown,
