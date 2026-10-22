@@ -5,6 +5,7 @@
 #include "paint/Paths.h"
 
 #include <QBoxLayout>
+#include <QCoreApplication>
 #include <QEvent>
 #include <QFontMetricsF>
 #include <QGridLayout>
@@ -1010,8 +1011,17 @@ bool Overlay::eventFilter(QObject* watched, QEvent* event)
         setGeometry(parentWidget()->rect());
 
     // The sheet's words or rows changed, so its height may have.
+    //
+    // AND ONCE IS ENOUGH. placeSheet() invalidates the body's layouts, which posts the
+    // body another layout request - but the one being handled lays it out as soon as
+    // this returns. Left in the queue, that one came round to here again, and an
+    // open sheet was laid out on every turn of the event loop, about 1,300 times a
+    // second (found during PR #37's review fixes).
     if(watched == plaque && event->type() == QEvent::LayoutRequest)
+    {
         placeSheet();
+        QCoreApplication::removePostedEvents(plaque, QEvent::LayoutRequest);
+    }
 
     return QWidget::eventFilter(watched, event);
 }

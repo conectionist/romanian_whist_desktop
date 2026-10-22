@@ -11,6 +11,7 @@
 #include "ui/RoundSheet.h"
 #include "ui/RulesSheet.h"
 #include "ui/SettingsSheet.h"
+#include "WindowDriving.h"
 
 #include <QBoxLayout>
 #include <QCoreApplication>
@@ -273,6 +274,52 @@ TEST_CASE("Every sheet stays on the page at the smallest window and Rules scroll
         INFO(sheet->metaObject()->className());
         REQUIRE(sheet->findChild<QScrollArea*>()->verticalScrollBar()->maximum() == 0);
         REQUIRE(sheet->sheetRect().width() == sheet::width);
+    }
+}
+
+// AN OPEN SHEET AT REST LAYS NOTHING OUT. placeSheet() runs on each of the body's
+// layout requests and invalidates the body's layouts, which posts another: a sheet
+// left open was laid out again on every turn of the event loop, about 1,300 times
+// a second, keeping a core busy (found during PR #37's review fixes).
+TEST_CASE("An open sheet stops laying itself out once it is laid out", "[overlay]")
+{
+    // A layout request counted as it reaches the body.
+    class Requests : public QObject
+    {
+    public:
+        int count = 0;
+
+    protected:
+        bool eventFilter(QObject*, QEvent* event) override
+        {
+            if(event->type() == QEvent::LayoutRequest)
+                count++;
+
+            return false;
+        }
+    };
+
+    // Roomy, and at the smallest window, where Rules scrolls.
+    for(const QSize size : { QSize(1920, 1034), QSize(709, 495) })
+    {
+        EverySheet every(size);
+        driving::pump(100);
+
+        std::vector<std::unique_ptr<Requests>> counted;
+
+        for(Overlay* sheet : every.sheets)
+        {
+            counted.push_back(std::make_unique<Requests>());
+            sheet->findChild<QScrollArea*>()->widget()->installEventFilter(counted.back().get());
+        }
+
+        driving::pump(300);
+
+        for(std::size_t i = 0 ; i < every.sheets.size() ; i++)
+        {
+            INFO(every.sheets[i]->metaObject()->className() << " at " << size.width() << "x" << size.height());
+            REQUIRE(counted[i]->count == 0);
+        }
     }
 }
 
