@@ -12,7 +12,6 @@
 #include <QWidget>
 
 #include <initializer_list>
-#include <utility>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -155,16 +154,12 @@ public:
         Muted
     };
 
+    // Given its first few parts - { text, tone, strong } - a cell takes the
+    // defaults for the rest. Every part after the text has an initializer of its
+    // own, `note` included, which is what keeps -Wmissing-field-initializers quiet
+    // at every table.
     struct Cell
     {
-        // A constructor rather than an aggregate, so a cell given its first few
-        // parts - { text, tone, strong } - takes the defaults for the rest without
-        // -Wmissing-field-initializers objecting at every table in the client.
-        Cell(QString text = QString(), Tone tone = Tone::Plain, bool strong = false,
-             QString note = QString())
-            : text(std::move(text)), tone(tone), strong(strong), note(std::move(note))
-        {}
-
         QString text;
         Tone tone = Tone::Plain;
 
@@ -174,7 +169,7 @@ public:
         // A SECOND, SMALLER PART AFTER THE TEXT, in .note's muted 15 on the text's
         // baseline: the history's "+6 1/1", where the tone colours the score and
         // the note stays muted whatever it is. Plain text, as the cell's own.
-        QString note;
+        QString note{};
     };
 
     explicit SheetTable(QWidget* parent = nullptr);
