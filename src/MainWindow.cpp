@@ -31,11 +31,13 @@
 #include <QGuiApplication>
 #include <QMenu>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QStackedWidget>
 #include <QShortcut>
 #include <QStyleHints>
 #include <QTimer>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -268,13 +270,11 @@ void MainWindow::buildTable()
     menuSheets = { rulesSheet, settingsSheet, historySheet, lastTrickSheet };
 
     // EVERY SHEET, as it comes up, lets the table's lit things go out under it.
-    for(Overlay* sheet : { static_cast<Overlay*>(pauseOverlay), static_cast<Overlay*>(roundSheet),
-                           static_cast<Overlay*>(gameOverPanel), static_cast<Overlay*>(rulesSheet),
-                           static_cast<Overlay*>(settingsSheet), static_cast<Overlay*>(historySheet),
-                           static_cast<Overlay*>(lastTrickSheet) })
-    {
+    sheets = { pauseOverlay, roundSheet, gameOverPanel, rulesSheet, settingsSheet, historySheet,
+               lastTrickSheet };
+
+    for(Overlay* sheet : sheets)
         sheet->installEventFilter(this);
-    }
 
     // AND THE HISTORY FROM THE TWO SHEETS THAT REPORT SCORES: over the round sheet,
     // whose hold it keeps, and over the standings, which otherwise cover the table's
@@ -719,8 +719,27 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     // from inside the scene's mouse release, and the scene ends a release by
     // sending a hover at where it happened (QGraphicsScene::mouseReleaseEvent()),
     // which lit the button again straight after a leave sent from here.
-    if(event->type() == QEvent::Show && qobject_cast<Overlay*>(watched))
-        QTimer::singleShot(0, this, &MainWindow::leaveTable);
+    //
+    // ONLY FOR THE SHEET THAT FIRST COVERS THE TABLE, and only if it is still up
+    // by then (leaveTable()).
+    Overlay* shown = event->type() == QEvent::Show ? qobject_cast<Overlay*>(watched) : nullptr;
+
+    if(shown)
+    {
+        const bool alreadyCovered = std::any_of(sheets.begin(), sheets.end(), [shown](const Overlay* sheet)
+        {
+            return sheet != shown && sheet->isVisible();
+        });
+
+        if(!alreadyCovered)
+        {
+            QTimer::singleShot(0, this, [this, sheet = QPointer<Overlay>(shown)]
+            {
+                if(sheet && sheet->isVisible())
+                    leaveTable();
+            });
+        }
+    }
 
     return QMainWindow::eventFilter(watched, event);
 }

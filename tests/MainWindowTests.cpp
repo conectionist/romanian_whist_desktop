@@ -263,6 +263,22 @@ int historyRows(const HistorySheet* sheet)
     return rows->rowCount();
 }
 
+// How many times the scene has been told the cursor left it.
+class SceneLeaves : public QObject
+{
+public:
+    int count = 0;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if(event->type() == QEvent::GraphicsSceneLeave)
+            count++;
+
+        return false;
+    }
+};
+
 }
 
 TEST_CASE("The client opens on the menu with no game running", "[main-window]")
@@ -2228,4 +2244,50 @@ TEST_CASE("A corner button goes out under the sheet it opens", "[main-window]")
 
     REQUIRE(last->isVisible());
     REQUIRE_FALSE(button->isHovered());
+}
+
+TEST_CASE("A sheet tells the table once, and only while it is up", "[main-window]")
+{
+    // PR #37's review, finding #2. Every leave closes the application's tooltip, so
+    // a round sheet coming under the history closed the one that shows a shortened
+    // name whole; and an unwaited round sheet at top speed, gone again before its
+    // leave was sent, put out a card lit under a cursor that had not moved.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    TableScene* scene = window.findChild<TableScene*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    RoundSheet* round = window.findChild<RoundSheet*>();
+    REQUIRE(scene != nullptr);
+    REQUIRE(rules != nullptr);
+    REQUIRE(settings != nullptr);
+    REQUIRE(round != nullptr);
+
+    SceneLeaves leaves;
+    scene->installEventFilter(&leaves);
+
+    // The first sheet over the table: one leave.
+    rules->show();
+    pump(50);
+    REQUIRE(leaves.count == 1);
+
+    // A sheet over a sheet: the table is already covered.
+    round->show();
+    pump(50);
+    REQUIRE(leaves.count == 1);
+
+    round->hide();
+    rules->hide();
+    pump(50);
+
+    // A sheet gone again before its leave was due: nothing.
+    settings->show();
+    settings->hide();
+    pump(50);
+    REQUIRE(leaves.count == 1);
+
+    scene->removeEventFilter(&leaves);
 }

@@ -99,7 +99,8 @@ protected:
     // by its Alt shortcuts.
     bool focusNextPrevChild(bool next) override;
 
-    // Every sheet's showing, for leaveTable().
+    // A sheet's showing, for leaveTable(): when it covers a table no other sheet
+    // already covers.
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 
@@ -290,6 +291,12 @@ private:
     // it. The scene hears of a cursor only from the view, and the view hears
     // nothing until the mouse next moves (found in the running app, phase 11).
     // eventFilter() sends it once the event under way is done.
+    //
+    // ONCE, AND ONLY WHILE THE SHEET IS UP (PR #37's review, finding #2). A sheet
+    // over another sends nothing: the table had its leave, and another would close
+    // the tooltip of a shortened name in the history. Nor does a sheet gone again by
+    // then - an unwaited round sheet at top speed - which would put out a card lit
+    // under a cursor that never left it.
     void leaveTable();
 
     // Whether the keyboard is on `widget` or inside it. Null holds nothing.
@@ -391,6 +398,10 @@ private:
     // one more is added here and nowhere else: showMenuSheet(), dropMenuSheets()
     // and openMenuSheet() all go through it.
     std::vector<Overlay*> menuSheets;
+
+    // AND EVERY SHEET AT ALL, those and the pause menu, the round sheet and the
+    // standings: the seven whose showing covers the table (eventFilter()).
+    std::vector<Overlay*> sheets;
 
     // THE GAME'S ROUNDS SO FAR, one RoundResult each, as onRoundScored() delivers
     // them: the only record of what a round was worth, since the engine keeps
