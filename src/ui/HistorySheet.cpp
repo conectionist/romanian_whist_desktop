@@ -62,6 +62,9 @@ HistorySheet::HistorySheet(QWidget* parent) : Overlay(parent)
 
     addActions({ closeButton });
 
+    // A round scored while it is open is added in place (MainWindow::onRoundScored()).
+    keepFootInView();
+
     connect(closeButton, &QPushButton::clicked, this, &HistorySheet::closeRequested);
 }
 

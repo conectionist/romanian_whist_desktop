@@ -332,6 +332,12 @@ protected:
     // when the whole sheet fits the page.
     void reveal(QWidget* widget);
 
+    // KEEPS THE READER'S PLACE AS THE BODY GROWS, for a sheet whose rows arrive while
+    // it is open (the history): one at the foot is kept there, so the new rows come
+    // into view, and one scrolled up stays where they are (PR #37's review, finding
+    // #4). Called once, by a sheet that wants it.
+    void keepFootInView();
+
     // The dim, then the panel round the sheet.
     void paintEvent(QPaintEvent* event) override;
 
@@ -362,6 +368,10 @@ private:
     // it last reported to contentWidthChanged().
     bool bodyScrolls = false;
     int reportedWidth = -1;
+
+    // Whether the body was last left at its foot - or does not scroll at all
+    // (keepFootInView()).
+    bool atFoot = true;
 
     // The panel's picture, with its drop shadow: the overlay repaints with every
     // frame of the table under a sheet that does not hold the game, and the two

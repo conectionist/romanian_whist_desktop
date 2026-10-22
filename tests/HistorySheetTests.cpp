@@ -323,6 +323,59 @@ TEST_CASE("Six of the longest names fit a long history beside its scroll bar", "
     REQUIRE(rows->heading(2)->toolTip() == longest);
 }
 
+// AN OPEN HISTORY TAKES IN A ROUND SCORED UNDER IT (MainWindow::onRoundScored())
+// and keeps the reader's place: at its foot, the new row and the totals come into
+// view; scrolled up, nothing moves (PR #37's review, finding #4).
+TEST_CASE("An open history keeps the reader's place as a round is added", "[history]")
+{
+    std::vector<RoundResult> rounds;
+
+    for(unsigned int r = 1 ; r <= 32 ; r++)
+        rounds.push_back(roundOf(r, 1, threeRounds().front().seats));
+
+    QWidget page;
+    page.resize(1920, 1034);
+
+    HistorySheet sheet(&page);
+    sheet.hide();
+    page.show();
+    QCoreApplication::processEvents();
+
+    sheet.showHistory(rounds, threeNames);
+    sheet.show();
+    sheet.raise();
+    sheet.focusDefault();
+    driving::pump(50);
+
+    QScrollBar* bar = sheet.findChild<QScrollArea*>()->verticalScrollBar();
+    REQUIRE(bar->maximum() > 0);
+    REQUIRE(bar->value() == bar->maximum());
+
+    SECTION("At its foot, it follows the new row")
+    {
+        const int before = bar->maximum();
+
+        rounds.push_back(roundOf(33, 1, threeRounds().front().seats));
+        sheet.showHistory(rounds, threeNames);
+        driving::pump(50);
+
+        REQUIRE(bar->maximum() > before);
+        REQUIRE(bar->value() == bar->maximum());
+    }
+
+    SECTION("Scrolled up, it stays where it is")
+    {
+        const int reading = bar->maximum() / 2;
+        bar->setValue(reading);
+
+        rounds.push_back(roundOf(33, 1, threeRounds().front().seats));
+        sheet.showHistory(rounds, threeNames);
+        driving::pump(50);
+
+        REQUIRE(bar->value() == reading);
+    }
+}
+
 TEST_CASE("The history's Close asks to close", "[history]")
 {
     HistorySheet sheet;

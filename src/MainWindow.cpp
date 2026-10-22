@@ -638,7 +638,11 @@ void MainWindow::showRoundSheet(const RoundResult& result)
     roundSheet->show();
     roundSheet->raise();
 
-    if(roundSheetHolding)
+    // A SHEET THAT WAITS FOR YOU TAKES THE KEYBOARD - but not from under the history
+    // or Rules, open over it. Taken, it was handed back to the sheet on top, whose
+    // default scrolled the history to its foot under a reader of its first rounds
+    // (PR #37's review, finding #4). Closing that sheet gives it to Continue.
+    if(roundSheetHolding && !openMenuSheet())
         roundSheet->focusDefault();
 
     keepMenuSheetOnTop();
@@ -792,7 +796,10 @@ void MainWindow::showGameOverPanel()
 {
     gameOverPanel->show();
     gameOverPanel->raise();
-    gameOverPanel->focusDefault();
+
+    // Not from under an open sheet, as the round sheet (showRoundSheet()).
+    if(!openMenuSheet())
+        gameOverPanel->focusDefault();
 
     keepMenuSheetOnTop();
 }

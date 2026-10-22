@@ -659,6 +659,13 @@ QLabel* SheetTable::addLabel(const QString& text, int row, int column, bool head
     }
 
     grid->addWidget(label, row, column);
+
+    // SHOWN NOW, not on the event loop's next turn, which is when Qt shows a child
+    // added to a shown parent: until then the layout counts it as nothing. The
+    // history, filled again while open, measured for a moment as though empty, and
+    // its scroll range fell to nothing and took the reader's place with it (PR #37's
+    // review, finding #4). In a hidden sheet, it shows when the sheet does.
+    label->show();
     return label;
 }
 
@@ -920,6 +927,24 @@ void Overlay::reveal(QWidget* widget)
     column->activate();
 
     scroll->ensureWidgetVisible(widget);
+}
+
+void Overlay::keepFootInView()
+{
+    QScrollBar* bar = scroll->verticalScrollBar();
+
+    connect(bar, &QScrollBar::valueChanged, this, [this, bar](int value)
+    {
+        atFoot = value >= bar->maximum();
+    });
+
+    // Qt keeps the value as the range grows, which left a reader at the foot
+    // reading on there while the new rows went out of view below it.
+    connect(bar, &QScrollBar::rangeChanged, this, [this, bar](int, int maximum)
+    {
+        if(atFoot)
+            bar->setValue(maximum);
+    });
 }
 
 bool Overlay::focusNextInside(bool next)

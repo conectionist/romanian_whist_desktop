@@ -30,6 +30,8 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -2290,4 +2292,85 @@ TEST_CASE("A sheet tells the table once, and only while it is up", "[main-window
     REQUIRE(leaves.count == 1);
 
     scene->removeEventFilter(&leaves);
+}
+
+TEST_CASE("Rounds scored under the history leave the reader where they were", "[main-window]")
+{
+    // PR #37's review, finding #4. The hold lands at the game's next pause, so a
+    // round can be scored under a history just opened. At its foot, the reader kept
+    // reading there while the new rows went out of view below; scrolled up to the
+    // first rounds, a round that waited took the keyboard and handed it back, and
+    // the history's default threw the reader to its foot.
+    //
+    // THE ROUNDS ARE DELIVERED AS THE BRIDGE DELIVERS THEM, to onRoundScored(), over
+    // a seated game parked at your first bid: nothing else moves while they arrive.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    HistorySheet* history = window.findChild<HistorySheet*>();
+    RoundSheet* round = window.findChild<RoundSheet*>();
+    TableScene* scene = window.findChild<TableScene*>();
+    REQUIRE(history != nullptr);
+    REQUIRE(round != nullptr);
+    REQUIRE(scene != nullptr);
+
+    answerModalFreshSeatedGame(300);
+    window.findChild<QPushButton*>("newGame")->click();
+
+    BidStripItem* bidStrip = scene->bidStripItem();
+    REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
+
+    clickCorner(scene->historyButton());
+    REQUIRE(history->isVisible());
+
+    QPushButton* close = history->findChild<QPushButton*>("closeHistory");
+    QPushButton* continueButton = round->findChild<QPushButton*>("continueRound");
+    QScrollBar* bar = history->findChild<QScrollArea*>()->verticalScrollBar();
+    REQUIRE(close != nullptr);
+    REQUIRE(continueButton != nullptr);
+    REQUIRE(window.focusWidget() == close);
+
+    const auto score = [&window](unsigned int number, bool held)
+    {
+        RoundResult result;
+        result.roundNumber = number;
+        result.roundCount = 40;
+        result.trickCount = 1;
+        result.held = held;
+
+        REQUIRE(QMetaObject::invokeMethod(&window, "onRoundScored", Qt::DirectConnection,
+                                          Q_ARG(RoundResult, result)));
+        pump(20);
+    };
+
+    // At its foot, it stays there as the rows come.
+    for(unsigned int r = 1 ; r <= 30 ; r++)
+        score(r, false);
+
+    REQUIRE(bar->maximum() > 0);
+    REQUIRE(bar->value() == bar->maximum());
+
+    // Scrolled up to the first rounds, it stays there through a round that waits,
+    // and keeps the keyboard; the round sheet waits beneath.
+    bar->setValue(0);
+    score(31, true);
+
+    REQUIRE(round->isVisible());
+    REQUIRE(bar->value() == 0);
+    REQUIRE(window.focusWidget() == close);
+
+    // Closed, the keyboard goes to the waiting sheet's Continue - though Qt hands it
+    // to that sheet's first button as the history goes.
+    KeyboardMovedOnHide qtsMove(round->findChild<QPushButton*>("roundHistory"));
+    history->installEventFilter(&qtsMove);
+
+    close->click();
+    pump(50);
+
+    history->removeEventFilter(&qtsMove);
+
+    REQUIRE_FALSE(history->isVisible());
+    REQUIRE(window.focusWidget() == continueButton);
 }
