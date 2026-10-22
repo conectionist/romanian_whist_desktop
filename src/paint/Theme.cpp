@@ -274,6 +274,10 @@ Theme::TablePalette tablePalette()
     table.sheetHeadRule = rgba(201, 164, 92, 0.3);
     table.sheetRowRule = rgba(201, 164, 92, 0.1);
 
+    // Phase 11, from page.html's .sheet .mini figure.win img: box-shadow 0 0 0 2px
+    // gold-bright, 0 0 16px rgba(242, 211, 140, 0.5).
+    table.sheetWinGlow = rgba(242, 211, 140, 0.5);
+
     // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
     // optional hat, mustache and beard, and long hair.
     using Look = Theme::TablePalette::PortraitLook;

@@ -24,8 +24,9 @@
 // the mock-up's do, and are one cached picture each - the panel's two blurred
 // shadows are too dear to paint on every frame of a drag.
 //
-// WHAT THEY OPEN IS PHASE 11's. Until then the scene builds them disabled: drawn
-// in their place, muted, taking neither the cursor nor a click.
+// WHAT THEY OPEN IS MainWindow's: the Round history and Last trick sheets (phase
+// 11), on clicked(). Disabled, a button is drawn in its place, muted, taking neither
+// the cursor nor a click - as phase 8 built them until there were sheets to open.
 namespace tablebutton
 {
 

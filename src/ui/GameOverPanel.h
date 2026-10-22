@@ -79,6 +79,12 @@ signals:
     void playAgainRequested();
     void mainMenuRequested();
 
+    // The quiet Round history between the two (the redesign's phase 11, by the
+    // owner's call of 2026-10-22): the game's every round, which this panel's dim
+    // otherwise keeps the table's own button from. Opened over the panel and closed
+    // back to it.
+    void historyRequested();
+
 private:
     // One standing, spelled and laid out: place, name, score, and the star every
     // winner takes.
@@ -103,6 +109,7 @@ private:
     SheetTable* rows = nullptr;
 
     SheetButton* playAgain = nullptr;
+    SheetButton* history = nullptr;
     SheetButton* mainMenu = nullptr;
 };
 

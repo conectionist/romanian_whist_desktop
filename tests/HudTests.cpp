@@ -305,13 +305,40 @@ TEST_CASE("The corner panels wait for a view and a game", "[hud]")
     REQUIRE(scene.lastTrickButton()->isVisible());
 }
 
-TEST_CASE("The corner buttons are disabled until they have sheets to open", "[hud]")
+TEST_CASE("The corner buttons are live once a game is on the table", "[hud]")
 {
-    // Phase 11 enables them.
+    // PHASE 11 GAVE THEM THEIR SHEETS: phase 8 built them disabled until there was
+    // something to open. Pinned in a view over a game, each lights and clicks where
+    // it is drawn, through the scene as a player's click goes.
     TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
 
-    REQUIRE_FALSE(scene.historyButton()->isEnabled());
-    REQUIRE_FALSE(scene.lastTrickButton()->isEnabled());
+    TableView view(&scene);
+    view.resize(1440, 900);
+    view.show();
+    QCoreApplication::processEvents();
+
+    for(TableButtonItem* button : { scene.historyButton(), scene.lastTrickButton() })
+    {
+        INFO(button->label().toStdString());
+
+        REQUIRE(button->isVisible());
+        REQUIRE(button->isEnabled());
+
+        int clicks = 0;
+        QObject::connect(button, &TableButtonItem::clicked, [&clicks] { clicks++; });
+
+        const QPointF middle = inScene(*button).center();
+
+        hoverAt(scene, middle);
+        REQUIRE(button->isHovered());
+
+        pressAndRelease(scene, middle, middle);
+        REQUIRE(clicks == 1);
+
+        hoverAt(scene, QPointF(768.0, 512.0));
+    }
 }
 
 // SECTION 2.1: 8 pixels in from the window's left and bottom edges, whatever its

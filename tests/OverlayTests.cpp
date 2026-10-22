@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "paint/CardRenderer.h"
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
 #include "ui/NewGameDialog.h"
 #include "ui/Overlay.h"
 #include "ui/PauseOverlay.h"
@@ -27,7 +30,8 @@
 #include <vector>
 
 // What every sheet over the page shares (PR #35's review, finding #11): the pause
-// menu, the round sheet, the game-over panel, Rules and Settings.
+// menu, the round sheet, the game-over panel, Rules and Settings - and since phase
+// 11 the Round history and the Last trick.
 namespace
 {
 // The smallest sheet: one button on the plaque.
@@ -64,14 +68,17 @@ QImage ownPixels(QWidget& widget)
     return image;
 }
 
-// The five sheets, filled as they are filled in a game, each on a page of its own
-// of `size`: every one the window raises.
-struct FiveSheets
+// Every sheet, filled as it is filled in a game, each on a page of its own of
+// `size`: every one the window raises. Rules is the fourth.
+struct EverySheet
 {
     std::vector<std::unique_ptr<QWidget>> pages;
     std::vector<Overlay*> sheets;
 
-    explicit FiveSheets(QSize size)
+    // The last trick's art, which outlives the sheet drawn from it.
+    CardRenderer cards;
+
+    explicit EverySheet(QSize size)
     {
         const auto page = [this, size]
         {
@@ -124,6 +131,42 @@ struct FiveSheets
         sheets.push_back(rules);
 
         sheets.push_back(new SettingsSheet(page()));
+
+        // Three rounds of a six-seat game of the longest names the setup dialog
+        // takes: the widest history there can be, short enough to fit unscrolled.
+        HistorySheet* history = new HistorySheet(page());
+        std::vector<RoundResult> rounds;
+        std::vector<QString> names;
+
+        for(unsigned int r = 1 ; r <= 3 ; r++)
+        {
+            RoundResult scored = result;
+            scored.roundNumber = r;
+            scored.trickCount = 1;
+
+            for(RoundSeatResult& seat : scored.seats)
+                seat.name = "Bartholomew Fairbank";
+
+            rounds.push_back(scored);
+        }
+
+        for(std::size_t i = 0 ; i < 6 ; i++)
+            names.push_back(QStringLiteral("Bartholomew Fairbank"));
+
+        history->showHistory(rounds, names);
+        sheets.push_back(history);
+
+        LastTrickSheet* last = new LastTrickSheet(page());
+        last->setCards(&cards);
+        lasttrick::Trick trick;
+        trick.roundNumber = 7;
+
+        for(unsigned int i = 0 ; i < 6 ; i++)
+            trick.cards.push_back({ romanian_whist::Card(romanian_whist::Rank::Ace, romanian_whist::Suit::Spades),
+                                    i, QStringLiteral("Bartholomew Fairbank"), i == 2 });
+
+        last->showTrick(trick);
+        sheets.push_back(last);
 
         for(Overlay* sheet : sheets)
         {
@@ -204,9 +247,9 @@ TEST_CASE("A sheet is section 2.13's 720 wide and centred on the page", "[overla
 // smallest page is the table's minimum viewport, 709 x 495.
 TEST_CASE("Every sheet stays on the page at the smallest window and Rules scrolls there", "[overlay]")
 {
-    FiveSheets five(QSize(709, 495));
+    EverySheet every(QSize(709, 495));
 
-    for(Overlay* sheet : five.sheets)
+    for(Overlay* sheet : every.sheets)
     {
         INFO(sheet->metaObject()->className());
 
@@ -218,12 +261,12 @@ TEST_CASE("Every sheet stays on the page at the smallest window and Rules scroll
 
     // The longest of them, the rules of a game that deals both special rounds,
     // scrolls rather than leaving the page.
-    QScrollArea* scroll = five.sheets[3]->findChild<QScrollArea*>();
+    QScrollArea* scroll = every.sheets[3]->findChild<QScrollArea*>();
     REQUIRE(scroll != nullptr);
     REQUIRE(scroll->verticalScrollBar()->maximum() > 0);
 
     // And at the screenshot's size, none does.
-    FiveSheets roomy(QSize(1920, 1034));
+    EverySheet roomy(QSize(1920, 1034));
 
     for(Overlay* sheet : roomy.sheets)
     {
@@ -415,8 +458,8 @@ TEST_CASE("The keyboard scrolls a sheet whose body does not fit", "[overlay]")
     // actions moved out of the scroll area - a footer that stays put, say - would
     // put the top of the rules out of the keyboard's reach once a Tab to Close had
     // scrolled to the bottom.
-    FiveSheets five(QSize(709, 495));
-    Overlay* rules = five.sheets[3];
+    EverySheet every(QSize(709, 495));
+    Overlay* rules = every.sheets[3];
 
     QScrollArea* scroll = rules->findChild<QScrollArea*>();
     REQUIRE(scroll != nullptr);
@@ -459,9 +502,9 @@ TEST_CASE("A sheet's words are plain text unless the line asks for rich", "[over
     // as markup, and the announcement, the streak warning and a crash's message all
     // carry what a player typed or an exception said. Only the two lines that build
     // their own markup, escaped, are rich.
-    FiveSheets five(QSize(1920, 1034));
+    EverySheet every(QSize(1920, 1034));
 
-    for(Overlay* sheet : five.sheets)
+    for(Overlay* sheet : every.sheets)
     {
         for(const QLabel* label : sheet->findChildren<QLabel*>())
         {

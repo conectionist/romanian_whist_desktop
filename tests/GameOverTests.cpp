@@ -2,6 +2,7 @@
 
 #include "ui/GameOverPanel.h"
 
+#include <QCoreApplication>
 #include <QLabel>
 #include <QPushButton>
 #include <QString>
@@ -252,4 +253,41 @@ TEST_CASE("The failure face shows no standings and no Play again", "[game-over]"
     QLabel* announcement = panel.findChild<QLabel*>("announcement");
     REQUIRE(announcement);
     REQUIRE(announcement->text() == "the deck ran out");
+}
+
+TEST_CASE("The standings offer the round history between their two ways on", "[game-over]")
+{
+    // The owner's call, 2026-10-22 (phase 11): the standings' dim covers the
+    // table's own Round history button, so the panel carries one - quiet, between
+    // Main menu and Play again, and on the failure face as well, since a game that
+    // failed still played the rounds it scored.
+    GameOverPanel panel;
+    panel.showResult({ standing(0, "Ana", 47, 1) }, { standing(0, "Ana", 47, 1) });
+
+    QPushButton* history = panel.findChild<QPushButton*>("gameOverHistory");
+    QPushButton* mainMenu = panel.findChild<QPushButton*>("gameOverMainMenu");
+    QPushButton* playAgain = panel.findChild<QPushButton*>("playAgain");
+    REQUIRE(history != nullptr);
+    REQUIRE(mainMenu != nullptr);
+    REQUIRE(playAgain != nullptr);
+
+    REQUIRE(static_cast<SheetButton*>(history)->kind() == SheetButton::Kind::Quiet);
+    REQUIRE(playAgain->isDefault());
+    REQUIRE_FALSE(history->autoDefault());
+
+    panel.resize(1280, 754);
+    panel.show();
+    QCoreApplication::processEvents();
+
+    REQUIRE(mainMenu->geometry().right() < history->geometry().left());
+    REQUIRE(history->geometry().right() < playAgain->geometry().left());
+
+    int asked = 0;
+    QObject::connect(&panel, &GameOverPanel::historyRequested, [&asked] { asked++; });
+
+    history->click();
+    REQUIRE(asked == 1);
+
+    panel.showFailure("the deck ran out");
+    REQUIRE_FALSE(history->isHidden());
 }

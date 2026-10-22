@@ -321,6 +321,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
     // SWALLOWED, and not left to the default. QWidget::mousePressEvent() ignores
     // the event, which propagates to the PARENT rather than to the widgets

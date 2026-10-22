@@ -120,7 +120,7 @@ public:
     // that over through here.
     TrickPanelItem* trickPanelItem() const { return trickPanel; }
 
-    // Section 2.11's two buttons. Disabled until phase 11 gives them their sheets.
+    // Section 2.11's two buttons, whose clicked() MainWindow opens a sheet on.
     TableButtonItem* historyButton() const { return history; }
     TableButtonItem* lastTrickButton() const { return lastTrick; }
 

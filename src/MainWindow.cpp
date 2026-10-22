@@ -4,11 +4,14 @@
 #include "paint/Theme.h"
 #include "table/BidStripItem.h"
 #include "table/HandItem.h"
+#include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
 #include "ui/MainMenuPage.h"
 #include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
@@ -155,8 +158,10 @@ void MainWindow::buildTable()
     // handle here: it has the same second source, the prompt for your card.
     trickPanel = scene->trickPanelItem();
 
-    // THE CORNER BUTTONS ARE LEFT UNCONNECTED, and the scene builds them disabled:
-    // Round history and Last trick open the sheets phase 11 builds.
+    // THE CORNER BUTTONS, in the scene as the panels are: Round history and Last
+    // trick, which open their sheets below (phase 11).
+    connect(scene->historyButton(), &TableButtonItem::clicked, this, &MainWindow::showHistory);
+    connect(scene->lastTrickButton(), &TableButtonItem::clicked, this, &MainWindow::showLastTrick);
 
     scene->setTheme(theme);
 
@@ -242,7 +247,28 @@ void MainWindow::buildTable()
     connect(settingsSheet, &SettingsSheet::settingsChanged, this, &MainWindow::applySettings);
     connect(settingsSheet, &SettingsSheet::closeRequested, this, &MainWindow::hideMenuSheets);
 
-    menuSheets = { rulesSheet, settingsSheet };
+    // THE CORNER BUTTONS' TWO, opened as Rules is. The last trick is drawn from
+    // the table's own card art, whose pictures it shares.
+    historySheet = new HistorySheet(pages);
+    historySheet->setTheme(theme);
+    historySheet->hide();
+
+    connect(historySheet, &HistorySheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    lastTrickSheet = new LastTrickSheet(pages);
+    lastTrickSheet->setTheme(theme);
+    lastTrickSheet->setCards(&scene->cardRenderer());
+    lastTrickSheet->hide();
+
+    connect(lastTrickSheet, &LastTrickSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    menuSheets = { rulesSheet, settingsSheet, historySheet, lastTrickSheet };
+
+    // AND THE HISTORY FROM THE TWO SHEETS THAT REPORT SCORES: over the round sheet,
+    // whose hold it keeps, and over the standings, which otherwise cover the table's
+    // own button. Each closes back to the sheet it opened from.
+    connect(roundSheet, &RoundSheet::historyRequested, this, &MainWindow::showHistory);
+    connect(gameOverPanel, &GameOverPanel::historyRequested, this, &MainWindow::showHistory);
 
     // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
     // for a game that has already ended: stop() is idempotent, and a game that
@@ -493,6 +519,33 @@ void MainWindow::applySettings(int botSpeed, bool wait)
     // AND FOR THIS ONE. The bridge reads the wait as each round is scored, and
     // tells the window what it read (RoundResult::held).
     controller.setPacing(pacingOf(lastConfig));
+}
+
+void MainWindow::showHistory()
+{
+    fillHistory();
+    showMenuSheet(historySheet);
+}
+
+void MainWindow::fillHistory()
+{
+    // THE NAMES FROM THE TABLE, in seat order, so the columns are headed before
+    // the first round is scored.
+    std::vector<QString> names;
+
+    if(const std::shared_ptr<const GameSnapshot> table = scene->lastSnapshot())
+    {
+        for(const SeatView& seat : table->seats)
+            names.push_back(QString::fromStdString(seat.name));
+    }
+
+    historySheet->showHistory(roundHistory, names);
+}
+
+void MainWindow::showLastTrick()
+{
+    lastTrickSheet->showTrick(lastTrick.last());
+    showMenuSheet(lastTrickSheet);
 }
 
 void MainWindow::hideMenuSheets()
@@ -909,6 +962,10 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // AND THE MENU BAR'S SHEETS, which can be up over a game New Game replaces.
     dropMenuSheets();
 
+    // AND WHAT THE CORNER BUTTONS SHOW: the last game's rounds and its last trick.
+    roundHistory.clear();
+    lastTrick.clear();
+
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
     returningToMenu = false;
@@ -1018,6 +1075,14 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     // thing they click.
     scene->setSnapshot(snapshot);
     hand->setPlayable(false);
+
+    // THE LAST TRICK, kept from the frame that finishes it. A hold lands at the
+    // game's next pause, so a frame or two can still arrive under an open sheet;
+    // it shows the trick they finish rather than one already gone by.
+    lastTrick.observe(*snapshot);
+
+    if(lastTrickSheet->isVisible())
+        lastTrickSheet->showTrick(lastTrick.last());
 }
 
 // THE GAME THREAD IS PARKED IN makeBet() FROM HERE UNTIL onBidChosen(), which is
@@ -1272,6 +1337,14 @@ void MainWindow::onGameStopped()
 
 void MainWindow::onRoundScored(RoundResult result)
 {
+    // INTO THE HISTORY BEFORE ANYTHING ELSE, the final round of an unattended game
+    // included: it gets no sheet below, and the standings' Round history is where
+    // it is read. An open history takes it in, as the hold may land after it.
+    roundHistory.push_back(result);
+
+    if(historySheet->isVisible())
+        fillHistory();
+
     // THE LAST ROUND OF AN UNATTENDED GAME GETS NO SHEET. Its numbers are the
     // ones the game-over panel is about to show in full, and a sheet that
     // flashed for a dwell and was replaced would be two panels in a second.

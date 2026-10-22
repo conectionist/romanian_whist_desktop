@@ -161,13 +161,21 @@ RoundSheet::RoundSheet(QWidget* parent) : Overlay(parent)
     inside->addSpacing(12);
     inside->addWidget(warning);
 
+    // THE MOCK-UP'S QUIET [Round history] BEFORE ITS DEAL BUTTON: the whole game so
+    // far, opened over this sheet. Never the default - Enter is Continue's.
+    historyButton = new SheetButton(QCoreApplication::translate("roundsheet", "Round history"),
+                                    SheetButton::Kind::Quiet, panel);
+    historyButton->setObjectName("roundHistory");
+    historyButton->setAutoDefault(false);
+
     continueButton = new SheetButton(QCoreApplication::translate("roundsheet", "Continue"),
                                      SheetButton::Kind::Primary, panel);
     continueButton->setObjectName("continueRound");
     continueButton->setDefault(true);
 
-    addActions({ continueButton });
+    addActions({ historyButton, continueButton });
 
+    connect(historyButton, &QPushButton::clicked, this, &RoundSheet::historyRequested);
     connect(continueButton, &QPushButton::clicked, this, &RoundSheet::continueRequested);
 }
 

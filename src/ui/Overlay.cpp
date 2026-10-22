@@ -837,6 +837,11 @@ void Overlay::placeSheet()
 
 void Overlay::reveal(QWidget* widget)
 {
+    // LAID OUT FIRST. A sheet just shown has posted its layout, not run it, so its
+    // widgets are still where they were last placed - nowhere, the first time -
+    // and there would be nothing to scroll to.
+    column->activate();
+
     scroll->ensureWidgetVisible(widget);
 }
 
@@ -903,6 +908,18 @@ void Overlay::paintEvent(QPaintEvent* event)
 void Overlay::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
+    placeSheet();
+}
+
+void Overlay::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+
+    // MEASURED AGAIN NOW THAT IT SHOWS. A sheet the window has kept hidden since it
+    // was built has never shown its widgets, and a layout counts a widget that has
+    // never been shown as nothing: filled while hidden, the history measured 194
+    // tall for thirty rows. Its layout put that right a moment later, but a sheet
+    // opened at its foot (reveal()) had already scrolled by the wrong size.
     placeSheet();
 }
 
