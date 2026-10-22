@@ -545,9 +545,9 @@ void MainWindow::fillHistory()
     // the first round is scored.
     std::vector<QString> names;
 
-    if(const std::shared_ptr<const GameSnapshot> table = scene->lastSnapshot())
+    if(const std::shared_ptr<const GameSnapshot> snapshot = scene->lastSnapshot())
     {
-        for(const SeatView& seat : table->seats)
+        for(const SeatView& seat : snapshot->seats)
             names.push_back(QString::fromStdString(seat.name));
     }
 
@@ -557,9 +557,9 @@ void MainWindow::fillHistory()
 void MainWindow::showLastTrick()
 {
     // The round on the table, which says whether the trick's own needs naming.
-    const std::shared_ptr<const GameSnapshot> table = scene->lastSnapshot();
+    const std::shared_ptr<const GameSnapshot> snapshot = scene->lastSnapshot();
 
-    lastTrickSheet->showTrick(lastTrick.last(), table ? table->roundNumber : 0);
+    lastTrickSheet->showTrick(lastTrick.last(), snapshot ? snapshot->roundNumber : 0);
     showMenuSheet(lastTrickSheet);
 }
 
