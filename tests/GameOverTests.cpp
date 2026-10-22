@@ -290,4 +290,21 @@ TEST_CASE("The standings offer the round history between their two ways on", "[g
 
     panel.showFailure("the deck ran out");
     REQUIRE_FALSE(history->isHidden());
+
+    // THE GREEN ONE STILL LAST: Main menu is the green one on this face, so it
+    // goes after Round history, and Tab follows (PR #37's review, finding #1).
+    QCoreApplication::processEvents();
+
+    REQUIRE(static_cast<SheetButton*>(mainMenu)->kind() == SheetButton::Kind::Primary);
+    REQUIRE(history->geometry().right() < mainMenu->geometry().left());
+    REQUIRE(history->nextInFocusChain() == mainMenu);
+
+    // And back again for a game that ends as games do, on the same panel.
+    panel.showResult({ standing(0, "Ana", 47, 1) }, { standing(0, "Ana", 47, 1) });
+    QCoreApplication::processEvents();
+
+    REQUIRE(mainMenu->geometry().right() < history->geometry().left());
+    REQUIRE(history->geometry().right() < playAgain->geometry().left());
+    REQUIRE(mainMenu->nextInFocusChain() == history);
+    REQUIRE(history->nextInFocusChain() == playAgain);
 }

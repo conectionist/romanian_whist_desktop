@@ -17,6 +17,7 @@
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
+class QHBoxLayout;
 class QLabel;
 class QScrollArea;
 class QVBoxLayout;
@@ -307,8 +308,9 @@ protected:
     void dress(QLabel* label, sheet::Role role);
 
     // The sheet's buttons, at the bottom right, 12 apart and 20 below what is
-    // above them, in the order given: the primary one last.
-    void addActions(std::initializer_list<SheetButton*> buttons);
+    // above them, in the order given: the primary one last. Returns their row, for
+    // a sheet whose primary button changes (GameOverPanel's failure face).
+    QHBoxLayout* addActions(std::initializer_list<SheetButton*> buttons);
 
     // Sizes the sheet to what it now holds, and centres it: called when its
     // content changes. No wider than section 2.13's 720 or the page less its

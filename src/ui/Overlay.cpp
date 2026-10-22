@@ -816,7 +816,7 @@ void Overlay::dress(QLabel* label, sheet::Role role)
     setTextColour(label, sheet::colourFor(role, palette.table));
 }
 
-void Overlay::addActions(std::initializer_list<SheetButton*> buttons)
+QHBoxLayout* Overlay::addActions(std::initializer_list<SheetButton*> buttons)
 {
     column->addSpacing(actionsAbove);
 
@@ -831,6 +831,8 @@ void Overlay::addActions(std::initializer_list<SheetButton*> buttons)
     }
 
     column->addLayout(actions);
+
+    return actions;
 }
 
 QRect Overlay::sheetRect() const
