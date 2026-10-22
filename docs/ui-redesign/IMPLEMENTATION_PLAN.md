@@ -432,7 +432,7 @@ Two panel buttons, height 76, padding 0/22, Marcellus 21, 24 px gold icon then t
 history** and **Last trick**, 14 apart, pinned 8 from the window's left and bottom edges, at the
 table scale (1.0). Hover: brighter inner line and a gold glow. What they open: phase 11. *(Phase 8
 builds them disabled: in place, the label and icon muted, no hover and no click. Phase 11 enables
-them.)*
+them: they open the Round history and Last trick sheets, and go out under the sheet they open.)*
 
 ### 2.12 Menu bar
 
@@ -1662,7 +1662,7 @@ Done when: `screenshots/bidding.jpg` is matched and the end-of-round sheet reads
   - **A colour at a tenth of full alpha, read back from a premultiplied image,** is good to a
     few levels per channel only.
 
-### Phase 11: round history and last trick
+### Phase 11: round history and last trick ✅ COMPLETE
 
 Files: `src/MainWindow.*`, new `src/ui/HistorySheet.*` and `src/ui/LastTrickSheet.*`, tests.
 
@@ -1680,6 +1680,106 @@ Files: `src/MainWindow.*`, new `src/ui/HistorySheet.*` and `src/ui/LastTrickShee
 
 Done when: both buttons open working sheets.
 
+**Outcome:**
+
+- **The count is 557 tests** (532 + 25, one rewritten, none retired), passing on the `default`,
+  `release` and `clang` presets with Qt 6.11.2 and building without a warning. (Phase 10's outcome
+  above says 521; its review round brought it to 532.) Commit by commit:
+  - **The sheet table, 532 → 535**: three `OverlayTests` cases for what the history needs of
+    `SheetTable`.
+  - **The two sheets, 535 → 556**: `HistorySheetTests` (8), `LastTrickSheetTests` (7), a case each
+    in `RoundSheetTests` and `GameOverTests`, and four `MainWindowTests`. `OverlayTests`' shared
+    fixture covers all seven sheets now. **Rewritten:** `HudTests`' "The corner buttons are disabled
+    until they have sheets to open" is "The corner buttons are live once a game is on the table".
+  - **Two fixes the running app found, 556 → 557**: see the pitfalls.
+  - **Checked by taking each fix out:** the history's clear on New Game, the trick's, recording the
+    final round before `onRoundScored()`'s early return, measuring a sheet again on show, the sheet
+    beneath taking the keyboard at its default, and the queued leave each fail their test without it.
+- **Two decisions by the owner, 2026-10-22:**
+  - **The history's cell is `taken/bid`**, as the seat pill reads ("+6 1/1"), not the mock-up's
+    bid/taken; the meta line is "Score per round, then taken/bid". A slash reads as progress.
+  - **The standings carry a quiet Round history** between Main menu and Play again, on both faces.
+    Their dim covers the corner button, and otherwise nothing shows the game's rounds once it ends.
+- **Defaults taken, not asked:**
+  - **Last trick with no trick finished this round opens its sheet**, saying "No trick has finished
+    yet this round.", with no cards. The mock-up shows a toast; the client has none.
+  - **The history keeps the mock-up's columns**: Round, Cards, a column per seat. Section 16.3 of
+    `QT_CLIENT_PLAN_proposal1.md` also had Type and Trump.
+  - **A long name gives way in its heading**, with an ellipsis and the whole name as the tooltip,
+    so six 20-character names fit: a sheet never scrolls across. Its column still fits its cells.
+  - **The history opens at its foot** when it is taller than the page (a six-seat game has 30+
+    rounds, and about 22 rows fit at 1080), so the latest round, the totals and Close are in view.
+  - **"You" in sentences, names in labels**: "You took it", but your name under your card and over
+    your column, as the round sheet's rows have it.
+  - **The last trick is kept the moment it is complete**, while it is still on the felt. The
+    mock-up's is kept as the felt clears; the trick on the felt is the same one either way.
+  - **The trick's cards sit left in the sheet**, as the mock-up's flex row does; this phase's plan
+    said centred.
+- **What the build is:**
+  - **`MainWindow::roundHistory`** keeps every `RoundResult`, appended first thing in
+    `onRoundScored()`, so an unattended game's final round, which gets no round sheet, is in it.
+    `startGame()` empties it. Totals are the engine's (the last round's `totalScore + roundScore`),
+    never a sum of the rows. `RoundResult.h`'s "nothing accumulates these" note is updated.
+  - **`lasttrick::Tracker`** (`src/ui/LastTrickSheet.h`) keeps the last frame with a card from every
+    seat - the one `GameBridge::onTrickWon()` publishes - with the engine's `isWinning`. Partly
+    played frames leave it be; a frame of another round forgets it. `render()` feeds it, and
+    `startGame()` clears it, since a new game's round 1 has the old one's number.
+  - **Both sheets are menu sheets** (`menuSheets`): over everything, holding a game in play, closed
+    by Esc. An open one refills if a round or a trick lands under it before the hold does.
+  - **`SheetTable`** gained a cell's `note` (a smaller muted part on the text's baseline, painted by
+    the cell's own label, plain text), `addNote()` (one muted line across every column),
+    `fitHeadingsTo()` with `Column::elide`, and `Tone::Muted`. `Cell` has a constructor with
+    defaults. `Overlay::reveal()` scrolls a sheet's body to a widget, and `sheet::contentWidth` is
+    a full sheet's 658 inside its padding.
+  - **The winner's ring and glow** are painted on the sheet's body under the row's place, so the
+    glow reaches into the padding as the mock-up's box-shadow does. Its colour is `sheetWinGlow`.
+  - **No change to `src/engine/`** beyond `RoundResult.h`'s comments: everything both sheets show
+    already reached the GUI thread.
+- **The screenshots** (`sheet-history.png` and `sheet-last-trick.png` are new):
+  - The table shots differ from phase 10's at the corner buttons only, which are live now, gold
+    icons and cream labels as the mock-up's are. `table-empty.png` is pixel-identical.
+  - `sheet-round.png` and `sheet-game-over.png` differ by their new button.
+  - `menu.png` differs by up to 7 levels in the logo's lettering, the known band phase 10 saw in
+    `table-3-players.png`; nothing in this phase draws the logo.
+- **Checked in the running app**, on a nested Xephyr screen driven by xdotool, before the PR:
+  - both corner buttons at your first bid: "No trick has finished yet this round." and an empty
+    history headed by the four names;
+  - Last trick in the middle of an eight-card round, the first trick ringed on its winner; a digit
+    under the sheet played nothing;
+  - Round history from a waiting round sheet, Esc back to it, and Enter continuing to round 2.
+
+  It found the two pitfalls below that no offscreen test had.
+- **What later phases take from here:**
+  - **Phase 12's translations** have new contexts: `historysheet`, `lasttrick`, and new strings in
+    `roundsheet` and `GameOverPanel`.
+  - **Phase 12's documentation** amends `QT_CLIENT_PLAN_proposal1.md` section 16.3: the history lives
+    in `MainWindow`, opens from the corner, the round sheet and the standings, and has the mock-up's
+    columns.
+  - **`MainWindow::leaveTable()`** puts out what the cursor lit on the table whenever a sheet comes
+    up. A sheet going does not light it again under a cursor that has not moved; the bid strip has
+    its own way (`TableScene::cursorPosition()`), and nothing else needs one yet.
+- **No `[.timing]` run.** The owner did not ask for one, and nothing in this phase draws on the
+  table while it is dragged: the corner buttons were drawn before, and only their colours changed.
+- **Pitfalls:**
+  - **A layout counts a widget that has never been shown as nothing.** The window builds every sheet
+    hidden, so a sheet filled before its first showing measured as empty - the history, 194 tall
+    for thirty rows - and its layout put that right a moment after it showed. Harmless until a sheet
+    scrolled on opening. `Overlay` measures again in `showEvent()`.
+  - **Hiding the widget with the keyboard hands it on through the window's Tab handling**, which
+    under a sheet means the first control of the sheet beneath: the round sheet's Round history, so
+    Enter after closing the history opened it again; the standings' Main menu, where Enter would
+    have left the game. `restoreFocus()` now gives the sheet beneath its default when what went had
+    the keyboard. **The offscreen platform never does this** - its windows are never active, so
+    `QApplication::focusWidget()` is null - and every test passed; the tests now do what Qt does,
+    at the hide.
+  - **`QGraphicsScene` ends a mouse release with a hover at the release point**
+    (`QGraphicsScene::mouseReleaseEvent()`). A corner button's sheet opens from inside the release,
+    so a leave sent as the sheet showed was undone at once and the button stayed lit under the dim.
+    The leave is queued.
+  - **`-Wmissing-field-initializers` fires on a partly braced aggregate** even when every member left
+    out has a default member initializer, once two or more are given: `{ text, tone, strong }` after
+    a fourth field was added. A constructor with defaults is quiet.
+
 ### Phase 12: polish, translations, documentation
 
 1. Optional motion, within section 18.2's animation budget: card from hand to table, trick sweeping
@@ -1691,7 +1791,9 @@ Done when: both buttons open working sheets.
 5. Documentation: amend `docs/QT_CLIENT_PLAN_proposal1.md` sections 12, 14, 15.1, 17 and 18 where
    this redesign changes what they describe (the file already uses "AMENDED" boxes for this), and
    note here which open questions were decided and how. Section 15.1 since phase 10: the strip is on
-   the felt, and its digits are read on the window.
+   the felt, and its digits are read on the window. Section 16.3 since phase 11: the history lives in
+   `MainWindow`, has the mock-up's columns, and opens from the corner, the round sheet and the
+   standings.
 
 Done when: side-by-side screenshots of the client and `screenshots/` match closely at 1920×1080 for
 3 to 6 players and for bidding.
