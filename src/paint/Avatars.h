@@ -70,11 +70,13 @@ struct Wearer
 //    no strategy that suit their gender. A strategy's avatars are only ever its
 //    own, so a female Cyborg with only a male cyborg face gets an ordinary woman's.
 // 2. One of them at random, from those nobody at the table wears yet.
-// 3. IF EVERY ONE IS TAKEN, they are free again and the pick starts over: two
+// 3. IF EVERY ONE IS WORN, the pick starts over among those worn least: two
 //    Cyborgs and one cyborg face, and both wear it.
 //
 // A gender-neutral avatar is one of either gender's, and taken by whoever gets it
-// first. A player with no avatars at all gets an empty id: the bare box.
+// first. It counts as worn for both genders, so one gender starting over never
+// frees it for the other. A player with no avatars at all gets an empty id: the
+// bare box.
 //
 // The catalogue is a parameter so a test can hand it one of its own.
 std::vector<std::string> assign(const std::vector<Wearer>& wearers, const std::vector<Avatar>& catalogue,

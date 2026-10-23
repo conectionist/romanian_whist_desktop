@@ -8,7 +8,7 @@
 #include <QtDebug>
 
 #include <algorithm>
-#include <set>
+#include <map>
 
 namespace
 {
@@ -102,10 +102,18 @@ std::vector<std::string> avatars::assign(const std::vector<Wearer>& wearers, con
         return ids;
     };
 
-    // WHO WEARS WHAT ALREADY, across every group: a gender-neutral avatar belongs to
-    // both genders' groups, and must not be handed to a second player while either
-    // group still has another.
-    std::set<std::string> taken;
+    // HOW MANY AT THE TABLE WEAR EACH, across every group: a gender-neutral avatar
+    // belongs to both genders' groups, and must not be handed to a second player
+    // while either group still has another. A count, never cleared, so one group
+    // starting over cannot free a face the other group's player wears (PR #40's
+    // review, finding #1: a set erased the whole group when it ran out).
+    std::map<std::string, unsigned int> worn;
+
+    const auto wornCount = [&worn](const std::string& id)
+    {
+        const auto found = worn.find(id);
+        return found == worn.end() ? 0U : found->second;
+    };
 
     std::vector<std::string> chosen;
     chosen.reserve(wearers.size());
@@ -126,28 +134,26 @@ std::vector<std::string> avatars::assign(const std::vector<Wearer>& wearers, con
             continue;
         }
 
-        // 2. Those nobody wears yet, in catalogue order.
+        // 2. Those worn least, in catalogue order: those nobody wears yet, while
+        //    there are any.
+        // 3. RUN OUT: when every one is worn, the least worn are all of them, and
+        //    the pick starts over among them.
+        unsigned int least = wornCount(theirs.front());
+
+        for(const std::string& id : theirs)
+            least = std::min(least, wornCount(id));
+
         std::vector<std::string> free;
 
         for(const std::string& id : theirs)
-            if(!taken.contains(id))
+            if(wornCount(id) == least)
                 free.push_back(id);
-
-        // 3. RUN OUT: every one is taken. They are free again, and the pick starts
-        //    over among all of them.
-        if(free.empty())
-        {
-            for(const std::string& id : theirs)
-                taken.erase(id);
-
-            free = theirs;
-        }
 
         std::uniform_int_distribution<std::size_t> pick(0, free.size() - 1);
         const std::string& id = free[pick(random)];
 
         chosen.push_back(id);
-        taken.insert(id);
+        ++worn[id];
     }
 
     return chosen;

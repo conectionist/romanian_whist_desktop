@@ -444,3 +444,32 @@ TEST_CASE("A gender-neutral avatar is worn by either gender but by one player at
 
     REQUIRE(wornBy["star"] == std::set<Gender>{ Gender::Male, Gender::Female });
 }
+
+TEST_CASE("A gender that runs out does not free a gender-neutral avatar the other wears", "[avatars]")
+{
+    // PR #40's review, finding #1. The two men run out of faces (m1 and the star);
+    // starting over must not free the star for the second woman while a woman
+    // already wears it and f1 and f2 are both free. The rule used to erase the men's
+    // whole group, the star with it, and she drew it one deal in eighteen.
+    const std::vector<avatars::Avatar> catalogue = { { "m1", Gender::Male, "", QString() },
+                                                     { "star", std::nullopt, "", QString() },
+                                                     { "f1", Gender::Female, "", QString() },
+                                                     { "f2", Gender::Female, "", QString() } };
+
+    const std::vector<Wearer> wearers = { woman, man, man, woman };
+    bool starWornFirst = false;
+
+    for(std::uint32_t seed = 0 ; seed < 200 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<std::string> chosen = avatars::assign(wearers, catalogue, random);
+
+        INFO("seed " << seed);
+        REQUIRE(chosen[0] != chosen[3]);
+
+        starWornFirst = starWornFirst || chosen[0] == "star";
+    }
+
+    // The case the test is about came up.
+    REQUIRE(starWornFirst);
+}
