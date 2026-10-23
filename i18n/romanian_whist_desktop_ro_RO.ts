@@ -234,7 +234,7 @@
     <message>
         <location line="+11"/>
         <source>End with a forehead round and a hidden round</source>
-        <translation>Fruntea și neveul la urmă</translation>
+        <translation>Fruntea și Neveul la urmă</translation>
     </message>
     <message>
         <location line="+2"/>
