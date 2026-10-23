@@ -325,8 +325,15 @@ QPixmap cachedTexture(QPixmap* slot, const QString& path)
     return *slot;
 }
 
-// ONE AVATAR'S ART AS LOADED: a parsed SVG, or a decoded PNG. Neither when the
-// file is missing or unreadable, which draws the bare box and says so on stderr.
+// THE TALLEST A PNG AVATAR IS KEPT. The art comes 800 x 912, about 2.9 MB decoded,
+// and the box it fills is 100 x 114 at the mock-up's scale: about 228 tall on a 4K
+// screen, so 456 leaves twice that. Kept at full size, every face worn stayed 2.9 MB
+// for the cache's life (PR #40's review, finding #3); at this size it is about 0.7 MB.
+constexpr int maximumArtHeight = 456;
+
+// ONE AVATAR'S ART AS LOADED: a parsed SVG, or a decoded PNG no taller than
+// maximumArtHeight. Neither when the file is missing or unreadable, which draws
+// the bare box and says so on stderr.
 struct AvatarArt
 {
     std::shared_ptr<QSvgRenderer> svg;
@@ -350,6 +357,11 @@ AvatarArt loadAvatarArt(const QString& path)
         // QPixmap load would file the art in the process-wide QPixmapCache.
         QImageReader reader(path);
         art.image = reader.read();
+
+        // ONCE, here, rather than at every draw: drawCovering() scales it again
+        // to the box, from this smaller picture.
+        if(art.image.height() > maximumArtHeight)
+            art.image = art.image.scaledToHeight(maximumArtHeight, Qt::SmoothTransformation);
     }
 
     if(!art.svg && art.image.isNull())
@@ -477,9 +489,10 @@ struct Theme::Cache
     PictureKey avatarKey;
     QHash<QString, QPixmap> avatars;
 
-    // EACH AVATAR'S FILE, read once and kept: the source art, not a size, as the
-    // textures below are. A PNG decoded again for every seat at every settled
-    // resize would cost milliseconds a seat.
+    // EACH AVATAR'S FILE, read once and kept: the source art, not a box's size, as
+    // the textures below are, though a PNG is kept no taller than maximumArtHeight.
+    // A PNG decoded again for every seat at every settled resize would cost
+    // milliseconds a seat.
     std::unordered_map<std::string, AvatarArt> avatarArt;
 
     // Keyed on nothing. A texture is source art, not a colour and not a size,
