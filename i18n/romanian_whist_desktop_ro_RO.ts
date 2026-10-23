@@ -563,7 +563,7 @@ Whist</source>
     <message>
         <location line="+3"/>
         <source>%1 won it · round %2</source>
-        <translation>A câștigat-o %1 · runda %2</translation>
+        <translation>%1 a câștigat-o · runda %2</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -573,7 +573,7 @@ Whist</source>
     <message>
         <location line="+2"/>
         <source>%1 won it</source>
-        <translation>A câștigat-o %1</translation>
+        <translation>%1 a câștigat-o</translation>
     </message>
     <message>
         <location line="+27"/>
