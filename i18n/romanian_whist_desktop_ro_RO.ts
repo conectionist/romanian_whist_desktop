@@ -4,7 +4,7 @@
 <context>
     <name>BidBubbleItem</name>
     <message>
-        <location filename="../src/table/BidBubbleItem.cpp" line="+68"/>
+        <location filename="../src/table/BidBubbleItem.cpp" line="+63"/>
         <source>You bid %1</source>
         <translation type="unfinished">Ai licitat %1</translation>
     </message>
@@ -126,7 +126,7 @@
     <message>
         <location filename="../src/MainWindow.ui" line="+20"/>
         <source>Romanian Whist</source>
-        <translation type="unfinished">Whist românesc</translation>
+        <translation>Whist</translation>
     </message>
     <message>
         <location filename="../src/MainWindow.cpp" line="+886"/>
@@ -146,7 +146,7 @@
     <message>
         <location line="+5"/>
         <source>Rules</source>
-        <translation type="unfinished">Reguli</translation>
+        <translation>Regulament</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -169,7 +169,7 @@
         <translation type="unfinished">Grafica &amp;cărților...</translation>
     </message>
     <message>
-        <location line="+434"/>
+        <location line="+438"/>
         <source>-- stopped --</source>
         <translation type="unfinished">-- oprit --</translation>
     </message>
@@ -192,7 +192,7 @@
 <context>
     <name>NewGameDialog</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="+672"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="+680"/>
         <source>New Game</source>
         <translation type="unfinished">Joc nou</translation>
     </message>
@@ -234,7 +234,7 @@
     <message>
         <location line="+11"/>
         <source>End with a forehead round and a hidden round</source>
-        <translation type="unfinished">Încheie cu o rundă pe frunte și una pe nevăzute</translation>
+        <translation>Fruntea și neveul la urmă</translation>
     </message>
     <message>
         <location line="+2"/>
@@ -316,22 +316,22 @@
 <context>
     <name>SettingsSheet</name>
     <message>
-        <location filename="../src/ui/SettingsSheet.cpp" line="+36"/>
+        <location filename="../src/ui/SettingsSheet.cpp" line="+60"/>
         <source>Card animations</source>
         <translation type="unfinished">Animații</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+0"/>
         <source>Off</source>
         <translation type="unfinished">Oprite</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+1"/>
         <source>Slow</source>
         <translation type="unfinished">Lente</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="-26"/>
         <source>Settings</source>
         <translation type="unfinished">Setări</translation>
     </message>
@@ -341,7 +341,7 @@
         <translation type="unfinished">Se aplică acum și la jocul următor.</translation>
     </message>
     <message>
-        <location line="+66"/>
+        <location line="+70"/>
         <source>Done</source>
         <translation type="unfinished">Gata</translation>
     </message>
@@ -356,7 +356,7 @@
     <message>
         <location line="+1"/>
         <source>Last trick</source>
-        <translation type="unfinished">Ultima levată</translation>
+        <translation type="unfinished">Ultima mână</translation>
     </message>
 </context>
 <context>
@@ -379,22 +379,22 @@
     <message>
         <location filename="../src/table/BidStripItem.cpp" line="+218"/>
         <source>How many tricks will you take?</source>
-        <translation type="unfinished">Câte levate faci?</translation>
+        <translation type="unfinished">Câte mâini faci?</translation>
     </message>
     <message>
         <location line="+20"/>
         <source>You bid last. %1 would make the bids add up to %2, and somebody has to be wrong.</source>
-        <translation type="unfinished">Licitezi ultimul. Cu %1, licitațiile ar face %2 și cineva trebuie să greșească.</translation>
+        <translation>Licitezi ultimul. Cu %1, licitațiile ar face %2 și cineva trebuie să se pârlească.</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>%1 bid so far, totalling %2 of %3 trick.</source>
-        <translation type="unfinished">Licitații până acum: %1, în total %2 din %3 levată.</translation>
+        <translation type="unfinished">Licitații până acum: %1, în total %2 din %3 mână.</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>%1 bid so far, totalling %2 of %3 tricks.</source>
-        <translation type="unfinished">Licitații până acum: %1, în total %2 din %3 levate.</translation>
+        <translation type="unfinished">Licitații până acum: %1, în total %2 din %3 mâini.</translation>
     </message>
 </context>
 <context>
@@ -402,22 +402,22 @@
     <message>
         <location filename="../src/table/CardText.cpp" line="+29"/>
         <source>Hearts</source>
-        <translation type="unfinished">Cupă</translation>
+        <translation>Inimă roșie</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Diamonds</source>
-        <translation type="unfinished">Caro</translation>
+        <translation>Romb</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Spades</source>
-        <translation type="unfinished">Pică</translation>
+        <translation>Inimă neagră</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Clubs</source>
-        <translation type="unfinished">Treflă</translation>
+        <translation>Treflă</translation>
     </message>
     <message>
         <location line="+23"/>
@@ -562,7 +562,7 @@
     <message>
         <location filename="../src/ui/LastTrickSheet.cpp" line="+23"/>
         <source>No trick has finished yet.</source>
-        <translation type="unfinished">Nicio levată încheiată încă.</translation>
+        <translation type="unfinished">Nicio mână încheiată încă.</translation>
     </message>
     <message>
         <location line="+20"/>
@@ -587,7 +587,7 @@
     <message>
         <location line="+24"/>
         <source>Last trick</source>
-        <translation type="unfinished">Ultima levată</translation>
+        <translation type="unfinished">Ultima mână</translation>
     </message>
     <message>
         <location line="+20"/>
@@ -598,7 +598,7 @@
 <context>
     <name>newgame</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="-766"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="-774"/>
         <source>Weighs %1 imagined deals before each card, never plays at random, and counts %2% of every point an opponent scores against its own, %3% of the leader&apos;s.</source>
         <translation type="unfinished">Cântărește %1 de împărțiri imaginate înaintea fiecărei cărți, nu joacă niciodată la întâmplare și socotește %2% din fiecare punct al unui adversar împotriva propriului scor, %3% din ale liderului.</translation>
     </message>
@@ -704,12 +704,12 @@
     <message>
         <location line="+3"/>
         <source>Bids 0, or 1 when 0 is barred, and plays the first legal card in its hand.</source>
-        <translation type="unfinished">Licitează 0, sau 1 când 0 e interzis, și joacă prima carte permisă din mână.</translation>
+        <translation type="unfinished">Licitează 0, sau 1 când 0 e interzis, și joacă prima carte permisă pe care o are.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Bids the tricks its hand will take anyway, then wins cheaply while it owes them.</source>
-        <translation type="unfinished">Licitează levatele pe care mâna le face oricum, apoi câștigă ieftin cât timp le mai datorează.</translation>
+        <translation type="unfinished">Licitează mâinile pe care cărțile lui le fac oricum, apoi câștigă ieftin cât timp le mai datorează.</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -719,7 +719,7 @@
     <message>
         <location line="+4"/>
         <source>Bids the count with the best expected score, from exact odds on every card, and re-plans every trick which cards win and which go.</source>
-        <translation type="unfinished">Licitează numărul cu cel mai bun scor așteptat, din șansele exacte ale fiecărei cărți, și replanifică la fiecare levată ce cărți câștigă și ce cărți pleacă.</translation>
+        <translation type="unfinished">Licitează numărul cu cel mai bun scor așteptat, din șansele exacte ale fiecărei cărți, și replanifică la fiecare mână ce cărți câștigă și ce cărți pleacă.</translation>
     </message>
     <message>
         <location line="+20"/>
@@ -732,22 +732,22 @@
         <translation type="unfinished">Cântărește %1 de împărțiri imaginate înaintea fiecărei cărți și socotește %2% din fiecare punct al unui adversar împotriva propriului scor, dar joacă o carte permisă la întâmplare în %3% din cazuri și își mută licitația cu cel mult unu în %4% din cazuri.</translation>
     </message>
     <message>
-        <location line="+47"/>
+        <location line="+62"/>
         <source>Bot speed</source>
         <translation type="unfinished">Viteza boților</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+1"/>
         <source>Slow</source>
         <translation type="unfinished">Lent</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+1"/>
         <source>Instant</source>
         <translation type="unfinished">Instant</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+5"/>
         <source>Wait for me after each round</source>
         <translation type="unfinished">Așteaptă-mă după fiecare rundă</translation>
     </message>
@@ -916,7 +916,7 @@
     <message>
         <location line="+3"/>
         <source>Everyone bids how many tricks they will take. The last bidder may not make the bids add up to the number of tricks.</source>
-        <translation type="unfinished">Fiecare licitează câte levate va face. Ultimul nu poate licita astfel încât totalul să fie egal cu numărul de levate.</translation>
+        <translation type="unfinished">Fiecare licitează câte mâini va face. Ultimul nu poate licita astfel încât totalul să fie egal cu numărul de mâini.</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -959,42 +959,42 @@
     <message>
         <location line="+32"/>
         <source>Bids so far: %1 of %2 trick</source>
-        <translation type="unfinished">Licitate până acum: %1 din %2 levată</translation>
+        <translation type="unfinished">Licitate până acum: %1 din %2 mână</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids so far: %1 of %2 tricks</source>
-        <translation type="unfinished">Licitate până acum: %1 din %2 levate</translation>
+        <translation type="unfinished">Licitate până acum: %1 din %2 mâini</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Bids total %1 for %2 trick: over by %3</source>
-        <translation type="unfinished">Licitate %1 pentru %2 levată: cu %3 peste</translation>
+        <translation type="unfinished">Licitate %1 pentru %2 mână: cu %3 peste</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids total %1 for %2 tricks: over by %3</source>
-        <translation type="unfinished">Licitate %1 pentru %2 levate: cu %3 peste</translation>
+        <translation type="unfinished">Licitate %1 pentru %2 mâini: cu %3 peste</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Bids total %1 for %2 trick: under by %3</source>
-        <translation type="unfinished">Licitate %1 pentru %2 levată: cu %3 sub</translation>
+        <translation type="unfinished">Licitate %1 pentru %2 mână: cu %3 sub</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids total %1 for %2 tricks: under by %3</source>
-        <translation type="unfinished">Licitate %1 pentru %2 levate: cu %3 sub</translation>
+        <translation type="unfinished">Licitate %1 pentru %2 mâini: cu %3 sub</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Bids total %1 for %2 trick</source>
-        <translation type="unfinished">Licitate %1 pentru %2 levată</translation>
+        <translation type="unfinished">Licitate %1 pentru %2 mână</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids total %1 for %2 tricks</source>
-        <translation type="unfinished">Licitate %1 pentru %2 levate</translation>
+        <translation type="unfinished">Licitate %1 pentru %2 mâini</translation>
     </message>
     <message>
         <location line="+144"/>
@@ -1060,12 +1060,12 @@
     <message>
         <location line="+13"/>
         <source>Your turn. You must follow %1.</source>
-        <translation type="unfinished">E rândul tău. Răspunzi la %1.</translation>
+        <translation>E rândul tău. Trebuie să pui %1.</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Your turn. No %1, you must trump.</source>
-        <translation type="unfinished">E rândul tău. Fără %1, tai.</translation>
+        <translation>Fără %1. Trebuie să pui atu.</translation>
     </message>
     <message>
         <location line="+10"/>
@@ -1110,22 +1110,22 @@
     <message>
         <location line="+7"/>
         <source>Your bid. How many tricks?</source>
-        <translation type="unfinished">Licitația ta. Câte levate?</translation>
+        <translation>Licitația ta. Câte faci?</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Trick %1 of %2</source>
-        <translation type="unfinished">Levata %1 din %2</translation>
+        <translation type="unfinished">Mâna %1 din %2</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Leader: %1</source>
-        <translation type="unfinished">Deschide: %1</translation>
+        <translation>%1 e primul</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>Led %1</source>
-        <translation type="unfinished">Culoare %1</translation>
+        <translation>Jos e %1</translation>
     </message>
     <message>
         <location line="+17"/>
@@ -1135,12 +1135,12 @@
     <message>
         <location line="+27"/>
         <source>You win the trick.</source>
-        <translation type="unfinished">Câștigi levata.</translation>
+        <translation type="unfinished">Câștigi mâna.</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>%1 wins the trick.</source>
-        <translation type="unfinished">%1 câștigă levata.</translation>
+        <translation type="unfinished">%1 câștigă mâna.</translation>
     </message>
 </context>
 </TS>
