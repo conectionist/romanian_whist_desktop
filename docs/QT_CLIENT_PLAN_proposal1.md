@@ -2142,8 +2142,15 @@ whole shape of the game before starting it is strictly better.
   > client and not in the engine's `Player`.** The engine is the rules and is shared with the
   > terminal client, and gender changes nothing in them. `newgame::Config` holds your profile and one
   > per opponent; `GameDeal::profiles` carries them in seat order; `GameBridge` stamps each seat's
-  > gender onto every snapshot's `SeatView`. A nationality and an avatar are to join the profile, so
-  > a player's portrait can match their name and gender.
+  > gender onto every snapshot's `SeatView`. A nationality is to join the profile.
+  >
+  > **And the portrait follows the player** (the owner's call, same day). The profile's `avatar` is
+  > an id from the catalogue of portrait files (`resources/avatars.qrc`, listed by `avatars.json`;
+  > the table mock-up's six busts first), chosen when the game is dealt, not in this dialog: for each
+  > player, one of their gender at random from those not yet taken, the set starting again for a
+  > gender that runs out (`avatars::assign()`). Every new game gets new faces; a fixed deal deals the
+  > same faces each time. `GameBridge` stamps the avatar beside the gender, and the seat panel draws
+  > it, wherever the player sits.
 - **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.
