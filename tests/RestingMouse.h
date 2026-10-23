@@ -62,8 +62,8 @@ private:
 //   hover and the view has a mouse event of its own.
 // - Appeared: the view came up under a mouse that has not moved since, as the table
 //   page does after New Game's dialog. It is under the mouse and has had no mouse
-//   event, and QGraphicsItem::unsetCursor() then crashes inside Qt (see
-//   itemcursor::show()).
+//   event; QGraphicsItem::unsetCursor() on an item topmost there that has a cursor
+//   then crashes inside Qt (see itemcursor::show()).
 struct RestingMouse
 {
     enum class Arrival

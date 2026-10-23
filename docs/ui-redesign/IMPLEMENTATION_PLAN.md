@@ -1932,16 +1932,22 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     builder** (`newgame::buildSliderRow()`) for both of Settings' rows and the setup dialog's; **#9,
     one CSS curve helper** (`motion::cubicBezier()`); **#10, Qt greys a disabled widget's cursor
     itself**, so `LitButton` and `MenuBarButton` set their pointing hand once.
-  - **Then a crash, from #4's first fix.** It unset the strip's cursor as you bid, and
+  - **Then a crash in the suite, from #4's first fix.** It unset the strip's cursor as you bid, and
     `unsetCursor()` on the topmost item has the view look under its last mouse event, which a view
-    under a mouse that has not moved since it appeared does not have: Qt dereferences it anyway. The
-    table page comes up so after New Game's dialog, and a digit bid made before the mouse moves
-    hides the strip. In the suite it crashed a window test in two of four random-order runs, after a
-    test that had left the mouse over the middle of the screen. `itemcursor::show()` never unsets a
-    cursor now - "none" is the arrow, set like any other, which needs no mouse event - and the
-    corner buttons go through it too. `RestingMouse` and `restOn()` put the mouse back where they
-    found it. Two new cases reproduce the crash's state (`RestingMouse::Arrival::Appeared`) and
-    crash without the fix.
+    under a mouse that has not moved since it appeared does not have: Qt dereferences it anyway. A
+    window test crashed in two of four random-order runs: it clicks bids by sending the press
+    straight to the scene, which gave the strip its cursor while the view had no mouse event, and
+    an earlier test had left the mouse over the middle of the screen, where the window opened.
+    `itemcursor::show()` never unsets a cursor now - "none" is the arrow, set like any other, which
+    needs no mouse event - and the corner buttons go through it too. `RestingMouse` and `restOn()`
+    put the mouse back where they found it. Two new cases reproduce the crash's state
+    (`RestingMouse::Arrival::Appeared`) and crash without the fix.
+  - **The app never reached it.** An item gets a cursor only from a hover or a press, and in the app
+    both reach the scene through the view, which keeps the event first. Checked in the running app
+    with the review's build: the table brought up under a mouse resting on the 0 bid, with no mouse
+    motion (the bid stayed unlit), then a bid by key in one session and by click in another. Neither
+    crashed. The fix's commit message (`941906b`) says a digit bid could crash the app; that is
+    wrong, and is corrected here and in the code's comments rather than by rewriting history.
 - **Five decisions by the owner, 2026-10-22:**
   - **Animation lengths are a setting**, "Card animations": Off, Quick, Normal, Slow, Normal being
     the mock-up's. Off is section 18.2's "reduce motion".
@@ -2041,8 +2047,9 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     when its table is shot, and their bubbles still up.
   - **`QGraphicsItem::unsetCursor()` is two traps** (the review round): it restores the view's
     cursor only when the item is the topmost under the mouse, and when it is, it reads the view's
-    last mouse event, which a view that came up under a resting mouse has not had - a crash. Set a
-    table item's cursor through `itemcursor::show()`, which never unsets one.
+    last mouse event, which a view that came up under a resting mouse has not had - a crash, though
+    only an event sent straight to the scene gives an item a cursor in that state. Set a table
+    item's cursor through `itemcursor::show()`, which never unsets one.
   - **The test binary has one mouse.** A test that moves it must put it back
     (`tests/RestingMouse.h`'s `CursorReturn`), or the next test's window opens under it with no
     mouse event to say so. Catch2 runs the cases in a random order, so such a leak fails some runs

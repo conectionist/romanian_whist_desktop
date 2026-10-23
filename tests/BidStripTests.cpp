@@ -752,10 +752,12 @@ TEST_CASE("The pointing hand goes with the strip once you bid", "[bid-strip]")
     REQUIRE(mouse.shown() == Qt::ArrowCursor);
 }
 
-// AND WHEN THE MOUSE HAS NOT MOVED SINCE THE TABLE CAME UP - after New Game's dialog, a
-// bid typed as a digit. The strip is the topmost item under the mouse, and unsetting
-// its cursor as it went had Qt look under a mouse event the view never had: a crash
-// (found after PR #38's review, in a window test run after a test that moved the mouse).
+// AND WHEN THE VIEW HAS HAD NO MOUSE EVENT, though the mouse rests on it: the strip lit
+// through the scene alone, as the window tests' clicks reach it. The strip is the topmost
+// item under the mouse, and unsetting its cursor as it went had Qt look under a mouse
+// event the view never had: a crash (found after PR #38's review, in a window test run
+// after a test that had moved the mouse). The app does not reach this state - its
+// hovers and presses come through the view - but the strip must survive it.
 TEST_CASE("Bidding under a mouse that has not moved since the table came up is safe", "[bid-strip]")
 {
     LoneStrip lone;

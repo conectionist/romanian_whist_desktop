@@ -86,10 +86,11 @@ TEST_CASE("No cursor puts the arrow back at once, even under a child", "[cursor]
 }
 
 // A VIEW UNDER A MOUSE THAT HAS NOT MOVED SINCE IT APPEARED has had no mouse event, and
-// QGraphicsItem::unsetCursor() on the item topmost there has the view look under that
-// missing event: a crash inside Qt. The table page comes up so after New Game's dialog
-// (found after PR #38's review: the first fix for finding #4 unset the strip's cursor
-// as you bid). "None" must not go that way.
+// QGraphicsItem::unsetCursor() on the item topmost there, if it has a cursor, has the
+// view look under that missing event: a crash inside Qt. Found after PR #38's review,
+// whose first fix for finding #4 unset the strip's cursor as you bid. Only tests reach
+// that state - they give an item its cursor through the scene, not the view - but
+// "none" must not go that way however the item came by its cursor.
 TEST_CASE("No cursor is safe under a mouse that has not moved", "[cursor]")
 {
     QGraphicsScene scene;

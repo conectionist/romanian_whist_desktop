@@ -24,8 +24,12 @@ namespace itemcursor
 // - When the item IS topmost, it has the view look again under the view's last
 //   mouse event - and a view under a mouse that has not moved since it appeared has
 //   none, and Qt dereferences it all the same: a crash (found after that review).
-//   The table page comes up under a resting mouse after New Game's dialog, and a
-//   bid made with a digit key, before the mouse moves, hid the strip through here.
+//   The app does not reach it: an item gets a cursor only from a hover or a press,
+//   which reach the scene through the view, and the view keeps that event first.
+//   The tests did, sending a press straight to the scene under a mouse an earlier
+//   test had left over the window. (Checked in the running app: a bid made by key
+//   and by click, with the table brought up under a mouse resting on it, did not
+//   crash.) Nothing here relies on that holding.
 //
 // So "none" is the arrow, set like any other cursor. setCursor() looks through
 // every item under the mouse's real position, which needs no mouse event, and shows
