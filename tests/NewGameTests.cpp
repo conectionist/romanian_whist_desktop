@@ -503,6 +503,26 @@ TEST_CASE("A game you play in is longer with slower bots", "[new-game]")
     REQUIRE(newgame::estimatedMinutes(two) == 27);
 }
 
+// WAITING AFTER EACH ROUND, the result is held until you go on and the bots take
+// no dwell there, so the speed moves the estimate by the tricks' dwells alone. By
+// hand, six players at the default: 772 beats of 700 ms and 116 trick dwells of
+// 1.2 s are 679.6 s, so 61 minutes at the slowest and 39 at Instant - where the
+// round dwells, counted when they never happen, made it 62 and 38.
+TEST_CASE("Waiting after each round leaves the round's dwell out of the estimate", "[new-game]")
+{
+    newgame::Config six = playingConfig(5);
+    six.waitAfterEachRound = true;
+
+    six.botSpeed = newgame::DefaultSpeed;
+    REQUIRE(newgame::estimatedMinutes(six) == 50);
+
+    six.botSpeed = newgame::SlowestSpeed;
+    REQUIRE(newgame::estimatedMinutes(six) == 61);
+
+    six.botSpeed = newgame::FastestSpeed;
+    REQUIRE(newgame::estimatedMinutes(six) == 39);
+}
+
 TEST_CASE("A watched game's estimate follows the bot speed", "[new-game]")
 {
     newgame::Config config = watchingConfig(5);

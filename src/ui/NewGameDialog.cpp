@@ -314,6 +314,10 @@ unsigned int trickCount(const newgame::Config& config)
 // bid, and one as the bidding ends; a beat before each bot's card; and the dwell
 // after each trick and after each round. Your own turns are not in it - they are
 // yours to take.
+//
+// NOR IS THE ROUND'S DWELL WHEN THE GAME WAITS AFTER EACH ROUND: the result is
+// then held until you go on, and pace() takes no timed wait on a held frame
+// (GameBridge::onRoundScored()). That time is yours too.
 std::chrono::milliseconds botWaiting(const newgame::Config& config, const Pacing& pacing)
 {
     const long long bots = static_cast<long long>(config.botNames.size());
@@ -321,7 +325,7 @@ std::chrono::milliseconds botWaiting(const newgame::Config& config, const Pacing
     const long long tricks = trickCount(config);
 
     const long long beats = rounds * (bots + 1) + tricks * bots;
-    const long long dwells = tricks + rounds;
+    const long long dwells = tricks + (config.waitAfterEachRound ? 0 : rounds);
 
     return pacing.beat * beats + pacing.trickDwell * dwells;
 }
