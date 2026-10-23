@@ -1,5 +1,6 @@
 #include "TableScene.h"
 
+#include "table/BidBubbleItem.h"
 #include "table/BidStripItem.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
@@ -83,8 +84,61 @@ void TableScene::setSnapshot(std::shared_ptr<const GameSnapshot> next)
     if(!next)
         return;
 
+    const std::shared_ptr<const GameSnapshot> last = snapshot;
+
     snapshot = std::move(next);
-    relayout();
+    const seatlayout::Places places = relayout();
+
+    // After relayout(), which grows the seats - and the bubbles with them - for a
+    // table larger than the last, and on the places it found for them.
+    announceBids(last.get(), *snapshot, places);
+}
+
+void TableScene::newGame()
+{
+    trick->clear();
+
+    for(BidBubbleItem* bubble : bubbles)
+        bubble->dismiss();
+}
+
+void TableScene::announceBids(const GameSnapshot* last, const GameSnapshot& next,
+                              const seatlayout::Places& places)
+{
+    const std::size_t seatCount = next.seats.size();
+
+    // NO FRAME TO COMPARE WITH, OR ANOTHER TABLE: what the last one was saying is
+    // over, and its seats are not these. Another game is newGame()'s to clear: the
+    // round number cannot say so, since a game abandoned in round 1 is followed by
+    // another game's round 1.
+    if(!last || last->seats.size() != seatCount)
+    {
+        for(BidBubbleItem* bubble : bubbles)
+            bubble->dismiss();
+
+        return;
+    }
+
+    // Bids belong to a round; the next round's first frame has none in yet.
+    if(next.roundNumber != last->roundNumber)
+        return;
+
+    for(std::size_t i = 0 ; i < seatCount && i < bubbles.size() && i < places.size() ; i++)
+    {
+        if(last->seats[i].hasBet || !next.seats[i].hasBet || !places[i])
+            continue;
+
+        const bool yours = static_cast<int>(i) == next.humanSeat;
+
+        bubbles[i]->say(bidbubble::textFor(yours, next.seats[i].bet), places[i]->panel, animationPace,
+                        theme.table);
+    }
+}
+
+void TableScene::setMotion(motion::Pace pace)
+{
+    animationPace = pace;
+    trick->setPace(pace);
 }
 
 void TableScene::setTheme(const Theme& palette)
@@ -120,6 +174,10 @@ void TableScene::ensureSeats(std::size_t count)
         rack->setZValue(tablespace::z::racks);
         addItem(rack);
         racks.push_back(rack);
+
+        BidBubbleItem* bubble = new BidBubbleItem;
+        addItem(bubble);
+        bubbles.push_back(bubble);
     }
 
     // Hidden rather than deleted: a second game may seat more players again,
@@ -128,6 +186,7 @@ void TableScene::ensureSeats(std::size_t count)
     {
         seats[i]->hide();
         racks[i]->hide();
+        bubbles[i]->dismiss();
     }
 }
 
@@ -209,10 +268,10 @@ bool TableScene::event(QEvent* event)
     return QGraphicsScene::event(event);
 }
 
-void TableScene::relayout()
+seatlayout::Places TableScene::relayout()
 {
     if(!snapshot)
-        return;
+        return {};
 
     const std::size_t seatCount = snapshot->seats.size();
 
@@ -285,7 +344,12 @@ void TableScene::relayout()
 
     // THE TRICK AND WHO LEADS IT (section 2.7): each card in front of its owner's
     // rack, and the rhombus on the felt in line with the leader's.
-    trick->setTrick(*snapshot, places, theme);
+    //
+    // A CARD OF YOURS THAT IS NEW ON THE FELT FLIES FROM WHERE IT STOOD IN THE FAN,
+    // which is why the trick is placed before the fan is drawn again below: until
+    // hand->setHand() the fan still holds it.
+    trick->setTrick(*snapshot, places, theme,
+                    [this](const romanian_whist::Card& card) { return hand->restingPlacement(card); });
 
     const std::optional<unsigned int> lead = trickitem::leadSeat(*snapshot);
     std::optional<tablespace::Placement> mark;
@@ -323,4 +387,6 @@ void TableScene::relayout()
 
     // And the strip, which reads how the others have bid from the frame.
     bidStrip->setSnapshot(snapshot, theme);
+
+    return places;
 }

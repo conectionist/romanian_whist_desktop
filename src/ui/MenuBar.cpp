@@ -106,6 +106,11 @@ MenuBarButton::MenuBarButton(std::optional<icons::Icon> _icon, QWidget* parent)
     setFocusPolicy(Qt::TabFocus);
 
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+    // page.html's .btn `cursor: pointer`. Exit greys while there is nothing to pause,
+    // and Qt shows the plain arrow over it then: a disabled widget takes its
+    // parent's cursor.
+    setCursor(Qt::PointingHandCursor);
 }
 
 void MenuBarButton::setTheme(const Theme& _theme)

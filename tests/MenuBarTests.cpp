@@ -1,10 +1,12 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "RestingMouse.h"
 #include "WindowDriving.h"
 #include "paint/Theme.h"
 #include "ui/MenuBar.h"
 
+#include <QCursor>
 #include <QAction>
 #include <QFontMetricsF>
 #include <QImage>
@@ -12,6 +14,7 @@
 #include <QMainWindow>
 #include <QMenu>
 #include <QPixmap>
+#include <QWidget>
 
 #include <cmath>
 #include <cstdlib>
@@ -125,9 +128,9 @@ TEST_CASE("A menu item is as wide as its padding icon and label", "[menu-bar]")
     REQUIRE(view->width() ==
             static_cast<int>(std::ceil(12.0 + metrics.horizontalAdvance(view->label()) + 12.0)));
 
-    // The label's font is Marcellus 17, through section 2.3's chain.
+    // The label's font is Belleza 17 (page.html's Marcellus 17), through section 2.3's chain.
     REQUIRE(menubar::labelFont().pixelSize() == 17);
-    REQUIRE(menubar::labelFont().families().front() == QStringLiteral("Marcellus"));
+    REQUIRE(menubar::labelFont().families().front() == QStringLiteral("Belleza"));
 }
 
 TEST_CASE("A label reads mnemonics the way Qt does", "[menu-bar]")
@@ -348,4 +351,31 @@ TEST_CASE("The menu bar's shadow paints the glint over the shadow", "[menu-bar]"
     REQUIRE(top > middle);
     REQUIRE(middle > bottom);
     REQUIRE(bottom < 0.01);
+}
+
+// page.html's .btn: `cursor: pointer`, and the plain arrow on a greyed item (phase 12).
+//
+// WHAT THE WINDOW SHOWS, read under a mouse resting on the item while it greys and
+// comes back - Exit does, as a game comes and goes. The arrow is Qt's: a disabled
+// widget shows its parent's cursor (QWidgetPrivate::setEnabled_helper()), so the
+// item sets its pointing hand once (PR #38's review, finding #10).
+TEST_CASE("A menu item points only while it can be pressed", "[menu-bar]")
+{
+    QWidget bar;
+    bar.resize(240, 60);
+
+    MenuBarButton& button = *new MenuBarButton(icons::Icon::Exit, &bar);
+    button.resize(button.sizeHint());
+
+    bar.show();
+    QCoreApplication::processEvents();
+
+    const CursorReturn resting = restOn(button);
+    REQUIRE(shownOver(button) == Qt::PointingHandCursor);
+
+    button.setEnabled(false);
+    REQUIRE(shownOver(button) == Qt::ArrowCursor);
+
+    button.setEnabled(true);
+    REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 }

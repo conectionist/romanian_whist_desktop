@@ -61,11 +61,11 @@ QStringList rulessheet::linesFor(const newgame::Config& config)
                       ? QCoreApplication::translate("rulessheet",
                                                     "Rounds go 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, "
                                                     "8 (×%1), then a Forehead and a Hidden round: "
-                                                    "%2 rounds.")
+                                                    "%n rounds.", nullptr, static_cast<int>(rounds))
                       : QCoreApplication::translate("rulessheet",
                                                     "Rounds go 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, "
-                                                    "8 (×%1): %2 rounds."))
-                     .arg(QString::number(seats), QString::number(rounds));
+                                                    "8 (×%1): %n rounds.", nullptr, static_cast<int>(rounds)))
+                     .arg(QString::number(seats));
     }
     else
     {
@@ -73,11 +73,11 @@ QStringList rulessheet::linesFor(const newgame::Config& config)
                       ? QCoreApplication::translate("rulessheet",
                                                     "Rounds go 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, "
                                                     "1 (×%1), then a Forehead and a Hidden round: "
-                                                    "%2 rounds.")
+                                                    "%n rounds.", nullptr, static_cast<int>(rounds))
                       : QCoreApplication::translate("rulessheet",
                                                     "Rounds go 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, "
-                                                    "1 (×%1): %2 rounds."))
-                     .arg(QString::number(seats), QString::number(rounds));
+                                                    "1 (×%1): %n rounds.", nullptr, static_cast<int>(rounds)))
+                     .arg(QString::number(seats));
     }
 
     // RULES.md rule 9, said only for a game that deals them.

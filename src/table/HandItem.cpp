@@ -2,6 +2,7 @@
 
 #include "paint/CardRenderer.h"
 #include "table/CardItem.h"
+#include "table/ItemCursor.h"
 #include "table/Turn.h"
 
 #include <QGraphicsSceneHoverEvent>
@@ -220,6 +221,32 @@ bool HandItem::isPlayable(std::size_t slot) const
     return playable && slot < fan.size() && fan[slot].legal;
 }
 
+std::optional<tablespace::Placement> HandItem::restingPlacement(const romanian_whist::Card& card) const
+{
+    if(!isVisible() || fan.empty() || cardHeight <= 0.0)
+        return std::nullopt;
+
+    std::optional<std::size_t> slot;
+
+    if(backs > 0)
+    {
+        slot = (fan.size() - 1) / 2;
+    }
+    else
+    {
+        for(std::size_t i = 0 ; i < entries.size() && i < fan.size() ; i++)
+        {
+            if(entries[i].card == card)
+                slot = i;
+        }
+    }
+
+    if(!slot)
+        return std::nullopt;
+
+    return handitem::cardPlacement(fan.size(), *slot, renderer->sizeForHeight(cardHeight));
+}
+
 void HandItem::activate(std::size_t slot)
 {
     if(!isPlayable(slot))
@@ -312,6 +339,18 @@ void HandItem::layOut()
     showLift();
 }
 
+void HandItem::showCursor()
+{
+    const std::optional<std::size_t> slot = playable && cursor ? slotAt(*cursor) : std::nullopt;
+
+    if(!slot)
+        itemcursor::show(*this, std::nullopt);
+    else if(isPlayable(*slot))
+        itemcursor::show(*this, Qt::PointingHandCursor);
+    else
+        itemcursor::show(*this, Qt::ForbiddenCursor);
+}
+
 void HandItem::showLift()
 {
     // Every card casts the hand's shadow; the one under the cursor is raised, and
@@ -319,6 +358,8 @@ void HandItem::showLift()
     // the fan's geometry.
     for(std::size_t i = 0 ; i < fan.size() ; i++)
         fan[i].item->setHeld(hovered && *hovered == i, theme.table, shadows);
+
+    showCursor();
 }
 
 std::optional<std::size_t> HandItem::slotAt(QPointF position) const
@@ -379,7 +420,12 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
     const std::optional<std::size_t> next = liftAt(cursor);
 
     if(next == hovered)
+    {
+        // The card under the cursor may still have changed - from one dimmed card
+        // to the next, or onto the gap between - and the cursor with it.
+        showCursor();
         return;
+    }
 
     hovered = next;
 
@@ -389,6 +435,7 @@ void HandItem::hoverMoveEvent(QGraphicsSceneHoverEvent* event)
 void HandItem::hoverLeaveEvent(QGraphicsSceneHoverEvent*)
 {
     cursor.reset();
+    itemcursor::show(*this, std::nullopt);
 
     if(!hovered)
         return;

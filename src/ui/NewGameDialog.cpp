@@ -332,9 +332,14 @@ QString newgame::summaryText(const Config& config)
     if(minutes < 1)
         return QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
 
-    return QCoreApplication::translate("newgame", "%1 - about %2 minutes")
-        .arg(QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds)),
-             QString::number(minutes));
+    // %n FOR THE MINUTES TOO (phase 12): an estimate is often past 19, where Romanian
+    // says "25 de minute". One minute is "a minute", in English as in Romanian.
+    const QString count = QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
+
+    if(minutes == 1)
+        return QCoreApplication::translate("newgame", "%1 - about a minute").arg(count);
+
+    return QCoreApplication::translate("newgame", "%1 - about %n minutes", "", minutes).arg(count);
 }
 
 std::optional<QString> newgame::firstError(const Config& config)
@@ -634,26 +639,34 @@ QString newgame::tooltipFor(BotLevel level)
 
 // ---- the widget ----
 
-newgame::SpeedRow newgame::buildSpeedRow(QWidget* parent, int labelGap)
+newgame::SliderRow newgame::buildSliderRow(QWidget* parent, const QString& name, const QString& low,
+                                           const QString& high, int lowest, int highest, int labelGap)
 {
-    SpeedRow built;
+    SliderRow built;
 
     built.slider = new QSlider(Qt::Horizontal, parent);
-    built.slider->setRange(SlowestSpeed, FastestSpeed);
+    built.slider->setRange(lowest, highest);
     built.slider->setPageStep(1);
     built.slider->setTickPosition(QSlider::TicksBelow);
 
     built.row = new QHBoxLayout;
-    built.row->addWidget(new QLabel(QCoreApplication::translate("newgame", "Bot speed"), parent));
+    built.row->addWidget(new QLabel(name, parent));
 
     if(labelGap > 0)
         built.row->addSpacing(labelGap);
 
-    built.row->addWidget(new QLabel(QCoreApplication::translate("newgame", "Slow"), parent));
+    built.row->addWidget(new QLabel(low, parent));
     built.row->addWidget(built.slider, 1);
-    built.row->addWidget(new QLabel(QCoreApplication::translate("newgame", "Instant"), parent));
+    built.row->addWidget(new QLabel(high, parent));
 
     return built;
+}
+
+newgame::SliderRow newgame::buildSpeedRow(QWidget* parent, int labelGap)
+{
+    return buildSliderRow(parent, QCoreApplication::translate("newgame", "Bot speed"),
+                          QCoreApplication::translate("newgame", "Slow"),
+                          QCoreApplication::translate("newgame", "Instant"), SlowestSpeed, FastestSpeed, labelGap);
 }
 
 QCheckBox* newgame::buildWaitCheckBox(QWidget* parent)
@@ -769,7 +782,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // tricks", which is phase E's: it turns pace() into a wait on a button
     // rather than on a duration, and that is the machinery D1 built one caller
     // of and no more. A disabled checkbox would be a promise, so there is none.
-    const newgame::SpeedRow speedRow = newgame::buildSpeedRow(this);
+    const newgame::SliderRow speedRow = newgame::buildSpeedRow(this);
     speed = speedRow.slider;
     speed->setObjectName("speed");
     stack->addLayout(speedRow.row);

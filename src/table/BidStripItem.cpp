@@ -6,6 +6,7 @@
 #include "paint/Shadows.h"
 #include "paint/TextRuns.h"
 #include "table/HudText.h"
+#include "table/ItemCursor.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 
@@ -435,6 +436,10 @@ void BidStripItem::clearPrompt()
         memo.invalidate();
     }
 
+    // AND THE POINTING HAND, before the strip goes: hiding an item never changes the
+    // view's cursor (PR #38's review, finding #4).
+    itemcursor::show(*this, std::nullopt);
+
     hide();
 }
 
@@ -505,6 +510,18 @@ std::optional<unsigned int> BidStripItem::offeredAt(std::optional<QPointF> point
 
 void BidStripItem::hoverAt(std::optional<QPointF> point)
 {
+    // page.html's .opt `cursor: pointer`, and .opt:disabled's `not-allowed` over the
+    // struck-out bid; the plain arrow anywhere else on the strip.
+    const std::optional<unsigned int> under =
+        prompt && point ? bidUnder(firstBid, showing.highest, *point) : std::nullopt;
+
+    if(!under)
+        itemcursor::show(*this, std::nullopt);
+    else if(bidstrip::offers(showing, *under))
+        itemcursor::show(*this, Qt::PointingHandCursor);
+    else
+        itemcursor::show(*this, Qt::ForbiddenCursor);
+
     const std::optional<unsigned int> now = offeredAt(point);
 
     if(now == hovered)

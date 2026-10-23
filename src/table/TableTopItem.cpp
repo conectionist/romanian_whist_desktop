@@ -273,9 +273,41 @@ void paintOrnament(QPainter& painter, QPointF topLeft, bool wavy, const QColor& 
 
 }
 
+QStringList tabletop::logoLinesFrom(const QString& phrase)
+{
+    QStringList lines;
+
+    for(const QString& line : phrase.split(QLatin1Char('\n')))
+    {
+        if(!line.trimmed().isEmpty())
+            lines << line.trimmed();
+    }
+
+    return lines;
+}
+
+QStringList tabletop::logoLines()
+{
+    return logoLinesFrom(QCoreApplication::translate("TableTopItem", "Romanian\nWhist",
+                                                     "The logo on the table: its lines, split by line breaks. "
+                                                     "One line or two."));
+}
+
+QRectF tabletop::letteringRect(int lineCount)
+{
+    const QRectF padding = QRectF(QPointF(0.0, 0.0), tablespace::logoBox)
+                               .adjusted(logoBorderWidth, logoBorderWidth, -logoBorderWidth, -logoBorderWidth);
+
+    const qreal lettering = std::max(1, lineCount) * letterSize;
+    const qreal stack = ornamentHeight + lettering + ornamentHeight;
+    const qreal top = padding.top() + (padding.height() - stack) / 2.0 + ornamentHeight;
+
+    return QRectF(padding.left(), top, padding.width(), lettering);
+}
+
 // THE LOGO PLAQUE (.panel.logo), in its own 270 x 142 frame, drawn at 0.9 of that
 // about `centre`.
-void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre)
+void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, const QStringList& lines)
 {
     const Theme::TablePalette& table = theme.table;
 
@@ -333,11 +365,11 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre)
                             logoInnerLineRadius - 0.5, logoInnerLineRadius - 0.5);
     painter.restore();
 
-    // THE STACK: an ornament, two lines of lettering, an ornament - 98 units tall,
-    // centred in the padding box as the plaque's grid centres it.
-    const qreal lettering = 2.0 * letterSize;
-    const qreal stack = ornamentHeight + lettering + ornamentHeight;
-    const qreal stackTop = padding.top() + (padding.height() - stack) / 2.0;
+    // THE STACK: an ornament, the lettering, an ornament - 98 units tall with two
+    // lines, centred in the padding box as the plaque's grid centres it.
+    const QRectF letteringBox = letteringRect(static_cast<int>(lines.size()));
+    const qreal lettering = letteringBox.height();
+    const qreal stackTop = letteringBox.top() - ornamentHeight;
     const qreal ornamentLeft = padding.center().x() - ornamentWidth / 2.0;
 
     paintOrnament(painter, QPointF(ornamentLeft, stackTop), false, table.logoOrnament);
@@ -355,12 +387,6 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre)
     font.setLetterSpacing(QFont::AbsoluteSpacing, letterSpacing);
 
     const QFontMetricsF metrics(font);
-
-    const QString lines[] = {
-        QCoreApplication::translate("TableTopItem", "Romanian",
-                                    "The logo on the table, first line"),
-        QCoreApplication::translate("TableTopItem", "Whist",
-                                    "The logo on the table, second line") };
 
     QPainterPath letters;
     qreal lineTop = stackTop + ornamentHeight;

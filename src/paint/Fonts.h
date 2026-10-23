@@ -5,10 +5,16 @@
 #include <QFontMetricsF>
 
 // The table redesign's three typefaces (docs/ui-redesign/ section 2.3), bundled
-// rather than hoped for: Cinzel Decorative for the logo, Marcellus for names,
+// rather than hoped for: Cinzel Decorative for the logo, Belleza for names,
 // titles and buttons, Alegreya Sans for everything else. None of them is a
 // system font anywhere, so a client that only named them would draw every one
 // of them in a fallback on every machine it ships to.
+//
+// BELLEZA, NOT THE MOCK-UP'S MARCELLUS, since phase 12's follow-up (the owner's
+// call, 2026-10-22): Marcellus has no ș or ț, which the Romanian translation
+// needs, and its 0 and 1 read as O and I on the bid buttons. Comments that quote
+// page.html's CSS ("Marcellus 25") still say Marcellus, as page.html does; the
+// client draws those sizes in Belleza.
 //
 // Separate from Theme because a typeface is not a colour or a metric, and
 // because registering one needs a function the two binaries can both call -

@@ -5,6 +5,7 @@
 #include "WindowDriving.h"
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
+#include "table/BidBubbleItem.h"
 #include "table/BidStripItem.h"
 #include "table/CardItem.h"
 #include "table/HandItem.h"
@@ -37,6 +38,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QTranslator>
 
 #include <array>
 #include <cmath>
@@ -326,6 +328,16 @@ void capture(MainWindow& window, const TableScene& scene, const Capture& shot, c
     const std::shared_ptr<const GameSnapshot> s = scene.lastSnapshot();
     REQUIRE(s != nullptr);
 
+    // NO BID BUBBLES (phase 12). The game is played at the bots' top speed, so this
+    // round's bids are a few milliseconds old and still being said - 1.5 s even with
+    // motion off. A player at that speed sees them too; the pictures compare against
+    // the mock-up's, which show the table between bids.
+    for(std::size_t seat = 0 ; seat < s->seats.size() ; seat++)
+    {
+        if(BidBubbleItem* bubble = scene.bidBubble(seat))
+            bubble->dismiss();
+    }
+
     const QPixmap picture = window.grab();
     const QString path = QDir(dir).filePath(QString::fromUtf8(shot.file));
     REQUIRE(picture.save(path));
@@ -365,8 +377,51 @@ QString shotsDirectory()
 }
 }
 
+namespace
+{
+// WHIST_SHOTS_QM: a compiled translation to take the pictures in (phase 12), such as
+// the build's romanian_whist_desktop_ro_RO.qm. Unset, the pictures are in the source
+// language.
+//
+// FOR ONE TEST CASE, declared first in it so it outlives every window the case
+// builds: installed as it is made, before the first window, and taken out again as
+// it goes. Left in for the rest of the run, it turned every case run after the
+// pictures - `"[.screenshot],[bubble]"` - into Romanian, and those assert English
+// (PR #38's review, finding #5).
+class ShotsTranslation
+{
+public:
+    ShotsTranslation()
+    {
+        if(qEnvironmentVariableIsEmpty("WHIST_SHOTS_QM"))
+            return;
+
+        INFO("WHIST_SHOTS_QM=" << qEnvironmentVariable("WHIST_SHOTS_QM").toStdString());
+        REQUIRE(translator.load(qEnvironmentVariable("WHIST_SHOTS_QM")));
+
+        installed = QCoreApplication::installTranslator(&translator);
+        REQUIRE(installed);
+    }
+
+    ~ShotsTranslation()
+    {
+        if(installed)
+            QCoreApplication::removeTranslator(&translator);
+    }
+
+    ShotsTranslation(const ShotsTranslation&) = delete;
+    ShotsTranslation& operator=(const ShotsTranslation&) = delete;
+
+private:
+    QTranslator translator;
+    bool installed = false;
+};
+}
+
 TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 {
+    const ShotsTranslation translation;
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -404,6 +459,11 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 
             TableScene* scene = window.findChild<TableScene*>();
             REQUIRE(scene != nullptr);
+
+            // EACH PICTURE IS A SETTLED MOMENT: with the cards' motion off, the frame
+            // the game published is the frame shot, not a card half way to the felt. The
+            // window's own pace (phase 12's Card animations) is left as it ships.
+            scene->setMotion(motion::Pace::Off);
 
             BidStripItem* bidStrip = scene->bidStripItem();
             REQUIRE(bidStrip != nullptr);
@@ -474,6 +534,8 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 // the gold circle and the logo can be compared pixel for pixel.
 TEST_CASE("A screenshot of the empty table at the mock-up's own scale", "[.screenshot]")
 {
+    const ShotsTranslation translation;
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -615,6 +677,8 @@ GameSnapshot handMoment(const HandShot& shot)
 
 TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
 {
+    const ShotsTranslation translation;
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -851,6 +915,8 @@ lasttrick::Trick sheetTrick()
 
 TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 {
+    const ShotsTranslation translation;
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
@@ -887,7 +953,7 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
     rules->showRules(shotConfig(6));
 
     SettingsSheet* settings = new SettingsSheet(&page);
-    settings->setValues(newgame::DefaultSpeed, true);
+    settings->setValues(newgame::DefaultSpeed, true, motion::defaultPace);
 
     // Phase 11's two: the game's first twelve rounds, and a trick won mid-row.
     HistorySheet* history = new HistorySheet(&page);
@@ -942,6 +1008,8 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 // mock-up, which has no menu page.
 TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
 {
+    const ShotsTranslation translation;
+
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 

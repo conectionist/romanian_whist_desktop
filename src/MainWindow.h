@@ -6,6 +6,7 @@
 #include "engine/Prompts.h"
 #include "engine/RoundResult.h"
 #include "paint/Theme.h"
+#include "table/Motion.h"
 #include "ui/LastTrick.h"
 #include "ui/NewGameDialog.h"
 
@@ -176,8 +177,9 @@ private slots:
 
     // A control on the Settings sheet moved. Written into lastConfig, which the
     // next New Game opens on, and - live, by the owner's call of 2026-10-21 -
-    // into the game in play.
-    void applySettings(int botSpeed, bool waitAfterEachRound);
+    // into the game in play. The animations' pace goes to the table at once and
+    // is held here, apart from lastConfig: it is not a property of a game.
+    void applySettings(int botSpeed, bool waitAfterEachRound, motion::Pace animations);
 
     // Closes the menu sheet that is up, releasing its hold and giving the
     // keyboard back to what is beneath.
@@ -451,6 +453,11 @@ private:
     // AND THE PACE SETTINGS HAS SET SINCE: its bot speed and round wait are
     // written here as they change, so the next game opens on them.
     newgame::Config lastConfig = newgame::defaults();
+
+    // HOW MUCH THE TABLE MOVES: Settings' "Card animations", in memory like the
+    // rest (QSettings is section 20). The mock-up's own lengths until a player
+    // changes them.
+    motion::Pace animationPace = motion::defaultPace;
 
     // Holds the .ui's log widget from buildLogDock() onward.
     QDockWidget* logDock = nullptr;

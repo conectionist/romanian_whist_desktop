@@ -10,10 +10,12 @@
 #include <QGraphicsScene>
 #include <QImage>
 #include <QList>
+#include <QPainter>
 #include <QPixmap>
 #include <QPointF>
 #include <QRectF>
 #include <QSize>
+#include <QStringList>
 
 #include <cmath>
 #include <cstdlib>
@@ -209,4 +211,56 @@ TEST_CASE("The logo plaque sits on the table's centre with its gold border", "[t
     // And above the plaque, the felt: green, not the border's gold.
     const QColor felt = at(picture(), up(halfHeight + 6.0));
     REQUIRE(felt.green() > felt.red());
+}
+
+// THE LOGO'S WORDS (the owner's call, 2026-10-23): one translated phrase, a line of
+// lettering for each of its lines. English keeps page.html's two; Romanian names the
+// game in one word, "Whist", which a string per line could not do - Qt shows the
+// source for an empty translation.
+TEST_CASE("The logo is a line of lettering per line of its phrase", "[table-top]")
+{
+    // Untranslated, the English the mock-up has.
+    REQUIRE(tabletop::logoLines() == QStringList{ QStringLiteral("Romanian"), QStringLiteral("Whist") });
+
+    REQUIRE(tabletop::logoLinesFrom(QStringLiteral("Whist")) == QStringList{ QStringLiteral("Whist") });
+    REQUIRE(tabletop::logoLinesFrom(QStringLiteral("Whist\n")) == QStringList{ QStringLiteral("Whist") });
+    REQUIRE(tabletop::logoLinesFrom(QStringLiteral(" Romanian \n\nWhist"))
+            == QStringList{ QStringLiteral("Romanian"), QStringLiteral("Whist") });
+}
+
+// One line sits in the middle of the plaque, its ornaments close about it; two lines
+// are where they always were, the 98-unit stack centred.
+TEST_CASE("A one-line logo sits in the middle of its plaque", "[table-top]")
+{
+    const qreal middle = tablespace::logoBox.height() / 2.0;
+
+    const QRectF one = tabletop::letteringRect(1);
+    const QRectF two = tabletop::letteringRect(2);
+
+    REQUIRE(one.center().y() == Catch::Approx(middle));
+    REQUIRE(two.center().y() == Catch::Approx(middle));
+    REQUIRE(two.height() == Catch::Approx(2.0 * one.height()));
+
+    // The ornament above, the lettering, the ornament below: 12 + 74 + 12.
+    REQUIRE(two.height() + 2.0 * 12.0 == Catch::Approx(98.0));
+
+    // And it draws: a one-line plaque paints its lettering's gold across its middle row.
+    QImage image(QSize(400, 260), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        tabletop::paintLogo(painter, Theme::dark(), QPointF(200.0, 130.0), { QStringLiteral("Whist") });
+    }
+
+    int gold = 0;
+
+    for(int x = 150 ; x < 250 ; x++)
+    {
+        const QColor pixel = image.pixelColor(x, 130);
+        if(pixel.red() > 170 && pixel.green() > 120 && pixel.blue() < 120)
+            gold++;
+    }
+
+    REQUIRE(gold > 5);
 }

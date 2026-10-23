@@ -8,6 +8,7 @@
 #include <QPixmap>
 #include <QPointF>
 #include <QRectF>
+#include <QStringList>
 
 #include <cstddef>
 
@@ -33,11 +34,26 @@ QRectF bounds();
 // result and paints it again only when the ratio or the colours change.
 QPixmap render(const Theme& theme, qreal ratio);
 
+// THE LOGO'S WORDS, a line of lettering for each line of one translated phrase:
+// "Romanian" over "Whist" in English, as page.html has them, and in a language that
+// names the game in one word, one line - Romanian calls it plain "Whist" (the owner's
+// call, 2026-10-23). One phrase rather than a string per line, because a translation
+// cannot leave a line out: Qt shows the source for an empty translation.
+QStringList logoLines();
+
+// `phrase` as the logo's lines: split at its line breaks, blank lines dropped.
+QStringList logoLinesFrom(const QString& phrase);
+
 // THE LOGO PLAQUE ALONE (.panel.logo), centred on `centre` in the painter's units:
 // part of render()'s picture, and the main-menu page's title since the redesign's
 // phase 10. Drawn at section 2.4's 0.9 of its 270 x 142 frame, its drop shadow
-// included.
-void paintLogo(QPainter& painter, const Theme& theme, QPointF centre);
+// included. `lines` are its words, one line of lettering each.
+void paintLogo(QPainter& painter, const Theme& theme, QPointF centre, const QStringList& lines = logoLines());
+
+// WHERE THE LETTERING GOES for `lineCount` lines, in the plaque's own 270 x 142
+// frame: as tall as its lines, its two ornaments above and below it, and the three
+// centred in the plaque together - so a one-line logo sits in the middle.
+QRectF letteringRect(int lineCount);
 
 // What paintLogo() covers about the centre it is given, its shadow included.
 QRectF logoBounds();

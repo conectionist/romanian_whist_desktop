@@ -3,6 +3,7 @@
 
 #include "CardStringMaker.h"
 #include "GameFixtures.h"
+#include "RestingMouse.h"
 
 #include "paint/CardRenderer.h"
 #include "paint/CardShadow.h"
@@ -12,6 +13,7 @@
 #include "table/HandItem.h"
 #include "table/TableSpace.h"
 
+#include <QCursor>
 #include <QGraphicsScene>
 #include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSceneMouseEvent>
@@ -941,4 +943,121 @@ TEST_CASE("The tests' own player picks slot zero in a blind round", "[hand]")
     prompt.handIndex.push_back(0);
 
     REQUIRE(fixtures::firstLegalSlot(prompt) == 0);
+}
+
+// WHERE A CARD STANDS IN THE FAN (phase 12), which the trick flies it from when it is
+// played: its slot's placement, the slot the card is in rather than any other.
+TEST_CASE("A card's resting place in the fan is its own slot's", "[hand]")
+{
+    Fanned fan(promptOf({ true, true, true }));
+    const QSizeF size = fan.renderer.sizeForHeight(kCardHeight);
+
+    const std::optional<tablespace::Placement> king = fan.item.restingPlacement(HeartsKing);
+    REQUIRE(king.has_value());
+
+    const tablespace::Placement slot = handitem::cardPlacement(3, 1, size);
+    REQUIRE(king->centre == slot.centre);
+    REQUIRE(king->rotation == slot.rotation);
+
+    // A card the fan does not hold has no place in it.
+    REQUIRE_FALSE(fan.item.restingPlacement(Card(Rank::Two, Suit::Clubs)).has_value());
+}
+
+TEST_CASE("A fan of backs places any card at its middle", "[hand]")
+{
+    PlayPrompt blind;
+    blind.promptId = 9;
+    blind.blind = true;
+    blind.handIndex = { 0, 1, 2 };
+
+    Fanned fan(blind);
+    const QSizeF size = fan.renderer.sizeForHeight(kCardHeight);
+
+    const std::optional<tablespace::Placement> place = fan.item.restingPlacement(HeartsKing);
+    REQUIRE(place.has_value());
+    REQUIRE(place->centre == handitem::cardPlacement(3, 1, size).centre);
+}
+
+TEST_CASE("A hidden or empty fan has no resting place to give", "[hand]")
+{
+    Fanned fan(promptOf({ true, true }));
+
+    fan.item.hide();
+    REQUIRE_FALSE(fan.item.restingPlacement(SpadesAce).has_value());
+
+    fan.item.show();
+    fan.item.clear();
+    REQUIRE_FALSE(fan.item.restingPlacement(SpadesAce).has_value());
+}
+
+// .hcard.playable `cursor: pointer` and .hcard.illegal `not-allowed`, on your turn
+// only (phase 12). The last card is on top, so its middle is on it alone.
+//
+// Asked through QGraphicsItem: HandItem's own `cursor` is where the mouse last was.
+namespace
+{
+Qt::CursorShape pointerOf(const QGraphicsItem& item)
+{
+    return item.cursor().shape();
+}
+}
+
+TEST_CASE("The cursor points at a card you can play and refuses one you cannot", "[hand]")
+{
+    SECTION("a legal card")
+    {
+        Fanned fan(promptOf({ true, true, true }));
+        fan.hoverAt(fan.cards().back()->pos());
+
+        REQUIRE(fan.item.hasCursor());
+        REQUIRE(pointerOf(fan.item) == Qt::PointingHandCursor);
+
+        fan.leave();
+        REQUIRE(pointerOf(fan.item) == Qt::ArrowCursor);
+    }
+
+    SECTION("an illegal card")
+    {
+        Fanned fan(promptOf({ true, true, false }));
+        fan.hoverAt(fan.cards().back()->pos());
+
+        REQUIRE(pointerOf(fan.item) == Qt::ForbiddenCursor);
+    }
+
+    SECTION("between turns, nothing to promise")
+    {
+        Fanned fan(promptOf({ true, true, true }), false);
+        fan.hoverAt(fan.cards().back()->pos());
+
+        REQUIRE(pointerOf(fan.item) == Qt::ArrowCursor);
+    }
+
+    SECTION("the turn ending under a still cursor")
+    {
+        Fanned fan(promptOf({ true, true, true }));
+        fan.hoverAt(fan.cards().back()->pos());
+        REQUIRE(fan.item.hasCursor());
+
+        fan.item.setPlayable(false);
+        REQUIRE(pointerOf(fan.item) == Qt::ArrowCursor);
+    }
+}
+
+// AND WHAT THE VIEW SHOWS, which the case above cannot see. A card is a child of the
+// fan, drawn over it, and QGraphicsItem::unsetCursor() puts the view's cursor back
+// only when the item itself is topmost under the mouse: the pointing hand stayed
+// over a fan that could no longer be clicked until the mouse moved (PR #38's review,
+// finding #4).
+TEST_CASE("The pointing hand goes the moment your turn ends", "[hand]")
+{
+    Fanned fan(promptOf({ true, true, true }));
+    const QPointF onTop = fan.cards().back()->pos();
+
+    RestingMouse mouse(fan.scene, fan.item.mapToScene(onTop));
+
+    fan.hoverAt(onTop);
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    fan.item.setPlayable(false);
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
 }

@@ -113,9 +113,17 @@ TEST_CASE("a negative winning score keeps its sign", "[game-over]")
 {
     // A whole table can finish below zero - missed bids score negative and
     // nothing floors the total - so the winner's score is not always positive.
+    //
+    // "A SCORE OF -12" since phase 12, not "-12 points": the points take Qt's %n so a
+    // translation can choose its plural form, and Qt fills %n in for a count of zero
+    // or more only. A score below zero is said without counting anything.
     const std::vector<Standing> winners{ standing(1, "Bogdan", -12, 1) };
 
-    REQUIRE(gameover::winnerAnnouncement(winners) == "Bogdan wins with -12 points.");
+    REQUIRE(gameover::winnerAnnouncement(winners) == "Bogdan wins with a score of -12.");
+
+    const std::vector<Standing> tied{ standing(0, "Ana", -3, 1), standing(1, "Bogdan", -3, 1) };
+
+    REQUIRE(gameover::winnerAnnouncement(tied) == "Ana and Bogdan tie for first with a score of -3.");
 }
 
 TEST_CASE("no winners is no announcement", "[game-over]")

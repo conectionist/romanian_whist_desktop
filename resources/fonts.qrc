@@ -21,13 +21,13 @@
          which is why there are three and not one. -->
     <qresource prefix="/fonts">
         <file alias="CinzelDecorative-Bold.ttf">fonts/cinzel-decorative/CinzelDecorative-Bold.ttf</file>
-        <file alias="Marcellus-Regular.ttf">fonts/marcellus/Marcellus-Regular.ttf</file>
+        <file alias="Belleza-Regular.ttf">fonts/belleza/Belleza-Regular.ttf</file>
         <file alias="AlegreyaSans-Regular.ttf">fonts/alegreya-sans/AlegreyaSans-Regular.ttf</file>
         <file alias="AlegreyaSans-Medium.ttf">fonts/alegreya-sans/AlegreyaSans-Medium.ttf</file>
         <file alias="AlegreyaSans-Bold.ttf">fonts/alegreya-sans/AlegreyaSans-Bold.ttf</file>
 
         <file alias="OFL-CinzelDecorative.txt">fonts/cinzel-decorative/OFL.txt</file>
-        <file alias="OFL-Marcellus.txt">fonts/marcellus/OFL.txt</file>
+        <file alias="OFL-Belleza.txt">fonts/belleza/OFL.txt</file>
         <file alias="OFL-AlegreyaSans.txt">fonts/alegreya-sans/OFL.txt</file>
     </qresource>
 </RCC>

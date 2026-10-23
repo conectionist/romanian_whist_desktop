@@ -15,6 +15,10 @@
 // themselves lit by it, and carried a copy each until PR #36's review (finding
 // #12). The menu bar's buttons do not: they are QToolButtons, reached only by Tab,
 // with a rule of their own (MenuBarButton::isLit()).
+//
+// AND THE MOCK-UP'S `cursor: pointer` (phase 12): a pointing hand, set once. Greyed,
+// the button shows the plain arrow without being told: Qt gives a disabled widget
+// its parent's cursor (PR #38's review, finding #10).
 class LitButton : public QPushButton
 {
     Q_OBJECT

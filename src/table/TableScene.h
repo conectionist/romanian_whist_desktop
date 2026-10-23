@@ -6,7 +6,9 @@
 #include "paint/CardShadow.h"
 #include "paint/Panel.h"
 #include "paint/Theme.h"
+#include "table/Motion.h"
 #include "table/RackItem.h"
+#include "table/SeatLayout.h"
 
 #include <QGraphicsScene>
 #include <QPointF>
@@ -16,6 +18,7 @@
 #include <optional>
 #include <vector>
 
+class BidBubbleItem;
 class BidStripItem;
 class HandItem;
 class LeadMarkItem;
@@ -56,6 +59,13 @@ public:
     // to blank the table by dropping one.
     void setSnapshot(std::shared_ptr<const GameSnapshot> snapshot);
 
+    // A NEW GAME IS ABOUT TO BE DEALT (MainWindow::startGame()): what the last one
+    // had in motion ends here - the trick on the felt, its sweep, and every bid
+    // bubble. A snapshot carries nothing that names its game, so the scene cannot
+    // tell the next game's first frame from the last game's next one, and guessing
+    // from the round number let both through (PR #38's review, findings #1-#3).
+    void newGame();
+
     // THE FAN, which has a second source the snapshot cannot supply. Everything
     // else on this table is drawn from the snapshot and only the snapshot, and
     // the hand is the documented exception (section 4.0): between turns it
@@ -70,6 +80,13 @@ public:
     std::shared_ptr<const GameSnapshot> lastSnapshot() const { return snapshot; }
 
     void setTheme(const Theme& theme);
+
+    // HOW MUCH THE TABLE MOVES (the redesign's phase 12): Settings' "Card
+    // animations", handed over by MainWindow, live, as the pace is. OFF UNTIL SAID
+    // OTHERWISE, so a scene built on its own - in a test, or the screenshot tool -
+    // shows each frame at once, finished; the window sets the shipped default.
+    void setMotion(motion::Pace pace);
+    motion::Pace motionPace() const { return animationPace; }
 
     // The theme the table is drawn in. TableView draws the room behind it from
     // this, so the room and the table cannot be in two different themes.
@@ -102,6 +119,13 @@ public:
     // The lead rhombus, READ-ONLY and for tests in the same way.
     const LeadMarkItem* leadMarkItem() const { return leadMark; }
 
+    // The trick, and with it the cards in flight: for tests in the same way.
+    const TrickItem* trickItem() const { return trick; }
+
+    // SEAT `seat`'S BID BUBBLE (phase 12), shown for a moment as its bid is made:
+    // READ-ONLY and for tests in the same way. Null for a seat the table has never had.
+    BidBubbleItem* bidBubble(std::size_t seat) const { return seat < bubbles.size() ? bubbles[seat] : nullptr; }
+
     // PINS THE CORNER PANELS TO THE WINDOW (section 2.1): `visible` is the part of
     // the scene the viewport shows, in table space, and `scale` the view's pixels
     // per table unit. Each panel goes tablespace::hudInset pixels in from its
@@ -132,7 +156,16 @@ private:
     // Puts every item where the snapshot says, in table space. Run on a new
     // snapshot and a new theme and on nothing else: a resize is the view's
     // business, and changes no position here.
-    void relayout();
+    //
+    // Returns every seat's place, found once here, for announceBids(); none
+    // before the first snapshot.
+    seatlayout::Places relayout();
+
+    // A BID JUST MADE, between the last frame and `next`: each seat whose bid is in
+    // now and was not then, in the same round, says it over its panel (phase 12).
+    // Another table clears them all; another game is newGame()'s to clear.
+    // `places` are relayout()'s for `next`.
+    void announceBids(const GameSnapshot* last, const GameSnapshot& next, const seatlayout::Places& places);
 
     // Grown when a game has more seats than the last one did, panels and racks
     // together. Six at most, and reused across games rather than rebuilt, for the
@@ -144,6 +177,9 @@ private:
     void placeHud();
 
     Theme theme = Theme::light();
+
+    // See setMotion().
+    motion::Pace animationPace = motion::Pace::Off;
 
     // BY VALUE, so its cache lives as long as the scene and a repaint costs
     // nothing after the first. Declared before the items, which hold a pointer
@@ -178,6 +214,9 @@ private:
     // Every seat's rack, indexed as `seats` is. Yours is built with the rest and
     // never shown: your hand is the fan at the bottom (section 2.6).
     std::vector<RackItem*> racks;
+
+    // Every seat's bid bubble, indexed as `seats` is.
+    std::vector<BidBubbleItem*> bubbles;
 
     TrickItem* trick = nullptr;
 

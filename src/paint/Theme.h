@@ -227,6 +227,11 @@ struct ThemeColours
         QColor leadMarkOutline;
         QColor leadMarkGlow;
 
+        // THE BID BUBBLE (phase 12): a gold-bright pill, its words dark brown, and a
+        // soft shadow under it.
+        QColor bubbleText;
+        QColor bubbleShadow;
+
         // THE CORNER PANELS (sections 2.9 to 2.11), added in the redesign's phase 8.
         //
         // A button under the cursor: its inset gold line brightened, and a faint

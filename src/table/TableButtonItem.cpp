@@ -2,7 +2,9 @@
 
 #include "paint/DevicePixels.h"
 #include "paint/Fonts.h"
+#include "table/ItemCursor.h"
 
+#include <QCursor>
 #include <QFont>
 #include <QFontMetricsF>
 #include <QGraphicsSceneMouseEvent>
@@ -76,6 +78,9 @@ TableButtonItem::TableButtonItem(icons::Icon _icon, const QString& label, panel:
 {
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::LeftButton);
+
+    // page.html's .btn: `cursor: pointer`, while it can be pressed (itemChange()).
+    itemcursor::show(*this, Qt::PointingHandCursor);
 }
 
 void TableButtonItem::setTheme(const Theme& palette)
@@ -146,6 +151,13 @@ QVariant TableButtonItem::itemChange(GraphicsItemChange change, const QVariant& 
         // as the constructor set them.
         if(!value.toBool())
             hovered = false;
+
+        // The pointing hand only while a click would do something, and the arrow at
+        // once otherwise, through the one helper that never unsets a cursor (see
+        // itemcursor::show()): a button greyed under a resting mouse is the topmost
+        // item there, which is the case that crashed.
+        itemcursor::show(*this, value.toBool() ? std::optional<Qt::CursorShape>(Qt::PointingHandCursor)
+                                               : std::nullopt);
 
         memo.invalidate();
         update();

@@ -170,6 +170,10 @@ void MainWindow::buildTable()
 
     scene->setTheme(theme);
 
+    // THE SHIPPED PACE. The scene starts with its motion off, as a scene built on its
+    // own should; the window is where the player's choice lives.
+    scene->setMotion(animationPace);
+
     // TWO PAGES, and the table keeps its own state between games. The menu is
     // page 0 because that is what the window opens on; nothing is destroyed when
     // the pages change, so a second game repaints the same scene rather than
@@ -490,7 +494,7 @@ void MainWindow::showSettings()
 {
     // The pace changes the moment the slider moves, so the bots take it up as
     // soon as the sheet is closed.
-    settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound);
+    settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound, animationPace);
     showMenuSheet(settingsSheet);
 }
 
@@ -519,8 +523,13 @@ void MainWindow::showMenuSheet(Overlay* sheet)
     sheet->focusDefault();
 }
 
-void MainWindow::applySettings(int botSpeed, bool wait)
+void MainWindow::applySettings(int botSpeed, bool wait, motion::Pace animations)
 {
+    // THE TABLE'S MOTION FIRST, and whatever is on screen: it is not part of a game,
+    // so it applies on the menu page as well, and to the next game.
+    animationPace = animations;
+    scene->setMotion(animations);
+
     // FOR THE NEXT GAME, whatever is on screen: New Game opens on lastConfig.
     lastConfig.botSpeed = botSpeed;
     lastConfig.waitAfterEachRound = wait;
@@ -1004,6 +1013,10 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     hand->clear();
     hand->setPlayable(false);
     trickPanel->clearPrompt();
+
+    // AND WHAT THE TABLE HAD IN MOTION: the last game's trick, its sweep, and its
+    // bid bubbles, which the new game's first frame cannot be told apart from.
+    scene->newGame();
 
     // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
     // lives on. Reachable since phase 9: the menu bar's New Game stays live

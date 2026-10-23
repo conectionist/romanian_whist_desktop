@@ -1801,6 +1801,90 @@ TEST_CASE("Settings on the menu page sets the next game's pace", "[main-window]"
     REQUIRE(dialogWait);
 }
 
+// THE CARDS' ANIMATIONS (the redesign's phase 12) are the table's and not a game's:
+// the window ships them at the mock-up's pace, and the slider reaches the scene at
+// once - with no game, as with one - and is what the sheet opens on next time.
+TEST_CASE("Settings' card animations reach the table at once and are remembered", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    TableScene* scene = window.findChild<TableScene*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    QAction* settingsItem = window.findChild<QAction*>("settingsAction");
+    REQUIRE(scene != nullptr);
+    REQUIRE(settings != nullptr);
+    REQUIRE(settingsItem != nullptr);
+
+    // Shipped at Normal, though a scene on its own starts with its motion off.
+    REQUIRE(scene->motionPace() == motion::Pace::Normal);
+
+    settingsItem->trigger();
+    QSlider* animations = settings->findChild<QSlider*>("settingsAnimations");
+    REQUIRE(animations != nullptr);
+    REQUIRE(animations->value() == motion::stopOf(motion::Pace::Normal));
+
+    animations->setValue(motion::stopOf(motion::Pace::Off));
+    REQUIRE(scene->motionPace() == motion::Pace::Off);
+
+    // Closed and opened again, it opens on what was chosen.
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    settingsItem->trigger();
+    REQUIRE(animations->value() == motion::stopOf(motion::Pace::Off));
+
+    animations->setValue(motion::stopOf(motion::Pace::Slow));
+    REQUIRE(scene->motionPace() == motion::Pace::Slow);
+
+    settings->findChild<QPushButton*>("settingsDone")->click();
+}
+
+// AND IN PLAY: a watched game running, the slider moved from Settings, reaches the
+// scene the game is drawn on, and the game is none the wiser.
+TEST_CASE("Settings' card animations change the table of a game in play", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    TableScene* scene = window.findChild<TableScene*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    REQUIRE(scene != nullptr);
+    REQUIRE(settings != nullptr);
+
+    QTimer::singleShot(300, []
+    {
+        QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if(!dialog)
+            return;
+
+        if(QRadioButton* watch = dialog->findChild<QRadioButton*>("watching"))
+            watch->setChecked(true);
+
+        if(QSpinBox* opponents = dialog->findChild<QSpinBox*>("opponents"))
+            opponents->setValue(2);
+
+        dialog->done(QDialog::Accepted);
+    });
+
+    window.findChild<QAction*>("newGameAction")->trigger();
+    pump(1000);
+
+    REQUIRE(scene->lastSnapshot() != nullptr);
+    REQUIRE(scene->motionPace() == motion::Pace::Normal);
+
+    window.findChild<QAction*>("settingsAction")->trigger();
+    REQUIRE(settings->isVisible());
+
+    settings->findChild<QSlider*>("settingsAnimations")->setValue(motion::stopOf(motion::Pace::Quick));
+    REQUIRE(scene->motionPace() == motion::Pace::Quick);
+
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    REQUIRE(scene->motionPace() == motion::Pace::Quick);
+}
+
 // AND OVER A GAME IN PLAY IT CHANGES THAT GAME: a watched game dealt at the
 // slowest pace, sped to the fastest from Settings, reaches its end inside a
 // deadline the slowest pace could not meet. Two bots over 18 rounds at the

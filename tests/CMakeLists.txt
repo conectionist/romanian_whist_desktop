@@ -31,6 +31,10 @@ add_executable(desktop_tests
     CardRendererTests.cpp
     DevicePixelsTests.cpp
     TableSpaceTests.cpp
+    MotionTests.cpp
+    TrickMotionTests.cpp
+    BidBubbleTests.cpp
+    ItemCursorTests.cpp
     TableTopTests.cpp
     ShadowsTests.cpp
     PanelTests.cpp

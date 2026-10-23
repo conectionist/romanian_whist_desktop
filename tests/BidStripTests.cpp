@@ -1,16 +1,21 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "GameFixtures.h"
+#include "RestingMouse.h"
 
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
 #include "paint/Theme.h"
 #include "table/BidStripItem.h"
+#include "table/ScoreboardItem.h"
 #include "table/SeatLayout.h"
+#include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 #include "table/TableView.h"
+#include "table/TrickPanelItem.h"
 
+#include <QCursor>
 #include <QCoreApplication>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
@@ -22,6 +27,7 @@
 #include <QPainter>
 #include <QPointF>
 #include <QRectF>
+#include <QSize>
 #include <QString>
 
 #include <cmath>
@@ -477,6 +483,55 @@ TEST_CASE("The strip lies on the felt clear of your hand and your panel", "[bid-
     }
 }
 
+// THE CORNER PANELS FOLLOW THE WINDOW and the strip does not: it is in table space
+// on the felt, and they are pinned to the window's corners. At a shape the panels
+// reach furthest into the table, the strip must still lie clear of all four, or the
+// strip (drawn over them) would hide a part of the scoreboard.
+TEST_CASE("The strip clears the corner panels at the sizes people play at", "[bid-strip]")
+{
+    const QSize windows[] = { QSize(1920, 1080), QSize(2560, 1440), QSize(1920, 1200),
+                              QSize(1440, 900) };
+
+    for(unsigned int seats = 2 ; seats <= 6 ; seats++)
+    {
+        TableScene scene;
+        scene.setTheme(Theme::dark());
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(biddingTable(seats)));
+
+        TableView view(&scene);
+        view.show();
+
+        BidStripItem* strip = scene.bidStripItem();
+        REQUIRE(strip != nullptr);
+
+        // The tallest strip: a forbidden bid's note is the longer sentence.
+        strip->setPrompt(promptFor(8, std::optional<unsigned int>(2u)));
+
+        const QRectF placed = strip->mapRectToScene(QRectF(QPointF(), strip->size()));
+
+        for(const QSize& window : windows)
+        {
+            INFO(seats << " seats, window " << window.width() << "x" << window.height());
+
+            view.resize(window);
+            QCoreApplication::processEvents();
+
+            // The panel's own rect, as HudTests measures it: its shadow is not part of
+            // what a reader loses to the strip.
+            const auto clear = [&placed](const auto& corner)
+            {
+                REQUIRE(corner.isVisible());
+                REQUIRE_FALSE(placed.intersects(corner.mapRectToScene(QRectF(QPointF(), corner.size()))));
+            };
+
+            clear(*scene.scoreboardItem());
+            clear(*scene.trickPanelItem());
+            clear(*scene.historyButton());
+            clear(*scene.lastTrickButton());
+        }
+    }
+}
+
 TEST_CASE("A long note wraps and the strip grows to hold it", "[bid-strip]")
 {
     // A translation may need two lines where English needs one. The strip keeps its
@@ -659,4 +714,62 @@ TEST_CASE("The tests' own bidder bids one when zero is forbidden", "[bid-strip]"
 TEST_CASE("The tests' own bidder bids zero when nothing is forbidden", "[bid-strip]")
 {
     REQUIRE(fixtures::lowestLegalBid(promptFor(1)) == 0);
+}
+
+// .opt `cursor: pointer`, .opt:disabled `not-allowed`, the plain arrow between them
+// (phase 12).
+TEST_CASE("The cursor points at a bid and refuses the struck-out one", "[bid-strip]")
+{
+    LoneStrip lone;
+    lone.strip->setPrompt(promptFor(4, std::optional<unsigned int>(2u)));
+
+    hoverAt(lone.scene, lone.on(1));
+    REQUIRE(lone.strip->hasCursor());
+    REQUIRE(lone.strip->cursor().shape() == Qt::PointingHandCursor);
+
+    hoverAt(lone.scene, lone.on(2));
+    REQUIRE(lone.strip->cursor().shape() == Qt::ForbiddenCursor);
+
+    // Between two bids: no button, no promise.
+    hoverAt(lone.scene, (lone.on(0) + lone.on(1)) / 2.0);
+    REQUIRE(lone.strip->cursor().shape() == Qt::ArrowCursor);
+}
+
+// THE STRIP GOES WHEN YOU BID, and the pointing hand with it. Hiding an item never
+// touches the view's cursor, so the hand stayed over the felt where the strip had
+// been until the mouse moved (PR #38's review, finding #4).
+TEST_CASE("The pointing hand goes with the strip once you bid", "[bid-strip]")
+{
+    LoneStrip lone;
+    lone.strip->setPrompt(promptFor(4));
+
+    RestingMouse mouse(lone.scene, lone.on(1));
+
+    hoverAt(lone.scene, lone.on(1));
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    lone.strip->clearPrompt();
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
+}
+
+// AND WHEN THE VIEW HAS HAD NO MOUSE EVENT, though the mouse rests on it: the strip lit
+// through the scene alone, as the window tests' clicks reach it. The strip is the topmost
+// item under the mouse, and unsetting its cursor as it went had Qt look under a mouse
+// event the view never had: a crash (found after PR #38's review, in a window test run
+// after a test that had moved the mouse). The app does not reach this state - its
+// hovers and presses come through the view - but the strip must survive it.
+TEST_CASE("Bidding under a mouse that has not moved since the table came up is safe", "[bid-strip]")
+{
+    LoneStrip lone;
+    lone.strip->setPrompt(promptFor(4));
+
+    RestingMouse mouse(lone.scene, lone.on(1), RestingMouse::Arrival::Appeared);
+
+    // The strip lit under the mouse through the scene, as the window lights it for a
+    // prompt that arrives under a resting cursor; the view itself heard nothing.
+    hoverAt(lone.scene, lone.on(1));
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    lone.strip->clearPrompt();
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
 }

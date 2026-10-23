@@ -6,6 +6,8 @@ LitButton::LitButton(const QString& text, QWidget* parent) : QPushButton(text, p
 {
     // Repainted as the cursor comes and goes, which is all the lit look needs.
     setAttribute(Qt::WA_Hover);
+
+    setCursor(Qt::PointingHandCursor);
 }
 
 bool LitButton::isLit() const

@@ -238,6 +238,11 @@ Theme::TablePalette tablePalette()
     table.leadMarkOutline = rgba(60, 40, 10, 0.5);
     table.leadMarkGlow = rgba(242, 211, 140, 0.8);
 
+    // .bubble: background gold-bright, color #2a1a0a, box-shadow 0 6px 14px
+    // rgba(0, 0, 0, 0.5).
+    table.bubbleText = QColor(0x2A, 0x1A, 0x0A);
+    table.bubbleShadow = rgba(0, 0, 0, 0.5);
+
     // Sections 2.9 to 2.11, from page.html. .panel.btn:hover: inset 0 0 0 4px
     // rgba(242, 211, 140, 0.6) and 0 0 18px rgba(242, 211, 140, 0.25). The rules:
     // .score th's border-bottom, .score .divider and .trickinfo .prompt's border-top,

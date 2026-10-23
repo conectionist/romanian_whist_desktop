@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QRawFont>
 #include <QGuiApplication>
 #include <QString>
 #include <QStringList>
@@ -14,14 +15,14 @@
 // application starts in, not one a test set up for itself.
 
 // FONT EMBEDDING FAILS AS QUIETLY AS ANY RESOURCE: a missing face is not an
-// error anywhere, only text in Georgia where Marcellus was meant. Asking the
+// error anywhere, only text in Georgia where Belleza was meant. Asking the
 // database is the one place the difference is a yes or a no.
 TEST_CASE("The bundled typefaces are registered", "[fonts]")
 {
     const QStringList families = QFontDatabase::families();
 
     REQUIRE(families.contains(QStringLiteral("Cinzel Decorative")));
-    REQUIRE(families.contains(QStringLiteral("Marcellus")));
+    REQUIRE(families.contains(QStringLiteral("Belleza")));
     REQUIRE(families.contains(QStringLiteral("Alegreya Sans")));
 
     // ALL THREE WEIGHTS RESOLVE TO REAL FACES, asked the way a widget will ask.
@@ -103,4 +104,50 @@ TEST_CASE("The default font is none of the bundled typefaces", "[fonts]")
 
     for(const QFont& font : { fonts::logo(), fonts::heading(), fonts::body() })
         REQUIRE_FALSE(family.startsWith(font.families().first()));
+}
+
+// ROMANIAN'S LETTERS (phase 12), in the faces the Romanian draft is drawn in. ș and ț
+// are the comma-below letters, U+0219 and U+021B, not the older cedilla ş and ţ.
+namespace
+{
+const QString romanianLetters = QStringLiteral("ăâîșțĂÂÎȘȚ");
+
+// The letters the face's own file has, not what Qt would borrow from another face.
+QString missingFrom(QFont font)
+{
+    font.setPixelSize(24);
+
+    const QRawFont raw = QRawFont::fromFont(font);
+    QString missing;
+
+    for(const QChar letter : romanianLetters)
+    {
+        if(!raw.supportsCharacter(letter))
+            missing += letter;
+    }
+
+    return missing;
+}
+}
+
+TEST_CASE("The body and logo faces draw every Romanian letter", "[fonts]")
+{
+    QFont bold = fonts::body();
+    bold.setWeight(QFont::Bold);
+
+    for(const QFont& face : { fonts::body(), bold, fonts::logo() })
+    {
+        INFO(face.family().toStdString() << " lacks " << missingFrom(face).toStdString());
+        REQUIRE(missingFrom(face).isEmpty());
+    }
+}
+
+// THE HEADINGS TOO: a name, a title, a button. Marcellus, the mock-up's heading face,
+// has no ș or ț (only ş and ţ, with a cedilla), so Qt drew those two in another face;
+// this case was expected to fail until Belleza replaced it (phase 12's follow-up), and
+// now it guards whatever heading face comes next.
+TEST_CASE("The heading face draws every Romanian letter", "[fonts]")
+{
+    INFO(fonts::heading().family().toStdString() << " lacks " << missingFrom(fonts::heading()).toStdString());
+    REQUIRE(missingFrom(fonts::heading()).isEmpty());
 }

@@ -2,6 +2,7 @@
 
 #include "TableFixtures.h"
 
+#include "paint/CardRenderer.h"
 #include "paint/Fonts.h"
 #include "paint/Icons.h"
 #include "paint/Theme.h"
@@ -13,6 +14,7 @@
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
 
+#include <QCursor>
 #include <QCoreApplication>
 #include <QFontMetricsF>
 #include <QGraphicsRectItem>
@@ -137,7 +139,7 @@ const QSize shapes[] = { QSize(1920, 1080), QSize(1440, 900), QSize(1000, 700),
 TEST_CASE("A button is as wide as its icon and its label", "[hud]")
 {
     // .panel.btn: a border of 1 and padding of 22 either side, the 24-unit icon and
-    // 12 after it, then the label in Marcellus 21. 76 tall, border included.
+    // 12 after it, then the label in the heading face at 21. 76 tall, border included.
     QFont label = fonts::heading();
     label.setPixelSize(tablebutton::labelSize);
 
@@ -341,6 +343,58 @@ TEST_CASE("The corner buttons are live once a game is on the table", "[hud]")
     }
 }
 
+// A SCREEN WITH ANOTHER PIXEL RATIO (phase 12). The window dragged from a 1x screen
+// to a 2x one repaints at the new ratio, and everything on the scoreboard, its trump
+// card included, has to be drawn again at it: docs/KNOWN_ISSUES.md recorded the old
+// info strip keeping the first screen's card. The scoreboard's picture is keyed on
+// the ratio it is painted at, trump and all, so this holds it to that.
+TEST_CASE("The scoreboard is drawn again at a new pixel ratio and not otherwise", "[hud]")
+{
+    CardRenderer renderer;
+    QGraphicsScene scene;
+
+    auto* board = new ScoreboardItem(&renderer, nullptr);
+    board->setSnapshot(tableOf(4), Theme::dark());
+    board->setScale(tablespace::hudScale);
+    scene.addItem(board);
+
+    const QRectF source = board->mapRectToScene(QRectF(QPointF(), board->size()));
+
+    const auto renderAt = [&](qreal ratio)
+    {
+        QImage image((source.size() * ratio).toSize(), QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(ratio);
+        image.fill(Qt::transparent);
+
+        QPainter painter(&image);
+        scene.render(&painter, QRectF(QPointF(), source.size()), source);
+        painter.end();
+
+        return image;
+    };
+
+    REQUIRE(board->shown().trump.hasCard);
+
+    renderAt(1.0);
+    const std::size_t first = board->compositions();
+    const std::size_t faces = renderer.rasterizations();
+
+    REQUIRE(first >= 1);
+
+    // The same ratio again: nothing to compose.
+    renderAt(1.0);
+    REQUIRE(board->compositions() == first);
+
+    // Another screen: the picture, and the trump card inside it, at the new ratio.
+    renderAt(2.0);
+    REQUIRE(board->compositions() == first + 1);
+    REQUIRE(renderer.rasterizations() > faces);
+
+    // And back again, the memo holding one ratio at a time.
+    renderAt(1.0);
+    REQUIRE(board->compositions() == first + 2);
+}
+
 // SECTION 2.1: 8 pixels in from the window's left and bottom edges, whatever its
 // shape - the mock-up's fit() recomputes them on every resize, and the buttons'
 // place in table space changes with the window while the table's does not.
@@ -414,8 +468,10 @@ TEST_CASE("The corner panels sit inside the window and clear of every seat", "[h
 {
     // 4:3 and 5:4 since the scoreboard became as wide as its columns: narrower
     // than about 3:2, the mock-up's 236 reached the top-left seat.
+    //
+    // 2560 x 1440 since phase 12, which the plan names with the other three.
     const QSize windows[] = { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900),
-                              QSize(1024, 768), QSize(1280, 1024) };
+                              QSize(1024, 768), QSize(1280, 1024), QSize(2560, 1440) };
 
     for(unsigned int seats = 3 ; seats <= 6 ; seats++)
     {
@@ -482,4 +538,19 @@ TEST_CASE("The trick panel stays eight pixels in from the top-right corner", "[h
         // 264 units, drawn 1.2 times the table, as page.html's .trickinfo is.
         REQUIRE(std::abs(placed.width() - trickpanel::width * tablespace::hudScale * scale) < 1e-6);
     }
+}
+
+// page.html's .btn: `cursor: pointer` while a click would do something (phase 12).
+TEST_CASE("A corner button points only while it can be pressed", "[hud]")
+{
+    LoneButton lone;
+
+    REQUIRE(lone.button->hasCursor());
+    REQUIRE(lone.button->cursor().shape() == Qt::PointingHandCursor);
+
+    lone.button->setEnabled(false);
+    REQUIRE(lone.button->cursor().shape() == Qt::ArrowCursor);
+
+    lone.button->setEnabled(true);
+    REQUIRE(lone.button->cursor().shape() == Qt::PointingHandCursor);
 }

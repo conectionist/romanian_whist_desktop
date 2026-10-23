@@ -4,6 +4,10 @@ This plan turns the approved HTML mock-up into the Qt client. It is written for 
 person) picking the work up cold: it says what the target looks like, where every number comes
 from, which classes change, in what order, and how to tell each step is done.
 
+> **COMPLETE.** All thirteen phases are built (phase 12 last, on 2026-10-22). Each phase's outcome
+> below says what was built, what the owner decided and what the build departed from. What is left
+> is listed at the end of phase 12's outcome.
+
 **Read first, in this order**
 
 1. This file, top to bottom, once.
@@ -137,6 +141,15 @@ their `OFL.txt`, register them in a `.qrc`, and load them once at startup with
 `QFontDatabase::addApplicationFont`. If fetching them is impossible from the build environment, keep
 the code path and the fallbacks, and leave a clear note; do not block the rest of the work on fonts.
 
+> **AMENDED AFTER PHASE 12, by the owner's call of 2026-10-22: the client's headings are Belleza.**
+> Marcellus has no ș or ț (only ş and ţ, with a cedilla), which the Romanian translation needs, and
+> its 0 and 1 read as O and I on the bid buttons and in "Round 10 of 32". Six OFL faces with both
+> letters and lining digits were set in the running app (Forum, Belleza, Tenor Sans, EB Garamond,
+> Spectral, Cinzel); Belleza, flared as Marcellus is and about as wide, was chosen. Same sizes,
+> same fallback chain. **The mock-up keeps Marcellus**: it is the approved target, and its capture
+> script reads the file from `mockup/source/fonts/marcellus/`. Where this document and the code's
+> comments quote page.html ("Marcellus 25"), the client draws that size in Belleza.
+
 All sizes below are in **table-space units** (they scale with the table), not points.
 
 ### 2.4 Table
@@ -215,7 +228,7 @@ opponent: a rack on the rim at angle 90° (bottom), no hand.
   gold glow (blur 26, `rgba(242,211,140,0.5)`), and a "▸" before the name. Not shown while a full
   trick is waiting to be cleared.
 - When a bot bids, a small gold "Bids 2" bubble floats over its panel for ~1.6 s (`.bubble`).
-  Optional; see phase 12.
+  *(Built in phase 12: `BidBubbleItem`. Yours says "You bid 2", as the mock-up's does.)*
 
 ### 2.6 Racks (opponents' face-down hands)
 
@@ -1859,7 +1872,7 @@ Done when: both buttons open working sheets.
   - **`placeSheet()` from a layout request must not leave a request behind.** Invalidating the
     body's layouts posts one, which came round again forever (the review round's older bug).
 
-### Phase 12: polish, translations, documentation
+### Phase 12: polish, translations, documentation ✅ COMPLETE
 
 1. Optional motion, within section 18.2's animation budget: card from hand to table, trick sweeping
    to the winner, the "Bids 2" bubble. Respect any existing reduced-motion or pace settings.
@@ -1876,6 +1889,192 @@ Done when: both buttons open working sheets.
 
 Done when: side-by-side screenshots of the client and `screenshots/` match closely at 1920×1080 for
 3 to 6 players and for bidding.
+
+> **AMENDED IN PHASE 12, by the owner's calls of 2026-10-22.** Step 1's lengths are a setting, not a
+> choice between the mock-up and section 18.2: Settings' "Card animations", the mock-up's by default.
+> Of step 1's motion, the card to the table, the sweep and the bubble are built; the small
+> transitions (hover, winner lift, turn ring) are not. Step 4 drafts Romanian as well as extracting.
+
+**Outcome:**
+
+- **The count is 613 tests** (566 + 47, one rewritten, none retired), passing on the `default`,
+  `release` and `clang` presets with Qt 6.11.2 and building without a warning. The heading face's
+  Romanian-letters case was expected to fail and reported so until the follow-up below replaced
+  Marcellus with Belleza; it passes now, untagged. Commit by commit:
+  - **Window sizes, 566 → 567**: the fit and corner-panel cases also run at 2560×1440 and
+    1920×1200, and a new `BidStripTests` case holds the strip clear of the four corner panels.
+  - **HiDPI, 567 → 568**: the whole-pixel cases (a played card's shadow, a turned rack, a canvas)
+    also run at ratios 1.5 and 2; and `HudTests`' "The scoreboard is drawn again at a new pixel
+    ratio and not otherwise". No code changed.
+  - **The setting, 568 → 580**: `MotionTests` (9), a `SettingsSheetTests` case and two
+    `MainWindowTests`.
+  - **The motion, 580 → 606**: `TrickMotionTests` (16), `BidBubbleTests` (7) and three
+    `HandItemTests` cases for `restingPlacement()`.
+  - **The cursors, 606 → 611**: one case per control.
+  - **Extracting the strings, 611**: `GameOverTests`' negative-score case rewritten (see below).
+  - **The Romanian draft, 611 → 613**: two `FontsTests` cases.
+- **PR #38's review round brought it to 622** (613 + 9), building without a warning. A review by
+  another agent found ten things and fixed all ten, one commit each or per group; a check of those
+  fixes found one more, which they had caused:
+  - **#1-#3, a new game could inherit the last one's motion.** A snapshot names no game, and the
+    scene guessed the boundary from the round number going down; a game abandoned in round 1 is
+    followed by another game's round 1, so the old trick could sweep toward a panel of the new
+    game. `MainWindow::startGame()` calls `TableScene::newGame()`, which clears the trick
+    (`TrickItem::clear()`: the next frame is a first frame) and every bubble.
+  - **#4, the pointing hand stayed up** after your turn ended or the strip went, until the mouse
+    moved: `QGraphicsItem::unsetCursor()` restores the view's cursor only for the topmost item, and
+    over the fan that is a card. One helper, `itemcursor::show()`, now sets every table item's
+    cursor. The step 7 tests read the item's own cursor, which could not see this; the new ones read
+    what the view shows (`tests/RestingMouse.h`).
+  - **#5, the screenshots' translation outlived its test case**, turning later cases Romanian.
+  - **#6, the same cursor set again on every move** (each set has Qt search the items under the
+    mouse); **#7, the bubbles reuse the seat places `relayout()` found**; **#8, one slider-row
+    builder** (`newgame::buildSliderRow()`) for both of Settings' rows and the setup dialog's; **#9,
+    one CSS curve helper** (`motion::cubicBezier()`); **#10, Qt greys a disabled widget's cursor
+    itself**, so `LitButton` and `MenuBarButton` set their pointing hand once.
+  - **Then a crash in the suite, from #4's first fix.** It unset the strip's cursor as you bid, and
+    `unsetCursor()` on the topmost item has the view look under its last mouse event, which a view
+    under a mouse that has not moved since it appeared does not have: Qt dereferences it anyway. A
+    window test crashed in two of four random-order runs: it clicks bids by sending the press
+    straight to the scene, which gave the strip its cursor while the view had no mouse event, and
+    an earlier test had left the mouse over the middle of the screen, where the window opened.
+    `itemcursor::show()` never unsets a cursor now - "none" is the arrow, set like any other, which
+    needs no mouse event - and the corner buttons go through it too. `RestingMouse` and `restOn()`
+    put the mouse back where they found it. Two new cases reproduce the crash's state
+    (`RestingMouse::Arrival::Appeared`) and crash without the fix.
+  - **The app never reached it.** An item gets a cursor only from a hover or a press, and in the app
+    both reach the scene through the view, which keeps the event first. Checked in the running app
+    with the review's build: the table brought up under a mouse resting on the 0 bid, with no mouse
+    motion (the bid stayed unlit), then a bid by key in one session and by click in another. Neither
+    crashed. The fix's commit message (`941906b`) says a digit bid could crash the app; that is
+    wrong, and is corrected here and in the code's comments rather than by rewriting history.
+- **The owner's Romanian brought it to 624** (622 + 2): two `TableTopTests` cases for the logo's
+  lines, below.
+- **Five decisions by the owner, 2026-10-22:**
+  - **Animation lengths are a setting**, "Card animations": Off, Quick, Normal, Slow, Normal being
+    the mock-up's. Off is section 18.2's "reduce motion".
+  - **The motion is the card to the table, the sweep and the bid bubble.**
+  - **Translations: every string extracted, and a Romanian draft** of all of them for review.
+  - **The drafts show in the app** on a Romanian system: they are marked unfinished, and lrelease
+    compiles unfinished translations by default.
+  - **The correct ș and ț**, mapped to nothing, the stage set for the heading face that replaces
+    Marcellus (see the pitfalls).
+  - **The follow-up: Belleza replaces Marcellus** in the client (section 2.3's amendment). The mock-up
+    keeps Marcellus.
+- **Defaults taken, not asked:**
+  - **No sweep at a round's end.** The last trick stays under the round sheet, as it always has; the
+    next round's bare felt takes it off at once.
+  - **Your card flies from its resting place in the fan**, not from where it had risen: clicking
+    ends your turn's claim on the fan, which drops the raised card first.
+  - **A card leaving your hand passes over the fan** on a new rung, `z::flyingCard`, under your
+    panel. Without it the flight began under the fan's other cards.
+  - **The bubble over your panel says "You bid 2"**, as the mock-up's does.
+  - **The mock-up's cursors** (step 7 of the phase's plan): a pointing hand on every button, a card
+    you can play and a bid; "not allowed" on a card you cannot play and the forbidden bid.
+- **The owner's Romanian, two rounds on 2026-10-23.** Fourteen of the 206 strings are the
+  owner's own, marked finished; the other 192 are still drafts.
+  - **The game is plain "Whist"** in Romanian: the window title and the logo. The logo became one
+    translated phrase, a line of lettering per line of it (`tabletop::logoLines()`), because a
+    string per line cannot leave one out: Qt shows the source for an empty translation. English
+    keeps page.html's "Romanian" over "Whist"; Romanian's one line sits in the middle of the
+    plaque (`tabletop::letteringRect()`).
+  - **The glossary:** a trick is a *mână*; the suits are Inimă roșie, Romb, Inimă neagră and
+    Treflă; the one-card rounds are *Fruntea* and *Neveul*, capitalised, everywhere; Rules is
+    *Regulament*.
+  - **Rules words following and trumping as the trick panel does**: "Pui din culoarea de jos dacă
+    poți, altfel pui atu dacă poți."
+  - **Every your-turn line starts "E rândul tău."**, the must-trump one included: "E rândul tău.
+    Nu ai ♥! Pune atu." The panel's line is 230 units wide, and that is 207.
+  - **"%1 e primul"** (Leader: %1) reads wrong for a woman's name and for "Tu". The owner's call:
+    it stays for now and is fixed later.
+- **What the build is:**
+  - **`src/table/Motion.h`**: `motion::Pace`, the lengths (`flightMs` 360, `sweepMs` 480,
+    `bubbleMs` 1600, `bubbleStillMs` 1500), `factorFor()` (0, 0.5, 1, 1.6) and the mock-up's two
+    curves as `QEasingCurve`s. Settings' row is built in the Bot speed row's shape, its columns
+    lined up with it. `MainWindow::animationPace` holds the choice and hands it to
+    `TableScene::setMotion()` on start-up and on every change; **a scene on its own is Off**, so
+    the scene-level tests and the bare-view shots see each frame finished.
+  - **`TrickItem`** keeps the last frame's table and gives each card a `QVariantAnimation`, made
+    once and reused. A frame that adds cards to the same round's table flies the new ones; a frame
+    that leaves the felt as it was leaves flights running; anything else lands them. The sweep is
+    the same tween, ending hidden. `HandItem::restingPlacement()` says where your card stood,
+    asked before the fan is redrawn; `TableScene::relayout()` places the trick before the fan for
+    that reason.
+  - **`BidBubbleItem`**, one per seat on `z::bubbles` (between the panels and the HUD), raised by
+    `TableScene::announceBids()` when a seat's bid is new between two frames of a round.
+  - **Strings**: `qt_add_translations()` reads `desktop_core` (`SOURCE_TARGETS`), writes relative
+    locations and skips the `.qrc` files. 207 strings in 23 contexts, all drafted.
+  - **`ScreenshotTool`**: `WHIST_SHOTS_QM` names a `.qm` to take the pictures in; the window shots
+    set motion Off and clear the bubbles before each picture.
+- **Where the build departed from the plan, and why:**
+  - **Animations end on a frame that disagrees with them, not on every frame.** The bridge
+    publishes the next seat's turn microseconds after a card lands, and the next trick's lead
+    microseconds after the felt clears: each over the same felt, and each would have cut every
+    flight and sweep short.
+  - **Open loop.** Section 18.2's handshake is not built, and section 0's rule kept the bridge as it
+    was; at fast bot speeds an animation is cut short instead.
+  - **A negative winning score has its own sentence**, "Bogdan wins with a score of -12.": the
+    points take `%n` so a translation can choose its plural, and Qt leaves `%n` unfilled for a
+    negative count. Its test is rewritten to it.
+  - **The seat pill's Romanian is "Făcut/Lic.: 1/2"**, measured to fit the column the English pill
+    sets; the first draft's "Făcute/Licit.:" was cut short in the shots.
+- **HiDPI, checked:**
+  - The screenshot tool at `QT_SCALE_FACTOR` 1.5 and 2 draws the right sizes (2880×1620,
+    3840×2160). Shrunk to 1920, each differs from phase 11's 1x picture by about one level on
+    average, at edges only. At native pixels the panel lines, rack rails, sheet borders and the
+    trump card are crisp, with no half-pixel seams.
+  - **The textures, measured and left as they are, pending the owner's call.** At a 1920×1080
+    window the table is drawn at 0.77 device pixels per texel at 1x, 1.15 at 1.5x and 1.53 at 2x
+    (2.08 for a 2560×1440 window at 2x). The grain's detail per logical pixel is 1.2 times the 1x
+    picture's at 2x (wood 3.94 against 3.28; felt 1.77 against 1.45): every texel shows, the picture
+    is smooth rather than blocky, and only a texture made at 2x could add more.
+  - **`KNOWN_ISSUES.md`'s one entry is gone**: the info strip it described went in phase 8, and
+    the scoreboard keys its picture, trump card and all, on the ratio it is painted at.
+- **The screenshots**: with motion off, every picture is pixel-identical to phase 11's but for the
+  logo's known band and the Settings sheet's new row. The sets at 1.5x and 2x, and in Romanian, are
+  `build/shots/phase-12-dpr150/`, `phase-12-dpr200/` and `phase-12-ro/`.
+- **Checked in the running app**, on a nested Xephyr screen driven by xdotool and recorded:
+  - the bubbles over the panels as the bots bid;
+  - your card leaving the fan and landing above it in about nine frames, over the fan;
+  - a bot's card growing in from its panel;
+  - a trick swept to its winner's panel in an 8-1-8 game's first round, slow at first and then
+    quick, and the winner's lead flying in after it;
+  - the one-card rounds' last tricks left under the round sheet;
+  - the app log clean.
+- **No `[.timing]` run.** The owner did not ask for one. A flight costs one card and its shadow
+  blended at a scale, drawn from the picture it lands with.
+- **Pitfalls:**
+  - **`QGraphicsItem::setScale()` prepares a geometry change before it compares**, as
+    `setRotation()` does: a card set to scale 1 on every frame repainted the felt, and "A snapshot
+    that changes nothing repaints nothing" failed. `scaleTo()` sits beside `turnTo()`.
+  - **`devicepixels::effectiveRatio()` includes an item's own scale**, so a scaled card asked the
+    renderer for a new pixmap every frame of its flight. `CardItem::paint()` divides it out.
+  - **Qt fills `%n` in only for a count of zero or more.**
+  - **lupdate read the executable's sources only**, which are `main.cpp`; and it reads a `.qrc`
+    listed among a target's sources as C++.
+  - **`QWidget::unsetCursor()` leaves `WA_SetCursor` set on a top-level widget.** A test of a
+    button's cursor needs the button in a parent.
+  - **`HandItem`'s private `cursor`** (where the mouse last was) hides `QGraphicsItem::cursor()`.
+  - **Marcellus has no ș or ț** (U+0219, U+021B), only ş and ţ with a cedilla, so Qt drew those two
+    in another face in a heading. `FontsTests`' heading case was `[!shouldfail]` until Belleza
+    replaced it; it now guards the heading face.
+  - **The screenshot tool plays at the bots' top speed**, so a round's bids are milliseconds old
+    when its table is shot, and their bubbles still up.
+  - **`QGraphicsItem::unsetCursor()` is two traps** (the review round): it restores the view's
+    cursor only when the item is the topmost under the mouse, and when it is, it reads the view's
+    last mouse event, which a view that came up under a resting mouse has not had - a crash, though
+    only an event sent straight to the scene gives an item a cursor in that state. Set a table
+    item's cursor through `itemcursor::show()`, which never unsets one.
+  - **The test binary has one mouse.** A test that moves it must put it back
+    (`tests/RestingMouse.h`'s `CursorReturn`), or the next test's window opens under it with no
+    mouse event to say so. Catch2 runs the cases in a random order, so such a leak fails some runs
+    and not others; when a run stops early, rerun it with its `--rng-seed`.
+- **Left open:**
+  - **The rest of the Romanian draft wants the owner's review** in Qt Linguist: 192 strings, the
+    glossary's open words among them (licitație, făcute, rundă, Popă, the scoreboard's columns).
+  - **"%1 e primul"**, for a woman's name and for "Tu".
+  - **2x textures**, if the owner wants them after the numbers above.
+  - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
 
 ---
 
@@ -1915,6 +2114,6 @@ Ask the owner if possible. If not, use the default and record it.
 | Q2 | Fonts: bundle Cinzel Decorative, Marcellus and Alegreya Sans (OFL)? | Yes. **Decided by the owner, 2026-10-17: yes** (phase 1) |
 | Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too. **Decided by the owner, 2026-10-20: the round score stays out; the streak comes back as a RUN column, W2 or L3** (phase 8; section 2.9) |
 | Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later. **Decided by the owner, 2026-10-21: the bot speed and "Wait for me after each round", applied to the game in play at once and to the next New Game** (phase 9) |
-| Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off |
-| Q6 | Portraits: drawn busts as in the mock-up, or real art later? | Drawn busts now through `Theme::avatar()`, which is the seam for real art later |
-| Q7 | 2 players: not in the mock-up | Opponent at the top position, as in section 2.5 |
+| Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off. **Built as the default in phase 4; not asked** |
+| Q6 | Portraits: drawn busts as in the mock-up, or real art later? | Drawn busts now through `Theme::avatar()`, which is the seam for real art later. **Built as the default in phase 4; not asked** |
+| Q7 | 2 players: not in the mock-up | Opponent at the top position, as in section 2.5. **Built as the default in phase 4; not asked** |

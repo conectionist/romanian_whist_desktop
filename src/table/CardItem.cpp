@@ -6,6 +6,8 @@
 
 #include <QPainter>
 
+#include <algorithm>
+
 CardItem::CardItem(const CardRenderer* renderer, QGraphicsItem* parent)
     : QGraphicsObject(parent)
     , renderer(renderer)
@@ -131,7 +133,14 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     // answers with on its own (TableView): the pixmap the renderer already holds is
     // asked for again and drawn scaled, rather than every card being rasterized
     // afresh on every step of the drag.
-    const qreal dpr = devicepixels::effectiveRatio(*painter);
+    //
+    // WITHOUT THE ITEM'S OWN SCALE (phase 12): a card in flight is scaled up or down
+    // from the size it will rest at, and the ratio above includes that scale. Asked
+    // for at each frame's own size it would miss the renderer's cache every frame -
+    // a court card takes 8 to 11 ms to rasterize - so it is asked for at the size
+    // it lands at, once, and Qt scales that picture, with the view's smooth
+    // transform, as the card moves.
+    const qreal dpr = devicepixels::effectiveRatio(*painter) / std::max(scale(), 1e-3);
 
     const QRectF body = cardRect();
 
