@@ -75,19 +75,28 @@ int main(int argc, char *argv[])
         chosen = ask.choice();
     }
 
-    // FOR WHAT THE TRANSLATION DOES NOT CARRY: the players' names New Game draws.
-    language::setCurrent(*chosen);
-
     QTranslator translator;
     const QString resource = language::translationResource(*chosen);
+    language::Language running = *chosen;
 
     if(!resource.isEmpty())
     {
         if(translator.load(resource))
+        {
             QApplication::installTranslator(&translator);
+        }
         else
+        {
             qWarning("Could not load the translation %s: starting in English.", qPrintable(resource));
+            running = language::Language::English;
+        }
     }
+
+    // FOR WHAT THE TRANSLATION DOES NOT CARRY: the players' names New Game draws.
+    // The language the app runs in, not the one asked for: a translation that
+    // failed to load starts the app in English, and its names with it (PR #40's
+    // review, finding #2).
+    language::setCurrent(running);
 
     MainWindow w;
 
