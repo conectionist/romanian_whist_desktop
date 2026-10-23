@@ -183,8 +183,8 @@ side of it; below, the same strokes as waves and the diamond, no dots (the inlin
 > medallion 215 across (`tablespace::logoDiameter`), picked from screenshots at 140, 170, 195 and
 > 215: the plaque's layers drawn as circles (`tabletop::medallion()`), no ♣ either side, and the
 > ornaments and lettering scaled to sit inside the fine gold line, never past the plaque's size
-> (`tabletop::letteringScale()`). Your played card lies over its lower quarter. The main-menu page
-> keeps the plaque above.
+> (`tabletop::letteringScale()`). Every played card, yours too, lies with its inner edge on its rim
+> (section 2.7). The main-menu page keeps the plaque above.
 
 ### 2.5 Seats
 
@@ -347,7 +347,7 @@ cache behaviour; it is already a single seam for exactly this.
 > (`tablespace::playedFromCentre`, half of section 2.4's amended 215), so the whole trick sits on
 > one circle about it. An opponent's card is still on its rack's line and turned to it; yours is
 > straight below the centre, unturned, 35 units lower than the mock-up's with up to four players
-> and 59 with five or six, and still clear of your hand. Your rhombus stays half way between your
+> and 11 with five or six, and still clear of your hand. Your rhombus stays half way between your
 > card and your hand. Section 2.5's seats are not evenly spaced, so with five or six players some
 > neighbours' inner corners overlap a little, and with six your card stands about 4 degrees apart
 > from each neighbour where the others touch. The owner saw both and kept them, rather than

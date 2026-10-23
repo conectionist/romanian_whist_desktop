@@ -72,7 +72,8 @@ constexpr QRectF squareAround(qreal radius)
 // round it: the light is directly overhead, so there is no offset.
 inline constexpr qreal woodRadius = 510.0;
 
-// The felt. Played cards are placed relative to its edge.
+// The felt. Every played card stays inside it; where they lie is measured from the
+// logo's rim, playedFromCentre below.
 inline constexpr qreal feltRadius = 440.0;
 
 // The bead between the two: three rings just outside the felt, each given by its
@@ -89,17 +90,17 @@ inline constexpr qreal beadOuterRadius = 453.0;
 inline constexpr qreal goldLineRadius = 416.0;
 inline constexpr qreal goldLineWidth = 1.5;
 
-// The logo plaque: the mock-up's 270 x 142 box, drawn at 0.9 of that about the
-// table's centre, which is where it sits.
+// The logo plaque: the mock-up's 270 x 142 box, drawn at 0.9 of that. It sat at
+// the table's centre until phase 13 made the table's logo round (logoDiameter
+// below); the main-menu page and the language dialog keep it.
 inline constexpr QSizeF logoBox(270.0, 142.0);
 inline constexpr qreal logoScale = 0.9;
 
 // THE LOGO ON THE TABLE IS ROUND (phase 13, the owner's call of 2026-10-23): a
 // medallion this many units across, its border included, picked from screenshots
 // at 140, 170, 195 and 215. At 215 the English lettering is close to the plaque's
-// size, and your played card, which stops 73 below the centre, lies over the
-// medallion's lower quarter as a card lies on any table's emblem. The main-menu
-// page keeps the plaque.
+// size. Every played card's inner edge touches its rim (playedFromCentre below).
+// The main-menu page keeps the plaque.
 inline constexpr qreal logoDiameter = 215.0;
 
 // The table's shadow: CSS's blur of 70 round the rim, which is a Gaussian of
