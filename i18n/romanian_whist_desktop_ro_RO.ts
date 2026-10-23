@@ -192,7 +192,7 @@
 <context>
     <name>NewGameDialog</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="+680"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="+734"/>
         <source>New Game</source>
         <translation>Joc nou</translation>
     </message>
@@ -557,31 +557,31 @@ Whist</source>
     </message>
     <message>
         <location line="+20"/>
-        <source>You took it · round %1</source>
-        <translation>Ai luat-o tu · runda %1</translation>
+        <source>You won it · round %1</source>
+        <translation>Ai câștigat-o tu · runda %1</translation>
     </message>
     <message>
         <location line="+3"/>
-        <source>%1 took it · round %2</source>
-        <translation>A luat-o %1 · runda %2</translation>
+        <source>%1 won it · round %2</source>
+        <translation>A câștigat-o %1 · runda %2</translation>
     </message>
     <message>
         <location line="+4"/>
-        <source>You took it</source>
-        <translation>Ai luat-o tu</translation>
+        <source>You won it</source>
+        <translation>Ai câștigat-o tu</translation>
     </message>
     <message>
         <location line="+2"/>
-        <source>%1 took it</source>
-        <translation>A luat-o %1</translation>
+        <source>%1 won it</source>
+        <translation>A câștigat-o %1</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+27"/>
         <source>Last trick</source>
         <translation>Ultima mână</translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+24"/>
         <source>Close</source>
         <translation>Închide</translation>
     </message>
@@ -589,7 +589,7 @@ Whist</source>
 <context>
     <name>newgame</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="-774"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="-826"/>
         <source>Weighs %1 imagined deals before each card, never plays at random, and counts %2% of every point an opponent scores against its own, %3% of the leader&apos;s.</source>
         <translation>Cântărește %1 de împărțiri imaginate înaintea fiecărei cărți, nu joacă niciodată la întâmplare și socotește %2% din fiecare punct al unui adversar împotriva propriului scor, %3% din ale liderului.</translation>
     </message>
@@ -599,7 +599,7 @@ Whist</source>
         <translation>Jucător</translation>
     </message>
     <message numerus="yes">
-        <location line="+63"/>
+        <location line="+115"/>
         <location line="+4"/>
         <source>%n rounds</source>
         <translation>

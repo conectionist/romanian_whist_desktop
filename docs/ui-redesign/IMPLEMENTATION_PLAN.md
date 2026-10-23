@@ -2097,6 +2097,8 @@ commit, all on 2026-10-23:
   cards and Close down the middle, the sheet as wide as the widest of them (650 for six players,
   where every other sheet is 720). `Overlay::preferredWidth()` is the hook; every other sheet keeps
   section 2.13's 720.
+- **"Ana won it", not "Ana took it"**, on the Last trick sheet, and in Romanian "A câștigat-o Ana"
+  for "A luat-o Ana". Phase 11's notes above keep the words it shipped with.
 
 ---
 

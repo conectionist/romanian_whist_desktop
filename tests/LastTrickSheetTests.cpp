@@ -135,7 +135,7 @@ TEST_CASE("The last trick outlasts its round", "[last-trick]")
     REQUIRE_FALSE(tracker.last().has_value());
 }
 
-TEST_CASE("The last trick says who took it and You for you", "[last-trick]")
+TEST_CASE("The last trick says who won it and You for you", "[last-trick]")
 {
     lasttrick::Trick trick;
     trick.roundNumber = 3;
@@ -144,19 +144,19 @@ TEST_CASE("The last trick says who took it and You for you", "[last-trick]")
                     { Card(Rank::King, Suit::Hearts), 0, QStringLiteral("Dan"), true },
                     { Card(Rank::Two, Suit::Hearts), 1, QStringLiteral("Bogdan"), false } };
 
-    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("You took it"));
+    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("You won it"));
 
     trick.cards[1].isWinning = false;
     trick.cards[0].isWinning = true;
 
-    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("Ana took it"));
+    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("Ana won it"));
 
     // A game you watch has no You: your seat's number is the bots', by name.
     trick.humanSeat = -1;
     trick.cards[0].isWinning = false;
     trick.cards[1].isWinning = true;
 
-    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("Dan took it"));
+    REQUIRE(lasttrick::metaFor(trick, 3) == QStringLiteral("Dan won it"));
 
     // And with nothing finished in the game yet, the mock-up's sentence, less its
     // "this round".
@@ -173,18 +173,18 @@ TEST_CASE("A trick from an earlier round says which round it was", "[last-trick]
     trick.cards = { { Card(Rank::Ten, Suit::Hearts), 2, QStringLiteral("Ana"), true },
                     { Card(Rank::Two, Suit::Hearts), 0, QStringLiteral("Dan"), false } };
 
-    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("Ana took it \u00B7 round 3"));
+    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("Ana won it \u00B7 round 3"));
 
     trick.cards[0].isWinning = false;
     trick.cards[1].isWinning = true;
 
-    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("You took it \u00B7 round 3"));
+    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("You won it \u00B7 round 3"));
 
     // A name with a placeholder in it is not filled in by the round.
     trick.humanSeat = -1;
     trick.cards[1].name = QStringLiteral("Dan %2");
 
-    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("Dan %2 took it \u00B7 round 3"));
+    REQUIRE(lasttrick::metaFor(trick, 4) == QStringLiteral("Dan %2 won it \u00B7 round 3"));
 }
 
 TEST_CASE("The last trick shows each card over its player in play order", "[last-trick]")
@@ -210,7 +210,7 @@ TEST_CASE("The last trick shows each card over its player in play order", "[last
 
     QLabel* meta = sheet.findChild<QLabel*>("lastTrickMeta");
     REQUIRE(meta != nullptr);
-    REQUIRE(meta->text() == QStringLiteral("Seat 1 took it"));
+    REQUIRE(meta->text() == QStringLiteral("Seat 1 won it"));
 
     // .mini's row: six cards 88 wide, 12 apart, the names under them.
     const QSizeF card = lasttrick::cardSize();

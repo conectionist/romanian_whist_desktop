@@ -27,8 +27,8 @@ class CardRenderer;
 namespace lasttrick
 {
 
-// THE LINE UNDER THE TITLE: who took it - "You took it", or "Ana took it" - and,
-// for a trick from a round before `currentRound`, which one: "Ana took it · round
+// THE LINE UNDER THE TITLE: who won it - "You won it", or "Ana won it" - and,
+// for a trick from a round before `currentRound`, which one: "Ana won it · round
 // 4". With no trick finished in the game yet, "No trick has finished yet.". Your
 // own seat is "You", as in every sentence on the table (section 2.10); a game you
 // watch has no "You". Whole sentences, so a translator can agree the verb.

@@ -40,16 +40,16 @@ QString lasttrick::metaFor(const std::optional<Trick>& trick, unsigned int curre
         const QString round = QString::number(trick->roundNumber);
 
         if(yours)
-            return QCoreApplication::translate("lasttrick", "You took it · round %1").arg(round);
+            return QCoreApplication::translate("lasttrick", "You won it · round %1").arg(round);
 
         // One arg() taking both, so a name with a %2 in it is not filled in.
-        return QCoreApplication::translate("lasttrick", "%1 took it · round %2").arg(winner->name, round);
+        return QCoreApplication::translate("lasttrick", "%1 won it · round %2").arg(winner->name, round);
     }
 
     if(yours)
-        return QCoreApplication::translate("lasttrick", "You took it");
+        return QCoreApplication::translate("lasttrick", "You won it");
 
-    return QCoreApplication::translate("lasttrick", "%1 took it").arg(winner->name);
+    return QCoreApplication::translate("lasttrick", "%1 won it").arg(winner->name);
 }
 
 QSizeF lasttrick::cardSize()
@@ -75,7 +75,7 @@ LastTrickSheet::LastTrickSheet(QWidget* parent) : Overlay(parent)
 
     // ONE LINE EACH, CENTRED. Not wrapped, so a label's size hint is the line's
     // whole width, which is what preferredWidth() sizes the sheet by: the widest
-    // line, "Bartholomew Fairbank took it · round 12", is half the narrowest page.
+    // line, "Bartholomew Fairbank won it · round 12", is half the narrowest page.
     title = new QLabel(QCoreApplication::translate("lasttrick", "Last trick"), panel);
     title->setObjectName("lastTrickTitle");
     dress(title, sheet::Role::Title);
