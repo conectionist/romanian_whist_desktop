@@ -194,12 +194,12 @@
     <message>
         <location filename="../src/ui/NewGameDialog.cpp" line="+63"/>
         <source>Male</source>
-        <translation type="unfinished">Bărbat</translation>
+        <translation>Bărbat</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Female</source>
-        <translation type="unfinished">Femeie</translation>
+        <translation>Femeie</translation>
     </message>
     <message>
         <location line="+700"/>
@@ -396,7 +396,7 @@ Whist</source>
         <location line="+4"/>
         <source>You bid last. %1 would make the bids add up to %2, and somebody has to be wrong.</source>
         <comment>about you, a woman</comment>
-        <translation type="unfinished">Licitezi ultima. Cu %1, licitațiile ar face %2 și cineva trebuie să se pârlească.</translation>
+        <translation>Licitezi ultima. Cu %1, licitațiile ar face %2 și cineva trebuie să se pârlească.</translation>
     </message>
     <message>
         <location line="+233"/>
@@ -1043,19 +1043,19 @@ Whist</source>
         <location line="+1"/>
         <source>Leader: %1</source>
         <comment>about a woman</comment>
-        <translation type="unfinished">%1 e prima</translation>
+        <translation>%1 e prima</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Leader: %1</source>
         <comment>about you, a man</comment>
-        <translation type="unfinished">%1 ești primul</translation>
+        <translation>%1 ești primul</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Leader: %1</source>
         <comment>about you, a woman</comment>
-        <translation type="unfinished">%1 ești prima</translation>
+        <translation>%1 ești prima</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -1067,19 +1067,19 @@ Whist</source>
         <location line="+1"/>
         <source>First to bid: %1</source>
         <comment>about a woman</comment>
-        <translation type="unfinished">Licitează prima: %1</translation>
+        <translation>Licitează prima: %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>First to bid: %1</source>
         <comment>about you, a man</comment>
-        <translation type="unfinished">%1 licitezi primul</translation>
+        <translation>%1 licitezi primul</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>First to bid: %1</source>
         <comment>about you, a woman</comment>
-        <translation type="unfinished">%1 licitezi prima</translation>
+        <translation>%1 licitezi prima</translation>
     </message>
     <message>
         <location line="+147"/>
