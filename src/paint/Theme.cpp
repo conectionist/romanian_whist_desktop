@@ -5,7 +5,6 @@
 #include "paint/Gradients.h"
 
 #include <QGradientStops>
-#include <QHash>
 #include <QImage>
 #include <QImageReader>
 #include <QPainter>
@@ -487,7 +486,7 @@ struct Theme::Cache
     // its sizes genuinely differ from each other within one frame; here they do
     // not, and discarding the old set is both simpler and more complete.
     PictureKey avatarKey;
-    QHash<QString, QPixmap> avatars;
+    std::unordered_map<std::string, QPixmap> avatars;
 
     // EACH AVATAR'S FILE, read once and kept: the source art, not a box's size, as
     // the textures below are, though a PNG is kept no taller than maximumArtHeight.
@@ -582,13 +581,11 @@ QPixmap Theme::avatar(const std::string& id, QSize box, qreal dpr) const
         cache->avatarKey = key;
     }
 
-    const QString name = QString::fromStdString(id);
+    auto found = cache->avatars.find(id);
+    if(found != cache->avatars.end())
+        return found->second;
 
-    auto found = cache->avatars.constFind(name);
-    if(found != cache->avatars.constEnd())
-        return found.value();
-
-    return *cache->avatars.insert(name, rasterize(paintAvatar(id, physicalSize(box, dpr)), dpr));
+    return cache->avatars.emplace(id, rasterize(paintAvatar(id, physicalSize(box, dpr)), dpr)).first->second;
 }
 
 QPixmap Theme::woodTexture() const
