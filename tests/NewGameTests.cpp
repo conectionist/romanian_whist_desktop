@@ -354,14 +354,21 @@ TEST_CASE("Every seat of a dealt game wears a face of its own gender", "[new-gam
         const GameDeal dealt = newgame::buildDeal(config);
         std::set<std::string> faces;
 
-        for(const PlayerProfile& profile : dealt.profiles)
+        // You at seat 0, with no strategy; then the bots with their levels'.
+        const std::vector<avatars::Wearer> seated = newgame::wearersOf(config);
+
+        for(std::size_t seat = 0 ; seat < dealt.profiles.size() ; seat++)
         {
+            const PlayerProfile& profile = dealt.profiles[seat];
+
             INFO("deal " << deal << ", " << profile.name << " wears " << profile.avatar);
 
             const avatars::Avatar* avatar = avatars::find(profile.avatar);
             REQUIRE(avatar != nullptr);
             REQUIRE(avatars::suits(*avatar, profile.gender));
-            REQUIRE(avatar->strategy.empty());
+
+            // Its strategy's own face, or an ordinary one - never another's.
+            REQUIRE((avatar->strategy.empty() || avatar->strategy == seated.at(seat).strategy));
 
             faces.insert(profile.avatar);
         }
@@ -416,6 +423,35 @@ TEST_CASE("The avatar rule sees every seat's gender and strategy in seat order",
 
     REQUIRE(watched.size() == 3);
     REQUIRE(watched[0].strategy == "cyborg");
+}
+
+TEST_CASE("A Cyborg bot wears a cyborg face and nobody else does", "[new-game]")
+{
+    // THE OWNER'S CYBORG ART (avatars.json, "strategy": "cyborg"), a man's and a
+    // woman's: dealt from New Game, a Cyborg of either gender wears one, and the
+    // other bots and you never do.
+    newgame::Config config = playingConfig(4);
+    config.bots[0].gender = Gender::Male;
+    config.bots[2].gender = Gender::Female;
+    config.botLevels = { newgame::BotLevel::Cyborg, newgame::BotLevel::LowRisk,
+                         newgame::BotLevel::Cyborg, newgame::BotLevel::Ducking };
+
+    for(int deal = 0 ; deal < 20 ; deal++)
+    {
+        const GameDeal dealt = newgame::buildDeal(config);
+
+        for(std::size_t seat = 0 ; seat < dealt.profiles.size() ; seat++)
+        {
+            const avatars::Avatar* avatar = avatars::find(dealt.profiles[seat].avatar);
+            REQUIRE(avatar != nullptr);
+
+            const bool cyborg = seat == 1 || seat == 3;
+
+            INFO("deal " << deal << ", seat " << seat << " wears " << avatar->id);
+            REQUIRE((avatar->strategy == "cyborg") == cyborg);
+            REQUIRE(avatars::suits(*avatar, dealt.profiles[seat].gender));
+        }
+    }
 }
 
 TEST_CASE("A fixed deal deals the same faces every time", "[new-game]")

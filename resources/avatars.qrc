@@ -31,7 +31,7 @@
          it (Theme::avatar()), so a file is drawn as given otherwise.
 
          The first six are the table mock-up's busts, written by
-         tools/export_portraits.py. -->
+         tools/export_portraits.py; the rest are the owner's art. -->
     <qresource prefix="/avatars">
         <file alias="avatars.json">images/avatars/avatars.json</file>
         <file alias="man-dark-hair-beard.svg">images/avatars/man-dark-hair-beard.svg</file>
@@ -40,5 +40,13 @@
         <file alias="man-white-hair-hat.svg">images/avatars/man-white-hair-hat.svg</file>
         <file alias="woman-long-red-hair.svg">images/avatars/woman-long-red-hair.svg</file>
         <file alias="man-black-hair-beard.svg">images/avatars/man-black-hair-beard.svg</file>
+        <file alias="man-stubble.png">images/avatars/man-stubble.png</file>
+        <file alias="man-short-hair.png">images/avatars/man-short-hair.png</file>
+        <file alias="woman-long-dark-hair.png">images/avatars/woman-long-dark-hair.png</file>
+        <file alias="woman-shoulder-hair.png">images/avatars/woman-shoulder-hair.png</file>
+        <file alias="cyborg-man-bald.png">images/avatars/cyborg-man-bald.png</file>
+        <file alias="cyborg-man-half.png">images/avatars/cyborg-man-half.png</file>
+        <file alias="cyborg-man-eye.png">images/avatars/cyborg-man-eye.png</file>
+        <file alias="cyborg-woman-eye.png">images/avatars/cyborg-woman-eye.png</file>
     </qresource>
 </RCC>
