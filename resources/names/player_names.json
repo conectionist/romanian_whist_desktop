@@ -42,7 +42,6 @@
     { "name": "Alice", "gender": "female", "language": "en" },
     { "name": "Sarah", "gender": "female", "language": "en" },
     { "name": "Kate", "gender": "female", "language": "en" },
-    { "name": "Laura", "gender": "female", "language": "en" },
     { "name": "Rachel", "gender": "female", "language": "en" },
     { "name": "Megan", "gender": "female", "language": "en" },
     { "name": "Chloe", "gender": "female", "language": "en" },
@@ -62,5 +61,17 @@
     { "name": "David", "gender": "male", "language": "en" },
     { "name": "Peter", "gender": "male", "language": "en" },
     { "name": "Robert", "gender": "male", "language": "en" },
-    { "name": "Matthew", "gender": "male", "language": "en" }
+    { "name": "Matthew", "gender": "male", "language": "en" },
+    { "name": "Randy", "gender": "male", "language": "en", "strategy" : "random" },
+    { "name": "Laurie", "gender": "female", "language": "en", "strategy": "low-risk" },
+    { "name": "Lory", "gender": "female", "language": "en", "strategy": "low-risk" },
+    { "name": "Laura", "gender": "female", "language": "en", "strategy": "low-risk" },
+    { "name": "Laura", "gender": "female", "language": "ro", "strategy": "low-risk" },
+    { "name": "Lori", "gender": "female", "language": "ro", "strategy": "low-risk" },
+    { "name": "Lăurica", "gender": "female", "language": "ro", "strategy": "low-risk" },
+    { "name": "Duck", "gender": "female", "language": "en", "strategy": "ducking" },
+    { "name": "Drake", "gender": "male", "language": "en", "strategy": "ducking" },
+    { "name": "Rățușca", "gender": "female", "language": "ro", "strategy": "ducking" },
+    { "name": "Rățoi", "gender": "male", "language": "ro", "strategy": "ducking" },
+    { "name": "Cyborg", "gender": "male", "language": "any", "strategy": "cyborg" }
 ]
