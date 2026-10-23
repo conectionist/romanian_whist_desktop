@@ -2130,6 +2130,20 @@ whole shape of the game before starting it is strictly better.
 - **Names are validated as you type.** The engine rejects an empty name and rejects two names equal
   **byte for byte** — no trimming, no case folding, which is deliberate on its side. The dialog
   marks the offending field and disables **Deal** rather than letting `start()` throw.
+
+  > **AMENDED 2026-10-23, by the owner's call: every name has a gender beside it**, a Male / Female
+  > drop-down, yours included (greyed with your name while watching). It is chosen, never guessed
+  > from the name. A row's gender comes with its name: from the last game's settings, otherwise from
+  > the stock players (Ana F, Bogdan M, Cristina F, Dan M, Elena F, Florin M). You start as Male, as
+  > "Player" ("Jucător") is masculine. Romanian needs it: "Ana e prima", "Bogdan e primul", "Tu ești
+  > primul" (`src/table/PersonText.h`).
+  >
+  > **Where it lives: `PlayerProfile` (`src/core/PlayerProfile.h`), a name and a gender, in the
+  > client and not in the engine's `Player`.** The engine is the rules and is shared with the
+  > terminal client, and gender changes nothing in them. `newgame::Config` holds your profile and one
+  > per opponent; `GameDeal::profiles` carries them in seat order; `GameBridge` stamps each seat's
+  > gender onto every snapshot's `SeatView`. A nationality and an avatar are to join the profile, so
+  > a player's portrait can match their name and gender.
 - **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.

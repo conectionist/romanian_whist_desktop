@@ -2095,7 +2095,10 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - ~~**The rest of the Romanian draft wants the owner's review**~~ **Done, 2026-10-23** (on
     `redesign/phase-13-final_changes`): the owner went through the 192 drafts in Qt Linguist and
     accepted each as written, the glossary's open words included. All 206 strings are finished.
-  - **"%1 e primul"**, for a woman's name and for "Tu".
+  - ~~**"%1 e primul"**, for a woman's name and for "Tu".~~ **Done, 2026-10-23** (on
+    `feature/player-gender`): each player has a gender, chosen in New Game
+    (`QT_CLIENT_PLAN_proposal1.md` section 13's amendment), and the leader line, the first bidder
+    and "You bid last" agree with it: "Ana e prima", "Tu ești primul".
   - **2x textures**, if the owner wants them after the numbers above.
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
 
