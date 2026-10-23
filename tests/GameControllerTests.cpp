@@ -181,7 +181,7 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
     {
         newgame::Config config;
         config.spectator = true;   // so bot i is seat i, with no human seat shifting them
-        config.botNames = QStringList{ "Ana", "Bogdan", "Reckoner" };
+        config.bots = { { "Ana", Gender::Female }, { "Bogdan", Gender::Male }, { "Reckoner", Gender::Male } };
         config.botLevels = { newgame::BotLevel::LowRisk,
                              newgame::BotLevel::Ducking,
                              // ALPHA, whose K_play and K_bid are 0 - the rollout
@@ -308,7 +308,7 @@ TEST_CASE("A Cyborg seat is registered with the engine before it starts", "[cont
     {
         newgame::Config config;
         config.spectator = true;   // so bot i is seat i, with no human seat shifting them
-        config.botNames = QStringList{ "Ana", "Bogdan", "Cyborg" };
+        config.bots = { { "Ana", Gender::Female }, { "Bogdan", Gender::Male }, { "Cyborg", Gender::Male } };
         config.botLevels = { newgame::BotLevel::LowRisk,
                              newgame::BotLevel::Ducking,
                              newgame::BotLevel::Cyborg };
@@ -471,7 +471,7 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
 
     config.shuffleSeed = 42u;
 
-    REQUIRE(config.botNames.size() == 3);
+    REQUIRE(config.bots.size() == 3);
     REQUIRE_FALSE(config.spectator);
 
     GameController controller;

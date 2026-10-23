@@ -1,6 +1,7 @@
 #ifndef NEW_GAME_DIALOG_H
 #define NEW_GAME_DIALOG_H
 
+#include "core/PlayerProfile.h"
 #include "engine/GameController.h"
 
 #include <romanian_whist/GameEngine.h>
@@ -175,11 +176,14 @@ struct Config
     // state sections 4.3 and 6 null-check for.
     bool spectator = false;
 
-    QString humanName;
+    // Kept while watching, though nobody takes the seat, so a player who flips to
+    // watching and back finds their name and gender as they left them.
+    PlayerProfile human;
 
-    // One level per name, in the same order - the terminal's parallel-vector
-    // shape, kept because it is what the dialog's rows are.
-    QStringList botNames;
+    // One level per opponent, in the same order - the terminal's parallel-vector
+    // shape, kept because it is what the dialog's rows are. The level is beside
+    // the profile, not in it: it is how a bot plays, not who it is.
+    std::vector<PlayerProfile> bots;
     std::vector<BotLevel> botLevels;
 
     romanian_whist::GameStructure structure = romanian_whist::GameStructure::S_181;
@@ -380,6 +384,7 @@ private:
     {
         QLabel* number = nullptr;
         QLineEdit* name = nullptr;
+        QComboBox* gender = nullptr;
         QComboBox* level = nullptr;
     };
 
@@ -407,6 +412,7 @@ private:
     QRadioButton* playing = nullptr;
     QLabel* humanNameLabel = nullptr;
     QLineEdit* humanName = nullptr;
+    QComboBox* humanGender = nullptr;
     QSpinBox* opponents = nullptr;
     QLabel* opponentsHint = nullptr;
     QFormLayout* opponentRows = nullptr;

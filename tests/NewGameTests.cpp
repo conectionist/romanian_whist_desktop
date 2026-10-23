@@ -36,16 +36,39 @@ using namespace romanian_whist;
 // without a window, and the window is tested after it.
 namespace
 {
+// The opponents' names, as the cases below compare them.
+QStringList namesOf(const std::vector<PlayerProfile>& players)
+{
+    QStringList names;
+
+    for(const PlayerProfile& player : players)
+        names.push_back(QString::fromStdString(player.name));
+
+    return names;
+}
+
+// Opponents with these names, every one Male: the cases that use it are about
+// names, not genders.
+std::vector<PlayerProfile> named(const QStringList& names)
+{
+    std::vector<PlayerProfile> players;
+
+    for(const QString& name : names)
+        players.push_back(PlayerProfile{ name.toStdString(), Gender::Male });
+
+    return players;
+}
+
 newgame::Config playingConfig(int opponents = 3)
 {
     newgame::Config config;
-    config.humanName = "Dan";
+    config.human = PlayerProfile{ "Dan", Gender::Male };
 
     static const char* names[] = { "Ana", "Bogdan", "Cristina", "Elena", "Florin" };
 
     for(int i = 0 ; i < opponents ; i++)
     {
-        config.botNames.push_back(names[i]);
+        config.bots.push_back(PlayerProfile{ names[i], Gender::Male });
         config.botLevels.push_back(newgame::BotLevel::LowRisk);
     }
 
@@ -233,6 +256,40 @@ TEST_CASE("A watched game leaves no seat for the controller to fill", "[new-game
     REQUIRE_NOTHROW(startWith(engine, std::move(deal)));
 }
 
+TEST_CASE("The deal carries a profile per seat in seat order", "[new-game]")
+{
+    // SEAT i IS PROFILE i, which is all GameBridge has to go on when it stamps a
+    // gender onto each seat: nothing matches them by name afterwards. So the two
+    // lists have to come out of buildDeal() side by side, with the human first.
+    SECTION("a seated game")
+    {
+        newgame::Config config = playingConfig(3);
+        config.human.gender = Gender::Female;
+        config.bots[1].gender = Gender::Female;
+
+        const GameDeal deal = newgame::buildDeal(config);
+
+        REQUIRE(deal.profiles.size() == deal.setup.seats.size());
+        REQUIRE(deal.profiles.at(0) == config.human);
+
+        for(std::size_t seat = 0 ; seat < deal.setup.seats.size() ; seat++)
+            REQUIRE(deal.profiles.at(seat).name == deal.setup.seats.at(seat).name);
+
+        for(std::size_t bot = 0 ; bot < config.bots.size() ; bot++)
+            REQUIRE(deal.profiles.at(bot + 1) == config.bots.at(bot));
+    }
+
+    SECTION("a watched game, where bot i is seat i")
+    {
+        newgame::Config config = watchingConfig(4);
+        config.bots[0].gender = Gender::Female;
+
+        const GameDeal deal = newgame::buildDeal(config);
+
+        REQUIRE(deal.profiles == config.bots);
+    }
+}
+
 TEST_CASE("A setup the dialog would produce is one the engine accepts", "[new-game]")
 {
     // THE ASSERTION THE WHOLE VALIDATION EXISTS FOR, at both ends of the clamp.
@@ -308,7 +365,7 @@ TEST_CASE("A name the engine would reject disables Deal first", "[new-game]")
 
     SECTION("an empty name")
     {
-        config.botNames[1] = "";
+        config.bots[1].name = "";
         REQUIRE(newgame::firstError(config).has_value());
     }
 
@@ -316,13 +373,13 @@ TEST_CASE("A name the engine would reject disables Deal first", "[new-game]")
     {
         // ACCEPTED BY THE ENGINE and empty to a reader, which is why the check
         // trims for the test and not for the value.
-        config.humanName = "   ";
+        config.human.name = "   ";
         REQUIRE(newgame::firstError(config).has_value());
     }
 
     SECTION("a duplicate, byte for byte")
     {
-        config.botNames[1] = config.botNames[0];
+        config.bots[1].name = config.bots[0].name;
         REQUIRE(newgame::firstError(config).has_value());
     }
 
@@ -331,19 +388,19 @@ TEST_CASE("A name the engine would reject disables Deal first", "[new-game]")
         // STRICTER THAN THE ENGINE ON PURPOSE. GameEngine::start() compares byte
         // for byte and would accept this; two seats reading Ana and ana share
         // nothing there and everything on a scoreboard.
-        config.botNames[1] = config.botNames[0].toUpper();
+        config.bots[1].name = QString::fromStdString(config.bots[0].name).toUpper().toStdString();
         REQUIRE(newgame::firstError(config).has_value());
     }
 
     SECTION("the human colliding with a bot")
     {
-        config.humanName = config.botNames[2];
+        config.human.name = config.bots[2].name;
         REQUIRE(newgame::firstError(config).has_value());
     }
 
     SECTION("a name past the cap")
     {
-        config.humanName = QString(newgame::MaximumNameLength + 1, 'x');
+        config.human.name = std::string(newgame::MaximumNameLength + 1, 'x');
         REQUIRE(newgame::firstError(config).has_value());
     }
 }
@@ -357,7 +414,7 @@ TEST_CASE("A table too small or too large is refused", "[new-game]")
     REQUIRE(newgame::firstError(tooSmall).has_value());
 
     newgame::Config tooLarge = playingConfig(5);
-    tooLarge.botNames.push_back("Gheorghe");
+    tooLarge.bots.push_back(PlayerProfile{ "Gheorghe", Gender::Male });
     tooLarge.botLevels.push_back(newgame::BotLevel::Ducking);
     REQUIRE(newgame::seatCount(tooLarge) == 7);
     REQUIRE(newgame::firstError(tooLarge).has_value());
@@ -888,7 +945,7 @@ TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")
     // rows FOLLOWING THE SPINNER and not about how many the dialog opens with.
     // The default table has changed before and will again; a literal here
     // would make each change come and find this line for no reason.
-    REQUIRE(dialog.config().botNames.size() == newgame::defaults().botNames.size());
+    REQUIRE(dialog.config().bots.size() == newgame::defaults().bots.size());
 
     // BY NAME, not by position in findChildren(). Every QSpinBox owns an
     // editable QLineEdit of its own, so a positional lookup over either list
@@ -898,15 +955,15 @@ TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")
     REQUIRE(count != nullptr);
 
     count->setValue(5);
-    REQUIRE(dialog.config().botNames.size() == 5);
+    REQUIRE(dialog.config().bots.size() == 5);
 
     // AND THE NAMES ALREADY THERE SURVIVE, which is the half a rebuild would
     // lose - and the reason rebuildOpponentRows() adds and removes rather than
     // clearing.
-    const QStringList before = dialog.config().botNames;
+    const QStringList before = namesOf(dialog.config().bots);
 
     count->setValue(4);
-    const QStringList after = dialog.config().botNames;
+    const QStringList after = namesOf(dialog.config().bots);
 
     REQUIRE(after.size() == 4);
     for(int i = 0 ; i < after.size() ; i++)
@@ -914,7 +971,7 @@ TEST_CASE("The dialog's rows follow the opponent count", "[new-game]")
 
     // No row is left blank, which would disable Deal for a reason the player did
     // not cause.
-    for(const QString& name : dialog.config().botNames)
+    for(const QString& name : namesOf(dialog.config().bots))
         REQUIRE_FALSE(name.isEmpty());
 }
 
@@ -942,9 +999,9 @@ TEST_CASE("Every row of the largest table is pre-filled with a real name", "[new
     count->setValue(static_cast<int>(newgame::MaximumSeats));
 
     const newgame::Config config = dialog.config();
-    REQUIRE(config.botNames.size() == static_cast<int>(newgame::MaximumSeats));
+    REQUIRE(config.bots.size() == newgame::MaximumSeats);
 
-    for(const QString& name : config.botNames)
+    for(const QString& name : namesOf(config.bots))
     {
         INFO("name " << name.toStdString());
         REQUIRE_FALSE(name.isEmpty());
@@ -968,14 +1025,14 @@ TEST_CASE("Reopening on a config offers back the game it describes", "[new-game]
     // overwrite was invisible to a dialog opened on them.
     newgame::Config config = newgame::defaults();
 
-    config.botNames = QStringList{ "Zoltan", "Yvette" };
+    config.bots = named({ "Zoltan", "Yvette" });
     config.botLevels = { newgame::BotLevel::Ducking, newgame::BotLevel::Random };
 
     NewGameDialog dialog(config);
 
     const newgame::Config offered = dialog.config();
 
-    REQUIRE(offered.botNames == config.botNames);
+    REQUIRE(offered.bots == config.bots);
     REQUIRE(offered.botLevels == config.botLevels);
 
     // The rows themselves, not only what config() computes from them - the
@@ -997,10 +1054,113 @@ TEST_CASE("Reopening on a config offers back the game it describes", "[new-game]
     count->setValue(3);
 
     const newgame::Config grown = dialog.config();
-    REQUIRE(grown.botNames.size() == 3);
-    REQUIRE(grown.botNames.at(0) == "Zoltan");
-    REQUIRE_FALSE(grown.botNames.at(2).isEmpty());
+    REQUIRE(grown.bots.size() == 3);
+    REQUIRE(grown.bots.at(0).name == "Zoltan");
+    REQUIRE_FALSE(grown.bots.at(2).name.empty());
     REQUIRE_FALSE(newgame::firstError(grown).has_value());
+}
+
+TEST_CASE("The default table names each player's gender", "[new-game]")
+{
+    // CHOSEN, NEVER READ OFF THE NAME. The stock players carry theirs, and you
+    // start as Male, as "Player" ("Jucător") is masculine.
+    const newgame::Config config = newgame::defaults();
+
+    REQUIRE(config.human.gender == Gender::Male);
+
+    REQUIRE(config.bots.size() == 3);
+    REQUIRE(config.bots.at(0) == PlayerProfile{ "Ana", Gender::Female });
+    REQUIRE(config.bots.at(1) == PlayerProfile{ "Bogdan", Gender::Male });
+    REQUIRE(config.bots.at(2) == PlayerProfile{ "Cristina", Gender::Female });
+}
+
+TEST_CASE("The dialog shows and returns every seat's gender", "[new-game]")
+{
+    newgame::Config config = newgame::defaults();
+    config.human.gender = Gender::Female;
+    config.bots = { { "Zoltan", Gender::Male }, { "Yvette", Gender::Female } };
+    config.botLevels = { newgame::BotLevel::Ducking, newgame::BotLevel::Random };
+
+    NewGameDialog dialog(config);
+
+    QComboBox* yours = dialog.findChild<QComboBox*>("humanGender");
+    QComboBox* first = dialog.findChild<QComboBox*>("botGender0");
+    QComboBox* second = dialog.findChild<QComboBox*>("botGender1");
+    REQUIRE(yours != nullptr);
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+
+    // What the player sees: Male is the first item, Female the second.
+    REQUIRE(yours->currentIndex() == 1);
+    REQUIRE(first->currentIndex() == 0);
+    REQUIRE(second->currentIndex() == 1);
+
+    REQUIRE(dialog.config().human == config.human);
+    REQUIRE(dialog.config().bots == config.bots);
+
+    // And a choice made in the dialog is what it deals.
+    first->setCurrentIndex(1);
+    yours->setCurrentIndex(0);
+
+    REQUIRE(dialog.config().bots.at(0).gender == Gender::Female);
+    REQUIRE(dialog.config().human.gender == Gender::Male);
+}
+
+TEST_CASE("A row's gender comes with its name and outlives the count changing", "[new-game]")
+{
+    NewGameDialog dialog(newgame::defaults());
+
+    QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
+    REQUIRE(count != nullptr);
+
+    // A ROW ADDED PAST THE CONFIG TAKES A STOCK PLAYER WHOLE: Dan, then Elena.
+    count->setValue(5);
+    REQUIRE(dialog.config().bots.at(3) == PlayerProfile{ "Dan", Gender::Male });
+    REQUIRE(dialog.config().bots.at(4) == PlayerProfile{ "Elena", Gender::Female });
+
+    // A gender changed on a row that survives the count going down and back up
+    // stays changed.
+    QComboBox* first = dialog.findChild<QComboBox*>("botGender0");
+    REQUIRE(first != nullptr);
+    first->setCurrentIndex(0);
+
+    count->setValue(1);
+    count->setValue(3);
+
+    REQUIRE(dialog.config().bots.size() == 3);
+    REQUIRE(dialog.config().bots.at(0) == PlayerProfile{ "Ana", Gender::Male });
+
+    // The rows removed and added again are rebuilt from the config the dialog
+    // opened on, gender with name, as a removed row's name and level always were.
+    REQUIRE(dialog.config().bots.at(1) == PlayerProfile{ "Bogdan", Gender::Male });
+    REQUIRE(dialog.config().bots.at(2) == PlayerProfile{ "Cristina", Gender::Female });
+}
+
+TEST_CASE("Your gender is greyed out with your name while watching", "[new-game]")
+{
+    NewGameDialog dialog(newgame::defaults());
+
+    QRadioButton* watch = dialog.findChild<QRadioButton*>("watching");
+    QRadioButton* play = dialog.findChild<QRadioButton*>("playing");
+    QComboBox* yours = dialog.findChild<QComboBox*>("humanGender");
+    REQUIRE(watch != nullptr);
+    REQUIRE(play != nullptr);
+    REQUIRE(yours != nullptr);
+
+    REQUIRE(yours->isEnabled());
+
+    watch->setChecked(true);
+    REQUIRE_FALSE(yours->isEnabled());
+
+    play->setChecked(true);
+    REQUIRE(yours->isEnabled());
+
+    // A dialog opened on a watched game starts with it greyed.
+    newgame::Config watched = watchingConfig(4);
+    NewGameDialog opened(watched);
+    QComboBox* openedGender = opened.findChild<QComboBox*>("humanGender");
+    REQUIRE(openedGender != nullptr);
+    REQUIRE_FALSE(openedGender->isEnabled());
 }
 
 TEST_CASE("The spinner opens on the range its own game allows", "[new-game]")
@@ -1015,7 +1175,7 @@ TEST_CASE("The spinner opens on the range its own game allows", "[new-game]")
     // it was opened on.
     newgame::Config config = newgame::defaults();
     config.spectator = true;
-    config.botNames = QStringList{ "A", "B", "C", "D", "E", "F" };
+    config.bots = named({ "A", "B", "C", "D", "E", "F" });
     config.botLevels = std::vector<newgame::BotLevel>(6, newgame::BotLevel::Random);
 
     NewGameDialog dialog(config);
@@ -1024,7 +1184,7 @@ TEST_CASE("The spinner opens on the range its own game allows", "[new-game]")
     REQUIRE(count != nullptr);
 
     REQUIRE(count->value() == static_cast<int>(newgame::MaximumSeats));
-    REQUIRE(dialog.config().botNames.size() == static_cast<int>(newgame::MaximumSeats));
+    REQUIRE(dialog.config().bots.size() == newgame::MaximumSeats);
 
     // And the floor is the watched one, so the spinner cannot reach a table the
     // engine would refuse - section 13 wants the control to make the illegal

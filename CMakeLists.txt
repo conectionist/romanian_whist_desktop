@@ -55,6 +55,7 @@ qt_add_library(desktop_core STATIC
     src/core/CardOrder.h
     src/core/CardOrder.cpp
     src/core/GameSnapshot.h
+    src/core/PlayerProfile.h
     src/core/HandLayout.h
     src/core/HandLayout.cpp
     src/core/Snapshot.h

@@ -145,22 +145,22 @@ const std::vector<Game> games = {
 // seeded it replays, but it is also slow.
 newgame::Config shotConfig(int players)
 {
-    static const QStringList names = { QStringLiteral("Ana"),
-                                       QStringLiteral("Bogdan"),
-                                       QStringLiteral("Cristina"),
-                                       QStringLiteral("Dan"),
-                                       QStringLiteral("Elena") };
+    static const std::vector<PlayerProfile> opponents = { { "Ana", Gender::Female },
+                                                          { "Bogdan", Gender::Male },
+                                                          { "Cristina", Gender::Female },
+                                                          { "Dan", Gender::Male },
+                                                          { "Elena", Gender::Female } };
 
     newgame::Config config;
     config.spectator = false;
 
     // NOT THE MOCK-UP'S "You", which is a name to replace rather than a label -
     // NewGameDialog's default for the same reason.
-    config.humanName = QStringLiteral("Player");
+    config.human = PlayerProfile{ "Player", Gender::Male };
 
     for(int i = 0 ; i < players - 1 ; i++)
     {
-        config.botNames.push_back(names.at(i));
+        config.bots.push_back(opponents.at(static_cast<std::size_t>(i)));
         config.botLevels.push_back(i % 2 == 0 ? newgame::BotLevel::LowRisk
                                               : newgame::BotLevel::Ducking);
     }
@@ -189,8 +189,8 @@ QStringList differences(const newgame::Config& want, const newgame::Config& got)
     };
 
     compare(want.spectator == got.spectator, "spectator");
-    compare(want.humanName == got.humanName, "humanName");
-    compare(want.botNames == got.botNames, "botNames");
+    compare(want.human == got.human, "human");
+    compare(want.bots == got.bots, "bots");
     compare(want.botLevels == got.botLevels, "botLevels");
     compare(want.structure == got.structure, "structure");
     compare(want.endWithForeheadAndHidden == got.endWithForeheadAndHidden, "endWithForeheadAndHidden");
@@ -218,20 +218,27 @@ void fillShotDialog(NewGameDialog& dialog, DialogAnswer& answer, const newgame::
         playing->setChecked(true);
 
     if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("humanName"), answer))
-        name->setText(want.humanName);
+        name->setText(QString::fromStdString(want.human.name));
+
+    // The index is the enum's own value: Male, then Female.
+    if(QComboBox* gender = need<QComboBox>(dialog, QStringLiteral("humanGender"), answer))
+        gender->setCurrentIndex(static_cast<int>(want.human.gender));
 
     // BEFORE the rows: they follow the opponent count.
     if(QSpinBox* opponents = need<QSpinBox>(dialog, QStringLiteral("opponents"), answer))
-        opponents->setValue(static_cast<int>(want.botNames.size()));
+        opponents->setValue(static_cast<int>(want.bots.size()));
 
-    for(qsizetype i = 0 ; i < want.botNames.size() ; i++)
+    for(std::size_t i = 0 ; i < want.bots.size() ; i++)
     {
         if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("botName%1").arg(i), answer))
-            name->setText(want.botNames.at(i));
+            name->setText(QString::fromStdString(want.bots.at(i).name));
+
+        if(QComboBox* gender = need<QComboBox>(dialog, QStringLiteral("botGender%1").arg(i), answer))
+            gender->setCurrentIndex(static_cast<int>(want.bots.at(i).gender));
 
         // The index is the enum's own value, which is what BotLevels is ordered by.
         if(QComboBox* level = need<QComboBox>(dialog, QStringLiteral("botLevel%1").arg(i), answer))
-            level->setCurrentIndex(static_cast<int>(want.botLevels.at(static_cast<std::size_t>(i))));
+            level->setCurrentIndex(static_cast<int>(want.botLevels.at(i)));
     }
 
     const QString structure = want.structure == romanian_whist::GameStructure::S_181

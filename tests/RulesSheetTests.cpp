@@ -24,12 +24,12 @@ newgame::Config tableOf(unsigned int seats)
     newgame::Config config = newgame::defaults();
 
     config.spectator = false;
-    config.botNames.clear();
+    config.bots.clear();
     config.botLevels.clear();
 
     for(unsigned int i = 1 ; i < seats ; i++)
     {
-        config.botNames << QStringLiteral("Bot %1").arg(i);
+        config.bots.push_back(PlayerProfile{ "Bot " + std::to_string(i), Gender::Male });
         config.botLevels.push_back(newgame::BotLevel::Random);
     }
 
