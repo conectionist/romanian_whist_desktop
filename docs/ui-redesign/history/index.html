@@ -296,6 +296,9 @@ function show(n, { instant = false } = {}) {
   at = Math.min(13, Math.max(views[view].first, n));
   const p = phases[at - 1];
 
+  // A fade still waiting for its picture is dropped: this step decides what shows.
+  front.onload = back.onload = null;
+
   const next = src(view, at);
   if (instant || reduced) {
     front.src = next;
