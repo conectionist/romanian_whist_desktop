@@ -31,6 +31,11 @@ int main(int argc, char *argv[])
         }
     }
     MainWindow w;
-    w.show();
+
+    // MAXIMIZED, the owner's call of 2026-10-23: the table is drawn at the window's
+    // scale, and a maximized window draws it at its largest while keeping the title
+    // bar and the taskbar. Restoring it gives the .ui's size, raised to the
+    // window's minimum.
+    w.showMaximized();
     return QApplication::exec();
 }
