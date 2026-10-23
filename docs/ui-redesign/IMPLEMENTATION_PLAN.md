@@ -1913,6 +1913,35 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - **The cursors, 606 → 611**: one case per control.
   - **Extracting the strings, 611**: `GameOverTests`' negative-score case rewritten (see below).
   - **The Romanian draft, 611 → 613**: two `FontsTests` cases.
+- **PR #38's review round brought it to 622** (613 + 9), building without a warning. A review by
+  another agent found ten things and fixed all ten, one commit each or per group; a check of those
+  fixes found one more, which they had caused:
+  - **#1-#3, a new game could inherit the last one's motion.** A snapshot names no game, and the
+    scene guessed the boundary from the round number going down; a game abandoned in round 1 is
+    followed by another game's round 1, so the old trick could sweep toward a panel of the new
+    game. `MainWindow::startGame()` calls `TableScene::newGame()`, which clears the trick
+    (`TrickItem::clear()`: the next frame is a first frame) and every bubble.
+  - **#4, the pointing hand stayed up** after your turn ended or the strip went, until the mouse
+    moved: `QGraphicsItem::unsetCursor()` restores the view's cursor only for the topmost item, and
+    over the fan that is a card. One helper, `itemcursor::show()`, now sets every table item's
+    cursor. The step 7 tests read the item's own cursor, which could not see this; the new ones read
+    what the view shows (`tests/RestingMouse.h`).
+  - **#5, the screenshots' translation outlived its test case**, turning later cases Romanian.
+  - **#6, the same cursor set again on every move** (each set has Qt search the items under the
+    mouse); **#7, the bubbles reuse the seat places `relayout()` found**; **#8, one slider-row
+    builder** (`newgame::buildSliderRow()`) for both of Settings' rows and the setup dialog's; **#9,
+    one CSS curve helper** (`motion::cubicBezier()`); **#10, Qt greys a disabled widget's cursor
+    itself**, so `LitButton` and `MenuBarButton` set their pointing hand once.
+  - **Then a crash, from #4's first fix.** It unset the strip's cursor as you bid, and
+    `unsetCursor()` on the topmost item has the view look under its last mouse event, which a view
+    under a mouse that has not moved since it appeared does not have: Qt dereferences it anyway. The
+    table page comes up so after New Game's dialog, and a digit bid made before the mouse moves
+    hides the strip. In the suite it crashed a window test in two of four random-order runs, after a
+    test that had left the mouse over the middle of the screen. `itemcursor::show()` never unsets a
+    cursor now - "none" is the arrow, set like any other, which needs no mouse event - and the
+    corner buttons go through it too. `RestingMouse` and `restOn()` put the mouse back where they
+    found it. Two new cases reproduce the crash's state (`RestingMouse::Arrival::Appeared`) and
+    crash without the fix.
 - **Five decisions by the owner, 2026-10-22:**
   - **Animation lengths are a setting**, "Card animations": Off, Quick, Normal, Slow, Normal being
     the mock-up's. Off is section 18.2's "reduce motion".
@@ -2010,6 +2039,14 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     replaced it; it now guards the heading face.
   - **The screenshot tool plays at the bots' top speed**, so a round's bids are milliseconds old
     when its table is shot, and their bubbles still up.
+  - **`QGraphicsItem::unsetCursor()` is two traps** (the review round): it restores the view's
+    cursor only when the item is the topmost under the mouse, and when it is, it reads the view's
+    last mouse event, which a view that came up under a resting mouse has not had - a crash. Set a
+    table item's cursor through `itemcursor::show()`, which never unsets one.
+  - **The test binary has one mouse.** A test that moves it must put it back
+    (`tests/RestingMouse.h`'s `CursorReturn`), or the next test's window opens under it with no
+    mouse event to say so. Catch2 runs the cases in a random order, so such a leak fails some runs
+    and not others; when a run stops early, rerun it with its `--rng-seed`.
 - **Left open:**
   - **The Romanian draft wants the owner's review** in Qt Linguist, and a glossary settled first
     (the PR lists it): levată, atu, licitație, rundă, the suits, Forehead and Hidden.

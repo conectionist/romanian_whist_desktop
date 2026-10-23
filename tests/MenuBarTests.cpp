@@ -370,7 +370,7 @@ TEST_CASE("A menu item points only while it can be pressed", "[menu-bar]")
     bar.show();
     QCoreApplication::processEvents();
 
-    restOn(button);
+    const CursorReturn resting = restOn(button);
     REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 
     button.setEnabled(false);

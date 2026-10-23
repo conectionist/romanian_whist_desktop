@@ -1013,7 +1013,7 @@ TEST_CASE("The cursor points at a card you can play and refuses one you cannot",
         REQUIRE(pointerOf(fan.item) == Qt::PointingHandCursor);
 
         fan.leave();
-        REQUIRE_FALSE(fan.item.hasCursor());
+        REQUIRE(pointerOf(fan.item) == Qt::ArrowCursor);
     }
 
     SECTION("an illegal card")
@@ -1029,7 +1029,7 @@ TEST_CASE("The cursor points at a card you can play and refuses one you cannot",
         Fanned fan(promptOf({ true, true, true }), false);
         fan.hoverAt(fan.cards().back()->pos());
 
-        REQUIRE_FALSE(fan.item.hasCursor());
+        REQUIRE(pointerOf(fan.item) == Qt::ArrowCursor);
     }
 
     SECTION("the turn ending under a still cursor")
@@ -1039,7 +1039,7 @@ TEST_CASE("The cursor points at a card you can play and refuses one you cannot",
         REQUIRE(fan.item.hasCursor());
 
         fan.item.setPlayable(false);
-        REQUIRE_FALSE(fan.item.hasCursor());
+        REQUIRE(pointerOf(fan.item) == Qt::ArrowCursor);
     }
 }
 

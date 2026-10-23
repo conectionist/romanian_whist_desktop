@@ -732,7 +732,7 @@ TEST_CASE("The cursor points at a bid and refuses the struck-out one", "[bid-str
 
     // Between two bids: no button, no promise.
     hoverAt(lone.scene, (lone.on(0) + lone.on(1)) / 2.0);
-    REQUIRE_FALSE(lone.strip->hasCursor());
+    REQUIRE(lone.strip->cursor().shape() == Qt::ArrowCursor);
 }
 
 // THE STRIP GOES WHEN YOU BID, and the pointing hand with it. Hiding an item never
@@ -745,6 +745,26 @@ TEST_CASE("The pointing hand goes with the strip once you bid", "[bid-strip]")
 
     RestingMouse mouse(lone.scene, lone.on(1));
 
+    hoverAt(lone.scene, lone.on(1));
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    lone.strip->clearPrompt();
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
+}
+
+// AND WHEN THE MOUSE HAS NOT MOVED SINCE THE TABLE CAME UP - after New Game's dialog, a
+// bid typed as a digit. The strip is the topmost item under the mouse, and unsetting
+// its cursor as it went had Qt look under a mouse event the view never had: a crash
+// (found after PR #38's review, in a window test run after a test that moved the mouse).
+TEST_CASE("Bidding under a mouse that has not moved since the table came up is safe", "[bid-strip]")
+{
+    LoneStrip lone;
+    lone.strip->setPrompt(promptFor(4));
+
+    RestingMouse mouse(lone.scene, lone.on(1), RestingMouse::Arrival::Appeared);
+
+    // The strip lit under the mouse through the scene, as the window lights it for a
+    // prompt that arrives under a resting cursor; the view itself heard nothing.
     hoverAt(lone.scene, lone.on(1));
     REQUIRE(mouse.shown() == Qt::PointingHandCursor);
 

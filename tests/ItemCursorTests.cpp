@@ -48,14 +48,19 @@ TEST_CASE("Asking for the cursor already shown changes nothing", "[cursor]")
     REQUIRE(probe.changes == 2);
     REQUIRE(probe.cursor().shape() == Qt::ForbiddenCursor);
 
-    // None: the arrow on the way out, and then no cursor of its own.
+    // None: the arrow, set as any other cursor is - never unset (see the header).
     itemcursor::show(probe, std::nullopt);
-    REQUIRE_FALSE(probe.hasCursor());
-    const int cleared = probe.changes;
+    REQUIRE(probe.changes == 3);
+    REQUIRE(probe.cursor().shape() == Qt::ArrowCursor);
 
     itemcursor::show(probe, std::nullopt);
-    REQUIRE(probe.changes == cleared);
-    REQUIRE_FALSE(probe.hasCursor());
+    REQUIRE(probe.changes == 3);
+
+    // And an item that never asked for a cursor is left alone: the arrow is what it shows.
+    Probe untouched;
+    itemcursor::show(untouched, std::nullopt);
+    REQUIRE(untouched.changes == 0);
+    REQUIRE(untouched.cursor().shape() == Qt::ArrowCursor);
 }
 
 // THE VIEW, not only the item: what QGraphicsItem::unsetCursor() alone gets wrong
@@ -77,5 +82,26 @@ TEST_CASE("No cursor puts the arrow back at once, even under a child", "[cursor]
 
     itemcursor::show(*parent, std::nullopt);
     REQUIRE(mouse.shown() == Qt::ArrowCursor);
-    REQUIRE_FALSE(parent->hasCursor());
+    REQUIRE(parent->cursor().shape() == Qt::ArrowCursor);
+}
+
+// A VIEW UNDER A MOUSE THAT HAS NOT MOVED SINCE IT APPEARED has had no mouse event, and
+// QGraphicsItem::unsetCursor() on the item topmost there has the view look under that
+// missing event: a crash inside Qt. The table page comes up so after New Game's dialog
+// (found after PR #38's review: the first fix for finding #4 unset the strip's cursor
+// as you bid). "None" must not go that way.
+TEST_CASE("No cursor is safe under a mouse that has not moved", "[cursor]")
+{
+    QGraphicsScene scene;
+
+    Probe* item = new Probe;
+    scene.addItem(item);
+
+    RestingMouse mouse(scene, QPointF(50.0, 50.0), RestingMouse::Arrival::Appeared);
+
+    itemcursor::show(*item, Qt::PointingHandCursor);
+    REQUIRE(mouse.shown() == Qt::PointingHandCursor);
+
+    itemcursor::show(*item, std::nullopt);
+    REQUIRE(mouse.shown() == Qt::ArrowCursor);
 }

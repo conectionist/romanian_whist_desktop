@@ -12,23 +12,33 @@
 namespace itemcursor
 {
 
-// Shows `shape` over `item`, or with none the view's own arrow, AT ONCE: under a
-// mouse that has not moved, too.
+// Shows `shape` over `item`, or with none the arrow, AT ONCE: under a mouse that has
+// not moved, too. Every cursor a table item shows goes through here.
 //
-// QGraphicsItem::unsetCursor() alone does not. It puts the view's cursor back only
-// when the item is itself the topmost item under the mouse, which a fan never is
-// over one of its cards - they are its children, drawn above it - so the pointing
-// hand stayed up after your turn ended until the mouse moved (PR #38's review,
-// finding #4). setCursor() looks through every item under the mouse instead, so
-// setting the arrow first shows it whatever is on top; unsetCursor() then drops it.
-// The arrow is what the view goes back to: TableView sets no cursor of its own.
+// NEVER QGraphicsItem::unsetCursor(), for two reasons Qt does not document:
+//
+// - It puts the view's cursor back only when the item is itself the topmost item
+//   under the mouse, which a fan never is over one of its cards - they are its
+//   children, drawn above it - so the pointing hand stayed up after your turn ended
+//   until the mouse moved (PR #38's review, finding #4).
+// - When the item IS topmost, it has the view look again under the view's last
+//   mouse event - and a view under a mouse that has not moved since it appeared has
+//   none, and Qt dereferences it all the same: a crash (found after that review).
+//   The table page comes up under a resting mouse after New Game's dialog, and a
+//   bid made with a digit key, before the mouse moves, hid the strip through here.
+//
+// So "none" is the arrow, set like any other cursor. setCursor() looks through
+// every item under the mouse's real position, which needs no mouse event, and shows
+// the first cursor it finds - this item's arrow, or the cursor of an item above it.
+// The item keeps the arrow as its own: hasCursor() stays true, and cursor() is the
+// arrow either way.
 //
 // NOTHING IS DONE when the item already shows what is asked: every setCursor() has
 // Qt look for the items under the mouse again, and a hover asks on every move
 // (finding #6).
 //
-// An item about to be hidden is cleared before it is hidden: hiding one never
-// changes the view's cursor.
+// An item about to be hidden is given the arrow before it is hidden: hiding one
+// never changes the view's cursor.
 void show(QGraphicsItem& item, std::optional<Qt::CursorShape> shape);
 
 } // namespace itemcursor

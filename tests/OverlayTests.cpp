@@ -860,7 +860,7 @@ TEST_CASE("A sheet button points only while it can be pressed", "[overlay]")
     page.show();
     QCoreApplication::processEvents();
 
-    restOn(button);
+    const CursorReturn resting = restOn(button);
     REQUIRE(shownOver(button) == Qt::PointingHandCursor);
 
     button.setEnabled(false);

@@ -549,7 +549,7 @@ TEST_CASE("A corner button points only while it can be pressed", "[hud]")
     REQUIRE(lone.button->cursor().shape() == Qt::PointingHandCursor);
 
     lone.button->setEnabled(false);
-    REQUIRE_FALSE(lone.button->hasCursor());
+    REQUIRE(lone.button->cursor().shape() == Qt::ArrowCursor);
 
     lone.button->setEnabled(true);
     REQUIRE(lone.button->cursor().shape() == Qt::PointingHandCursor);

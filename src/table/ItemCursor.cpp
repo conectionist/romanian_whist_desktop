@@ -4,19 +4,13 @@
 
 void itemcursor::show(QGraphicsItem& item, std::optional<Qt::CursorShape> shape)
 {
-    if(shape)
-    {
-        if(item.hasCursor() && item.cursor().shape() == *shape)
-            return;
+    const Qt::CursorShape wanted = shape.value_or(Qt::ArrowCursor);
 
-        item.setCursor(*shape);
-        return;
-    }
-
-    if(!item.hasCursor())
+    // NOTHING TO DO: the item already asks for this, or asks for nothing and the arrow
+    // is wanted - which is what a hover over a gap asks on every move.
+    if(item.cursor().shape() == wanted && (item.hasCursor() || wanted == Qt::ArrowCursor))
         return;
 
-    // See the header: the arrow first, so the view shows it now.
-    item.setCursor(Qt::ArrowCursor);
-    item.unsetCursor();
+    // NEVER unsetCursor(): see the header. The arrow is a cursor like any other.
+    item.setCursor(wanted);
 }
