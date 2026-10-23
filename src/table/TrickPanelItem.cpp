@@ -219,7 +219,7 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     // trick", "First to bid: You". A spectator has no seat, so is never "You".
     const auto nameOf = [&](unsigned int seat)
     {
-        if(snapshot.humanSeat >= 0 && static_cast<unsigned int>(snapshot.humanSeat) == seat)
+        if(snapshot.isHumanSeat(seat))
             return QCoreApplication::translate("trickpanel", "You");
 
         return seat < snapshot.seats.size() ? QString::fromStdString(snapshot.seats[seat].name)
@@ -343,8 +343,7 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
 
     if(trickFull && winning != snapshot.table.end())
     {
-        const bool yours = snapshot.humanSeat >= 0
-                           && static_cast<unsigned int>(snapshot.humanSeat) == winning->seatIndex;
+        const bool yours = snapshot.isHumanSeat(winning->seatIndex);
 
         if(yours)
         {

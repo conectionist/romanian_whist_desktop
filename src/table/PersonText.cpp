@@ -10,7 +10,7 @@ QString persontext::translate(const char* context, const Gendered& variants, Gen
 
 QString persontext::translate(const Sentence& sentence, const GameSnapshot& snapshot, unsigned int seat)
 {
-    const bool yours = snapshot.humanSeat >= 0 && static_cast<unsigned int>(snapshot.humanSeat) == seat;
+    const bool yours = snapshot.isHumanSeat(seat);
     const Gender gender = seat < snapshot.seats.size() ? snapshot.seats[seat].gender : Gender::Male;
 
     return translate(sentence.context, yours ? sentence.yours : sentence.others, gender);

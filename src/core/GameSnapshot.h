@@ -123,6 +123,13 @@ struct GameSnapshot
 
     unsigned int betsPlaced = 0;
     unsigned int betSum = 0;
+
+    // Whether `seat` is the human's: never in a spectator game. The one place this
+    // is worked out from humanSeat (PR #40's review, finding #8).
+    bool isHumanSeat(unsigned int seat) const
+    {
+        return humanSeat >= 0 && static_cast<unsigned int>(humanSeat) == seat;
+    }
 };
 
 #endif
