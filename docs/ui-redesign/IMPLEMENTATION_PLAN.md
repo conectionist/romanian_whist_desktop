@@ -179,6 +179,13 @@ stroke 1.2 in `#d9b46a`: above the text two straight strokes with a diamond betw
 side of it; below, the same strokes as waves and the diamond, no dots (the inline SVGs in
 `page.html`). Draw it under the played cards.
 
+> **AMENDED IN PHASE 13, by the owner's call of 2026-10-23: on the table the logo is round.** A
+> medallion 215 across (`tablespace::logoDiameter`), picked from screenshots at 140, 170, 195 and
+> 215: the plaque's layers drawn as circles (`tabletop::medallion()`), no ♣ either side, and the
+> ornaments and lettering scaled to sit inside the fine gold line, never past the plaque's size
+> (`tabletop::letteringScale()`). Your played card lies over its lower quarter. The main-menu page
+> keeps the plaque above.
+
 ### 2.5 Seats
 
 `table.js` "geometry" section.
@@ -2097,6 +2104,8 @@ commit, all on 2026-10-23:
   cards and Close down the middle, the sheet as wide as the widest of them (650 for six players,
   where every other sheet is 720). `Overlay::preferredWidth()` is the hook; every other sheet keeps
   section 2.13's 720.
+- **The logo on the table is round**, a medallion 215 across, chosen from four sizes: section 2.4's
+  amendment. The main-menu page keeps the plaque.
 - **"Ana won it", not "Ana took it"**, on the Last trick sheet, and in Romanian "Ana a câștigat-o"
   for "A luat-o Ana". Phase 11's notes above keep the words it shipped with.
 

@@ -94,6 +94,14 @@ inline constexpr qreal goldLineWidth = 1.5;
 inline constexpr QSizeF logoBox(270.0, 142.0);
 inline constexpr qreal logoScale = 0.9;
 
+// THE LOGO ON THE TABLE IS ROUND (phase 13, the owner's call of 2026-10-23): a
+// medallion this many units across, its border included, picked from screenshots
+// at 140, 170, 195 and 215. At 215 the English lettering is close to the plaque's
+// size, and your played card, which stops 73 below the centre, lies over the
+// medallion's lower quarter as a card lies on any table's emblem. The main-menu
+// page keeps the plaque.
+inline constexpr qreal logoDiameter = 215.0;
+
 // The table's shadow: CSS's blur of 70 round the rim, which is a Gaussian of
 // sigma 35 - and shadows::reach() is where it has faded to nothing, so the
 // picture of the table reaches that far and no further.
