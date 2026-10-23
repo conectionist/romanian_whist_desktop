@@ -89,6 +89,19 @@ QPainterPath ring(qreal inner, qreal outer)
     return paths::ring(tablespace::centre, inner, outer);
 }
 
+// THE LETTERING'S FONT, the one letteringScale() measures and paintLogo() draws,
+// so what is measured is what is drawn. letter-spacing is a fixed 0.37 after
+// every letter - an absolute spacing, not Qt's percentage of each letter's own
+// width.
+QFont letteringFont()
+{
+    QFont font = fonts::logo();
+    font.setPixelSize(letterSize);
+    font.setWeight(QFont::Bold);
+    font.setLetterSpacing(QFont::AbsoluteSpacing, letterSpacing);
+    return font;
+}
+
 using paths::rounded;
 using paths::roundedBand;
 
@@ -325,12 +338,7 @@ qreal tabletop::letteringScale(const LogoShape& shape, const QStringList& lines)
     // inset, so the words never crowd it.
     const qreal reach = shape.box.width() / 2.0 - logoBorderWidth - 2.0 * logoInnerLineInset;
 
-    QFont font = fonts::logo();
-    font.setPixelSize(letterSize);
-    font.setWeight(QFont::Bold);
-    font.setLetterSpacing(QFont::AbsoluteSpacing, letterSpacing);
-
-    const QFontMetricsF metrics(font);
+    const QFontMetricsF metrics(letteringFont());
 
     qreal widest = 0.0;
 
@@ -366,7 +374,7 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
                          const LogoShape& shape)
 {
     const Theme::TablePalette& table = theme.table;
-    const qreal logoRadius = shape.radius;
+    const qreal outerRadius = shape.radius;
 
     painter.save();
     painter.translate(centre);
@@ -376,12 +384,12 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
     const QRectF outer(QPointF(0.0, 0.0), shape.box);
     const QRectF padding = outer.adjusted(logoBorderWidth, logoBorderWidth,
                                           -logoBorderWidth, -logoBorderWidth);
-    const qreal paddingRadius = logoRadius - logoBorderWidth;
+    const qreal paddingRadius = outerRadius - logoBorderWidth;
 
     // .panel's drop shadow, which section 2.4 leaves out: the logo is
     // class="panel logo", and .logo overrides the panel's background and border
     // but not its shadows.
-    shadows::drawShapeShadow(painter, rounded(outer, logoRadius), logoShadowOffset,
+    shadows::drawShapeShadow(painter, rounded(outer, outerRadius), logoShadowOffset,
                              logoShadowBlur, table.panelShadow);
 
     // The background, over the whole border box and positioned on the padding box,
@@ -390,7 +398,7 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
                                    { logoGradientMiddle, table.logoMiddle },
                                    { 1.0, table.logoEdge } };
 
-    painter.fillPath(rounded(outer, logoRadius),
+    painter.fillPath(rounded(outer, outerRadius),
                      gradients::cssRadial(padding, logoGradientAt, gradients::Shape::Ellipse,
                                           green));
 
@@ -410,7 +418,7 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
                      table.panelInnerShadow);
 
     // The border, over the inset rings as CSS paints it.
-    painter.fillPath(roundedBand(outer, logoRadius, padding, paddingRadius), table.logoBorder);
+    painter.fillPath(roundedBand(outer, outerRadius, padding, paddingRadius), table.logoBorder);
 
     // .logo::before: a 1-unit line, so its stroke runs half a unit inside its box.
     const qreal lineInset = logoInnerLineInset + 0.5;
@@ -443,14 +451,8 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
 
     // THE LETTERING, MIXED CASE AS page.html WRITES IT: Cinzel Decorative draws a
     // lowercase letter as a small capital, so "Romanian" is a tall R and smaller
-    // capitals, where "ROMANIAN" would be eight tall ones. letter-spacing is a
-    // fixed 0.37 after every letter - an absolute spacing, not Qt's percentage of
-    // each letter's own width.
-    QFont font = fonts::logo();
-    font.setPixelSize(letterSize);
-    font.setWeight(QFont::Bold);
-    font.setLetterSpacing(QFont::AbsoluteSpacing, letterSpacing);
-
+    // capitals, where "ROMANIAN" would be eight tall ones.
+    const QFont font = letteringFont();
     const QFontMetricsF metrics(font);
 
     QPainterPath letters;
