@@ -2131,7 +2131,9 @@ whole shape of the game before starting it is strictly better.
   > **AMENDED 2026-10-23 (the table redesign's phase 13), by the owner's measure: off the slider only
   > for a watched game.** With a person playing, the game goes at their pace, and the bots' beats
   > had it at a few minutes. It is now about 30 minutes for two players and 5 more for each player
-  > added, at any bot speed (`newgame::estimatedMinutes()`).
+  > added with the bots at the default speed; another speed adds or takes off what the bots then wait
+  > more or less, counted exactly over the schedule (a six-player game: 62 minutes at the slowest,
+  > 38 at Instant). `newgame::estimatedMinutes()`.
 
   > **CORRECTED IN D1: the count is `3·seats + 12 + (endWithForeheadAndHidden ? 2 : 0)`**, and the
   > mockup above said 24 for a four-seat game with the box ticked. 24 is the count *without* the

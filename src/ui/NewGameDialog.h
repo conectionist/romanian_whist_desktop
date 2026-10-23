@@ -229,10 +229,11 @@ unsigned int roundCount(const Config& config);
 
 // HOW LONG A GAME TAKES, in whole minutes, as a rule of thumb.
 //
-// - WITH YOU PLAYING, your own pace decides it, whatever the bots' speed: about
-//   30 minutes for two players, and 5 more for each player added (the owner's
-//   measure, 2026-10-23). Worked out from the bots' pace, a game with you in it
-//   came out at a few minutes, which it never is.
+// - WITH YOU PLAYING, your own pace is most of it: about 30 minutes for two
+//   players, and 5 more for each player added, with the bots at DefaultSpeed (the
+//   owner's measure, 2026-10-23). Another bot speed adds or takes off what the bots
+//   then wait more or less. Worked out from the bots' pace alone, a game with you
+//   in it came out at a few minutes, which it never is.
 // - A WATCHED GAME goes at the bots' pace: off the bot-speed slider, and zero at
 //   its instant end.
 inline constexpr int playingMinutesForTwo = 30;

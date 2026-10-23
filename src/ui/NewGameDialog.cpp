@@ -24,6 +24,8 @@
 #include <QSpinBox>
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -296,15 +298,57 @@ unsigned int newgame::roundCount(const Config& config)
     return 3u * seatCount(config) + 12u + (config.endWithForeheadAndHidden ? 2u : 0u);
 }
 
+namespace
+{
+
+// EVERY TRICK THE GAME DEALS, from roundCount()'s schedule: N rounds of one card,
+// 2..7, N of eight, 7..2 and N of one - 10N + 54 tricks whichever end it starts
+// from - and the appended Forehead and Hidden rounds, one each.
+unsigned int trickCount(const newgame::Config& config)
+{
+    return 10u * newgame::seatCount(config) + 54u + (config.endWithForeheadAndHidden ? 2u : 0u);
+}
+
+// WHAT THE GAME SPENDS WAITING ON THE BOTS in a game you play, at `pacing`: every
+// timed pace() GameBridge takes with you at the table. A beat after each bot's
+// bid, and one as the bidding ends; a beat before each bot's card; and the dwell
+// after each trick and after each round. Your own turns are not in it - they are
+// yours to take.
+std::chrono::milliseconds botWaiting(const newgame::Config& config, const Pacing& pacing)
+{
+    const long long bots = static_cast<long long>(config.botNames.size());
+    const long long rounds = newgame::roundCount(config);
+    const long long tricks = trickCount(config);
+
+    const long long beats = rounds * (bots + 1) + tricks * bots;
+    const long long dwells = tricks + rounds;
+
+    return pacing.beat * beats + pacing.trickDwell * dwells;
+}
+
+}
+
 int newgame::estimatedMinutes(const Config& config)
 {
-    // WITH YOU AT THE TABLE, YOUR PACE IS THE GAME'S, and the bots' is lost in
-    // it: the owner's measure of 2026-10-23 is about 30 minutes for two players,
-    // and 5 more for each seat added. The bots' speed does not enter into it.
+    // WITH YOU AT THE TABLE, YOUR PACE IS MOST OF THE GAME: the owner's measure of
+    // 2026-10-23 is about 30 minutes for two players and 5 more for each player
+    // added, with the bots at the default speed. Another speed adds or takes off
+    // what the bots then wait more or less, which is exact arithmetic over the
+    // schedule: at the slowest, a six-player game is about 62 minutes; at Instant,
+    // about 38.
     if(!config.spectator)
     {
         const int seats = static_cast<int>(seatCount(config));
-        return playingMinutesForTwo + playingMinutesPerSeat * std::max(seats - 2, 0);
+        const std::chrono::milliseconds measured =
+            std::chrono::minutes(playingMinutesForTwo + playingMinutesPerSeat * std::max(seats - 2, 0));
+
+        const std::chrono::milliseconds total = measured
+                                                + botWaiting(config, pacingFor(config.botSpeed))
+                                                - botWaiting(config, pacingFor(DefaultSpeed));
+
+        // To the NEAREST minute: the measure is in whole minutes, and truncating
+        // would take one off it for a few seconds the bots save.
+        return static_cast<int>(std::lround(static_cast<double>(total.count()) / 60000.0));
     }
 
     // A WATCHED GAME IS THE BOTS' PACE: a rule of thumb off the slider. The

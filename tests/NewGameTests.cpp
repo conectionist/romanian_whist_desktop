@@ -429,31 +429,78 @@ TEST_CASE("The summary line names the round count it computed", "[new-game]")
 }
 
 // THE OWNER'S MEASURE, 2026-10-23: with a person at the table a game takes about
-// 30 minutes for two players and 5 more for each player added. Worked out from the
-// bots' pace, as a watched game's is, it came out at a few minutes.
+// 30 minutes for two players and 5 more for each player added, with the bots at
+// the default speed. Worked out from the bots' pace alone, as a watched game's
+// is, it came out at a few minutes.
 TEST_CASE("A game you play in is about 30 minutes for two and 5 more a player", "[new-game]")
 {
     for(int opponents = 1 ; opponents <= 5 ; opponents++)
     {
         newgame::Config config = playingConfig(opponents);
+        config.botSpeed = newgame::DefaultSpeed;
 
         const int expected = 30 + 5 * (opponents - 1);
 
         INFO(opponents << " opponents");
         REQUIRE(newgame::estimatedMinutes(config) == expected);
-
-        // YOUR PACE, NOT THE BOTS': the same at every position of the slider.
-        for(int speed = newgame::SlowestSpeed ; speed <= newgame::FastestSpeed ; speed++)
-        {
-            config.botSpeed = speed;
-
-            INFO("bot speed " << speed);
-            REQUIRE(newgame::estimatedMinutes(config) == expected);
-        }
-
-        // And the line says it.
         REQUIRE(newgame::summaryText(config).contains(QStringLiteral("about %1 minutes").arg(expected)));
     }
+}
+
+// THE BOTS' SPEED STILL COUNTS: they wait before every card and after every
+// trick, and the slider sets how long. What a speed adds or takes off is what the
+// bots then wait more or less than at the default - so the more bots, the wider
+// the spread.
+TEST_CASE("A game you play in is longer with slower bots", "[new-game]")
+{
+    for(int opponents = 1 ; opponents <= 5 ; opponents++)
+    {
+        newgame::Config config = playingConfig(opponents);
+
+        INFO(opponents << " opponents");
+
+        for(int speed = newgame::SlowestSpeed ; speed < newgame::FastestSpeed ; speed++)
+        {
+            config.botSpeed = speed;
+            const int slower = newgame::estimatedMinutes(config);
+
+            config.botSpeed = speed + 1;
+
+            INFO("bot speed " << speed);
+            REQUIRE(slower >= newgame::estimatedMinutes(config));
+        }
+
+        config.botSpeed = newgame::DefaultSpeed;
+        const int measured = newgame::estimatedMinutes(config);
+
+        config.botSpeed = newgame::SlowestSpeed;
+        REQUIRE(newgame::estimatedMinutes(config) > measured);
+
+        config.botSpeed = newgame::FastestSpeed;
+        REQUIRE(newgame::estimatedMinutes(config) < measured);
+    }
+
+    // At the ends of the slider, worked out by hand from the schedule (32 rounds
+    // and 116 tricks for six players; a beat of 700 ms and a dwell of 1.2 s at
+    // the default, twice that at the slowest and nothing at Instant): the bots
+    // wait about 12 minutes at the default, so 62 minutes at the slowest and 38 at
+    // Instant.
+    newgame::Config six = playingConfig(5);
+
+    six.botSpeed = newgame::SlowestSpeed;
+    REQUIRE(newgame::estimatedMinutes(six) == 62);
+
+    six.botSpeed = newgame::FastestSpeed;
+    REQUIRE(newgame::estimatedMinutes(six) == 38);
+
+    // And two players, with one bot, move least: 33 and 27.
+    newgame::Config two = playingConfig(1);
+
+    two.botSpeed = newgame::SlowestSpeed;
+    REQUIRE(newgame::estimatedMinutes(two) == 33);
+
+    two.botSpeed = newgame::FastestSpeed;
+    REQUIRE(newgame::estimatedMinutes(two) == 27);
 }
 
 TEST_CASE("A watched game's estimate follows the bot speed", "[new-game]")
