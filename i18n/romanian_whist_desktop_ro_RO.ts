@@ -239,7 +239,7 @@
     <message>
         <location line="+2"/>
         <source>Play every one-card round forehead</source>
-        <translation type="unfinished">Joacă pe frunte fiecare rundă de o carte</translation>
+        <translation type="unfinished">Fiecare rundă de o carte se joacă ca Fruntea</translation>
     </message>
     <message>
         <location line="+13"/>
@@ -362,16 +362,11 @@
 <context>
     <name>TableTopItem</name>
     <message>
-        <location filename="../src/table/TableTopItem.cpp" line="+360"/>
-        <source>Romanian</source>
-        <comment>The logo on the table, first line</comment>
-        <translation type="unfinished">Romanian</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>Whist</source>
-        <comment>The logo on the table, second line</comment>
-        <translation type="unfinished">Whist</translation>
+        <location filename="../src/table/TableTopItem.cpp" line="+293"/>
+        <source>Romanian
+Whist</source>
+        <comment>The logo on the table: its lines, split by line breaks. One line or two.</comment>
+        <translation>Whist</translation>
     </message>
 </context>
 <context>
@@ -539,12 +534,12 @@
     <message>
         <location line="+1"/>
         <source>Forehead</source>
-        <translation type="unfinished">Pe frunte</translation>
+        <translation type="unfinished">Fruntea</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Hidden</source>
-        <translation type="unfinished">Pe nevăzute</translation>
+        <translation type="unfinished">Neveul</translation>
     </message>
     <message>
         <location line="+3"/>
@@ -856,9 +851,9 @@
         <location line="+13"/>
         <source>Rounds go 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), then a Forehead and a Hidden round: %n rounds.</source>
         <translation type="unfinished">
-            <numerusform>Rundele merg 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), apoi o rundă pe frunte și una pe nevăzute: %n rundă.</numerusform>
-            <numerusform>Rundele merg 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), apoi o rundă pe frunte și una pe nevăzute: %n runde.</numerusform>
-            <numerusform>Rundele merg 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), apoi o rundă pe frunte și una pe nevăzute: %n de runde.</numerusform>
+            <numerusform>Rundele merg 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), apoi Fruntea și Neveul: %n rundă.</numerusform>
+            <numerusform>Rundele merg 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), apoi Fruntea și Neveul: %n runde.</numerusform>
+            <numerusform>Rundele merg 8 (×%1), 7 … 3, 2, 1 (×%1), 2, 3 … 7, 8 (×%1), apoi Fruntea și Neveul: %n de runde.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -874,9 +869,9 @@
         <location line="+8"/>
         <source>Rounds go 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), then a Forehead and a Hidden round: %n rounds.</source>
         <translation type="unfinished">
-            <numerusform>Rundele merg 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), apoi o rundă pe frunte și una pe nevăzute: %n rundă.</numerusform>
-            <numerusform>Rundele merg 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), apoi o rundă pe frunte și una pe nevăzute: %n runde.</numerusform>
-            <numerusform>Rundele merg 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), apoi o rundă pe frunte și una pe nevăzute: %n de runde.</numerusform>
+            <numerusform>Rundele merg 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), apoi Fruntea și Neveul: %n rundă.</numerusform>
+            <numerusform>Rundele merg 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), apoi Fruntea și Neveul: %n runde.</numerusform>
+            <numerusform>Rundele merg 1 (×%1), 2, 3 … 7, 8 (×%1), 7 … 3, 2, 1 (×%1), apoi Fruntea și Neveul: %n de runde.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
@@ -891,22 +886,22 @@
     <message>
         <location line="+14"/>
         <source>Every 1-card round is a Forehead round, except the Hidden round at the end.</source>
-        <translation type="unfinished">Fiecare rundă de o carte se joacă pe frunte, în afară de runda pe nevăzute de la sfârșit.</translation>
+        <translation type="unfinished">Fiecare rundă de o carte se joacă ca Fruntea, în afară de Neveul de la sfârșit.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Every 1-card round is a Forehead round.</source>
-        <translation type="unfinished">Fiecare rundă de o carte se joacă pe frunte.</translation>
+        <translation type="unfinished">Fiecare rundă de o carte se joacă ca Fruntea.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>In a Forehead round you see everyone&apos;s card but your own while you bid.</source>
-        <translation type="unfinished">Într-o rundă pe frunte vezi cartea fiecăruia, în afară de a ta, cât timp licitezi.</translation>
+        <translation type="unfinished">Când se joacă Fruntea, vezi cartea fiecăruia, în afară de a ta, cât timp licitezi.</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>In a Hidden round nobody sees their card until the bidding is done.</source>
-        <translation type="unfinished">Într-o rundă pe nevăzute nimeni nu își vede cartea până la sfârșitul licitației.</translation>
+        <translation type="unfinished">Când se joacă Neveul, nimeni nu își vede cartea până la sfârșitul licitației.</translation>
     </message>
     <message>
         <location line="+7"/>
@@ -921,7 +916,7 @@
     <message>
         <location line="+4"/>
         <source>Follow suit if you can, otherwise trump if you can. You never have to overtrump.</source>
-        <translation type="unfinished">Răspunzi la culoare dacă poți, altfel tai cu atu dacă poți. Nu ești obligat să tai peste.</translation>
+        <translation type="unfinished">Pui din culoarea de jos dacă poți, altfel pui atu dacă poți. Nu ești obligat să pui un atu mai mare.</translation>
     </message>
     <message>
         <location line="+3"/>
