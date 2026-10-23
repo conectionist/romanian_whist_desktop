@@ -1948,6 +1948,8 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     motion (the bid stayed unlit), then a bid by key in one session and by click in another. Neither
     crashed. The fix's commit message (`941906b`) says a digit bid could crash the app; that is
     wrong, and is corrected here and in the code's comments rather than by rewriting history.
+- **The owner's Romanian brought it to 624** (622 + 2): two `TableTopTests` cases for the logo's
+  lines, below.
 - **Five decisions by the owner, 2026-10-22:**
   - **Animation lengths are a setting**, "Card animations": Off, Quick, Normal, Slow, Normal being
     the mock-up's. Off is section 18.2's "reduce motion".
@@ -1969,9 +1971,22 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - **The bubble over your panel says "You bid 2"**, as the mock-up's does.
   - **The mock-up's cursors** (step 7 of the phase's plan): a pointing hand on every button, a card
     you can play and a bid; "not allowed" on a card you cannot play and the forbidden bid.
-  - **The Romanian logo stays "Romanian Whist"** in the draft: "Whist / Românesc" puts the long word
-    on the second line, level with the plaque's clubs, and it runs into the right one. The owner's
-    call.
+- **The owner's Romanian, two rounds on 2026-10-23.** Fourteen of the 206 strings are the
+  owner's own, marked finished; the other 192 are still drafts.
+  - **The game is plain "Whist"** in Romanian: the window title and the logo. The logo became one
+    translated phrase, a line of lettering per line of it (`tabletop::logoLines()`), because a
+    string per line cannot leave one out: Qt shows the source for an empty translation. English
+    keeps page.html's "Romanian" over "Whist"; Romanian's one line sits in the middle of the
+    plaque (`tabletop::letteringRect()`).
+  - **The glossary:** a trick is a *mână*; the suits are Inimă roșie, Romb, Inimă neagră and
+    Treflă; the one-card rounds are *Fruntea* and *Neveul*, capitalised, everywhere; Rules is
+    *Regulament*.
+  - **Rules words following and trumping as the trick panel does**: "Pui din culoarea de jos dacă
+    poți, altfel pui atu dacă poți."
+  - **Every your-turn line starts "E rândul tău."**, the must-trump one included: "E rândul tău.
+    Nu ai ♥! Pune atu." The panel's line is 230 units wide, and that is 207.
+  - **"%1 e primul"** (Leader: %1) reads wrong for a woman's name and for "Tu". The owner's call:
+    it stays for now and is fixed later.
 - **What the build is:**
   - **`src/table/Motion.h`**: `motion::Pace`, the lengths (`flightMs` 360, `sweepMs` 480,
     `bubbleMs` 1600, `bubbleStillMs` 1500), `factorFor()` (0, 0.5, 1, 1.6) and the mock-up's two
@@ -2055,9 +2070,9 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     mouse event to say so. Catch2 runs the cases in a random order, so such a leak fails some runs
     and not others; when a run stops early, rerun it with its `--rng-seed`.
 - **Left open:**
-  - **The Romanian draft wants the owner's review** in Qt Linguist, and a glossary settled first
-    (the PR lists it): levată, atu, licitație, rundă, the suits, Forehead and Hidden.
-  - **The logo's Romanian.**
+  - **The rest of the Romanian draft wants the owner's review** in Qt Linguist: 192 strings, the
+    glossary's open words among them (licitație, făcute, rundă, Popă, the scoreboard's columns).
+  - **"%1 e primul"**, for a woman's name and for "Tu".
   - **2x textures**, if the owner wants them after the numbers above.
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
 

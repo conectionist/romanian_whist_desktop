@@ -10,6 +10,7 @@ opponents' cards standing in racks on the rim, and panels pinned to the window c
 - **Screenshots** of the mock-up at 1920×1080: [`screenshots/`](screenshots/).
 
 Status: built. Phases 0 to 12 are complete in the client; each phase's outcome, and the owner's
-decisions along the way, are in the plan. Left open after phase 12: the Romanian translation is a
-draft for review, and the logo keeps its English words in it. The client's headings are Belleza
+decisions along the way, are in the plan. Left open after phase 12: most of the Romanian
+translation is still a draft for review; the owner's own strings so far include the logo, plain
+"Whist" on one line. The client's headings are Belleza
 where the mock-up's are Marcellus, which has no ș or ț.
