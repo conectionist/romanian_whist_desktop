@@ -75,6 +75,8 @@ qt_add_library(desktop_core STATIC
 
     src/paint/Theme.h
     src/paint/Theme.cpp
+    src/paint/Avatars.h
+    src/paint/Avatars.cpp
     src/paint/Fonts.h
     src/paint/Fonts.cpp
     src/paint/CardRenderer.h
@@ -229,8 +231,9 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # Two more .qrc files follow the same pattern, both added by the table redesign
 # (docs/ui-redesign/): resources/table.qrc puts the wood and felt textures under
 # /table, and resources/fonts.qrc puts the three bundled typefaces and their
-# licences under /fonts. Everything below applies to all three - they are one
-# call because they share every one of its pitfalls.
+# licences under /fonts. A fourth, resources/avatars.qrc, puts the seat portraits
+# and their catalogue under /avatars. Everything below applies to all four - they
+# are one call because they share every one of its pitfalls.
 #
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
@@ -251,7 +254,8 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # .qrc files, with the generated .cpp put into the target by hand. It does not
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
 # build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
-# for the textures and qrc_fonts.cpp for the typefaces.
+# for the textures, qrc_fonts.cpp for the typefaces and qrc_avatars.cpp for the
+# portraits.
 #
 # The list is a variable because tests/CMakeLists.txt consumes the same one (see
 # below), and absolute because that directory would resolve a relative path
@@ -260,6 +264,7 @@ set(WHIST_DESKTOP_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/cards.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/table.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/avatars.qrc
 )
 qt_add_resources(APP_RESOURCES ${WHIST_DESKTOP_RESOURCES})
 target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})

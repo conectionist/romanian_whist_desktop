@@ -27,6 +27,7 @@ add_executable(desktop_tests
     HandItemTests.cpp
     TrickPanelTests.cpp
     ThemeTests.cpp
+    AvatarTests.cpp
     FontsTests.cpp
     CardRendererTests.cpp
     DevicePixelsTests.cpp

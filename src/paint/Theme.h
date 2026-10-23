@@ -9,6 +9,7 @@
 
 #include <array>
 #include <memory>
+#include <string>
 
 // The first of the two seams of plan section 18.1: THE ONLY PLACE A COLOUR
 // EXISTS.
@@ -159,34 +160,9 @@ struct ThemeColours
         // content, and the portrait's picture fills its whole content box.
         QColor portraitBorder;
 
-        // WHAT EVERY PORTRAIT SHARES: the dark its background fades to, the
-        // eyebrows' stroke, and the mouth of a face with no mustache.
+        // The dark a portrait's box is filled with before its art is drawn: the
+        // mock-up's vignette's outer stop, which a transparent part of a file shows.
         QColor portraitEdge;
-        QColor portraitBrow;
-        QColor portraitMouth;
-
-        // ONE HEAD-AND-SHOULDERS BUST PER SEAT, table.js PLAYERS[].look: six hand-
-        // drawn variants rather than a hue rotation, indexed as Theme::avatar() is.
-        //
-        // hat, mustache and beard are INVALID where the look has none, which is how
-        // the mock-up's optional fields read; a valid colour draws the feature.
-        struct PortraitLook
-        {
-            QColor background;
-            QColor skin;
-            QColor shade;
-            QColor hair;
-            QColor coat;
-            QColor shirt;
-            QColor hat;
-            QColor mustache;
-            QColor beard;
-            bool longHair = false;
-
-            bool operator==(const PortraitLook&) const = default;
-        };
-
-        std::array<PortraitLook, 6> portraits;
 
         // THE RACKS (section 2.6), added in the redesign's phase 5. The card backs'
         // own colours are CardRenderer's, as every card's are; these are the
@@ -324,16 +300,17 @@ struct Theme : ThemeColours
     // frame and a cached picture of the old size would only be thrown away.
     QBrush roomBrush(const QRectF& view) const;
 
-    // A drawn bust today (table.PortraitLook), real art tomorrow. THE BOX IS
-    // WHAT THE SEAT PANEL RESERVES, which is the whole reason this takes a QSize
-    // rather than a scale: replacing the art then never reflows the layout,
-    // because the layout never asked how big the art wanted to be.
+    // The portrait with this id (avatars::catalogue()), from its SVG or PNG file:
+    // scaled to fill the box and cropped, centred, over portraitEdge, then given
+    // the mock-up's light sepia. THE BOX IS WHAT THE SEAT PANEL RESERVES, which is
+    // the whole reason this takes a QSize rather than a scale: the art never
+    // reflows the layout, because the layout never asked how big it wanted to be.
     //
-    // `seat` picks the look, modulo the six there are. The table passes a seat's
-    // place clockwise from the bottom, so you are always the first.
+    // An id the catalogue does not have draws the bare box: a missing face shows,
+    // and harms nothing.
     //
     // Same logical-size-and-dpr contract as background() above.
-    QPixmap avatar(unsigned int seat, QSize box, qreal dpr) const;
+    QPixmap avatar(const std::string& id, QSize box, qreal dpr) const;
 
     // The redesign's two table textures (tools/generate_table_textures.py), as
     // the source art: the wooden rim 1020x1020 with alpha, the felt 880x880.
@@ -362,7 +339,7 @@ private:
     // ratio. Attaching the ratio is the caller's half, done above.
     QPixmap paintBackground(QSize physical) const;
     QPixmap paintRoom(QSize physical) const;
-    QPixmap paintAvatar(unsigned int seat, QSize physical) const;
+    QPixmap paintAvatar(const std::string& id, QSize physical) const;
 
     // The other half: stamping the ratio onto what a painter returned. Static
     // and shared by both, so neither public method can rasterize large and then

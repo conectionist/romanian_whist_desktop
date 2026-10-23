@@ -1,0 +1,33 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <!-- Runtime paths are :/avatars/NAME - the alias strips the source directory,
+         as table.qrc does, so moving the files does not move the URLs.
+
+         THE PORTRAITS A SEAT CAN WEAR. avatars.json is the catalogue: one entry per
+         avatar, its id, its gender ("male" or "female") and its file, in the order
+         the catalogue keeps (src/paint/Avatars.h). TO ADD ONE: put the file in
+         images/avatars/, give it a line here and an entry in avatars.json.
+         AvatarTests fails on a file listed in one and not the other.
+
+         WHAT A FILE MUST BE:
+         - SVG or PNG. Not JPEG: it needs an image plugin the deploy step strips.
+         - 100 wide by 114 tall in shape, the seat panel's portrait box. Another
+           shape is scaled to fill the box and cropped, centred.
+         - A PNG at least 400 x 456 pixels; the box is about 140 pixels at its
+           largest on screen. An SVG is sharp at any size.
+         - Opaque, with its own background. A transparent part shows the dark
+           the box is filled with first.
+         The client tones every portrait with the mock-up's light sepia as it draws
+         it (Theme::avatar()), so a file is drawn as given otherwise.
+
+         The first six are the table mock-up's busts, written by
+         tools/export_portraits.py. -->
+    <qresource prefix="/avatars">
+        <file alias="avatars.json">images/avatars/avatars.json</file>
+        <file alias="man-dark-hair-beard.svg">images/avatars/man-dark-hair-beard.svg</file>
+        <file alias="man-hat-mustache.svg">images/avatars/man-hat-mustache.svg</file>
+        <file alias="woman-long-brown-hair.svg">images/avatars/woman-long-brown-hair.svg</file>
+        <file alias="man-white-hair-hat.svg">images/avatars/man-white-hair-hat.svg</file>
+        <file alias="woman-long-red-hair.svg">images/avatars/woman-long-red-hair.svg</file>
+        <file alias="man-black-hair-beard.svg">images/avatars/man-black-hair-beard.svg</file>
+    </qresource>
+</RCC>

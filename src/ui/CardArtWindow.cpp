@@ -1,5 +1,6 @@
 #include "CardArtWindow.h"
 
+#include "paint/Avatars.h"
 #include "table/SeatItem.h"
 #include "table/TableSpace.h"
 
@@ -131,7 +132,7 @@ void CardArtCanvas::paintEvent(QPaintEvent*)
     // card.
     const QSize box = (seatitem::portraitPicture() * (unit / tablespace::handCardHeight)).toSize();
 
-    painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(0, box, dpr));
+    painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(avatars::catalogue().empty() ? std::string() : avatars::catalogue().front().id, box, dpr));
     painter.drawText(QRectF(x, baseline + 4.0, box.width() * 2.0, captionHeight),
                      Qt::AlignLeft | Qt::AlignVCenter, tr("Avatar"));
 }

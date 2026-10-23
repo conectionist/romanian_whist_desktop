@@ -209,12 +209,12 @@ void SeatItem::setPanelSize(QSizeF panelSize)
     update();
 }
 
-void SeatItem::setPortrait(unsigned int portrait)
+void SeatItem::setPortrait(const std::string& avatar)
 {
-    if(look == portrait)
+    if(look == avatar)
         return;
 
-    look = portrait;
+    look = avatar;
     memo.invalidate();
     update();
 }

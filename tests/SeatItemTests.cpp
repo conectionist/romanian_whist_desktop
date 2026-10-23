@@ -2,6 +2,7 @@
 
 #include "CardStringMaker.h"
 
+#include "paint/Avatars.h"
 #include "paint/CardRenderer.h"
 #include "paint/Fonts.h"
 #include "paint/Panel.h"
@@ -18,6 +19,7 @@
 #include <QString>
 #include <QtMath>
 
+#include <string>
 #include <vector>
 
 using namespace romanian_whist;
@@ -434,7 +436,7 @@ TEST_CASE("A portrait's edge shows no row from its other edge", "[seat]")
     const QPointF origin(20.0, 20.0);
     const auto device = [&](QPointF point) { return origin + (point - layout.panel.topLeft()) * ratio; };
 
-    const auto paintWith = [&](unsigned int look)
+    const auto paintWith = [&](const std::string& look)
     {
         plaque.item.setPortrait(look);
 
@@ -451,11 +453,11 @@ TEST_CASE("A portrait's edge shows no row from its other edge", "[seat]")
         return image;
     };
 
-    const QImage first = paintWith(0);
-    const QImage second = paintWith(1);
+    const QImage first = paintWith(avatars::catalogue().at(0).id);
+    const QImage second = paintWith(avatars::catalogue().at(1).id);
 
     const int top = qRound(device(inner.topLeft()).y());
-    const QImage avatar = Theme::dark().avatar(0, inner.size().toSize(), ratio).toImage();
+    const QImage avatar = Theme::dark().avatar(avatars::catalogue().at(0).id, inner.size().toSize(), ratio).toImage();
 
     const int left = qRound(device(inner.topLeft()).x());
     const int from = left + avatar.width() / 4;

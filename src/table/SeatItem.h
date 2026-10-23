@@ -12,6 +12,7 @@
 #include <QString>
 
 #include <cstddef>
+#include <string>
 
 // One seat's name panel (the table redesign's section 2.5): a portrait, the name,
 // the Taken/Bid pill, and the turn ring.
@@ -148,9 +149,10 @@ public:
     // panel is too.
     void setPanelSize(QSizeF size);
 
-    // Which of the Theme's portraits this seat wears. A fact about where the seat
-    // sits rather than about the snapshot, so it is set with the size.
-    void setPortrait(unsigned int look);
+    // Which portrait this seat wears: an avatars::catalogue() id. A fact about
+    // where the seat sits rather than about the snapshot, so it is set with the
+    // size.
+    void setPortrait(const std::string& avatar);
 
     // The panel plus everything it paints past its edge - the drop shadow, and the
     // ring and glow whether or not they are showing: a rect that changed as the
@@ -198,7 +200,7 @@ private:
     SeatView seat;
     bool active = false;
     bool biddingOpen = false;
-    unsigned int look = 0;
+    std::string look;
     Theme theme = Theme::dark();
     QSizeF size;
 
