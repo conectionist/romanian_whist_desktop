@@ -34,15 +34,12 @@ tablespace::Placement trickitem::cardPlacement(unsigned int seatCount, const sea
 {
     const qreal height = tablespace::playedCardHeight(seatCount);
 
-    if(place.human)
-    {
-        return tablespace::Placement{ QPointF(tablespace::centre.x(),
-                                              tablespace::handTop - tablespace::playedInset - height / 2.0),
-                                      0.0 };
-    }
+    // TOUCHING THE LOGO (phase 13): the card's inner edge on the medallion's rim,
+    // so its middle is half a card further out. Yours straight down, unturned.
+    const qreal radius = tablespace::playedFromCentre + height / 2.0;
 
-    // The felt's edge, the inset, then half the card: table.js trickPos().
-    const qreal radius = tablespace::feltRadius - tablespace::playedInset - height / 2.0;
+    if(place.human)
+        return tablespace::Placement{ tablespace::centre + QPointF(0.0, radius), 0.0 };
 
     return tablespace::Placement{ seatlayout::onCircle(*place.angle, radius),
                                   rackitem::frameRotation(*place.angle) };
@@ -59,10 +56,17 @@ std::optional<tablespace::Placement> trickitem::cardPlacement(unsigned int seatC
     return cardPlacement(seatCount, *place);
 }
 
-tablespace::Placement trickitem::leadMarkPlacement(const seatlayout::Place& place)
+tablespace::Placement trickitem::leadMarkPlacement(unsigned int seatCount, const seatlayout::Place& place)
 {
+    // Yours half way between your card's bottom edge and your hand's top.
     if(place.human)
-        return tablespace::Placement{ QPointF(tablespace::centre.x(), tablespace::leadMarkHumanY), 0.0 };
+    {
+        const qreal cardBottom = tablespace::centre.y() + tablespace::playedFromCentre
+                               + tablespace::playedCardHeight(seatCount);
+
+        return tablespace::Placement{ QPointF(tablespace::centre.x(), (cardBottom + tablespace::handTop) / 2.0),
+                                      0.0 };
+    }
 
     return tablespace::Placement{ seatlayout::onCircle(*place.angle, tablespace::goldLineRadius),
                                   rackitem::frameRotation(*place.angle) };
@@ -76,7 +80,7 @@ std::optional<tablespace::Placement> trickitem::leadMarkPlacement(unsigned int s
     if(!place)
         return std::nullopt;
 
-    return leadMarkPlacement(*place);
+    return leadMarkPlacement(seatCount, *place);
 }
 
 std::optional<unsigned int> trickitem::leadSeat(const GameSnapshot& snapshot)

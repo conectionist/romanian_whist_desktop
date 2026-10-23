@@ -342,6 +342,17 @@ cache behaviour; it is already a single seam for exactly this.
   is still on the table. (Corrected in phase 6's review; phase 6 first read `betsPlaced` and
   `activeSeat`.)
 
+> **AMENDED IN PHASE 13, by the owner's call of 2026-10-23: the trick rings the round logo.**
+> Every played card, yours included, lies with its inner edge on the logo's rim
+> (`tablespace::playedFromCentre`, half of section 2.4's amended 215), so the whole trick sits on
+> one circle about it. An opponent's card is still on its rack's line and turned to it; yours is
+> straight below the centre, unturned, 35 units lower than the mock-up's with up to four players
+> and 59 with five or six, and still clear of your hand. Your rhombus stays half way between your
+> card and your hand. Section 2.5's seats are not evenly spaced, so with five or six players some
+> neighbours' inner corners overlap a little, and with six your card stands about 4 degrees apart
+> from each neighbour where the others touch. The owner saw both and kept them, rather than
+> spacing the cards evenly, which would turn them up to 17 degrees off their racks.
+
 ### 2.8 The human's hand
 
 `table.js` `renderHand()`; `.hcard`.
@@ -2106,6 +2117,8 @@ commit, all on 2026-10-23:
   section 2.13's 720.
 - **The logo on the table is round**, a medallion 215 across, chosen from four sizes: section 2.4's
   amendment. The main-menu page keeps the plaque.
+- **The trick rings the round logo**: every played card, yours too, touches it, so yours is on
+  the others' circle. Section 2.7's amendment.
 - **"Ana won it", not "Ana took it"**, on the Last trick sheet, and in Romanian "Ana a câștigat-o"
   for "A luat-o Ana". Phase 11's notes above keep the words it shipped with.
 

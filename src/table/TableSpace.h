@@ -114,19 +114,16 @@ inline constexpr qreal tableReach = woodRadius + shadows::reach(tableShadowBlur)
 // playedCardHeight() below, and the racks' cards rackCardHeight.
 inline constexpr qreal handCardHeight = 225.0;
 
-// Where the top of the human's hand is (section 2.8). Their played card sits 60
-// above it.
+// Where the top of the human's hand is (section 2.8).
 inline constexpr qreal handTop = 850.0;
 
-// THE PLAYED CARDS (section 2.7). Each opponent's lies on the line from the centre
-// to its rack with its outer end this far inside the felt's edge, and yours with
-// its bottom edge this far above your hand. trickitem::cardPlacement() is where.
-inline constexpr qreal playedInset = 60.0;
-
-// THE LEAD RHOMBUS (section 2.7): an opponent's sits on the gold circle
-// (goldLineRadius) in line with their rack. Yours would sit under your hand there,
-// so it goes in the gap between your card and your hand, half way.
-inline constexpr qreal leadMarkHumanY = handTop - playedInset / 2.0;
+// THE TRICK ROUND THE LOGO (section 2.7, as phase 13 amends it by the owner's call
+// of 2026-10-23): every played card - yours too - lies with its inner edge this far
+// from the centre, touching the round logo, so the trick sits on one circle about
+// it. trickitem::cardPlacement() is where. The mock-up put each opponent's outer
+// end 60 inside the felt's edge and yours 60 above your hand, which left yours
+// well off the others' circle.
+inline constexpr qreal playedFromCentre = logoDiameter / 2.0;
 
 // THE NAME PANELS (section 2.5). Where each one goes is seatlayout::panelRect(),
 // from a table hand-tuned per player count for the mock-up's panel of this size:

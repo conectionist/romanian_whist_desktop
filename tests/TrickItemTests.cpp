@@ -120,8 +120,8 @@ TEST_CASE("An opponent's card lies in front of their rack, turned to it", "[tric
 {
     for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
     {
-        const qreal radius = tablespace::feltRadius - tablespace::playedInset
-                             - tablespace::playedCardHeight(seatCount) / 2.0;
+        // Its inner edge on the round logo's rim (phase 13).
+        const qreal radius = tablespace::playedFromCentre + tablespace::playedCardHeight(seatCount) / 2.0;
 
         for(int humanSeat = -1 ; humanSeat < static_cast<int>(seatCount) ; humanSeat++)
         {
@@ -138,7 +138,7 @@ TEST_CASE("An opponent's card lies in front of their rack, turned to it", "[tric
 
                 const qreal rack = seatlayout::place(seatCount, humanSeat, seat)->angle.value();
 
-                // On the line to the rack, its outer end 60 inside the felt's edge...
+                // On the line to the rack, touching the logo...
                 REQUIRE(distanceFromCentre(place->centre) == Catch::Approx(radius));
                 REQUIRE(std::cos(angleOf(place->centre) - rack) == Catch::Approx(1.0));
 
@@ -164,7 +164,10 @@ TEST_CASE("Four players' cards are turned by exact quarter turns", "[trick]")
     REQUIRE(trickitem::cardPlacement(4, 0, 1)->centre.y() == Catch::Approx(tablespace::centre.y()));
 }
 
-TEST_CASE("Your card lies above your hand, unturned", "[trick]")
+// THE TRICK ON ONE CIRCLE (phase 13, the owner's call of 2026-10-23): yours is as
+// far from the centre as everyone else's, where the mock-up put it 60 above your
+// hand and well off the others' circle.
+TEST_CASE("Your card touches the logo below it on the others' circle", "[trick]")
 {
     for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
     {
@@ -178,11 +181,21 @@ TEST_CASE("Your card lies above your hand, unturned", "[trick]")
                 trickitem::cardPlacement(seatCount, static_cast<int>(human), human);
             REQUIRE(place);
 
-            // Its bottom edge 60 above the top of your hand.
+            // Straight below the centre and unturned, its top edge on the logo's rim.
             REQUIRE(place->centre.x() == tablespace::centre.x());
-            REQUIRE(place->centre.y() + height / 2.0
-                    == Catch::Approx(tablespace::handTop - tablespace::playedInset));
+            REQUIRE(place->centre.y() - height / 2.0
+                    == Catch::Approx(tablespace::centre.y() + tablespace::playedFromCentre));
             REQUIRE(place->rotation == 0.0);
+
+            // As far out as an opponent's.
+            const unsigned int other = (human + 1) % seatCount;
+            const std::optional<tablespace::Placement> theirs =
+                trickitem::cardPlacement(seatCount, static_cast<int>(human), other);
+            REQUIRE(theirs);
+            REQUIRE(distanceFromCentre(place->centre) == Catch::Approx(distanceFromCentre(theirs->centre)));
+
+            // And clear of your hand, with room for your rhombus between them.
+            REQUIRE(place->centre.y() + height / 2.0 < tablespace::handTop - 20.0);
         }
     }
 }
@@ -198,8 +211,7 @@ TEST_CASE("A spectated seat 0's card lies in front of its rack at the bottom", "
         const std::optional<tablespace::Placement> place = trickitem::cardPlacement(seatCount, -1, 0);
         REQUIRE(place);
 
-        const qreal radius = tablespace::feltRadius - tablespace::playedInset
-                             - tablespace::playedCardHeight(seatCount) / 2.0;
+        const qreal radius = tablespace::playedFromCentre + tablespace::playedCardHeight(seatCount) / 2.0;
 
         REQUIRE(place->centre.x() == Catch::Approx(tablespace::centre.x()));
         REQUIRE(place->centre.y() == Catch::Approx(tablespace::centre.y() + radius));
@@ -207,30 +219,58 @@ TEST_CASE("A spectated seat 0's card lies in front of its rack at the bottom", "
     }
 }
 
-TEST_CASE("No two played cards touch, and every one stays on the felt", "[trick]")
+// NONE COVERS THE LOGO, and each stays on the felt. Up to four players no two
+// touch. Five and six seats are not evenly spaced (section 2.5's panels are placed
+// by hand), and some neighbours' INNER CORNERS overlap by a little, by the owner's
+// call of 2026-10-23 - but never their outer halves, so every card reads whole
+// where its owner looks at it.
+TEST_CASE("Played cards ring the logo without covering it", "[trick]")
 {
-    // A FULL TRICK AT EVERY TABLE: the felt is shared by up to six cards, and five
-    // and six take the smaller size for exactly this.
     for(unsigned int seatCount = 2 ; seatCount <= 6 ; seatCount++)
     {
+        const qreal height = tablespace::playedCardHeight(seatCount);
+
         for(int humanSeat = -1 ; humanSeat < static_cast<int>(seatCount) ; humanSeat++)
         {
             std::vector<QPolygonF> cards;
+            std::vector<QPolygonF> outerHalves;
 
             for(unsigned int seat = 0 ; seat < seatCount ; seat++)
-                cards.push_back(outlineOf(seatCount, *trickitem::cardPlacement(seatCount, humanSeat, seat)));
+            {
+                const tablespace::Placement place = *trickitem::cardPlacement(seatCount, humanSeat, seat);
+                cards.push_back(outlineOf(seatCount, place));
+
+                // The half away from the centre: a card's own +y runs out along the
+                // radius for every seat, yours included (unturned, below the centre).
+                const qreal width = seatCount <= 4 ? 141.6 : 124.8;
+
+                QTransform turn;
+                turn.translate(place.centre.x(), place.centre.y());
+                turn.rotate(place.rotation);
+
+                outerHalves.push_back(turn.map(QPolygonF(QRectF(-width / 2.0, 0.0, width, height / 2.0))));
+            }
 
             for(std::size_t left = 0 ; left < cards.size() ; left++)
             {
                 INFO("seatCount " << seatCount << ", humanSeat " << humanSeat << ", seat " << left);
 
+                // On the felt, and nothing inside the logo's rim: the inner edge is a
+                // tangent, so every corner is further out than the rim.
                 for(const QPointF& corner : cards[left])
+                {
                     REQUIRE(distanceFromCentre(corner) < tablespace::feltRadius);
+                    REQUIRE(distanceFromCentre(corner) > tablespace::playedFromCentre);
+                }
 
                 for(std::size_t right = left + 1 ; right < cards.size() ; right++)
                 {
                     INFO("and seat " << right);
-                    REQUIRE_FALSE(cards[left].intersects(cards[right]));
+
+                    if(seatCount <= 4)
+                        REQUIRE_FALSE(cards[left].intersects(cards[right]));
+
+                    REQUIRE_FALSE(outerHalves[left].intersects(outerHalves[right]));
                 }
             }
         }
@@ -516,10 +556,19 @@ TEST_CASE("The rhombus sits on the gold circle, or between your card and your ha
             REQUIRE(tablespace::goldLineRadius < tablespace::rackRadius);
         }
 
-        // Yours, half way between your card and your hand.
+        // Yours, half way between your card's bottom edge and your hand's top, and
+        // clear of both: the rhombus is 11 turned 45 degrees and stretched 1.45, so
+        // it reaches about 11.3 either way along its long axis.
         const std::optional<tablespace::Placement> yours = trickitem::leadMarkPlacement(seatCount, 0, 0);
         REQUIRE(yours);
-        REQUIRE(yours->centre == QPointF(768.0, 820.0));
+
+        const qreal cardBottom = trickitem::cardPlacement(seatCount, 0, 0)->centre.y()
+                               + tablespace::playedCardHeight(seatCount) / 2.0;
+
+        REQUIRE(yours->centre.x() == tablespace::centre.x());
+        REQUIRE(yours->centre.y() == Catch::Approx((cardBottom + tablespace::handTop) / 2.0));
+        REQUIRE(yours->centre.y() - cardBottom > 11.3);
+        REQUIRE(tablespace::handTop - yours->centre.y() > 11.3);
         REQUIRE(yours->rotation == 0.0);
     }
 }

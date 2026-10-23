@@ -32,15 +32,22 @@ namespace trickitem
 
 // WHERE `seat`'S PLAYED CARD LIES.
 //
-// An opponent's - and a spectated seat 0's, which is drawn as one - is on the line
-// from the table's centre at its rack's angle (seatlayout::rackAngle()), its outer
-// end tablespace::playedInset inside the felt's edge, and turned as the rack is
-// (rackitem::frameRotation()): so the side seats' cards lie sideways and the top
-// seat's is upside down, each reading the right way up to its owner. A quarter turn
-// exactly when it is one.
+// EVERY CARD'S INNER EDGE TOUCHES THE ROUND LOGO (tablespace::playedFromCentre),
+// so the whole trick lies on one circle about it (phase 13).
 //
-// Yours is centred above your hand, its bottom edge playedInset above the hand's
-// top, and not turned.
+// An opponent's - and a spectated seat 0's, which is drawn as one - is on the line
+// from the table's centre at its rack's angle (seatlayout::rackAngle()), turned as
+// the rack is (rackitem::frameRotation()): so the side seats' cards lie sideways
+// and the top seat's is upside down, each reading the right way up to its owner. A
+// quarter turn exactly when it is one.
+//
+// Yours is straight below the centre, not turned, and clear of your hand.
+//
+// THE SEATS ARE NOT EVENLY SPACED - section 2.5's panels are placed by hand - so
+// with five or six players some neighbours' inner corners overlap by a little,
+// and with six your card stands a little apart from its two neighbours. The owner
+// saw both and kept them (2026-10-23), rather than spacing the cards evenly and
+// turning them up to 17 degrees away from their racks.
 //
 // From the seat's place, worked out once (seatlayout::place()); the card's size
 // is the table's, by `seatCount`.
@@ -52,9 +59,10 @@ std::optional<tablespace::Placement> cardPlacement(unsigned int seatCount, int h
 
 // WHERE THE LEAD RHOMBUS GOES FOR `seat`: an opponent's on the felt's gold circle
 // at its rack's angle, between the rack and the card, turned so its long axis
-// points at the rack; yours in the gap between your card and your hand, where the
-// circle is under your cards. None where cardPlacement() has none.
-tablespace::Placement leadMarkPlacement(const seatlayout::Place& place);
+// points at the rack; yours half way between your card's bottom edge and your
+// hand's top, where the circle is under your cards. None where cardPlacement()
+// has none.
+tablespace::Placement leadMarkPlacement(unsigned int seatCount, const seatlayout::Place& place);
 
 std::optional<tablespace::Placement> leadMarkPlacement(unsigned int seatCount, int humanSeat,
                                                        unsigned int seat);

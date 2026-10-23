@@ -355,7 +355,7 @@ seatlayout::Places TableScene::relayout()
     std::optional<tablespace::Placement> mark;
 
     if(lead && *lead < places.size() && places[*lead])
-        mark = trickitem::leadMarkPlacement(*places[*lead]);
+        mark = trickitem::leadMarkPlacement(static_cast<unsigned int>(snapshot->seats.size()), *places[*lead]);
 
     leadMark->setMark(mark, theme.table);
 
