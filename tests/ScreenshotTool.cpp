@@ -380,28 +380,47 @@ QString shotsDirectory()
 namespace
 {
 // WHIST_SHOTS_QM: a compiled translation to take the pictures in (phase 12), such as
-// the build's romanian_whist_desktop_ro_RO.qm. Installed once, before the first
-// window is built, and left for the rest of the run - the screenshot cases run on
-// their own, by their tag. Unset, the pictures are in the source language.
-void translateShots()
+// the build's romanian_whist_desktop_ro_RO.qm. Unset, the pictures are in the source
+// language.
+//
+// FOR ONE TEST CASE, declared first in it so it outlives every window the case
+// builds: installed as it is made, before the first window, and taken out again as
+// it goes. Left in for the rest of the run, it turned every case run after the
+// pictures - `"[.screenshot],[bubble]"` - into Romanian, and those assert English
+// (PR #38's review, finding #5).
+class ShotsTranslation
 {
-    static QTranslator* installed = nullptr;
+public:
+    ShotsTranslation()
+    {
+        if(qEnvironmentVariableIsEmpty("WHIST_SHOTS_QM"))
+            return;
 
-    if(installed || qEnvironmentVariableIsEmpty("WHIST_SHOTS_QM"))
-        return;
+        INFO("WHIST_SHOTS_QM=" << qEnvironmentVariable("WHIST_SHOTS_QM").toStdString());
+        REQUIRE(translator.load(qEnvironmentVariable("WHIST_SHOTS_QM")));
 
-    installed = new QTranslator(QCoreApplication::instance());
+        installed = QCoreApplication::installTranslator(&translator);
+        REQUIRE(installed);
+    }
 
-    INFO("WHIST_SHOTS_QM=" << qEnvironmentVariable("WHIST_SHOTS_QM").toStdString());
-    REQUIRE(installed->load(qEnvironmentVariable("WHIST_SHOTS_QM")));
+    ~ShotsTranslation()
+    {
+        if(installed)
+            QCoreApplication::removeTranslator(&translator);
+    }
 
-    QCoreApplication::installTranslator(installed);
-}
+    ShotsTranslation(const ShotsTranslation&) = delete;
+    ShotsTranslation& operator=(const ShotsTranslation&) = delete;
+
+private:
+    QTranslator translator;
+    bool installed = false;
+};
 }
 
 TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 {
-    translateShots();
+    const ShotsTranslation translation;
 
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
@@ -515,7 +534,7 @@ TEST_CASE("Screenshots of the table for the redesign", "[.screenshot]")
 // the gold circle and the logo can be compared pixel for pixel.
 TEST_CASE("A screenshot of the empty table at the mock-up's own scale", "[.screenshot]")
 {
-    translateShots();
+    const ShotsTranslation translation;
 
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
@@ -658,7 +677,7 @@ GameSnapshot handMoment(const HandShot& shot)
 
 TEST_CASE("Screenshots of the hand at the mock-up's own scale", "[.screenshot]")
 {
-    translateShots();
+    const ShotsTranslation translation;
 
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
@@ -896,7 +915,7 @@ lasttrick::Trick sheetTrick()
 
 TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 {
-    translateShots();
+    const ShotsTranslation translation;
 
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
@@ -989,7 +1008,7 @@ TEST_CASE("Screenshots of the sheets", "[.screenshot]")
 // mock-up, which has no menu page.
 TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
 {
-    translateShots();
+    const ShotsTranslation translation;
 
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
