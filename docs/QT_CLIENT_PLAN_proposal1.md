@@ -2028,8 +2028,8 @@ About box prints the client version and the linked engine version, exactly as th
 `--version` does).
 
 > **AMENDED IN THE TABLE REDESIGN'S PHASE 13 (the owner's call of 2026-10-23): the language is asked
-> first.** Before the window is built, a small dialog asks for **English** or **Română**, with the
-> system's language picked to start; closing it quits. `--language en` or `--language ro` answers it
+> first.** Before the window is built, a small dialog offers **Română** and **English** as two
+> flags, each named under it, Romanian lit to start; closing it quits. `--language en` or `--language ro` answers it
 > from the command line. The app still needs no command line: the switch only skips the question.
 > Nothing is remembered between runs until settings are saved (§20).
 

@@ -13,7 +13,7 @@
 
 // ---- MenuPageButton ----
 
-MenuPageButton::MenuPageButton(std::optional<icons::Icon> _icon, const QString& text, QWidget* parent)
+MenuPageButton::MenuPageButton(icons::Icon _icon, const QString& text, QWidget* parent)
     : LitButton(text, parent), icon(_icon), colours(Theme::dark().table)
 {
     // The page repaints the panel behind the face (MainMenuPage::eventFilter()).
@@ -27,7 +27,7 @@ void MenuPageButton::setColours(const Theme::TablePalette& palette)
 
 QSize MenuPageButton::sizeHint() const
 {
-    const QSizeF size = tablebutton::sizeFor(text(), icon.has_value());
+    const QSizeF size = tablebutton::sizeFor(text());
 
     return QSize(static_cast<int>(std::ceil(size.width())), static_cast<int>(std::ceil(size.height())));
 }

@@ -1031,13 +1031,14 @@ TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
 // ---- the language dialog, for the redesign's phase 13 ----
 //
 // language.png: the dialog that asks for the language before the window is built,
-// at its own size, English preselected and so lit.
+// at its own size, Romanian lit to start (lit only in an active window, so
+// not here: the offscreen platform never activates one).
 TEST_CASE("A screenshot of the language dialog", "[.screenshot]")
 {
     const QString dir = shotsDirectory();
     REQUIRE(QDir().mkpath(dir));
 
-    LanguageDialog dialog(language::Language::English);
+    LanguageDialog dialog;
     dialog.show();
     pump(200);
 

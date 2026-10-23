@@ -10,7 +10,6 @@
 #include <QSize>
 #include <QWidget>
 
-#include <optional>
 #include <vector>
 
 // One of the menu page's two buttons: section 2.11's .panel.btn - a gold line icon
@@ -30,8 +29,7 @@ class MenuPageButton : public LitButton
     Q_OBJECT
 
 public:
-    // No icon gives the label alone, centred: the language dialog's buttons.
-    MenuPageButton(std::optional<icons::Icon> icon, const QString& text, QWidget* parent = nullptr);
+    MenuPageButton(icons::Icon icon, const QString& text, QWidget* parent = nullptr);
 
     void setColours(const Theme::TablePalette& palette);
 
@@ -44,7 +42,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
-    std::optional<icons::Icon> icon;
+    icons::Icon icon;
     Theme::TablePalette colours;
 };
 

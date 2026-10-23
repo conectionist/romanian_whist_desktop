@@ -2119,10 +2119,10 @@ commit, all on 2026-10-23:
   amendment. The main-menu page keeps the plaque.
 - **The trick rings the round logo**: every played card, yours too, touches it, so yours is on
   the others' circle. Section 2.7's amendment.
-- **The app asks for its language first**: a dialog with English and Română, before the window is
-  built, so nothing is translated twice; `--language en|ro` skips it. The system's language only
-  picks which answer it starts on. `src/ui/LanguageDialog.h`; `QT_CLIENT_PLAN_proposal1.md` section
-  12 carries the amendment.
+- **The app asks for its language first**: a dialog of two flags, Română and English, each named
+  under it, Romanian lit to start, before the window is built, so nothing is translated twice;
+  `--language en|ro` skips it. `src/ui/LanguageDialog.h`; `QT_CLIENT_PLAN_proposal1.md` section 12
+  carries the amendment.
 - **"Ana won it", not "Ana took it"**, on the Last trick sheet, and in Romanian "Ana a câștigat-o"
   for "A luat-o Ana". Phase 11's notes above keep the words it shipped with.
 

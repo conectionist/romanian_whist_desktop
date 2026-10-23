@@ -7,7 +7,6 @@
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
-#include <QLocale>
 #include <QTranslator>
 
 #include <optional>
@@ -28,9 +27,9 @@ int main(int argc, char *argv[])
 
     // THE LANGUAGE, BEFORE ANYTHING IS BUILT IN IT (the redesign's phase 13, the
     // owner's call of 2026-10-23): --language en|ro says it, and without one the
-    // player is asked. Chosen first, every string the window makes is made in it,
-    // and nothing has to be translated again while the app runs. The system's
-    // language only picks which answer the dialog starts on.
+    // player is asked, Romanian lit to start. Chosen first, every string the window
+    // makes is made in it, and nothing has to be translated again while the app
+    // runs.
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Romanian Whist, the desktop client."));
     parser.addHelpOption();
@@ -55,7 +54,7 @@ int main(int argc, char *argv[])
 
     if(!chosen)
     {
-        LanguageDialog ask(language::fromSystem(QLocale::system().uiLanguages()));
+        LanguageDialog ask;
 
         // Closed without an answer: there is nothing to show yet, so the app ends.
         if(ask.exec() != QDialog::Accepted)
