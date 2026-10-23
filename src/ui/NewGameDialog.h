@@ -302,15 +302,21 @@ QString tooltipFor(BotLevel level);
 // newgame::pacingFor() turning them into delays. Each caller names them and
 // lays them out (PR #35's review, finding #12).
 //
-// The slider and its row: "Bot speed", "Slow", the slider, "Instant".
-// `labelGap` is extra room after "Bot speed".
-struct SpeedRow
+// A SLIDER AND ITS ROW of words: `name`, then `low`, the slider from `lowest` to
+// `highest` with a tick at each step, and `high`. `labelGap` is extra room after
+// `name`. Settings' two rows are this one shape, the bot speed's and the card
+// animations', and so is the setup dialog's (PR #38's review, finding #8).
+struct SliderRow
 {
     QHBoxLayout* row = nullptr;
     QSlider* slider = nullptr;
 };
 
-SpeedRow buildSpeedRow(QWidget* parent, int labelGap = 0);
+SliderRow buildSliderRow(QWidget* parent, const QString& name, const QString& low, const QString& high,
+                         int lowest, int highest, int labelGap = 0);
+
+// The bot speed's: "Bot speed", "Slow", the slider, "Instant".
+SliderRow buildSpeedRow(QWidget* parent, int labelGap = 0);
 
 // "Wait for me after each round": section 16.1's round sheet, held or not.
 QCheckBox* buildWaitCheckBox(QWidget* parent);

@@ -4,7 +4,6 @@
 
 #include <QBoxLayout>
 #include <QCheckBox>
-#include <QCoreApplication>
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -14,37 +13,6 @@
 
 namespace
 {
-struct AnimationRow
-{
-    QHBoxLayout* row = nullptr;
-    QSlider* slider = nullptr;
-};
-
-// "Card animations", Off, the slider, Slow: the Bot speed row's shape, with the
-// four stops of motion::Pace. Only the two ends are named, as the speed row's are;
-// the stops between are where the default sits, at the third.
-AnimationRow buildAnimationRow(QWidget* parent, int labelGap)
-{
-    AnimationRow built;
-
-    built.slider = new QSlider(Qt::Horizontal, parent);
-    built.slider->setRange(0, motion::stopCount - 1);
-    built.slider->setPageStep(1);
-    built.slider->setTickPosition(QSlider::TicksBelow);
-
-    built.row = new QHBoxLayout;
-    built.row->addWidget(new QLabel(QCoreApplication::translate("SettingsSheet", "Card animations"), parent));
-
-    if(labelGap > 0)
-        built.row->addSpacing(labelGap);
-
-    built.row->addWidget(new QLabel(QCoreApplication::translate("SettingsSheet", "Off"), parent));
-    built.row->addWidget(built.slider, 1);
-    built.row->addWidget(new QLabel(QCoreApplication::translate("SettingsSheet", "Slow"), parent));
-
-    return built;
-}
-
 std::vector<QLabel*> labelsOf(const QHBoxLayout* row)
 {
     std::vector<QLabel*> labels;
@@ -80,13 +48,17 @@ SettingsSheet::SettingsSheet(QWidget* parent) : Overlay(parent)
     // THE SETUP DIALOG'S SLIDER, built by the same function, so a player who has
     // set it in one place recognises it in the other - its words set here as the
     // sheet's: "Bot speed" as the mock-up's .label, its two ends as notes.
-    const newgame::SpeedRow speedRow = newgame::buildSpeedRow(panel, 12);
+    const newgame::SliderRow speedRow = newgame::buildSpeedRow(panel, 12);
     speed = speedRow.slider;
     speed->setObjectName(QStringLiteral("settingsSpeed"));
     speed->setMinimumWidth(240);
 
-    // THE ANIMATIONS' ROW, in the same shape and under it (phase 12).
-    const AnimationRow animationRow = buildAnimationRow(panel, 12);
+    // THE ANIMATIONS' ROW, in the same shape and under it (phase 12): "Card
+    // animations", Off, the slider, Slow, with the four stops of motion::Pace. Only
+    // the two ends are named, as the speed row's are; the stops between are where
+    // the default sits, at the third.
+    const newgame::SliderRow animationRow = newgame::buildSliderRow(panel, tr("Card animations"), tr("Off"),
+                                                                    tr("Slow"), 0, motion::stopCount - 1, 12);
     animations = animationRow.slider;
     animations->setObjectName(QStringLiteral("settingsAnimations"));
     animations->setMinimumWidth(240);
