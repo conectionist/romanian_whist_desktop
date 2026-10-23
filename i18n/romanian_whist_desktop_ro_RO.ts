@@ -192,7 +192,17 @@
 <context>
     <name>NewGameDialog</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="+734"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="+63"/>
+        <source>Male</source>
+        <translation type="unfinished">Bărbat</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Female</source>
+        <translation type="unfinished">Femeie</translation>
+    </message>
+    <message>
+        <location line="+700"/>
         <source>New Game</source>
         <translation>Joc nou</translation>
     </message>
@@ -212,7 +222,7 @@
         <translation>Numele tău</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+18"/>
         <source>Opponents</source>
         <translation>Adversari</translation>
     </message>
@@ -257,17 +267,17 @@
         <translation>Împarte</translation>
     </message>
     <message>
-        <location line="+106"/>
+        <location line="+109"/>
         <source>%1.</source>
         <translation>%1.</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+40"/>
         <source>Bot %1</source>
         <translation>Bot %1</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location line="+34"/>
         <source>plays</source>
         <translation>joacă</translation>
     </message>
@@ -362,7 +372,7 @@
 <context>
     <name>TableTopItem</name>
     <message>
-        <location filename="../src/table/TableTopItem.cpp" line="+291"/>
+        <location filename="../src/table/TableTopItem.cpp" line="+305"/>
         <source>Romanian
 Whist</source>
         <comment>The logo on the table: its lines, split by line breaks. One line or two.</comment>
@@ -372,17 +382,24 @@ Whist</source>
 <context>
     <name>bidstrip</name>
     <message>
-        <location filename="../src/table/BidStripItem.cpp" line="+218"/>
+        <location filename="../src/table/BidStripItem.cpp" line="+231"/>
         <source>How many tricks will you take?</source>
         <translation>Câte mâini faci?</translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="-202"/>
         <source>You bid last. %1 would make the bids add up to %2, and somebody has to be wrong.</source>
+        <comment>about you, a man</comment>
         <translation>Licitezi ultimul. Cu %1, licitațiile ar face %2 și cineva trebuie să se pârlească.</translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+4"/>
+        <source>You bid last. %1 would make the bids add up to %2, and somebody has to be wrong.</source>
+        <comment>about you, a woman</comment>
+        <translation type="unfinished">Licitezi ultima. Cu %1, licitațiile ar face %2 și cineva trebuie să se pârlească.</translation>
+    </message>
+    <message>
+        <location line="+233"/>
         <source>%1 bid so far, totalling %2 of %3 trick.</source>
         <translation>Licitații până acum: %1, în total %2 din %3 mână.</translation>
     </message>
@@ -394,22 +411,6 @@ Whist</source>
 </context>
 <context>
     <name>cardtext</name>
-    <message>
-        <source>Hearts</source>
-        <translation type="vanished">Inimă roșie</translation>
-    </message>
-    <message>
-        <source>Diamonds</source>
-        <translation type="vanished">Romb</translation>
-    </message>
-    <message>
-        <source>Spades</source>
-        <translation type="vanished">Inimă neagră</translation>
-    </message>
-    <message>
-        <source>Clubs</source>
-        <translation type="vanished">Treflă</translation>
-    </message>
     <message>
         <location filename="../src/table/CardText.cpp" line="+42"/>
         <source>J</source>
@@ -589,7 +590,7 @@ Whist</source>
 <context>
     <name>newgame</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="-826"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="-857"/>
         <source>Weighs %1 imagined deals before each card, never plays at random, and counts %2% of every point an opponent scores against its own, %3% of the leader&apos;s.</source>
         <translation>Cântărește %1 de împărțiri imaginate înaintea fiecărei cărți, nu joacă niciodată la întâmplare și socotește %2% din fiecare punct al unui adversar împotriva propriului scor, %3% din ale liderului.</translation>
     </message>
@@ -599,7 +600,7 @@ Whist</source>
         <translation>Jucător</translation>
     </message>
     <message numerus="yes">
-        <location line="+115"/>
+        <location line="+119"/>
         <location line="+4"/>
         <source>%n rounds</source>
         <translation>
@@ -643,7 +644,7 @@ Whist</source>
         <translation>Doi jucători nu se pot numi amândoi %1.</translation>
     </message>
     <message>
-        <location line="+123"/>
+        <location line="+130"/>
         <source>Random</source>
         <translation>Aleatoriu</translation>
     </message>
@@ -1033,13 +1034,61 @@ Whist</source>
 <context>
     <name>trickpanel</name>
     <message>
-        <location filename="../src/table/TrickPanelItem.cpp" line="+167"/>
-        <location line="+184"/>
+        <location filename="../src/table/TrickPanelItem.cpp" line="+28"/>
+        <source>Leader: %1</source>
+        <comment>about a man</comment>
+        <translation>%1 e primul</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Leader: %1</source>
+        <comment>about a woman</comment>
+        <translation type="unfinished">%1 e prima</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Leader: %1</source>
+        <comment>about you, a man</comment>
+        <translation type="unfinished">%1 ești primul</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Leader: %1</source>
+        <comment>about you, a woman</comment>
+        <translation type="unfinished">%1 ești prima</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>First to bid: %1</source>
+        <comment>about a man</comment>
+        <translation>Licitează primul: %1</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>First to bid: %1</source>
+        <comment>about a woman</comment>
+        <translation type="unfinished">Licitează prima: %1</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>First to bid: %1</source>
+        <comment>about you, a man</comment>
+        <translation type="unfinished">%1 licitezi primul</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>First to bid: %1</source>
+        <comment>about you, a woman</comment>
+        <translation type="unfinished">%1 licitezi prima</translation>
+    </message>
+    <message>
+        <location line="+147"/>
+        <location line="+186"/>
         <source>Your turn.</source>
         <translation>E rândul tău.</translation>
     </message>
     <message>
-        <location line="-180"/>
+        <location line="-182"/>
         <source>Your turn. You lead.</source>
         <translation>E rândul tău. Deschizi.</translation>
     </message>
@@ -1094,12 +1143,7 @@ Whist</source>
         <translation>Licitație</translation>
     </message>
     <message>
-        <location line="+10"/>
-        <source>First to bid: %1</source>
-        <translation>Licitează primul: %1</translation>
-    </message>
-    <message>
-        <location line="+7"/>
+        <location line="+19"/>
         <source>Your bid. How many tricks?</source>
         <translation>Licitația ta. Câte faci?</translation>
     </message>
@@ -1109,12 +1153,7 @@ Whist</source>
         <translation>Mâna %1 din %2</translation>
     </message>
     <message>
-        <location line="+9"/>
-        <source>Leader: %1</source>
-        <translation>%1 e primul</translation>
-    </message>
-    <message>
-        <location line="+5"/>
+        <location line="+14"/>
         <source>Led %1</source>
         <translation>Jos e %1</translation>
     </message>

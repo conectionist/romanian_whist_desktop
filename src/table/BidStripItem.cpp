@@ -7,6 +7,7 @@
 #include "paint/TextRuns.h"
 #include "table/HudText.h"
 #include "table/ItemCursor.h"
+#include "table/PersonText.h"
 #include "table/TableScene.h"
 #include "table/TableSpace.h"
 
@@ -21,6 +22,18 @@
 
 namespace
 {
+
+// "You bid last", which Romanian says as a man or as a woman: "Licitezi ultimul",
+// "Licitezi ultima" (persontext::).
+constexpr persontext::Gendered youBidLast{
+    QT_TRANSLATE_NOOP3("bidstrip",
+                       "You bid last. %1 would make the bids add up to %2, "
+                       "and somebody has to be wrong.",
+                       "about you, a man"),
+    QT_TRANSLATE_NOOP3("bidstrip",
+                       "You bid last. %1 would make the bids add up to %2, "
+                       "and somebody has to be wrong.",
+                       "about you, a woman") };
 
 // page.html's .bidstrip, in table units, border-box: a border of 1, padding of 16
 // above, 22 either side and 18 below, and everything centred.
@@ -235,9 +248,7 @@ bidstrip::Fields bidstrip::fieldsFor(const BetPrompt& prompt, const GameSnapshot
     // that arrived inside a string it just substituted.
     if(prompt.forbiddenBet)
     {
-        fields.note = QCoreApplication::translate("bidstrip",
-                                                  "You bid last. %1 would make the bids add up to %2, "
-                                                  "and somebody has to be wrong.")
+        fields.note = persontext::translate("bidstrip", youBidLast, persontext::yourGender(snapshot))
                           .arg(QString::number(*prompt.forbiddenBet), QString::number(fields.highest));
 
         return fields;

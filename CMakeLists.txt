@@ -132,6 +132,8 @@ qt_add_library(desktop_core STATIC
     src/table/ScoreboardItem.cpp
     src/table/TrickPanelItem.h
     src/table/TrickPanelItem.cpp
+    src/table/PersonText.h
+    src/table/PersonText.cpp
     src/table/BidStripItem.h
     src/table/BidStripItem.cpp
     src/table/BidBubbleItem.h
