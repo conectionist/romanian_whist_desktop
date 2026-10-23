@@ -32,24 +32,36 @@ int main(int argc, char *argv[])
     // runs.
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Romanian Whist, the desktop client."));
-    parser.addHelpOption();
+    const QCommandLineOption helpOption = parser.addHelpOption();
 
     const QCommandLineOption languageOption(QStringLiteral("language"),
                                             QStringLiteral("Start in this language without asking: en (English) "
                                                            "or ro (Romanian)."),
                                             QStringLiteral("code"));
     parser.addOption(languageOption);
-    parser.process(a);
+
+    // parse() AND NOT process(): process() ends the app on any option it does not
+    // know, where 1.0 ignored its arguments, so a launcher or an old shortcut that
+    // passes one would stop it starting. An unknown option, or --language with no
+    // code, is warned about and the app carries on, asking.
+    if(!parser.parse(QCoreApplication::arguments()))
+        qWarning("%s Carrying on.", qPrintable(parser.errorText()));
+
+    // Help is still process()'s to print, --help-all's too, and it ends the app.
+    if(parser.isSet(helpOption) || parser.isSet(QStringLiteral("help-all")))
+        parser.process(a);
 
     std::optional<language::Language> chosen;
 
-    if(parser.isSet(languageOption))
+    // Empty when not given, and when given with no code, which parse() has warned of.
+    const QString code = parser.value(languageOption);
+
+    if(!code.isEmpty())
     {
-        chosen = language::fromCode(parser.value(languageOption));
+        chosen = language::fromCode(code);
 
         if(!chosen)
-            qWarning("Unknown language \"%s\": use en or ro. Asking instead.",
-                     qPrintable(parser.value(languageOption)));
+            qWarning("Unknown language \"%s\": use en or ro. Asking instead.", qPrintable(code));
     }
 
     if(!chosen)
