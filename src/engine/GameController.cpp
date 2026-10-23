@@ -148,6 +148,10 @@ void GameController::start(GameDeal deal)
     // run slot's catch-all turns that into gameFailed. A caller who forgot a bot
     // gets told so, rather than having the human quietly play that seat too.
 
+    // WHO SITS WHERE, handed over while the bridge is still the GUI thread's, so
+    // the game thread finds it written before it publishes the first snapshot.
+    gameBridge->setProfiles(deal.profiles);
+
     // The bridge belongs to the game thread from here on. Its signals are
     // AutoConnection, which now resolves to QueuedConnection for anything
     // connected from the GUI thread - and marshals for us.

@@ -158,6 +158,57 @@ TEST_CASE("A game left to itself reaches onGameOver", "[controller]")
     controller.stop();
 }
 
+TEST_CASE("A game dealt from New Game publishes the genders it was dealt", "[controller]")
+{
+    // THE WHOLE ROUTE: buildDeal() puts the profiles on the deal, start() hands
+    // them to the bridge before the game thread starts, and every snapshot the
+    // game publishes carries them. Watched, so bot i is seat i and nobody has to
+    // answer a prompt.
+    newgame::Config config;
+    config.spectator = true;
+    config.bots = { { "Ana", Gender::Female }, { "Bogdan", Gender::Male }, { "Elena", Gender::Female } };
+    config.botLevels = { newgame::BotLevel::LowRisk, newgame::BotLevel::Ducking, newgame::BotLevel::LowRisk };
+    config.shuffleSeed = 42u;
+
+    GameController controller;
+    controller.prepare(newgame::humanSeatOf(config), instant());
+
+    std::mutex mutex;
+    std::size_t snapshots = 0;
+    std::size_t wrong = 0;
+
+    QObject context;
+    QObject::connect(controller.bridge(), &GameBridge::stateChanged, &context,
+                     [&](std::shared_ptr<const GameSnapshot> snapshot)
+                     {
+                         const std::vector<Gender> dealt = { Gender::Female, Gender::Male, Gender::Female };
+                         std::vector<Gender> seats;
+
+                         for(const SeatView& seat : snapshot->seats)
+                             seats.push_back(seat.gender);
+
+                         std::lock_guard lock(mutex);
+                         snapshots++;
+
+                         if(seats != dealt)
+                             wrong++;
+                     },
+                     Qt::DirectConnection);
+
+    Outcome outcome(controller);
+
+    controller.start(newgame::buildDeal(config));
+
+    REQUIRE(outcome.await());
+    REQUIRE(outcome.overCount == 1);
+
+    controller.stop();
+
+    std::lock_guard lock(mutex);
+    REQUIRE(snapshots > 0);
+    REQUIRE(wrong == 0);
+}
+
 TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[controller]")
 {
     // THE ONE THING buildDeal() CANNOT PROVE ON ITS OWN. NewGameTests asserts that

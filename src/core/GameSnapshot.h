@@ -20,6 +20,8 @@
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/RoundType.h>
 
+#include "PlayerProfile.h"
+
 #include <string>
 #include <vector>
 
@@ -40,6 +42,11 @@ struct SeatView
 {
     std::string name;
     unsigned int seatIndex = 0;
+
+    // FROM THE SEAT'S PlayerProfile, not the engine, which knows only the name:
+    // GameBridge stamps it on from the deal's profiles. Male for a seat that came
+    // without one - every fixture that builds a GameSetup by hand.
+    Gender gender = Gender::Male;
 
     // Position in this round's bidding, 1 for whoever opened it.
     unsigned int bidOrder = 0;

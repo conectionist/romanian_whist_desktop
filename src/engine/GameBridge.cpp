@@ -2,6 +2,8 @@
 
 #include "core/Snapshot.h"
 
+#include <utility>
+
 using romanian_whist::Card;
 using romanian_whist::GameEngine;
 using romanian_whist::Seat;
@@ -9,6 +11,11 @@ using romanian_whist::Seat;
 GameBridge::GameBridge(std::optional<Seat> _humanSeat, Pacing _pacing)
     : humanSeat(_humanSeat), pacing(_pacing)
 {}
+
+void GameBridge::setProfiles(std::vector<PlayerProfile> seatProfiles)
+{
+    profiles = std::move(seatProfiles);
+}
 
 void GameBridge::publish(const GameEngine& engine)
 {
@@ -42,6 +49,12 @@ void GameBridge::publish(const GameEngine& engine)
     snapshot.activeSeat = active ? static_cast<int>(active->index) : -1;
 
     refreshFromEngine(snapshot, engine);
+
+    // AFTER the refresh, which builds the seats from the engine, and outside it:
+    // refreshFromEngine() stays a pure function of the engine, as the terminal's
+    // is (SnapshotTests). Seat i is profile i (GameDeal::profiles).
+    for(std::size_t seat = 0 ; seat < snapshot.seats.size() && seat < profiles.size() ; seat++)
+        snapshot.seats[seat].gender = profiles[seat].gender;
 
     // Wrapped only on the way out - built by value above, so GameSnapshot's rule
     // that every member is copyable and default-constructible is unchanged.

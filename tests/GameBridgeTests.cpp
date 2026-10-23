@@ -481,6 +481,58 @@ TEST_CASE("Every publishing callback emits a snapshot the GUI thread owns", "[br
         REQUIRE(snapshot->humanSeat == -1);
 }
 
+TEST_CASE("Every snapshot carries each seat's gender from its profile", "[bridge]")
+{
+    // THE ENGINE KNOWS ONLY NAMES, so the gender reaches a seat from the deal's
+    // profiles, seat i from profile i, on every snapshot and not only the first.
+    const auto genders = [](std::vector<PlayerProfile> profiles)
+    {
+        GameBridge bridge(std::nullopt, instant());
+        bridge.setProfiles(std::move(profiles));
+
+        std::vector<std::vector<Gender>> seen;
+        QObject::connect(&bridge, &GameBridge::stateChanged,
+                         [&seen](std::shared_ptr<const GameSnapshot> snapshot)
+                         {
+                             std::vector<Gender> seats;
+
+                             for(const SeatView& seat : snapshot->seats)
+                                 seats.push_back(seat.gender);
+
+                             seen.push_back(std::move(seats));
+                         });
+
+        GameEngine engine;
+        engine.addObserver(&bridge);
+        engine.start(buildSetup());
+        engine.run();
+
+        return seen;
+    };
+
+    SECTION("each seat as its profile says")
+    {
+        // Seat 1 Female, against SeatView's Male, so a bridge that stamped
+        // nothing fails.
+        const auto seen = genders({ { "Ana", Gender::Male }, { "Bogdan", Gender::Female } });
+
+        REQUIRE_FALSE(seen.empty());
+
+        for(const auto& seats : seen)
+            REQUIRE(seats == std::vector<Gender>{ Gender::Male, Gender::Female });
+    }
+
+    SECTION("a seat without a profile keeps the default")
+    {
+        const auto seen = genders({ { "Ana", Gender::Female } });
+
+        REQUIRE_FALSE(seen.empty());
+
+        for(const auto& seats : seen)
+            REQUIRE(seats == std::vector<Gender>{ Gender::Female, Gender::Male });
+    }
+}
+
 TEST_CASE("A game that ends on its own reports winners, not a first row", "[bridge]")
 {
     // getWinners() rather than standings.front(): a drawn game has more than one

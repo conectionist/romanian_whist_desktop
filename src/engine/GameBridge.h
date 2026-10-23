@@ -201,6 +201,13 @@ public:
     // wait after each round is read when the next round is scored.
     void setPacing(Pacing pacing);
 
+    // WHO SITS IN EACH SEAT (GameDeal::profiles), in seat order, stamped onto
+    // every snapshot's SeatView by publish(). Set by GameController::start()
+    // BEFORE the bridge moves to the game thread, so it is written once, on the
+    // GUI thread, before anything reads it, and needs no lock. A seat past the
+    // end keeps SeatView's defaults.
+    void setProfiles(std::vector<PlayerProfile> seatProfiles);
+
 private:
     // Snapshots on the GAME thread and emits the result by value. The GUI thread
     // must never reach into the engine, which has no thread safety at all.
@@ -259,6 +266,10 @@ private:
     }
 
     std::optional<romanian_whist::Seat> humanSeat;
+
+    // Written once by setProfiles() before the game thread starts, then read
+    // only there, by publish().
+    std::vector<PlayerProfile> profiles;
 
     // GUARDED BY pacingMutex since the redesign's phase 9, when Settings began
     // writing it from the GUI thread mid-game. Read only through delayOf() and
