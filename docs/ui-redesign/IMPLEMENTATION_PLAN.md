@@ -2142,6 +2142,10 @@ commit, all on 2026-10-23:
 - **Left open, by the owner's call:** the menu bar's grouping into File, Game and View menus
   (estimated, not built); the language choice remembered between runs, with the settings of
   section 20.
+- **PR #39's review:** seven findings fixed, adding one test (638, run on the `default` preset).
+  Four are left as known issues, in `docs/KNOWN_ISSUES.md`: your lead rhombus under a raised card,
+  the Last trick sheet clipped in a short window, and two places where the language dialog copies
+  code rather than sharing it.
 
 ---
 
