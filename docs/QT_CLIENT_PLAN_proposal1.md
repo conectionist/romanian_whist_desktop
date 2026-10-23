@@ -2128,6 +2128,11 @@ whole shape of the game before starting it is strictly better.
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.
 
+  > **AMENDED 2026-10-23 (the table redesign's phase 13), by the owner's measure: off the slider only
+  > for a watched game.** With a person playing, the game goes at their pace, and the bots' beats
+  > had it at a few minutes. It is now about 30 minutes for two players and 5 more for each player
+  > added, at any bot speed (`newgame::estimatedMinutes()`).
+
   > **CORRECTED IN D1: the count is `3·seats + 12 + (endWithForeheadAndHidden ? 2 : 0)`**, and the
   > mockup above said 24 for a four-seat game with the box ticked. 24 is the count *without* the
   > appended pair, so the two halves of the mockup disagreed with each other. `Scoreboard::initialize()`

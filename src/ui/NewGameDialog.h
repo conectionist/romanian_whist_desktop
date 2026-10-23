@@ -227,9 +227,22 @@ unsigned int seatCount(const Config& config);
 // the engine's; the mockup is stale.
 unsigned int roundCount(const Config& config);
 
+// HOW LONG A GAME TAKES, in whole minutes, as a rule of thumb.
+//
+// - WITH YOU PLAYING, your own pace decides it, whatever the bots' speed: about
+//   30 minutes for two players, and 5 more for each player added (the owner's
+//   measure, 2026-10-23). Worked out from the bots' pace, a game with you in it
+//   came out at a few minutes, which it never is.
+// - A WATCHED GAME goes at the bots' pace: off the bot-speed slider, and zero at
+//   its instant end.
+inline constexpr int playingMinutesForTwo = 30;
+inline constexpr int playingMinutesPerSeat = 5;
+
+int estimatedMinutes(const Config& config);
+
 // Section 13's live line: "26 rounds - about 20 minutes". The count is exact and
-// the time is a rule of thumb off the bot-speed slider, which is the honest
-// division - one is arithmetic over the schedule and the other is a guess.
+// the time is estimatedMinutes()'s rule of thumb, which is the honest division -
+// one is arithmetic over the schedule and the other is a guess.
 QString summaryText(const Config& config);
 
 // What is wrong with this config, or nothing. THE DIALOG DISABLES Deal ON IT

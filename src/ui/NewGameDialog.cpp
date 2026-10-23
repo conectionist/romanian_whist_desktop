@@ -296,27 +296,37 @@ unsigned int newgame::roundCount(const Config& config)
     return 3u * seatCount(config) + 12u + (config.endWithForeheadAndHidden ? 2u : 0u);
 }
 
-QString newgame::summaryText(const Config& config)
+int newgame::estimatedMinutes(const Config& config)
 {
-    const unsigned int rounds = roundCount(config);
+    // WITH YOU AT THE TABLE, YOUR PACE IS THE GAME'S, and the bots' is lost in
+    // it: the owner's measure of 2026-10-23 is about 30 minutes for two players,
+    // and 5 more for each seat added. The bots' speed does not enter into it.
+    if(!config.spectator)
+    {
+        const int seats = static_cast<int>(seatCount(config));
+        return playingMinutesForTwo + playingMinutesPerSeat * std::max(seats - 2, 0);
+    }
 
-    // A RULE OF THUMB OFF THE SLIDER, which is all section 13 asks for - and the
-    // honest division of this line, whose round count is exact arithmetic over
-    // the engine's schedule and whose minutes are a guess.
-    //
-    // The schedule runs 1..8 and back, so it averages about four tricks a round
-    // at any table size. Each trick costs one beat per seat plus one dwell, and
-    // a spectated game paces at the shorter beat (section 4.1).
+    // A WATCHED GAME IS THE BOTS' PACE: a rule of thumb off the slider. The
+    // schedule runs 1..8 and back, so it averages about four tricks a round at
+    // any table size. Each trick costs one spectator beat per seat plus one
+    // dwell (section 4.1).
     const Pacing pacing = pacingFor(config.botSpeed);
-    const auto beat = config.spectator ? pacing.spectatorBeat : pacing.beat;
 
     constexpr int averageTricksPerRound = 4;
 
-    const auto perTrick = beat * seatCount(config) + pacing.trickDwell;
-    const auto total = perTrick * averageTricksPerRound * rounds;
+    const auto perTrick = pacing.spectatorBeat * seatCount(config) + pacing.trickDwell;
+    const auto total = perTrick * averageTricksPerRound * roundCount(config);
 
-    const int minutes = static_cast<int>(
-        std::chrono::duration_cast<std::chrono::minutes>(total).count());
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(total).count());
+}
+
+QString newgame::summaryText(const Config& config)
+{
+    // The honest division of this line: its round count is exact arithmetic over
+    // the engine's schedule, and its minutes are a guess (estimatedMinutes()).
+    const unsigned int rounds = roundCount(config);
+    const int minutes = estimatedMinutes(config);
 
     // "%n rounds" AND NOT "%n round(s)", which is the idiom and is wrong here.
     // The parenthesised plural only resolves through a translator; with none
@@ -327,8 +337,8 @@ QString newgame::summaryText(const Config& config)
     // the count here is never 1 (the smallest table gives 18).
     //
     // TWO SENTENCES, NOT ONE INTERPOLATED, when the estimate rounds to nothing.
-    // An "about 0 minutes" is worse than saying nothing, and at the instant end
-    // of the slider that is the honest answer.
+    // An "about 0 minutes" is worse than saying nothing, and for a watched game at
+    // the instant end of the slider that is the honest answer.
     if(minutes < 1)
         return QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
 

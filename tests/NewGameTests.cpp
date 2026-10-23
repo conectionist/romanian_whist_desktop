@@ -412,16 +412,75 @@ TEST_CASE("The summary line names the round count it computed", "[new-game]")
     REQUIRE(newgame::summaryText(config)
                 .contains(QString::number(newgame::roundCount(config))));
 
-    // And at the instant end of the slider it still says something, rather than
-    // promising a game of about zero minutes.
+    // And a watched game at the instant end of the slider - the one estimate that
+    // rounds to nothing - still says something, rather than promising a game of
+    // about zero minutes.
+    config = watchingConfig();
     config.botSpeed = newgame::FastestSpeed;
+    REQUIRE(newgame::estimatedMinutes(config) == 0);
     REQUIRE_FALSE(newgame::summaryText(config).isEmpty());
-    REQUIRE_FALSE(newgame::summaryText(config).contains(QStringLiteral("0 minutes")));
+    REQUIRE(newgame::summaryText(config).contains(QString::number(newgame::roundCount(config))));
+    REQUIRE_FALSE(newgame::summaryText(config).contains(QStringLiteral("minute")));
 
     // NOT "26 round(s)". The parenthesised plural is an idiom that only resolves
     // through a translator, so an untranslated build printed it verbatim - which
     // no assertion here noticed until the dialog was rendered and read.
     REQUIRE_FALSE(newgame::summaryText(config).contains(QStringLiteral("(s)")));
+}
+
+// THE OWNER'S MEASURE, 2026-10-23: with a person at the table a game takes about
+// 30 minutes for two players and 5 more for each player added. Worked out from the
+// bots' pace, as a watched game's is, it came out at a few minutes.
+TEST_CASE("A game you play in is about 30 minutes for two and 5 more a player", "[new-game]")
+{
+    for(int opponents = 1 ; opponents <= 5 ; opponents++)
+    {
+        newgame::Config config = playingConfig(opponents);
+
+        const int expected = 30 + 5 * (opponents - 1);
+
+        INFO(opponents << " opponents");
+        REQUIRE(newgame::estimatedMinutes(config) == expected);
+
+        // YOUR PACE, NOT THE BOTS': the same at every position of the slider.
+        for(int speed = newgame::SlowestSpeed ; speed <= newgame::FastestSpeed ; speed++)
+        {
+            config.botSpeed = speed;
+
+            INFO("bot speed " << speed);
+            REQUIRE(newgame::estimatedMinutes(config) == expected);
+        }
+
+        // And the line says it.
+        REQUIRE(newgame::summaryText(config).contains(QStringLiteral("about %1 minutes").arg(expected)));
+    }
+}
+
+TEST_CASE("A watched game's estimate follows the bot speed", "[new-game]")
+{
+    newgame::Config config = watchingConfig(5);
+
+    // Never longer at a faster position, and nothing at the instant end.
+    for(int speed = newgame::SlowestSpeed ; speed < newgame::FastestSpeed ; speed++)
+    {
+        config.botSpeed = speed;
+        const int slower = newgame::estimatedMinutes(config);
+
+        config.botSpeed = speed + 1;
+
+        INFO("bot speed " << speed);
+        REQUIRE(slower >= newgame::estimatedMinutes(config));
+    }
+
+    config.botSpeed = newgame::SlowestSpeed;
+    REQUIRE(newgame::estimatedMinutes(config) > 0);
+
+    config.botSpeed = newgame::FastestSpeed;
+    REQUIRE(newgame::estimatedMinutes(config) == 0);
+
+    // Well under the game a person plays in: the bots alone are quick.
+    config.botSpeed = newgame::DefaultSpeed;
+    REQUIRE(newgame::estimatedMinutes(config) < newgame::estimatedMinutes(playingConfig(5)));
 }
 
 TEST_CASE("A fixed deal seeds the bots that draw, so the game repeats", "[new-game]")
