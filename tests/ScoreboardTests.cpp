@@ -427,21 +427,22 @@ TEST_CASE("A snapshot with no seats produces no rows", "[scoreboard]")
 
 // ---- the trump ----
 
-TEST_CASE("The trump is named under its card with its glyph", "[scoreboard]")
+// THE CARD SAYS ITS SUIT ITSELF (the owner's call, 2026-10-23): it is a hand
+// card's size, so the mock-up's "♣ Clubs" under it said nothing the card did not.
+TEST_CASE("A trump card has no suit named under it", "[scoreboard]")
 {
     GameSnapshot snapshot = roundOf(7, 24, 6);
     snapshot.hasTrump = true;
 
-    const auto named = [&](Suit suit)
+    for(const Suit suit : { Suit::Hearts, Suit::Diamonds, Suit::Spades, Suit::Clubs })
     {
         snapshot.trump = Card(Rank::Two, suit);
-        return scoreboard::trumpFor(snapshot).name;
-    };
 
-    REQUIRE(named(Suit::Clubs) == QStringLiteral("♣ Clubs"));
-    REQUIRE(named(Suit::Spades) == QStringLiteral("♠ Spades"));
-    REQUIRE(named(Suit::Hearts) == QStringLiteral("♥ Hearts"));
-    REQUIRE(named(Suit::Diamonds) == QStringLiteral("♦ Diamonds"));
+        const scoreboard::Trump trump = scoreboard::trumpFor(snapshot);
+
+        REQUIRE(trump.hasCard);
+        REQUIRE(trump.name.isEmpty());
+    }
 }
 
 // ---- the columns ----
@@ -607,9 +608,10 @@ TEST_CASE("The panel is taller with the trump's card than without it", "[scorebo
 
     const QSizeF without = scoreboard::sizeFor(scoreboard::shownFor(snapshot), cards);
 
-    // By the card - a hand card's height inside a panel drawn 1.2 times the table
-    // - and the gap after it.
-    REQUIRE(std::abs(withCard.height() - without.height() - (225.0 / 1.2 + 8.0)) < 1e-6);
+    // The card - a hand card's height inside a panel drawn 1.2 times the table -
+    // takes the place of "None this round", a line of 19.8 at 1.1, and ends the
+    // panel: no suit's name and no gap under it.
+    REQUIRE(std::abs(withCard.height() - without.height() - (225.0 / 1.2 - 19.8 * 1.1)) < 1e-6);
 
     // And a row more is a row taller.
     snapshot.seats.push_back(seatWith("Elena", 5));

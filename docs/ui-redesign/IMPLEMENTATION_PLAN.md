@@ -405,6 +405,9 @@ to bottom:
    letter-spaced 0.24em, muted); the trump card at **154.9 table units wide** (same as a hand card,
    radius 10, shadow); the suit name, Marcellus 19.8, e.g. "♣ Clubs" (♥/♦ glyph in red suit
    colour). In an 8-card round: "TRUMP" then "None this round", no card.
+   - **No suit name under the card** (the owner's call, 2026-10-23, in phase 13): at a hand card's
+     size the card says its suit itself, so the card ends the panel. The name was for the old
+     client's small trump card. "None this round" stays, in the card's place.
 
 The round-score and streak columns of the old scoreboard are not in the mock-up. **Decided by the
 owner, 2026-10-20 (Q3):** the round score goes, because it showed for only a second or two at the end
@@ -1331,7 +1334,8 @@ Done when: the whole page matches `screenshots/table-6-players.jpg` except the m
   - **Icons:** `paint/Icons.h`, the mock-up's inline SVGs drawn in any colour. Phase 9 adds the menu
     bar's four.
   - **Words:**
-    - `table/CardText.h` spells a card for people: "K♥", "♣ Clubs".
+    - `table/CardText.h` spells a card for people: "K♥", "♣ Clubs". *(Phase 13 removed
+      `suitName()` with the scoreboard's suit name, its only reader.)*
     - The info strip's words (`infostrip::`) live in `ScoreboardItem.h` now, under their old
       translation context.
     - The round sheet keeps Won/Round/Total as its own until phase 10 restyles it.

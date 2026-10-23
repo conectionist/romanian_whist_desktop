@@ -4,7 +4,6 @@
 #include "paint/Fonts.h"
 #include "paint/Paths.h"
 #include "paint/Shadows.h"
-#include "table/CardText.h"
 #include "table/HudText.h"
 #include "table/RoundText.h"
 #include "table/TableSpace.h"
@@ -59,8 +58,8 @@ constexpr qreal columnGap = 12.0;
 constexpr qreal dividerGap = 8.0;
 
 // .trump: a column with 8 between its items. Its .label 19.8, bold, spaced 0.24em;
-// its .name Marcellus 19.8 on a line 1.1 tall. The card rounded 10, its shadow
-// 0 4px 12px.
+// its .name Marcellus 19.8 on a line 1.1 tall, drawn only in a round with no trump
+// (see trumpFor()). The card rounded 10, its shadow 0 4px 12px.
 constexpr qreal trumpGap = 8.0;
 constexpr qreal trumpLabelSize = 19.8;
 constexpr qreal trumpLabelSpacing = 0.24;
@@ -305,7 +304,8 @@ qreal layOut(const scoreboard::Shown& shown, const scoreboard::Columns& columns,
         y += rowHeight;
     }
 
-    // The divider, then the trump stacked and centred: "TRUMP", the card, its suit.
+    // The divider, then the trump stacked and centred: "TRUMP", then the card - or,
+    // in a round with no trump, "None this round" in its place.
     y += dividerGap;
 
     if(painter)
@@ -349,12 +349,17 @@ qreal layOut(const scoreboard::Shown& shown, const scoreboard::Columns& columns,
             painter->drawPixmap(card, face, QRectF(face.rect()));
         }
 
-        y += size.height() + trumpGap;
+        y += size.height();
     }
-
-    const qreal nameHeight = trumpNameSize * trumpNameLine;
-    centred({ textruns::Run{ shown.trump.name } }, styles.trumpName, y, nameHeight);
-    y += nameHeight;
+    else
+    {
+        // THE CARD ENDS THE COLUMN when there is one, with no suit named under it
+        // (the owner's call, 2026-10-23): the card is a hand card's size and says
+        // its suit itself. The words are for a round with none to show.
+        const qreal nameHeight = trumpNameSize * trumpNameLine;
+        centred({ textruns::Run{ shown.trump.name } }, styles.trumpName, y, nameHeight);
+        y += nameHeight;
+    }
 
     return y + paddingY + borderWidth;
 }
@@ -610,9 +615,9 @@ scoreboard::Trump scoreboard::trumpFor(const GameSnapshot& snapshot)
     if(!snapshot.hasTrump)
         return { false, romanian_whist::Card{}, QCoreApplication::translate("scoreboard", "None this round") };
 
-    return { true, snapshot.trump,
-             cardtext::symbol(snapshot.trump.suit) + QLatin1Char(' ')
-                 + cardtext::suitName(snapshot.trump.suit) };
+    // No words with a card: it is drawn at a hand card's size, and its face says
+    // the suit (the owner's call, 2026-10-23, removing the mock-up's "♣ Clubs").
+    return { true, snapshot.trump, QString() };
 }
 
 scoreboard::Shown scoreboard::shownFor(const GameSnapshot& snapshot)

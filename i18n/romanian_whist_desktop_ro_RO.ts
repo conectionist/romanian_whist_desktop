@@ -362,7 +362,7 @@
 <context>
     <name>TableTopItem</name>
     <message>
-        <location filename="../src/table/TableTopItem.cpp" line="+293"/>
+        <location filename="../src/table/TableTopItem.cpp" line="+291"/>
         <source>Romanian
 Whist</source>
         <comment>The logo on the table: its lines, split by line breaks. One line or two.</comment>
@@ -395,27 +395,23 @@ Whist</source>
 <context>
     <name>cardtext</name>
     <message>
-        <location filename="../src/table/CardText.cpp" line="+29"/>
         <source>Hearts</source>
-        <translation>Inimă roșie</translation>
+        <translation type="vanished">Inimă roșie</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Diamonds</source>
-        <translation>Romb</translation>
+        <translation type="vanished">Romb</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Spades</source>
-        <translation>Inimă neagră</translation>
+        <translation type="vanished">Inimă neagră</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Clubs</source>
-        <translation>Treflă</translation>
+        <translation type="vanished">Treflă</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location filename="../src/table/CardText.cpp" line="+42"/>
         <source>J</source>
         <translation>J</translation>
     </message>
@@ -942,7 +938,7 @@ Whist</source>
         <translation>Atu</translation>
     </message>
     <message>
-        <location line="+51"/>
+        <location line="+56"/>
         <source>1 card dealt</source>
         <translation>1 carte împărțită</translation>
     </message>

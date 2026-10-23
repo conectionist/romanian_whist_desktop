@@ -22,19 +22,6 @@ QString cardtext::symbol(Suit suit)
     return QString();
 }
 
-QString cardtext::suitName(Suit suit)
-{
-    switch(suit)
-    {
-        case Suit::Hearts:   return QCoreApplication::translate("cardtext", "Hearts");
-        case Suit::Diamonds: return QCoreApplication::translate("cardtext", "Diamonds");
-        case Suit::Spades:   return QCoreApplication::translate("cardtext", "Spades");
-        case Suit::Clubs:    return QCoreApplication::translate("cardtext", "Clubs");
-    }
-
-    return QString();
-}
-
 QString cardtext::label(Card card)
 {
     QString rank;
