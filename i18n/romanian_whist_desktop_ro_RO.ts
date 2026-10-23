@@ -1060,7 +1060,7 @@ Whist</source>
     <message>
         <location line="+2"/>
         <source>Your turn. No %1, you must trump.</source>
-        <translation>Fără %1. Trebuie să pui atu.</translation>
+        <translation>E rândul tău. Nu ai %1! Pune atu.</translation>
     </message>
     <message>
         <location line="+10"/>
