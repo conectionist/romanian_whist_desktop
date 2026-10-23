@@ -664,7 +664,7 @@ GameSnapshot handMoment(const HandShot& shot)
         // THE MOCK-UP'S FACES, which go with its names: You, Bogdan, Ana and Costel
         // are the catalogue's first four, so these pictures still pair with its.
         seat.avatar = avatars::catalogue().at(i).id;
-        seat.gender = avatars::catalogue().at(i).gender;
+        seat.gender = avatars::catalogue().at(i).gender.value_or(Gender::Male);
 
         // Seat 1 bid first, as it leads. ONE-BASED, as the engine's
         // getBiddingOrder() is: the scoreboard lists the rows in this order since

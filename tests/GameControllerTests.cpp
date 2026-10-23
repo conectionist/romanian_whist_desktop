@@ -193,7 +193,7 @@ TEST_CASE("A game dealt from New Game publishes the genders and faces it was dea
                              seats.push_back(seat.gender);
 
                              const avatars::Avatar* avatar = avatars::find(seat.avatar);
-                             faces = faces && avatar != nullptr && avatar->gender == seat.gender;
+                             faces = faces && avatar != nullptr && avatars::suits(*avatar, seat.gender);
                          }
 
                          std::lock_guard lock(mutex);

@@ -3,8 +3,10 @@
 
 #include "core/PlayerProfile.h"
 
+#include <QByteArray>
 #include <QString>
 
+#include <optional>
 #include <random>
 #include <string>
 #include <string_view>
@@ -23,29 +25,59 @@ struct Avatar
 {
     // What a PlayerProfile names it by. Stable across reordering the catalogue.
     std::string id;
-    Gender gender = Gender::Male;
+
+    // Who can wear it: a man, a woman, or - empty, "any" in the catalogue - either.
+    std::optional<Gender> gender;
+
+    // DEDICATED TO ONE BOT STRATEGY when set: worn only by a bot that plays it,
+    // and by nobody else, the player included. Empty for an avatar anyone of its
+    // gender may wear. The keys are newgame::avatarStrategyOf()'s.
+    std::string strategy;
 
     // Its resource path, ":/avatars/<file>".
     QString path;
 };
 
+// Whether somebody of this gender can wear it.
+bool suits(const Avatar& avatar, Gender gender);
+
 // The catalogue, in the manifest's order, read once. An entry with no id, a
-// gender other than "male" or "female", no file, or an id already taken is
-// skipped with a warning rather than taking the rest down with it; AvatarTests
+// gender other than "male", "female" or "any", a strategy that is not text, no
+// file, or an id already taken is skipped with a warning rather than taking the rest down with it; AvatarTests
 // fails on any such entry.
 const std::vector<Avatar>& catalogue();
 
 // The avatar with this id, or null.
 const Avatar* find(std::string_view id);
 
-// ONE AVATAR PER PLAYER, by the owner's rule (2026-10-23). For each player in
-// order, take an avatar of that player's gender at random from what is left of
-// that gender, and remove it, so no two players share a face while there are
-// faces enough. A gender whose avatars have all been taken starts again from the
-// full set. A gender the catalogue has none of gets an empty id: the bare box.
+// A catalogue's entries from its JSON, as catalogue() reads avatars.json: what a
+// test hands a manifest of its own to. Paths are under ":/avatars/".
+std::vector<Avatar> parse(const QByteArray& json);
+
+// Who an avatar is being chosen for: a gender, and the strategy a bot plays
+// (newgame::avatarStrategyOf()), empty for you.
+struct Wearer
+{
+    Gender gender = Gender::Male;
+    std::string strategy;
+};
+
+// ONE AVATAR PER PLAYER, by the owner's rules (2026-10-23). For each player in
+// order:
+//
+// 1. WHICH AVATARS ARE THEIRS: those dedicated to the player's strategy that
+//    suit their gender, if the catalogue has any; otherwise those dedicated to
+//    no strategy that suit their gender. A strategy's avatars are only ever its
+//    own, so a female Cyborg with only a male cyborg face gets an ordinary woman's.
+// 2. One of them at random, from those nobody at the table wears yet.
+// 3. IF EVERY ONE IS TAKEN, they are free again and the pick starts over: two
+//    Cyborgs and one cyborg face, and both wear it.
+//
+// A gender-neutral avatar is one of either gender's, and taken by whoever gets it
+// first. A player with no avatars at all gets an empty id: the bare box.
 //
 // The catalogue is a parameter so a test can hand it one of its own.
-std::vector<std::string> assign(const std::vector<Gender>& genders, const std::vector<Avatar>& catalogue,
+std::vector<std::string> assign(const std::vector<Wearer>& wearers, const std::vector<Avatar>& catalogue,
                                 std::mt19937& random);
 }
 

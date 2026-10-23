@@ -2151,6 +2151,13 @@ whole shape of the game before starting it is strictly better.
   > gender that runs out (`avatars::assign()`). Every new game gets new faces; a fixed deal deals the
   > same faces each time. `GameBridge` stamps the avatar beside the gender, and the seat panel draws
   > it, wherever the player sits.
+  >
+  > **Two more rules, the same day.** An avatar may be **gender-neutral** ("any"), worn by either
+  > gender and by one player at a time while others are free. And an avatar may be **dedicated to a
+  > bot strategy** ("strategy": "cyborg"; each Reckoner preset is a strategy of its own): only a bot
+  > of that strategy wears it, and such a bot wears its strategy's avatars whenever the catalogue has
+  > one of its gender - two Cyborgs and one cyborg face, and both wear it. Without one of its gender,
+  > the bot wears an ordinary face, as you always do.
 - **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.

@@ -3,10 +3,21 @@
          as table.qrc does, so moving the files does not move the URLs.
 
          THE PORTRAITS A SEAT CAN WEAR. avatars.json is the catalogue: one entry per
-         avatar, its id, its gender ("male" or "female") and its file, in the order
-         the catalogue keeps (src/paint/Avatars.h). TO ADD ONE: put the file in
-         images/avatars/, give it a line here and an entry in avatars.json.
-         AvatarTests fails on a file listed in one and not the other.
+         avatar, in the order the catalogue keeps (src/paint/Avatars.h):
+         - "id": its name, unique.
+         - "gender": "male", "female", or "any" for one either can wear (a star).
+         - "strategy" (optional): the bot strategy it is dedicated to. Only a bot
+           of that strategy wears it, and that bot wears its strategy's avatars of
+           its gender whenever there are any. The names: random, first-card,
+           low-risk, ducking, cyborg, reckoner-alpha, reckoner-beta,
+           reckoner-gamma, reckoner-delta (newgame::avatarStrategyOf()).
+         - "file": the file's name in images/avatars/.
+         For example:
+           { "id": "cyborg-woman", "gender": "female", "strategy": "cyborg",
+             "file": "cyborg-woman.png" }
+         TO ADD ONE: put the file in images/avatars/, give it a line here and an
+         entry in avatars.json. AvatarTests fails on a file listed in one and not
+         the other, and on a strategy the game does not have.
 
          WHAT A FILE MUST BE:
          - SVG or PNG. Not JPEG: it needs an image plugin the deploy step strips.

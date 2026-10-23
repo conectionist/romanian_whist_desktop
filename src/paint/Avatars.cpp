@@ -8,23 +8,30 @@
 #include <QtDebug>
 
 #include <algorithm>
+#include <set>
 
 namespace
 {
 std::vector<avatars::Avatar> load()
 {
-    std::vector<avatars::Avatar> found;
-
     QFile manifest(QStringLiteral(":/avatars/avatars.json"));
 
     if(!manifest.open(QIODevice::ReadOnly))
     {
         qWarning() << "avatars: no catalogue at" << manifest.fileName();
-        return found;
+        return {};
     }
 
+    return avatars::parse(manifest.readAll());
+}
+}
+
+std::vector<avatars::Avatar> avatars::parse(const QByteArray& json)
+{
+    std::vector<avatars::Avatar> found;
+
     QJsonParseError error;
-    const QJsonDocument document = QJsonDocument::fromJson(manifest.readAll(), &error);
+    const QJsonDocument document = QJsonDocument::fromJson(json, &error);
 
     if(!document.isArray())
     {
@@ -39,23 +46,33 @@ std::vector<avatars::Avatar> load()
         const QString gender = entry.value(QStringLiteral("gender")).toString();
         const QString file = entry.value(QStringLiteral("file")).toString();
 
-        const bool known = gender == QStringLiteral("male") || gender == QStringLiteral("female");
+        // Optional: absent is an avatar for anyone of its gender.
+        const QJsonValue strategy = entry.value(QStringLiteral("strategy"));
+
+        const bool known = gender == QStringLiteral("male") || gender == QStringLiteral("female")
+                           || gender == QStringLiteral("any");
+        const bool strategyRead = strategy.isUndefined() || strategy.isString();
         const bool taken = std::any_of(found.begin(), found.end(), [&](const avatars::Avatar& avatar)
                                        { return avatar.id == id.toStdString(); });
 
-        if(id.isEmpty() || !known || file.isEmpty() || taken)
+        if(id.isEmpty() || !known || !strategyRead || file.isEmpty() || taken)
         {
             qWarning() << "avatars: skipping catalogue entry" << entry;
             continue;
         }
 
-        found.push_back(avatars::Avatar{ id.toStdString(),
-                                         gender == QStringLiteral("female") ? Gender::Female : Gender::Male,
+        std::optional<Gender> who;
+
+        if(gender == QStringLiteral("male"))
+            who = Gender::Male;
+        else if(gender == QStringLiteral("female"))
+            who = Gender::Female;
+
+        found.push_back(avatars::Avatar{ id.toStdString(), who, strategy.toString().toStdString(),
                                          QStringLiteral(":/avatars/") + file });
     }
 
     return found;
-}
 }
 
 const std::vector<avatars::Avatar>& avatars::catalogue()
@@ -64,45 +81,73 @@ const std::vector<avatars::Avatar>& avatars::catalogue()
     return entries;
 }
 
-std::vector<std::string> avatars::assign(const std::vector<Gender>& genders, const std::vector<Avatar>& catalogue,
+bool avatars::suits(const Avatar& avatar, Gender gender)
+{
+    return !avatar.gender || *avatar.gender == gender;
+}
+
+std::vector<std::string> avatars::assign(const std::vector<Wearer>& wearers, const std::vector<Avatar>& catalogue,
                                          std::mt19937& random)
 {
-    // Every avatar of one gender, in catalogue order.
-    const auto all = [&](Gender gender)
+    // Every avatar dedicated to `strategy` (empty: to none) that suits `gender`, in
+    // catalogue order.
+    const auto group = [&](const std::string& strategy, Gender gender)
     {
         std::vector<std::string> ids;
 
         for(const Avatar& avatar : catalogue)
-            if(avatar.gender == gender)
+            if(avatar.strategy == strategy && suits(avatar, gender))
                 ids.push_back(avatar.id);
 
         return ids;
     };
 
-    std::vector<std::string> left[2] = { all(Gender::Male), all(Gender::Female) };
+    // WHO WEARS WHAT ALREADY, across every group: a gender-neutral avatar belongs to
+    // both genders' groups, and must not be handed to a second player while either
+    // group still has another.
+    std::set<std::string> taken;
 
     std::vector<std::string> chosen;
-    chosen.reserve(genders.size());
+    chosen.reserve(wearers.size());
 
-    for(const Gender gender : genders)
+    for(const Wearer& wearer : wearers)
     {
-        std::vector<std::string>& pool = left[gender == Gender::Female ? 1 : 0];
+        // 1. A strategy's own avatars, if it has any of this gender; otherwise the
+        //    avatars dedicated to nobody.
+        std::vector<std::string> theirs = wearer.strategy.empty() ? std::vector<std::string>()
+                                                                  : group(wearer.strategy, wearer.gender);
 
-        // RUN OUT: more players of this gender than avatars. Start again.
-        if(pool.empty())
-            pool = all(gender);
+        if(theirs.empty())
+            theirs = group(std::string(), wearer.gender);
 
-        if(pool.empty())
+        if(theirs.empty())
         {
             chosen.emplace_back();
             continue;
         }
 
-        std::uniform_int_distribution<std::size_t> pick(0, pool.size() - 1);
-        const std::size_t index = pick(random);
+        // 2. Those nobody wears yet, in catalogue order.
+        std::vector<std::string> free;
 
-        chosen.push_back(pool[index]);
-        pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(index));
+        for(const std::string& id : theirs)
+            if(!taken.contains(id))
+                free.push_back(id);
+
+        // 3. RUN OUT: every one is taken. They are free again, and the pick starts
+        //    over among all of them.
+        if(free.empty())
+        {
+            for(const std::string& id : theirs)
+                taken.erase(id);
+
+            free = theirs;
+        }
+
+        std::uniform_int_distribution<std::size_t> pick(0, free.size() - 1);
+        const std::string& id = free[pick(random)];
+
+        chosen.push_back(id);
+        taken.insert(id);
     }
 
     return chosen;

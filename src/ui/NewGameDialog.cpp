@@ -577,14 +577,12 @@ GameDeal newgame::buildDeal(const Config& config)
     // (avatars::assign()). A FIXED DEAL DEALS THE SAME FACES, seeded from the
     // same number as the shuffle, so a rendering change can still be reviewed
     // as a diff.
+    //
+    // A BOT'S STRATEGY COUNTS TOO: a strategy with avatars of its own (a Cyborg's
+    // cyborg face) wears only those (avatars::assign() says the whole rule).
     {
-        std::vector<Gender> genders;
-
-        for(const PlayerProfile& profile : deal.profiles)
-            genders.push_back(profile.gender);
-
         std::mt19937 random(config.shuffleSeed ? *config.shuffleSeed : std::random_device{}());
-        const std::vector<std::string> faces = avatars::assign(genders, avatars::catalogue(), random);
+        const std::vector<std::string> faces = avatars::assign(wearersOf(config), avatars::catalogue(), random);
 
         for(std::size_t seat = 0 ; seat < deal.profiles.size() ; seat++)
             deal.profiles[seat].avatar = faces.at(seat);
@@ -596,6 +594,40 @@ GameDeal newgame::buildDeal(const Config& config)
     setup.shuffleSeed = config.shuffleSeed;
 
     return deal;
+}
+
+const char* newgame::avatarStrategyOf(BotLevel level)
+{
+    switch(level)
+    {
+    case BotLevel::Random:        return "random";
+    case BotLevel::FirstCard:     return "first-card";
+    case BotLevel::LowRisk:       return "low-risk";
+    case BotLevel::Ducking:       return "ducking";
+    case BotLevel::Cyborg:        return "cyborg";
+    case BotLevel::ReckonerAlpha: return "reckoner-alpha";
+    case BotLevel::ReckonerBeta:  return "reckoner-beta";
+    case BotLevel::ReckonerGamma: return "reckoner-gamma";
+    case BotLevel::ReckonerDelta: return "reckoner-delta";
+    }
+
+    // Unreachable for any enumerator above; the switch warns when one is added.
+    return "";
+}
+
+std::vector<avatars::Wearer> newgame::wearersOf(const Config& config)
+{
+    std::vector<avatars::Wearer> wearers;
+
+    if(!config.spectator)
+        wearers.push_back(avatars::Wearer{ config.human.gender, std::string() });
+
+    for(std::size_t i = 0 ; i < config.bots.size() ; i++)
+        wearers.push_back(avatars::Wearer{ config.bots[i].gender,
+                                           i < config.botLevels.size() ? avatarStrategyOf(config.botLevels[i])
+                                                                       : std::string() });
+
+    return wearers;
 }
 
 QString newgame::nameOf(BotLevel level)

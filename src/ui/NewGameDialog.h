@@ -3,6 +3,7 @@
 
 #include "core/PlayerProfile.h"
 #include "engine/GameController.h"
+#include "paint/Avatars.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/Scoreboard.h>
@@ -312,6 +313,18 @@ GameDeal buildDeal(const Config& config);
 // tooltipFor(). Free functions rather than a table in the widget so the test can
 // read them without a window.
 QString nameOf(BotLevel level);
+
+// HOW THE AVATAR CATALOGUE NAMES A LEVEL, in an entry's "strategy" (avatars.json):
+// "random", "first-card", "low-risk", "ducking", "cyborg", and each Reckoner
+// preset its own - "reckoner-alpha" to "reckoner-delta" - since an avatar for one
+// preset is not one for another (the owner's call, 2026-10-23). Stable text, not
+// the enum's number, for the reason the enum's own comment gives.
+const char* avatarStrategyOf(BotLevel level);
+
+// WHO SITS IN EACH SEAT, as the avatar rule sees them (avatars::assign()): seat
+// order, as buildDeal() deals them - you first, with no strategy, unless watching;
+// then each bot with its level's.
+std::vector<avatars::Wearer> wearersOf(const Config& config);
 QString tooltipFor(BotLevel level);
 
 // THE PACE CONTROLS, built here for the setup dialog and the menu bar's Settings

@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "paint/Avatars.h"
+#include "ui/NewGameDialog.h"
 
 #include <QDir>
 #include <QFile>
@@ -13,6 +14,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <random>
 #include <set>
 #include <string>
@@ -112,15 +114,19 @@ TEST_CASE("Every file under the avatars is in the catalogue", "[avatars]")
     }
 }
 
-TEST_CASE("There is an avatar of each gender", "[avatars]")
+TEST_CASE("There is an avatar anyone of either gender can wear", "[avatars]")
 {
     bool male = false;
     bool female = false;
 
     for(const avatars::Avatar& avatar : avatars::catalogue())
     {
-        male = male || avatar.gender == Gender::Male;
-        female = female || avatar.gender == Gender::Female;
+        // Dedicated to nobody, so anyone of that gender can be given it.
+        if(!avatar.strategy.empty())
+            continue;
+
+        male = male || avatars::suits(avatar, Gender::Male);
+        female = female || avatars::suits(avatar, Gender::Female);
     }
 
     REQUIRE(male);
@@ -138,23 +144,103 @@ TEST_CASE("An avatar is found by its id and by nothing else", "[avatars]")
     REQUIRE(avatars::find("") == nullptr);
 }
 
-// ---- the owner's rule: one avatar per player, at random, of their gender ----
+TEST_CASE("A catalogue entry can be for either gender and for one strategy", "[avatars]")
+{
+    // What the owner's avatars will say: "any" for a face anybody can wear (a
+    // star), "strategy" for one a bot of that strategy wears (a cyborg). An entry
+    // that cannot be read is skipped, the rest kept.
+    const std::vector<avatars::Avatar> read = avatars::parse(R"([
+        { "id": "star", "gender": "any", "file": "star.svg" },
+        { "id": "cyborg", "gender": "male", "strategy": "cyborg", "file": "cyborg.png" },
+        { "id": "robot", "gender": "any", "strategy": "cyborg", "file": "robot.svg" },
+        { "id": "nobody", "gender": "both", "file": "nobody.svg" },
+        { "id": "number", "gender": "male", "strategy": 5, "file": "number.svg" },
+        { "id": "star", "gender": "female", "file": "again.svg" },
+        { "id": "plain", "gender": "female", "file": "plain.svg" }
+    ])");
+
+    REQUIRE(read.size() == 4);
+
+    REQUIRE(read[0].id == "star");
+    REQUIRE_FALSE(read[0].gender.has_value());
+    REQUIRE(read[0].strategy.empty());
+    REQUIRE(read[0].path == QStringLiteral(":/avatars/star.svg"));
+    REQUIRE(avatars::suits(read[0], Gender::Male));
+    REQUIRE(avatars::suits(read[0], Gender::Female));
+
+    REQUIRE(read[1].id == "cyborg");
+    REQUIRE(read[1].gender == Gender::Male);
+    REQUIRE(read[1].strategy == "cyborg");
+    REQUIRE_FALSE(avatars::suits(read[1], Gender::Female));
+
+    REQUIRE(read[2].id == "robot");
+    REQUIRE_FALSE(read[2].gender.has_value());
+    REQUIRE(read[2].strategy == "cyborg");
+
+    REQUIRE(read[3].id == "plain");
+    REQUIRE(read[3].gender == Gender::Female);
+}
+
+TEST_CASE("Every dedicated avatar names a strategy the game has", "[avatars]")
+{
+    // A misspelt strategy ("cyborgs") would make an avatar nobody can ever wear.
+    std::set<std::string> known;
+
+    for(const newgame::BotLevel level : newgame::BotLevels)
+        known.insert(newgame::avatarStrategyOf(level));
+
+    for(const avatars::Avatar& avatar : avatars::catalogue())
+    {
+        INFO("avatar " << avatar.id << " for " << avatar.strategy);
+
+        if(!avatar.strategy.empty())
+            REQUIRE(known.contains(avatar.strategy));
+    }
+}
+
+// ---- the owner's rules: one avatar per player, at random, of their gender, and
+// ---- their strategy's own if it has any
 
 namespace
 {
-// Three men's faces and two women's, so a test can run either gender out.
+using avatars::Wearer;
+
+const Wearer man{ Gender::Male, "" };
+const Wearer woman{ Gender::Female, "" };
+
+// Three men's faces and two women's, for anyone: so a test can run either
+// gender out.
 std::vector<avatars::Avatar> madeUp()
 {
-    return { { "m1", Gender::Male, QString() },
-             { "f1", Gender::Female, QString() },
-             { "m2", Gender::Male, QString() },
-             { "m3", Gender::Male, QString() },
-             { "f2", Gender::Female, QString() } };
+    return { { "m1", Gender::Male, "", QString() },
+             { "f1", Gender::Female, "", QString() },
+             { "m2", Gender::Male, "", QString() },
+             { "m3", Gender::Male, "", QString() },
+             { "f2", Gender::Female, "", QString() } };
+}
+
+// The same, and a male cyborg's face and one for any Reckoner Alpha.
+std::vector<avatars::Avatar> withDedicated()
+{
+    std::vector<avatars::Avatar> catalogue = madeUp();
+    catalogue.push_back({ "cyborg-m", Gender::Male, "cyborg", QString() });
+    catalogue.push_back({ "alpha-any", std::nullopt, "reckoner-alpha", QString() });
+    return catalogue;
 }
 
 Gender genderOf(const std::string& id)
 {
     return id.front() == 'f' ? Gender::Female : Gender::Male;
+}
+
+std::vector<Wearer> people(const std::vector<Gender>& genders)
+{
+    std::vector<Wearer> wearers;
+
+    for(const Gender gender : genders)
+        wearers.push_back(Wearer{ gender, "" });
+
+    return wearers;
 }
 }
 
@@ -166,7 +252,7 @@ TEST_CASE("Every player is given an avatar of their own gender", "[avatars]")
     for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
     {
         std::mt19937 random(seed);
-        const std::vector<std::string> chosen = avatars::assign(genders, madeUp(), random);
+        const std::vector<std::string> chosen = avatars::assign(people(genders), madeUp(), random);
 
         REQUIRE(chosen.size() == genders.size());
 
@@ -188,7 +274,7 @@ TEST_CASE("No two players share an avatar while there are enough", "[avatars]")
     for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
     {
         std::mt19937 random(seed);
-        const std::vector<std::string> chosen = avatars::assign(genders, madeUp(), random);
+        const std::vector<std::string> chosen = avatars::assign(people(genders), madeUp(), random);
 
         INFO("seed " << seed);
         REQUIRE(std::set<std::string>(chosen.begin(), chosen.end()).size() == chosen.size());
@@ -198,7 +284,7 @@ TEST_CASE("No two players share an avatar while there are enough", "[avatars]")
 TEST_CASE("A gender that runs out of avatars starts again from all of them", "[avatars]")
 {
     // FIVE WOMEN AND TWO WOMEN'S FACES, with men between them, whose picks must not
-    // touch the women's pool. Each pair of women takes both faces, one each,
+    // touch the women's faces. Each pair of women takes both faces, one each,
     // before any face is worn a second time; the fifth wears one of the two.
     const std::vector<Gender> genders = { Gender::Female, Gender::Male, Gender::Female, Gender::Female,
                                           Gender::Male, Gender::Female, Gender::Female };
@@ -206,7 +292,7 @@ TEST_CASE("A gender that runs out of avatars starts again from all of them", "[a
     for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
     {
         std::mt19937 random(seed);
-        const std::vector<std::string> chosen = avatars::assign(genders, madeUp(), random);
+        const std::vector<std::string> chosen = avatars::assign(people(genders), madeUp(), random);
 
         std::vector<std::string> women;
 
@@ -223,12 +309,12 @@ TEST_CASE("A gender that runs out of avatars starts again from all of them", "[a
 
 TEST_CASE("The same seed gives the same avatars", "[avatars]")
 {
-    const std::vector<Gender> genders = { Gender::Male, Gender::Female, Gender::Male, Gender::Male };
+    const std::vector<Wearer> wearers = { man, woman, Wearer{ Gender::Male, "cyborg" }, man };
 
     std::mt19937 once(1234);
     std::mt19937 again(1234);
 
-    REQUIRE(avatars::assign(genders, madeUp(), once) == avatars::assign(genders, madeUp(), again));
+    REQUIRE(avatars::assign(wearers, withDedicated(), once) == avatars::assign(wearers, withDedicated(), again));
 }
 
 TEST_CASE("Every avatar of a gender is sometimes the one chosen", "[avatars]")
@@ -241,7 +327,7 @@ TEST_CASE("Every avatar of a gender is sometimes the one chosen", "[avatars]")
     {
         std::mt19937 random(seed);
 
-        for(const std::string& id : avatars::assign({ Gender::Male, Gender::Female }, madeUp(), random))
+        for(const std::string& id : avatars::assign({ man, woman }, madeUp(), random))
             worn[id]++;
     }
 
@@ -254,11 +340,107 @@ TEST_CASE("Every avatar of a gender is sometimes the one chosen", "[avatars]")
 
 TEST_CASE("A gender with no avatars at all gets the bare box", "[avatars]")
 {
-    const std::vector<avatars::Avatar> menOnly = { { "m1", Gender::Male, QString() } };
+    const std::vector<avatars::Avatar> menOnly = { { "m1", Gender::Male, "", QString() } };
 
     std::mt19937 random(5);
-    const std::vector<std::string> chosen = avatars::assign({ Gender::Female, Gender::Male, Gender::Female },
-                                                            menOnly, random);
+    const std::vector<std::string> chosen = avatars::assign({ woman, man, woman }, menOnly, random);
 
     REQUIRE(chosen == std::vector<std::string>{ "", "m1", "" });
+}
+
+TEST_CASE("A strategy's own avatar goes to its bots and to nobody else", "[avatars]")
+{
+    // THE OWNER'S FIRST RULE: a Cyborg wears the cyborg face when the catalogue has
+    // one of his gender, and nobody else ever does - not you, and not a bot that
+    // plays another strategy, even when the ordinary faces have run out.
+    const std::vector<Wearer> wearers = { man, Wearer{ Gender::Male, "low-risk" }, Wearer{ Gender::Male, "cyborg" },
+                                          man, man, Wearer{ Gender::Male, "ducking" } };
+
+    for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<std::string> chosen = avatars::assign(wearers, withDedicated(), random);
+
+        INFO("seed " << seed);
+
+        for(std::size_t i = 0 ; i < wearers.size() ; i++)
+        {
+            if(wearers[i].strategy == "cyborg")
+                REQUIRE(chosen[i] == "cyborg-m");
+            else
+                REQUIRE((chosen[i] == "m1" || chosen[i] == "m2" || chosen[i] == "m3"));
+        }
+    }
+}
+
+TEST_CASE("A strategy's avatars of the other gender are not a bot's", "[avatars]")
+{
+    // A FEMALE CYBORG, and the only cyborg face a man's: she wears an ordinary
+    // woman's face, as though the strategy had none (the owner's call).
+    for(std::uint32_t seed = 0 ; seed < 20 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<std::string> chosen = avatars::assign({ Wearer{ Gender::Female, "cyborg" } },
+                                                                withDedicated(), random);
+
+        REQUIRE((chosen.front() == "f1" || chosen.front() == "f2"));
+    }
+}
+
+TEST_CASE("Two bots of one strategy share its only avatar", "[avatars]")
+{
+    // RUN OUT, AS ANY GROUP CAN: two Cyborgs and one cyborg face, and both wear it
+    // (the owner's call) rather than the second taking an ordinary face.
+    std::mt19937 random(9);
+    const std::vector<std::string> chosen = avatars::assign({ Wearer{ Gender::Male, "cyborg" }, man,
+                                                              Wearer{ Gender::Male, "cyborg" } },
+                                                            withDedicated(), random);
+
+    REQUIRE(chosen[0] == "cyborg-m");
+    REQUIRE(chosen[2] == "cyborg-m");
+    REQUIRE(chosen[1] != "cyborg-m");
+}
+
+TEST_CASE("A Reckoner preset's avatar is only that preset's", "[avatars]")
+{
+    // Each preset is a strategy of its own to the avatars (the owner's call): the
+    // Alpha's face is an Alpha's, of either gender, and never a Delta's.
+    std::mt19937 random(3);
+    const std::vector<std::string> chosen = avatars::assign({ Wearer{ Gender::Female, "reckoner-alpha" },
+                                                              Wearer{ Gender::Male, "reckoner-delta" } },
+                                                            withDedicated(), random);
+
+    REQUIRE(chosen[0] == "alpha-any");
+    REQUIRE(chosen[1] != "alpha-any");
+    REQUIRE(genderOf(chosen[1]) == Gender::Male);
+}
+
+TEST_CASE("A gender-neutral avatar is worn by either gender but by one player at a time", "[avatars]")
+{
+    // "any" suits a man and a woman alike, so it is in both genders' faces - and
+    // whoever takes it first takes it from both, while either has another.
+    std::vector<avatars::Avatar> catalogue = { { "m1", Gender::Male, "", QString() },
+                                               { "star", std::nullopt, "", QString() },
+                                               { "f1", Gender::Female, "", QString() },
+                                               { "m2", Gender::Male, "", QString() },
+                                               { "f2", Gender::Female, "", QString() } };
+
+    std::map<std::string, std::set<Gender>> wornBy;
+
+    for(std::uint32_t seed = 0 ; seed < 200 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<Wearer> wearers = { man, woman, man, woman };
+        const std::vector<std::string> chosen = avatars::assign(wearers, catalogue, random);
+
+        INFO("seed " << seed);
+
+        // Two of each gender's own and the star between them: never a repeat.
+        REQUIRE(std::set<std::string>(chosen.begin(), chosen.end()).size() == chosen.size());
+
+        for(std::size_t i = 0 ; i < wearers.size() ; i++)
+            wornBy[chosen[i]].insert(wearers[i].gender);
+    }
+
+    REQUIRE(wornBy["star"] == std::set<Gender>{ Gender::Male, Gender::Female });
 }

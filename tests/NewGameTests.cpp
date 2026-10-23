@@ -327,13 +327,62 @@ TEST_CASE("Every seat of a dealt game wears a face of its own gender", "[new-gam
 
             const avatars::Avatar* avatar = avatars::find(profile.avatar);
             REQUIRE(avatar != nullptr);
-            REQUIRE(avatar->gender == profile.gender);
+            REQUIRE(avatars::suits(*avatar, profile.gender));
+            REQUIRE(avatar->strategy.empty());
 
             faces.insert(profile.avatar);
         }
 
         REQUIRE(faces.size() == dealt.profiles.size());
     }
+}
+
+TEST_CASE("Each level has its own name in the avatar catalogue", "[new-game]")
+{
+    // AN AVATAR DEDICATED TO A STRATEGY names it by these (avatars.json's
+    // "strategy"). Each Reckoner preset is a strategy of its own (the owner's
+    // call), so no two levels may share a name.
+    std::set<std::string> names;
+
+    for(const newgame::BotLevel level : newgame::BotLevels)
+    {
+        const std::string name = newgame::avatarStrategyOf(level);
+
+        INFO("level " << newgame::nameOf(level).toStdString());
+        REQUIRE_FALSE(name.empty());
+        REQUIRE(names.insert(name).second);
+    }
+
+    REQUIRE(std::string(newgame::avatarStrategyOf(newgame::BotLevel::Cyborg)) == "cyborg");
+    REQUIRE(std::string(newgame::avatarStrategyOf(newgame::BotLevel::ReckonerAlpha)) == "reckoner-alpha");
+}
+
+TEST_CASE("The avatar rule sees every seat's gender and strategy in seat order", "[new-game]")
+{
+    // What buildDeal() hands avatars::assign(): you first with no strategy, so no
+    // bot's dedicated face is ever yours; then each bot with its level's.
+    newgame::Config config = playingConfig(3);
+    config.human.gender = Gender::Female;
+    config.bots[1].gender = Gender::Female;
+    config.botLevels = { newgame::BotLevel::Cyborg, newgame::BotLevel::ReckonerBeta, newgame::BotLevel::Random };
+
+    const std::vector<avatars::Wearer> seated = newgame::wearersOf(config);
+
+    REQUIRE(seated.size() == 4);
+    REQUIRE(seated[0].gender == Gender::Female);
+    REQUIRE(seated[0].strategy.empty());
+    REQUIRE(seated[1].gender == Gender::Male);
+    REQUIRE(seated[1].strategy == "cyborg");
+    REQUIRE(seated[2].gender == Gender::Female);
+    REQUIRE(seated[2].strategy == "reckoner-beta");
+    REQUIRE(seated[3].strategy == "random");
+
+    // Watching, bot i is seat i.
+    config.spectator = true;
+    const std::vector<avatars::Wearer> watched = newgame::wearersOf(config);
+
+    REQUIRE(watched.size() == 3);
+    REQUIRE(watched[0].strategy == "cyborg");
 }
 
 TEST_CASE("A fixed deal deals the same faces every time", "[new-game]")
