@@ -28,11 +28,12 @@ QFont labelFont()
 
 }
 
-QSizeF tablebutton::sizeFor(const QString& label)
+QSizeF tablebutton::sizeFor(const QString& label, bool withIcon)
 {
     const qreal labelWidth = QFontMetricsF(labelFont()).horizontalAdvance(label);
+    const qreal icon = withIcon ? iconSize + iconGap : 0.0;
 
-    return QSizeF(2.0 * (borderWidth + paddingX) + iconSize + iconGap + labelWidth, height);
+    return QSizeF(2.0 * (borderWidth + paddingX) + icon + labelWidth, height);
 }
 
 tablebutton::Colours tablebutton::coloursFor(const Theme::TablePalette& palette, bool enabled, bool lit)
@@ -46,8 +47,8 @@ tablebutton::Colours tablebutton::coloursFor(const Theme::TablePalette& palette,
     return { palette.gold, palette.cream };
 }
 
-void tablebutton::paintFace(QPainter& painter, const QRectF& box, icons::Icon icon, const QString& label,
-                            const Colours& colours)
+void tablebutton::paintFace(QPainter& painter, const QRectF& box, std::optional<icons::Icon> icon,
+                            const QString& label, const Colours& colours)
 {
     const QFont font = labelFont();
     const QFontMetricsF metrics(font);
@@ -55,15 +56,19 @@ void tablebutton::paintFace(QPainter& painter, const QRectF& box, icons::Icon ic
 
     // align-items: center, so the icon and the label's line box are both centred on
     // the button's height; and the two together across it.
-    const qreal across = iconSize + iconGap + metrics.horizontalAdvance(label);
+    const qreal iconAcross = icon ? iconSize + iconGap : 0.0;
+    const qreal across = iconAcross + metrics.horizontalAdvance(label);
     const qreal left = box.left() + (box.width() - across) / 2.0;
 
-    icons::paint(painter, icon, QRectF(left, box.top() + (box.height() - iconSize) / 2.0, iconSize, iconSize),
-                 colours.icon);
+    if(icon)
+    {
+        icons::paint(painter, *icon, QRectF(left, box.top() + (box.height() - iconSize) / 2.0, iconSize, iconSize),
+                     colours.icon);
+    }
 
     painter.setFont(font);
     painter.setPen(colours.label);
-    painter.drawText(QPointF(left + iconSize + iconGap,
+    painter.drawText(QPointF(left + iconAcross,
                              fonts::baselineIn(metrics, box.top() + (box.height() - line) / 2.0, line)),
                      label);
 }

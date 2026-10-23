@@ -51,7 +51,8 @@ The owner wants to see each phase's visual result without running the app. When 
    hand, at the same 1920×1034 (added in phase 7). And since phase 10, `sheet-pause.png`,
    `sheet-round.png`, `sheet-game-over.png`, `sheet-rules.png` and `sheet-settings.png` (each sheet
    over a table, 1920×1034) and `menu.png` (the main-menu page, 1920×1080). Since phase 11,
-   `sheet-history.png` and `sheet-last-trick.png` too, as the other sheets are.
+   `sheet-history.png` and `sheet-last-trick.png` too, as the other sheets are. Since phase 13,
+   `language.png`: the language dialog at its own size.
 2. Pair each one with the mock-up picture of the same name in `docs/ui-redesign/screenshots/`
    (`.jpg`): client on the left, mock-up on the right, each labelled. Save the pair as
    `build/shots/phase-N/compare-<name>.png` (Pillow is installed). `build/` is git-ignored, so

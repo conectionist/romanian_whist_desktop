@@ -151,6 +151,8 @@ qt_add_library(desktop_core STATIC
     src/ui/LitButton.cpp
     src/ui/MainMenuPage.h
     src/ui/MainMenuPage.cpp
+    src/ui/LanguageDialog.h
+    src/ui/LanguageDialog.cpp
     src/ui/MenuBar.h
     src/ui/MenuBar.cpp
     src/ui/Overlay.h
