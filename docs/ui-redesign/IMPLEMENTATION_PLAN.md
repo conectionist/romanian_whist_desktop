@@ -4,9 +4,9 @@ This plan turns the approved HTML mock-up into the Qt client. It is written for 
 person) picking the work up cold: it says what the target looks like, where every number comes
 from, which classes change, in what order, and how to tell each step is done.
 
-> **COMPLETE.** All thirteen phases are built (phase 12 last, on 2026-10-22). Each phase's outcome
-> below says what was built, what the owner decided and what the build departed from. What is left
-> is listed at the end of phase 12's outcome.
+> **COMPLETE.** All thirteen phases are built (phase 12 on 2026-10-22), and phase 13 holds the
+> owner's final changes (2026-10-23). Each phase's outcome below says what was built, what the owner
+> decided and what the build departed from. What is left is listed at the end of phase 12's outcome.
 
 **Read first, in this order**
 
@@ -2099,7 +2099,7 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - **2x textures**, if the owner wants them after the numbers above.
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
 
-### Phase 13: the owner's final changes (in progress)
+### Phase 13: the owner's final changes ✅ COMPLETE
 
 On `redesign/phase-13-final_changes`, branched from `claude/zealous-lamport-zac87a` once phase 12
 was merged. Small changes the owner asked for after playing the finished redesign, each its own
@@ -2125,6 +2125,23 @@ commit, all on 2026-10-23:
   carries the amendment.
 - **"Ana won it", not "Ana took it"**, on the Last trick sheet, and in Romanian "Ana a câștigat-o"
   for "A luat-o Ana". Phase 11's notes above keep the words it shipped with.
+- **The redesign, phase by phase**, for the owner to keep: `history/index.html`, a slideshow of
+  the client at every phase (the table, bidding and your hand) with a wipe between 1.0 and 2.0,
+  and `history/redesign.mp4`, a film of the table whose captions type out after each picture has
+  been on screen alone.
+
+**Outcome:**
+
+- **The count is 637 tests** (624 + 13), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. Added: three for the game's length, two for the
+  Last trick sheet, one for the round logo and seven for the language. Rewritten, keeping their
+  intent: the trump name's two cases, the Last trick's sentences, the sheets' width, the New Game
+  line at Instant, the table logo's border, and seven trick-placement cases.
+- **Checked in the running app**, on a nested Xephyr screen: the maximized window, every way into
+  the language dialog and out of it, and the trick round the logo, which the owner then played.
+- **Left open, by the owner's call:** the menu bar's grouping into File, Game and View menus
+  (estimated, not built); the language choice remembered between runs, with the settings of
+  section 20.
 
 ---
 
