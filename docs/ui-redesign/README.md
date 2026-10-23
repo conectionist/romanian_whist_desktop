@@ -10,7 +10,7 @@ opponents' cards standing in racks on the rim, and panels pinned to the window c
 - **Screenshots** of the mock-up at 1920×1080: [`screenshots/`](screenshots/).
 - **How it went, phase by phase:** [`history/index.html`](history/index.html). Open it in a
   browser: a slideshow of the client at every phase (the table, bidding and your hand), a wipe
-  between 1.0 and 2.0, and a film of 2 min 21 s with its captions typed out, [`history/redesign.mp4`](history/redesign.mp4).
+  between 1.0 and 2.0, and a film of 3 min 12 s, each picture shown alone before its caption types out, [`history/redesign.mp4`](history/redesign.mp4).
 
 Status: built. Phases 0 to 12 are complete in the client, and phase 13 holds the owner's final
 changes; each phase's outcome, and the owner's decisions along the way, are in the plan. The
