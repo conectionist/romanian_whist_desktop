@@ -75,6 +75,9 @@ int main(int argc, char *argv[])
         chosen = ask.choice();
     }
 
+    // FOR WHAT THE TRANSLATION DOES NOT CARRY: the players' names New Game draws.
+    language::setCurrent(*chosen);
+
     QTranslator translator;
     const QString resource = language::translationResource(*chosen);
 

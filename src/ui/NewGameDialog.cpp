@@ -1,6 +1,8 @@
 #include "NewGameDialog.h"
 
 #include "paint/Avatars.h"
+#include "ui/LanguageDialog.h"
+#include "ui/PlayerNames.h"
 
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/strategies/CyborgStrategy.h>
@@ -36,26 +38,11 @@ using namespace romanian_whist;
 
 namespace
 {
-// The stock opponents, in seat order. The terminal's list is three letters
-// each because its seat table is fixed-width; this one has room, so these are
-// the names phase A's setup and tests/GameFixtures.h both use.
-//
-// EACH WITH A GENDER, chosen here and never read off the name (PlayerProfile).
-//
-// SIX, NOT FIVE, and the difference is a whole seat. Five is the most opponents
-// a PLAYING game can have, and a watched one has no human taking a chair - so a
-// five-name list runs out on the largest watched table and the sixth row fell
-// through to a "Bot 6" placeholder. Found by rendering a six-seat game; nothing
-// in the suite was looking at what the rows were pre-filled with.
-const std::vector<PlayerProfile>& stockPlayers()
+// A BOT'S GENDER WHEN NOTHING HAS CHOSEN ONE: either, at random (the owner's call,
+// 2026-10-23). Its name is then drawn to match (playernames::draw()).
+Gender randomGender(std::mt19937& random)
 {
-    static const std::vector<PlayerProfile> players = { { "Ana", Gender::Female },
-                                                        { "Bogdan", Gender::Male },
-                                                        { "Cristina", Gender::Female },
-                                                        { "Dan", Gender::Male },
-                                                        { "Elena", Gender::Female },
-                                                        { "Florin", Gender::Male } };
-    return players;
+    return std::bernoulli_distribution(0.5)(random) ? Gender::Female : Gender::Male;
 }
 
 // A gender drop-down: Male, then Female, at the enum's own values, which is what
@@ -296,10 +283,23 @@ newgame::Config newgame::defaults()
     // THREE, as in the terminal's quick game - see defaultLevel() for who they
     // are and why. Three bots plus the human is four seats and 26 rounds, where the four
     // Reckoner presets this replaced made five and 29.
+    //
+    // EACH A MAN OR A WOMAN AT RANDOM, named to match (playernames::draw()), as
+    // the dialog names a new row - which it does again for every row when it
+    // opens on this.
+    std::mt19937 random(std::random_device{}());
+    QStringList taken{ QString::fromStdString(config.human.name) };
+
     for(int i = 0 ; i < 3 ; i++)
     {
-        config.bots.push_back(stockPlayers().at(static_cast<std::size_t>(i)));
-        config.botLevels.push_back(defaultLevel(i));
+        const Gender gender = randomGender(random);
+        const BotLevel level = defaultLevel(i);
+        const QString name = playernames::draw(avatars::Wearer{ gender, avatarStrategyOf(level) }, language::current(),
+                                               playernames::catalogue(), taken, i + 1, random);
+
+        taken.push_back(name);
+        config.bots.push_back(PlayerProfile{ name.toStdString(), gender });
+        config.botLevels.push_back(level);
     }
 
     config.botSpeed = DefaultSpeed;
@@ -1083,43 +1083,26 @@ void NewGameDialog::rebuildOpponentRows()
         row.name->setMaxLength(newgame::MaximumNameLength);
         row.name->setObjectName(QStringLiteral("botName%1").arg(index));
 
-        // THE OPPONENT THIS SEAT HAD WHEN THE DIALOG OPENED, if it had one. The
-        // dialog is opened on the last game's config so that play again
-        // pre-fills with its settings (section 16.2), and every control did that
-        // except these: the rows were built from the stock list regardless, and
-        // refresh() then wrote those defaults back over the config that was
-        // handed in. So reopening a game against Ana, Bogdan and Cristi on three
-        // different levels offered - and then dealt - the stock three.
+        // THE OPPONENT THIS SEAT HAD WHEN THE DIALOG OPENED - its gender and its
+        // level - if it had one: the dialog is opened on the last game's config, so
+        // that play again pre-fills with its settings (section 16.2). FROM `initial`
+        // AND NOT FROM `current`, which refresh() rebuilds from the rows on every
+        // keystroke, so it describes the rows that exist rather than the game that
+        // was asked for. A seat the config never had is a man or a woman at random.
         //
-        // FROM `initial` AND NOT FROM `current`, which cannot answer: refresh()
-        // rebuilds current's bot lists from the rows on every keystroke, so it
-        // describes the rows that exist rather than the game that was asked for.
+        // ITS NAME IS DRAWN AFRESH, every time the dialog opens and the row is made
+        // (the owner's call, 2026-10-23): one of its gender and, for a strategy with
+        // names of its own, its strategy's, in the app's language
+        // (playernames::draw()), and none another row or you already have. It can
+        // still be typed over, and Deal deals what the row shows.
         //
-        // A PRE-FILLED DEFAULT OTHERWISE, so no row starts blank - a blank one
-        // disables Deal for a reason the player did not cause. The stock list
-        // holds one name per seat at the largest table there is, so its fallback
-        // is unreachable; it is one line against the day MaximumSeats moves.
-        //
-        // IT DOES NOT AVOID THE HUMAN'S NAME, unlike the terminal's quick start,
-        // and that is section 13's own answer: a player who types "Ana" gets the
-        // duplicate marked and Deal disabled, which names the collision instead
-        // of silently renaming a seat under them.
-        //
-        // THE GENDER COMES WITH THE NAME, from the same profile: a stock name
-        // keeps the stock gender, and a reopened game keeps the one chosen for
-        // that seat. The unreachable fallback is Male.
+        // IT DOES AVOID YOUR NAME AS IT STANDS, but a name you type afterwards that
+        // matches a bot's is section 13's own case: the duplicate is marked and Deal
+        // disabled, which names the collision instead of silently renaming a seat.
         const std::size_t seat = static_cast<std::size_t>(index);
 
         PlayerProfile profile;
-
-        if(seat < initial.bots.size())
-            profile = initial.bots.at(seat);
-        else if(seat < stockPlayers().size())
-            profile = stockPlayers().at(seat);
-        else
-            profile = PlayerProfile{ tr("Bot %1").arg(index + 1).toStdString(), Gender::Male };
-
-        row.name->setText(QString::fromStdString(profile.name));
+        profile.gender = seat < initial.bots.size() ? initial.bots.at(seat).gender : randomGender(random);
 
         row.gender = genderBox(this, profile.gender);
         row.gender->setObjectName(QStringLiteral("botGender%1").arg(index));
@@ -1144,9 +1127,15 @@ void NewGameDialog::rebuildOpponentRows()
                                        ? static_cast<int>(initial.botLevels.at(seat))
                                        : static_cast<int>(defaultLevel(index)));
 
+        // THE NAME LAST, once the gender and the level it is drawn for are known.
+        row.drawn = drawName(profile.gender, newgame::BotLevels[row.level->currentIndex()], seat);
+        row.name->setText(row.drawn);
+
+        // A NEW GENDER OR LEVEL DRAWS A NEW NAME to match, unless the row's name is
+        // no longer the one drawn for it: a name typed in is the player's to keep.
         connect(row.name, &QLineEdit::textChanged, this, [this]{ refresh(); });
-        connect(row.gender, &QComboBox::currentIndexChanged, this, [this]{ refresh(); });
-        connect(row.level, &QComboBox::currentIndexChanged, this, [this]{ refresh(); });
+        connect(row.gender, &QComboBox::currentIndexChanged, this, [this, seat]{ redrawUntouched(seat); refresh(); });
+        connect(row.level, &QComboBox::currentIndexChanged, this, [this, seat]{ redrawUntouched(seat); refresh(); });
 
         QHBoxLayout* line = new QHBoxLayout;
         line->addWidget(row.name);
@@ -1157,6 +1146,34 @@ void NewGameDialog::rebuildOpponentRows()
         opponentRows->addRow(row.number, line);
         rows.push_back(row);
     }
+}
+
+QString NewGameDialog::drawName(Gender gender, newgame::BotLevel level, std::size_t seat)
+{
+    // EVERY NAME AT THE TABLE BUT THIS ROW'S: yours while you play, and the other
+    // rows as they now read.
+    QStringList taken;
+
+    if(playing->isChecked())
+        taken.push_back(humanName->text());
+
+    for(std::size_t other = 0 ; other < rows.size() ; other++)
+        if(other != seat)
+            taken.push_back(rows[other].name->text());
+
+    return playernames::draw(avatars::Wearer{ gender, newgame::avatarStrategyOf(level) }, language::current(),
+                             playernames::catalogue(), taken, static_cast<int>(seat) + 1, random);
+}
+
+void NewGameDialog::redrawUntouched(std::size_t seat)
+{
+    Row& row = rows.at(seat);
+
+    if(row.name->text() != row.drawn)
+        return;
+
+    row.drawn = drawName(genderOf(row.gender), newgame::BotLevels[row.level->currentIndex()], seat);
+    row.name->setText(row.drawn);
 }
 
 void NewGameDialog::refresh()

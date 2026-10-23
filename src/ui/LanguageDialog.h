@@ -42,6 +42,13 @@ std::optional<Language> fromCode(const QString& code);
 // "en" or "ro": what --language takes.
 QString codeOf(Language language);
 
+// THE LANGUAGE THE APP RUNS IN, as main() chose it - set once, before the window is
+// built. What reads it is what the translation cannot carry: the players' names
+// New Game draws, Romanian for a Romanian game (playernames::). English until set,
+// which is every test that does not set it.
+Language current();
+void setCurrent(Language language);
+
 // The language's name in itself, which is how the dialog names it: "English",
 // "Română".
 QString nativeName(Language language);

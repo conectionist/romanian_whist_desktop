@@ -3,7 +3,9 @@
 #include "GameFixtures.h"
 
 #include "paint/Avatars.h"
+#include "ui/LanguageDialog.h"
 #include "ui/NewGameDialog.h"
+#include "ui/PlayerNames.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/AiMoveProvider.h>
@@ -60,6 +62,28 @@ std::vector<PlayerProfile> named(const QStringList& names)
 
     return players;
 }
+
+// WHETHER A BOT'S NAME IS ONE THE LIST GIVES A BOT OF ITS GENDER, in the app's
+// language, dedicated to no strategy - which every level is, until the list has
+// names for one.
+bool drawnFor(const PlayerProfile& bot)
+{
+    const QString name = QString::fromStdString(bot.name);
+
+    for(const playernames::Name& entry : playernames::catalogue())
+        if(entry.name == name && entry.strategy.empty() && playernames::suits(entry, bot.gender, language::current()))
+            return true;
+
+    return false;
+}
+
+// The app's language for one case's lifetime, then English again: Catch2 runs the
+// cases in a random order, and English is what every other case expects.
+struct RunningIn
+{
+    explicit RunningIn(language::Language language) { language::setCurrent(language); }
+    ~RunningIn() { language::setCurrent(language::Language::English); }
+};
 
 newgame::Config playingConfig(int opponents = 3)
 {
@@ -1135,34 +1159,39 @@ TEST_CASE("Reopening on a config offers back the game it describes", "[new-game]
     // regardless - and refresh() then wrote those defaults back over the config,
     // so a second game was dealt against three seats the player never chose.
     //
-    // EVERY CASE ABOVE OPENS ON newgame::defaults(), which is exactly why this
-    // passed a green suite: the stock names ARE the defaults' names, so the
-    // overwrite was invisible to a dialog opened on them.
+    // THE NAMES ARE DRAWN AFRESH since the owner's call of 2026-10-23: each row
+    // keeps its gender and its level, and is given a new name to match.
     newgame::Config config = newgame::defaults();
 
-    config.bots = named({ "Zoltan", "Yvette" });
+    config.bots = { { "Zoltan", Gender::Female }, { "Yvette", Gender::Male } };
     config.botLevels = { newgame::BotLevel::Ducking, newgame::BotLevel::Random };
 
     NewGameDialog dialog(config);
 
     const newgame::Config offered = dialog.config();
 
-    REQUIRE(offered.bots == config.bots);
     REQUIRE(offered.botLevels == config.botLevels);
+    REQUIRE(offered.bots.size() == 2);
+
+    for(std::size_t i = 0 ; i < offered.bots.size() ; i++)
+    {
+        INFO("row " << i << ": " << offered.bots[i].name);
+        REQUIRE(offered.bots[i].gender == config.bots[i].gender);
+        REQUIRE(drawnFor(offered.bots[i]));
+    }
 
     // The rows themselves, not only what config() computes from them - the
     // player has to SEE the game they are being offered.
-    QLineEdit* first = dialog.findChild<QLineEdit*>("botName0");
+    QComboBox* firstGender = dialog.findChild<QComboBox*>("botGender0");
     QComboBox* firstLevel = dialog.findChild<QComboBox*>("botLevel0");
-    REQUIRE(first != nullptr);
+    REQUIRE(firstGender != nullptr);
     REQUIRE(firstLevel != nullptr);
 
-    REQUIRE(first->text() == "Zoltan");
+    REQUIRE(firstGender->currentIndex() == static_cast<int>(Gender::Female));
     REQUIRE(newgame::BotLevels[firstLevel->currentIndex()] == newgame::BotLevel::Ducking);
 
-    // A SEAT THE CONFIG NEVER HAD still gets a stock default rather than a blank
-    // - the pre-fill above must not have cost the fallback that keeps Deal
-    // enabled for a reason the player did not cause.
+    // A SEAT THE CONFIG NEVER HAD still gets a name rather than a blank, which
+    // would disable Deal for a reason the player did not cause.
     QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
     REQUIRE(count != nullptr);
 
@@ -1170,23 +1199,57 @@ TEST_CASE("Reopening on a config offers back the game it describes", "[new-game]
 
     const newgame::Config grown = dialog.config();
     REQUIRE(grown.bots.size() == 3);
-    REQUIRE(grown.bots.at(0).name == "Zoltan");
-    REQUIRE_FALSE(grown.bots.at(2).name.empty());
+    REQUIRE(grown.bots.at(0).name == offered.bots.at(0).name);
+    REQUIRE(drawnFor(grown.bots.at(2)));
     REQUIRE_FALSE(newgame::firstError(grown).has_value());
 }
 
-TEST_CASE("The default table names each player's gender", "[new-game]")
+TEST_CASE("The default table's bots are named to match their genders", "[new-game]")
 {
-    // CHOSEN, NEVER READ OFF THE NAME. The stock players carry theirs, and you
-    // start as Male, as "Player" ("Jucător") is masculine.
-    const newgame::Config config = newgame::defaults();
+    // CHOSEN, NEVER READ OFF THE NAME: each bot is a man or a woman at random,
+    // and its name is drawn to match. You start as Male, as "Player" ("Jucător")
+    // is masculine.
+    for(int open = 0 ; open < 20 ; open++)
+    {
+        const newgame::Config config = newgame::defaults();
 
-    REQUIRE(config.human.gender == Gender::Male);
+        REQUIRE(config.human.gender == Gender::Male);
+        REQUIRE(config.bots.size() == 3);
 
-    REQUIRE(config.bots.size() == 3);
-    REQUIRE(config.bots.at(0) == PlayerProfile{ "Ana", Gender::Female });
-    REQUIRE(config.bots.at(1) == PlayerProfile{ "Bogdan", Gender::Male });
-    REQUIRE(config.bots.at(2) == PlayerProfile{ "Cristina", Gender::Female });
+        QStringList names;
+
+        for(const PlayerProfile& bot : config.bots)
+        {
+            INFO(bot.name);
+            REQUIRE(drawnFor(bot));
+            names.push_back(QString::fromStdString(bot.name));
+        }
+
+        REQUIRE(names.removeDuplicates() == 0);
+        REQUIRE_FALSE(newgame::firstError(config).has_value());
+    }
+}
+
+TEST_CASE("A Romanian game draws Romanian names and an English one English", "[new-game]")
+{
+    const auto languageOf = [](const PlayerProfile& bot)
+    {
+        for(const playernames::Name& entry : playernames::catalogue())
+            if(entry.name == QString::fromStdString(bot.name))
+                return entry.language;
+
+        return std::optional<language::Language>();
+    };
+
+    {
+        const RunningIn romanian(language::Language::Romanian);
+
+        for(const PlayerProfile& bot : newgame::defaults().bots)
+            REQUIRE(languageOf(bot).value_or(language::Language::Romanian) == language::Language::Romanian);
+    }
+
+    for(const PlayerProfile& bot : newgame::defaults().bots)
+        REQUIRE(languageOf(bot).value_or(language::Language::English) == language::Language::English);
 }
 
 TEST_CASE("The dialog shows and returns every seat's gender", "[new-game]")
@@ -1211,27 +1274,37 @@ TEST_CASE("The dialog shows and returns every seat's gender", "[new-game]")
     REQUIRE(second->currentIndex() == 1);
 
     REQUIRE(dialog.config().human == config.human);
-    REQUIRE(dialog.config().bots == config.bots);
+    REQUIRE(dialog.config().bots.at(0).gender == Gender::Male);
+    REQUIRE(dialog.config().bots.at(1).gender == Gender::Female);
 
-    // And a choice made in the dialog is what it deals.
+    // And a choice made in the dialog is what it deals - with a name to match,
+    // drawn again for a row that still showed the one drawn for it.
     first->setCurrentIndex(1);
     yours->setCurrentIndex(0);
 
     REQUIRE(dialog.config().bots.at(0).gender == Gender::Female);
+    REQUIRE(drawnFor(dialog.config().bots.at(0)));
     REQUIRE(dialog.config().human.gender == Gender::Male);
 }
 
-TEST_CASE("A row's gender comes with its name and outlives the count changing", "[new-game]")
+TEST_CASE("A row's gender outlives the count changing and new rows are named to match", "[new-game]")
 {
-    NewGameDialog dialog(newgame::defaults());
+    newgame::Config config = newgame::defaults();
+    config.bots = { { "A", Gender::Female }, { "B", Gender::Male }, { "C", Gender::Female } };
+
+    NewGameDialog dialog(config);
 
     QSpinBox* count = dialog.findChild<QSpinBox*>("opponents");
     REQUIRE(count != nullptr);
 
-    // A ROW ADDED PAST THE CONFIG TAKES A STOCK PLAYER WHOLE: Dan, then Elena.
+    // A ROW ADDED PAST THE CONFIG is a man or a woman at random, named to match.
     count->setValue(5);
-    REQUIRE(dialog.config().bots.at(3) == PlayerProfile{ "Dan", Gender::Male });
-    REQUIRE(dialog.config().bots.at(4) == PlayerProfile{ "Elena", Gender::Female });
+
+    for(std::size_t i = 0 ; i < 5 ; i++)
+    {
+        INFO("row " << i << ": " << dialog.config().bots.at(i).name);
+        REQUIRE(drawnFor(dialog.config().bots.at(i)));
+    }
 
     // A gender changed on a row that survives the count going down and back up
     // stays changed.
@@ -1243,12 +1316,71 @@ TEST_CASE("A row's gender comes with its name and outlives the count changing", 
     count->setValue(3);
 
     REQUIRE(dialog.config().bots.size() == 3);
-    REQUIRE(dialog.config().bots.at(0) == PlayerProfile{ "Ana", Gender::Male });
+    REQUIRE(dialog.config().bots.at(0).gender == Gender::Male);
 
-    // The rows removed and added again are rebuilt from the config the dialog
-    // opened on, gender with name, as a removed row's name and level always were.
-    REQUIRE(dialog.config().bots.at(1) == PlayerProfile{ "Bogdan", Gender::Male });
-    REQUIRE(dialog.config().bots.at(2) == PlayerProfile{ "Cristina", Gender::Female });
+    // The rows removed and added again take their gender from the config the
+    // dialog opened on, as a removed row's level always did, with fresh names.
+    REQUIRE(dialog.config().bots.at(1).gender == Gender::Male);
+    REQUIRE(dialog.config().bots.at(2).gender == Gender::Female);
+    REQUIRE(drawnFor(dialog.config().bots.at(1)));
+    REQUIRE(drawnFor(dialog.config().bots.at(2)));
+}
+
+TEST_CASE("A name typed into a row is kept when its gender or level changes", "[new-game]")
+{
+    // A NAME YOU TYPED IS YOURS: only a name the dialog drew is drawn again.
+    NewGameDialog dialog(newgame::defaults());
+
+    QLineEdit* name = dialog.findChild<QLineEdit*>("botName0");
+    QComboBox* gender = dialog.findChild<QComboBox*>("botGender0");
+    QComboBox* level = dialog.findChild<QComboBox*>("botLevel0");
+    REQUIRE(name != nullptr);
+    REQUIRE(gender != nullptr);
+    REQUIRE(level != nullptr);
+
+    name->setText(QStringLiteral("Zoltan"));
+
+    gender->setCurrentIndex(gender->currentIndex() == 0 ? 1 : 0);
+    level->setCurrentIndex(level->currentIndex() == 0 ? 1 : 0);
+
+    REQUIRE(name->text() == QStringLiteral("Zoltan"));
+    REQUIRE(dialog.config().bots.at(0).name == "Zoltan");
+}
+
+TEST_CASE("Every time New Game opens its bots get fresh names that never repeat", "[new-game]")
+{
+    // FIVE WOMEN AT ONE TABLE, and you named as one of the list's women: the names
+    // drawn are five different ones, none of them yours, and they change from one
+    // opening to the next.
+    newgame::Config config = newgame::defaults();
+    config.human.name = "Emma";
+    config.bots = std::vector<PlayerProfile>(5, PlayerProfile{ "x", Gender::Female });
+    config.botLevels = std::vector<newgame::BotLevel>(5, newgame::BotLevel::LowRisk);
+
+    std::set<std::string> everDrawn;
+
+    for(int open = 0 ; open < 10 ; open++)
+    {
+        NewGameDialog dialog(config);
+        const newgame::Config drawn = dialog.config();
+
+        QStringList names;
+
+        for(const PlayerProfile& bot : drawn.bots)
+        {
+            INFO("open " << open << ": " << bot.name);
+            REQUIRE(drawnFor(bot));
+            REQUIRE(QString::fromStdString(bot.name).compare(QStringLiteral("Emma"), Qt::CaseInsensitive) != 0);
+
+            names.push_back(QString::fromStdString(bot.name));
+            everDrawn.insert(bot.name);
+        }
+
+        REQUIRE(names.removeDuplicates() == 0);
+        REQUIRE_FALSE(newgame::firstError(drawn).has_value());
+    }
+
+    REQUIRE(everDrawn.size() > 5);
 }
 
 TEST_CASE("Your gender is greyed out with your name while watching", "[new-game]")

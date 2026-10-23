@@ -17,7 +17,7 @@
 <context>
     <name>CardArtCanvas</name>
     <message>
-        <location filename="../src/ui/CardArtWindow.cpp" line="+119"/>
+        <location filename="../src/ui/CardArtWindow.cpp" line="+120"/>
         <source>Back</source>
         <translation>Spate</translation>
     </message>
@@ -192,7 +192,7 @@
 <context>
     <name>NewGameDialog</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="+63"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="+53"/>
         <source>Male</source>
         <translation>Bărbat</translation>
     </message>
@@ -202,7 +202,7 @@
         <translation>Femeie</translation>
     </message>
     <message>
-        <location line="+700"/>
+        <location line="+763"/>
         <source>New Game</source>
         <translation>Joc nou</translation>
     </message>
@@ -272,17 +272,17 @@
         <translation>%1.</translation>
     </message>
     <message>
-        <location line="+40"/>
+        <location filename="../src/ui/PlayerNames.cpp" line="+136"/>
         <source>Bot %1</source>
         <translation>Bot %1</translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="+63"/>
         <source>plays</source>
         <translation>joacă</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+59"/>
         <source>(%1-%2 at the table)</source>
         <translation>(%1-%2 la masă)</translation>
     </message>
@@ -590,7 +590,7 @@ Whist</source>
 <context>
     <name>newgame</name>
     <message>
-        <location filename="../src/ui/NewGameDialog.cpp" line="-857"/>
+        <location filename="../src/ui/NewGameDialog.cpp" line="-937"/>
         <source>Weighs %1 imagined deals before each card, never plays at random, and counts %2% of every point an opponent scores against its own, %3% of the leader&apos;s.</source>
         <translation>Cântărește %1 de împărțiri imaginate înaintea fiecărei cărți, nu joacă niciodată la întâmplare și socotește %2% din fiecare punct al unui adversar împotriva propriului scor, %3% din ale liderului.</translation>
     </message>
@@ -600,7 +600,7 @@ Whist</source>
         <translation>Jucător</translation>
     </message>
     <message numerus="yes">
-        <location line="+119"/>
+        <location line="+132"/>
         <location line="+4"/>
         <source>%n rounds</source>
         <translation>
@@ -644,7 +644,7 @@ Whist</source>
         <translation>Doi jucători nu se pot numi amândoi %1.</translation>
     </message>
     <message>
-        <location line="+130"/>
+        <location line="+180"/>
         <source>Random</source>
         <translation>Aleatoriu</translation>
     </message>

@@ -14,9 +14,11 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <optional>
+#include <random>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -391,6 +393,14 @@ private:
     // depend on all of it: the summary line and whether Deal is enabled.
     void refresh();
 
+    // A name for opponent `seat`, of this gender and level, drawn at random by the
+    // owner's rules (playernames::draw()) and none another row or you have.
+    QString drawName(Gender gender, newgame::BotLevel level, std::size_t seat);
+
+    // A new name for opponent `seat` to match its gender and level, if it still
+    // shows the one drawn for it.
+    void redrawUntouched(std::size_t seat);
+
     // One opponent. Held as a struct rather than as parallel vectors of widgets
     // because a row is added and removed as a unit.
     struct Row
@@ -399,9 +409,16 @@ private:
         QLineEdit* name = nullptr;
         QComboBox* gender = nullptr;
         QComboBox* level = nullptr;
+
+        // The name last drawn for this row. While the row still shows it, a new
+        // gender or level draws another; once it is typed over, it is kept.
+        QString drawn;
     };
 
     newgame::Config current;
+
+    // What every name this dialog draws is drawn with.
+    std::mt19937 random{ std::random_device{}() };
 
     // WHAT THE DIALOG WAS OPENED ON, kept whole and never written to. `current`
     // cannot serve: refresh() rebuilds its bot lists FROM the rows on every

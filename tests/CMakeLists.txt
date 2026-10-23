@@ -28,6 +28,7 @@ add_executable(desktop_tests
     TrickPanelTests.cpp
     ThemeTests.cpp
     AvatarTests.cpp
+    PlayerNamesTests.cpp
     FontsTests.cpp
     CardRendererTests.cpp
     DevicePixelsTests.cpp

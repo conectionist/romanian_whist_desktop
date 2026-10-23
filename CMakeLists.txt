@@ -151,6 +151,8 @@ qt_add_library(desktop_core STATIC
     src/ui/CardArtWindow.cpp
 
     src/ui/NewGameDialog.h
+    src/ui/PlayerNames.h
+    src/ui/PlayerNames.cpp
     src/ui/NewGameDialog.cpp
     src/ui/LitButton.h
     src/ui/LitButton.cpp
@@ -232,8 +234,9 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # (docs/ui-redesign/): resources/table.qrc puts the wood and felt textures under
 # /table, and resources/fonts.qrc puts the three bundled typefaces and their
 # licences under /fonts. A fourth, resources/avatars.qrc, puts the seat portraits
-# and their catalogue under /avatars. Everything below applies to all four - they
-# are one call because they share every one of its pitfalls.
+# and their catalogue under /avatars, and a fifth, resources/names.qrc, the names
+# New Game draws under /names. Everything below applies to all five - they are
+# one call because they share every one of its pitfalls.
 #
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
@@ -254,8 +257,8 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # .qrc files, with the generated .cpp put into the target by hand. It does not
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
 # build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
-# for the textures, qrc_fonts.cpp for the typefaces and qrc_avatars.cpp for the
-# portraits.
+# for the textures, qrc_fonts.cpp for the typefaces, qrc_avatars.cpp for the
+# portraits and qrc_names.cpp for the names.
 #
 # The list is a variable because tests/CMakeLists.txt consumes the same one (see
 # below), and absolute because that directory would resolve a relative path
@@ -265,6 +268,7 @@ set(WHIST_DESKTOP_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/table.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/avatars.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/names.qrc
 )
 qt_add_resources(APP_RESOURCES ${WHIST_DESKTOP_RESOURCES})
 target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})

@@ -2158,6 +2158,16 @@ whole shape of the game before starting it is strictly better.
   > of that strategy wears it, and such a bot wears its strategy's avatars whenever the catalogue has
   > one of its gender - two Cyborgs and one cyborg face, and both wear it. Without one of its gender,
   > the bot wears an ordinary face, as you always do.
+  >
+  > **And the bots' names are drawn the same way** (the owner's call, same day), from
+  > `resources/names/player_names.json`: each opponent row gets a name of its gender, in the app's
+  > language ("ro" or "en", or "any"), from its strategy's own names when there are any free
+  > (`playernames::draw()`). Unlike a face, a name is drawn in this dialog, where it can still be
+  > typed over, and never repeats at one table: a strategy's names run out into the ordinary names of
+  > that gender, and those into "Bot 3". Every time the dialog opens, each row keeps its gender and
+  > level and gets a fresh name; a new row is a man or a woman at random; a new gender or level draws
+  > a new name for a row that still shows the one drawn for it, and a typed name is kept. Your own
+  > name is never drawn.
 - **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.

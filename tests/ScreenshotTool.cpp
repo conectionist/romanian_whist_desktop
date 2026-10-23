@@ -229,17 +229,19 @@ void fillShotDialog(NewGameDialog& dialog, DialogAnswer& answer, const newgame::
     if(QSpinBox* opponents = need<QSpinBox>(dialog, QStringLiteral("opponents"), answer))
         opponents->setValue(static_cast<int>(want.bots.size()));
 
+    // THE NAME LAST: a new gender or level draws a new name for a row that still
+    // shows the one drawn for it, which could be the very name wanted here.
     for(std::size_t i = 0 ; i < want.bots.size() ; i++)
     {
-        if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("botName%1").arg(i), answer))
-            name->setText(QString::fromStdString(want.bots.at(i).name));
-
         if(QComboBox* gender = need<QComboBox>(dialog, QStringLiteral("botGender%1").arg(i), answer))
             gender->setCurrentIndex(static_cast<int>(want.bots.at(i).gender));
 
         // The index is the enum's own value, which is what BotLevels is ordered by.
         if(QComboBox* level = need<QComboBox>(dialog, QStringLiteral("botLevel%1").arg(i), answer))
             level->setCurrentIndex(static_cast<int>(want.botLevels.at(i)));
+
+        if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("botName%1").arg(i), answer))
+            name->setText(QString::fromStdString(want.bots.at(i).name));
     }
 
     const QString structure = want.structure == romanian_whist::GameStructure::S_181
