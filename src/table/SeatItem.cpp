@@ -164,7 +164,7 @@ seatitem::Shown SeatItem::shownNow() const
 {
     const qreal width = seatitem::layoutFor(size).text.width();
 
-    return { seatitem::nameLineFor(seat, active, width), seatitem::pillFor(seat, active, biddingOpen) };
+    return { seatitem::nameLineFor(seat, active, width), seatitem::pillFor(seat, active, biddingOpen), seat.avatar };
 }
 
 // COMPARED BY WHAT IT DRAWS, not by the snapshot's fields: the cards left, the
@@ -205,16 +205,6 @@ void SeatItem::setPanelSize(QSizeF panelSize)
     prepareGeometryChange();
     size = panelSize;
     shown = shownNow();
-    memo.invalidate();
-    update();
-}
-
-void SeatItem::setPortrait(const std::string& avatar)
-{
-    if(look == avatar)
-        return;
-
-    look = avatar;
     memo.invalidate();
     update();
 }
@@ -314,7 +304,7 @@ void SeatItem::paintPortrait(QPainter& painter, const QRectF& box) const
     const qreal innerRadius = portraitRadius - portraitBorder;
 
     const qreal ratio = devicepixels::effectiveRatio(painter);
-    QPixmap picture = theme.avatar(look, laidOut.size().toSize(), ratio);
+    QPixmap picture = theme.avatar(shown.avatar, laidOut.size().toSize(), ratio);
 
     if(picture.isNull())
         return;

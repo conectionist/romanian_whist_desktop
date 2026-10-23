@@ -64,6 +64,50 @@ const std::vector<avatars::Avatar>& avatars::catalogue()
     return entries;
 }
 
+std::vector<std::string> avatars::assign(const std::vector<Gender>& genders, const std::vector<Avatar>& catalogue,
+                                         std::mt19937& random)
+{
+    // Every avatar of one gender, in catalogue order.
+    const auto all = [&](Gender gender)
+    {
+        std::vector<std::string> ids;
+
+        for(const Avatar& avatar : catalogue)
+            if(avatar.gender == gender)
+                ids.push_back(avatar.id);
+
+        return ids;
+    };
+
+    std::vector<std::string> left[2] = { all(Gender::Male), all(Gender::Female) };
+
+    std::vector<std::string> chosen;
+    chosen.reserve(genders.size());
+
+    for(const Gender gender : genders)
+    {
+        std::vector<std::string>& pool = left[gender == Gender::Female ? 1 : 0];
+
+        // RUN OUT: more players of this gender than avatars. Start again.
+        if(pool.empty())
+            pool = all(gender);
+
+        if(pool.empty())
+        {
+            chosen.emplace_back();
+            continue;
+        }
+
+        std::uniform_int_distribution<std::size_t> pick(0, pool.size() - 1);
+        const std::size_t index = pick(random);
+
+        chosen.push_back(pool[index]);
+        pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+
+    return chosen;
+}
+
 const avatars::Avatar* avatars::find(std::string_view id)
 {
     const std::vector<Avatar>& entries = catalogue();

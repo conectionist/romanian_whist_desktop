@@ -2,6 +2,7 @@
 
 #include "GameFixtures.h"
 
+#include "paint/Avatars.h"
 #include "ui/NewGameDialog.h"
 
 #include <romanian_whist/GameEngine.h>
@@ -24,6 +25,7 @@
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -270,13 +272,19 @@ TEST_CASE("The deal carries a profile per seat in seat order", "[new-game]")
         const GameDeal deal = newgame::buildDeal(config);
 
         REQUIRE(deal.profiles.size() == deal.setup.seats.size());
-        REQUIRE(deal.profiles.at(0) == config.human);
+        REQUIRE(deal.profiles.at(0).name == config.human.name);
+        REQUIRE(deal.profiles.at(0).gender == config.human.gender);
 
         for(std::size_t seat = 0 ; seat < deal.setup.seats.size() ; seat++)
             REQUIRE(deal.profiles.at(seat).name == deal.setup.seats.at(seat).name);
 
+        // Name and gender as the config has them; the avatar is the deal's own
+        // (the next case).
         for(std::size_t bot = 0 ; bot < config.bots.size() ; bot++)
-            REQUIRE(deal.profiles.at(bot + 1) == config.bots.at(bot));
+        {
+            REQUIRE(deal.profiles.at(bot + 1).name == config.bots.at(bot).name);
+            REQUIRE(deal.profiles.at(bot + 1).gender == config.bots.at(bot).gender);
+        }
     }
 
     SECTION("a watched game, where bot i is seat i")
@@ -286,8 +294,66 @@ TEST_CASE("The deal carries a profile per seat in seat order", "[new-game]")
 
         const GameDeal deal = newgame::buildDeal(config);
 
-        REQUIRE(deal.profiles == config.bots);
+        REQUIRE(deal.profiles.size() == config.bots.size());
+
+        for(std::size_t bot = 0 ; bot < config.bots.size() ; bot++)
+        {
+            REQUIRE(deal.profiles.at(bot).name == config.bots.at(bot).name);
+            REQUIRE(deal.profiles.at(bot).gender == config.bots.at(bot).gender);
+        }
     }
+}
+
+TEST_CASE("Every seat of a dealt game wears a face of its own gender", "[new-game]")
+{
+    // CHOSEN AS THE GAME IS DEALT, at random by the owner's rule
+    // (avatars::assign()): New Game's settings carry no face, the deal does.
+    const newgame::Config config = newgame::defaults();
+
+    REQUIRE(config.human.avatar.empty());
+    for(const PlayerProfile& bot : config.bots)
+        REQUIRE(bot.avatar.empty());
+
+    // You and Bogdan are men and Ana and Cristina women: two of each, and the
+    // catalogue has faces enough for both, so no two seats share one.
+    for(int deal = 0 ; deal < 20 ; deal++)
+    {
+        const GameDeal dealt = newgame::buildDeal(config);
+        std::set<std::string> faces;
+
+        for(const PlayerProfile& profile : dealt.profiles)
+        {
+            INFO("deal " << deal << ", " << profile.name << " wears " << profile.avatar);
+
+            const avatars::Avatar* avatar = avatars::find(profile.avatar);
+            REQUIRE(avatar != nullptr);
+            REQUIRE(avatar->gender == profile.gender);
+
+            faces.insert(profile.avatar);
+        }
+
+        REQUIRE(faces.size() == dealt.profiles.size());
+    }
+}
+
+TEST_CASE("A fixed deal deals the same faces every time", "[new-game]")
+{
+    // SO A RENDERING CHANGE CAN STILL BE REVIEWED AS A DIFF: the screenshot tool
+    // deals fixed games, and its pictures must come out the same twice.
+    newgame::Config config = newgame::defaults();
+    config.shuffleSeed = 42u;
+
+    const auto faces = [&]
+    {
+        std::vector<std::string> worn;
+
+        for(const PlayerProfile& profile : newgame::buildDeal(config).profiles)
+            worn.push_back(profile.avatar);
+
+        return worn;
+    };
+
+    REQUIRE(faces() == faces());
 }
 
 TEST_CASE("A setup the dialog would produce is one the engine accepts", "[new-game]")

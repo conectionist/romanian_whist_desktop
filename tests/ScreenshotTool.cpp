@@ -12,6 +12,7 @@
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
+#include "paint/Avatars.h"
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
 #include "ui/HistorySheet.h"
@@ -660,6 +661,11 @@ GameSnapshot handMoment(const HandShot& shot)
         seat.name = names[i];
         seat.isHuman = i == 0;
 
+        // THE MOCK-UP'S FACES, which go with its names: You, Bogdan, Ana and Costel
+        // are the catalogue's first four, so these pictures still pair with its.
+        seat.avatar = avatars::catalogue().at(i).id;
+        seat.gender = avatars::catalogue().at(i).gender;
+
         // Seat 1 bid first, as it leads. ONE-BASED, as the engine's
         // getBiddingOrder() is: the scoreboard lists the rows in this order since
         // the redesign's phase 8, and a 0 there is "not known yet".
@@ -777,12 +783,25 @@ namespace
 
 const char* const sheetNames[] = { "Player", "Ana", "Bogdan", "Cristina", "Dan", "Elena" };
 
+// A face of each player's own gender, as a dealt game gives them. Two women's
+// faces for three women, until there is more art: Elena wears Ana's.
+const PlayerProfile sheetFaces[] = { { "", Gender::Male, "man-dark-hair-beard" },
+                                     { "", Gender::Female, "woman-long-brown-hair" },
+                                     { "", Gender::Male, "man-hat-mustache" },
+                                     { "", Gender::Female, "woman-long-red-hair" },
+                                     { "", Gender::Male, "man-white-hair-hat" },
+                                     { "", Gender::Female, "woman-long-brown-hair" } };
+
 GameSnapshot sheetTable()
 {
     GameSnapshot snapshot = fullTable();
 
     for(std::size_t i = 0 ; i < snapshot.seats.size() ; i++)
+    {
         snapshot.seats[i].name = sheetNames[i];
+        snapshot.seats[i].gender = sheetFaces[i].gender;
+        snapshot.seats[i].avatar = sheetFaces[i].avatar;
+    }
 
     return snapshot;
 }

@@ -1,5 +1,7 @@
 #include "NewGameDialog.h"
 
+#include "paint/Avatars.h"
+
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/strategies/CyborgStrategy.h>
 #include <romanian_whist/strategies/DuckingStrategy.h>
@@ -27,6 +29,7 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <random>
 #include <utility>
 
 using namespace romanian_whist;
@@ -567,6 +570,24 @@ GameDeal newgame::buildDeal(const Config& config)
 
         setup.seats.push_back(SeatSetup{ name, std::move(built.provider) });
         deal.profiles.push_back(config.bots.at(i));
+    }
+
+    // EVERY SEAT'S FACE, chosen now, so each game - Play again included - gets new
+    // ones: one of the player's own gender, at random by the owner's rule
+    // (avatars::assign()). A FIXED DEAL DEALS THE SAME FACES, seeded from the
+    // same number as the shuffle, so a rendering change can still be reviewed
+    // as a diff.
+    {
+        std::vector<Gender> genders;
+
+        for(const PlayerProfile& profile : deal.profiles)
+            genders.push_back(profile.gender);
+
+        std::mt19937 random(config.shuffleSeed ? *config.shuffleSeed : std::random_device{}());
+        const std::vector<std::string> faces = avatars::assign(genders, avatars::catalogue(), random);
+
+        for(std::size_t seat = 0 ; seat < deal.profiles.size() ; seat++)
+            deal.profiles[seat].avatar = faces.at(seat);
     }
 
     setup.structure = config.structure;

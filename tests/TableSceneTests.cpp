@@ -33,12 +33,14 @@
 #include <QPointF>
 #include <QRectF>
 #include <QSize>
+#include <QtMath>
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <string>
 #include <vector>
 
 using Catch::Approx;
@@ -275,6 +277,49 @@ TEST_CASE("A spectated table stands seat 0's rack at the bottom", "[table]")
         found = found || QLineF(rack->pos(), bottom).length() < 1e-9;
 
     REQUIRE(found);
+}
+
+TEST_CASE("A seat wears its own player's face wherever it sits", "[table]")
+{
+    // THE PLAYER'S FACE, NOT THE PLACE'S (the owner's call, 2026-10-23). The
+    // fixture's seat 2 wears the long brown hair; seated at the bottom, where the
+    // table used to put the catalogue's first face, she still wears hers.
+    GameSnapshot snapshot = fullTable();
+    snapshot.seats[0].isHuman = false;
+    snapshot.seats[2].isHuman = true;
+    snapshot.humanSeat = 2;
+
+    REQUIRE(snapshot.seats[2].avatar == "woman-long-brown-hair");
+
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
+
+    SeatItem* bottom = plaqueAtBottom(scene);
+    REQUIRE(bottom != nullptr);
+
+    const seatitem::Layout layout = bottom->layoutFor();
+    const QRectF inner = layout.portrait.adjusted(1.0, 1.0, -1.0, -1.0);
+
+    QImage image(qCeil(layout.panel.width()), qCeil(layout.panel.height()), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::black);
+    {
+        QPainter painter(&image);
+        painter.translate(-layout.panel.topLeft());
+        bottom->paint(&painter, nullptr, nullptr);
+    }
+
+    const QPoint probe = (QPointF(inner.left() + inner.width() / 2.0, inner.top() + inner.height() * 3.0 / 4.0)
+                          - layout.panel.topLeft()).toPoint();
+
+    const auto middle = [&](const std::string& id)
+    {
+        const QImage avatar = Theme::dark().avatar(id, inner.size().toSize(), 1.0).toImage();
+        return avatar.pixel(avatar.width() / 2, avatar.height() * 3 / 4);
+    };
+
+    REQUIRE(middle("woman-long-brown-hair") != middle("man-dark-hair-beard"));
+    REQUIRE(image.pixel(probe) == middle("woman-long-brown-hair"));
 }
 
 TEST_CASE("Your own seat shows no face in a Forehead round", "[table]")

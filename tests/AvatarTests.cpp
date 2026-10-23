@@ -11,6 +11,9 @@
 #include <QString>
 #include <QSvgRenderer>
 
+#include <cstdint>
+#include <map>
+#include <random>
 #include <set>
 #include <string>
 #include <vector>
@@ -133,4 +136,129 @@ TEST_CASE("An avatar is found by its id and by nothing else", "[avatars]")
 
     REQUIRE(avatars::find("no-such-avatar") == nullptr);
     REQUIRE(avatars::find("") == nullptr);
+}
+
+// ---- the owner's rule: one avatar per player, at random, of their gender ----
+
+namespace
+{
+// Three men's faces and two women's, so a test can run either gender out.
+std::vector<avatars::Avatar> madeUp()
+{
+    return { { "m1", Gender::Male, QString() },
+             { "f1", Gender::Female, QString() },
+             { "m2", Gender::Male, QString() },
+             { "m3", Gender::Male, QString() },
+             { "f2", Gender::Female, QString() } };
+}
+
+Gender genderOf(const std::string& id)
+{
+    return id.front() == 'f' ? Gender::Female : Gender::Male;
+}
+}
+
+TEST_CASE("Every player is given an avatar of their own gender", "[avatars]")
+{
+    const std::vector<Gender> genders = { Gender::Male, Gender::Female, Gender::Female,
+                                          Gender::Male, Gender::Male, Gender::Female, Gender::Male };
+
+    for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<std::string> chosen = avatars::assign(genders, madeUp(), random);
+
+        REQUIRE(chosen.size() == genders.size());
+
+        for(std::size_t i = 0 ; i < genders.size() ; i++)
+        {
+            INFO("seed " << seed << ", player " << i);
+            REQUIRE_FALSE(chosen[i].empty());
+            REQUIRE(genderOf(chosen[i]) == genders[i]);
+        }
+    }
+}
+
+TEST_CASE("No two players share an avatar while there are enough", "[avatars]")
+{
+    // Three men and two women: exactly the faces there are.
+    const std::vector<Gender> genders = { Gender::Female, Gender::Male, Gender::Male,
+                                          Gender::Female, Gender::Male };
+
+    for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<std::string> chosen = avatars::assign(genders, madeUp(), random);
+
+        INFO("seed " << seed);
+        REQUIRE(std::set<std::string>(chosen.begin(), chosen.end()).size() == chosen.size());
+    }
+}
+
+TEST_CASE("A gender that runs out of avatars starts again from all of them", "[avatars]")
+{
+    // FIVE WOMEN AND TWO WOMEN'S FACES, with men between them, whose picks must not
+    // touch the women's pool. Each pair of women takes both faces, one each,
+    // before any face is worn a second time; the fifth wears one of the two.
+    const std::vector<Gender> genders = { Gender::Female, Gender::Male, Gender::Female, Gender::Female,
+                                          Gender::Male, Gender::Female, Gender::Female };
+
+    for(std::uint32_t seed = 0 ; seed < 50 ; seed++)
+    {
+        std::mt19937 random(seed);
+        const std::vector<std::string> chosen = avatars::assign(genders, madeUp(), random);
+
+        std::vector<std::string> women;
+
+        for(std::size_t i = 0 ; i < genders.size() ; i++)
+            if(genders[i] == Gender::Female)
+                women.push_back(chosen[i]);
+
+        INFO("seed " << seed);
+        REQUIRE(std::set<std::string>{ women[0], women[1] } == std::set<std::string>{ "f1", "f2" });
+        REQUIRE(std::set<std::string>{ women[2], women[3] } == std::set<std::string>{ "f1", "f2" });
+        REQUIRE(genderOf(women[4]) == Gender::Female);
+    }
+}
+
+TEST_CASE("The same seed gives the same avatars", "[avatars]")
+{
+    const std::vector<Gender> genders = { Gender::Male, Gender::Female, Gender::Male, Gender::Male };
+
+    std::mt19937 once(1234);
+    std::mt19937 again(1234);
+
+    REQUIRE(avatars::assign(genders, madeUp(), once) == avatars::assign(genders, madeUp(), again));
+}
+
+TEST_CASE("Every avatar of a gender is sometimes the one chosen", "[avatars]")
+{
+    // RANDOM, NOT THE CATALOGUE'S FIRST: over many seeds, the first man and the
+    // first woman at the table each wear every face of their gender at least once.
+    std::map<std::string, int> worn;
+
+    for(std::uint32_t seed = 0 ; seed < 200 ; seed++)
+    {
+        std::mt19937 random(seed);
+
+        for(const std::string& id : avatars::assign({ Gender::Male, Gender::Female }, madeUp(), random))
+            worn[id]++;
+    }
+
+    for(const avatars::Avatar& avatar : madeUp())
+    {
+        INFO("avatar " << avatar.id);
+        REQUIRE(worn[avatar.id] > 0);
+    }
+}
+
+TEST_CASE("A gender with no avatars at all gets the bare box", "[avatars]")
+{
+    const std::vector<avatars::Avatar> menOnly = { { "m1", Gender::Male, QString() } };
+
+    std::mt19937 random(5);
+    const std::vector<std::string> chosen = avatars::assign({ Gender::Female, Gender::Male, Gender::Female },
+                                                            menOnly, random);
+
+    REQUIRE(chosen == std::vector<std::string>{ "", "m1", "" });
 }

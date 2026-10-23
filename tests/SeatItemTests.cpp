@@ -373,6 +373,52 @@ TEST_CASE("A snapshot that changes nothing on a panel composes nothing", "[seat]
     REQUIRE(plaque.item.compositions() == first + 2);
 }
 
+TEST_CASE("A panel wears its own seat's avatar and redraws when it changes", "[seat]")
+{
+    // THE PLAYER'S FACE, NOT THE PLACE'S, since the owner's call of 2026-10-23:
+    // the portrait comes with the seat (SeatView::avatar), and a new one is a new
+    // picture - it is part of what the panel shows.
+    SeatView view = bidding(2, 0);
+    view.avatar = "woman-long-red-hair";
+
+    Plaque plaque(view);
+
+    const seatitem::Layout layout = plaque.item.layoutFor();
+    const QRectF inner = layout.portrait.adjusted(1.0, 1.0, -1.0, -1.0);
+
+    QImage image(qCeil(layout.panel.width()), qCeil(layout.panel.height()), QImage::Format_ARGB32_Premultiplied);
+    const auto render = [&]
+    {
+        image.fill(Qt::black);
+        QPainter painter(&image);
+        painter.translate(-layout.panel.topLeft());
+        plaque.item.paint(&painter, nullptr, nullptr);
+    };
+
+    // The middle of the portrait is the avatar's own middle.
+    const auto middle = [&](const std::string& id)
+    {
+        const QImage avatar = Theme::dark().avatar(id, inner.size().toSize(), 1.0).toImage();
+        return avatar.pixel(avatar.width() / 2, avatar.height() * 3 / 4);
+    };
+
+    const QPoint probe = (QPointF(inner.left() + inner.width() / 2.0, inner.top() + inner.height() * 3.0 / 4.0)
+                          - layout.panel.topLeft()).toPoint();
+
+    REQUIRE(middle("woman-long-red-hair") != middle("man-dark-hair-beard"));
+
+    render();
+    const std::size_t first = plaque.item.compositions();
+    REQUIRE(image.pixel(probe) == middle("woman-long-red-hair"));
+
+    view.avatar = "man-dark-hair-beard";
+    plaque.item.setSeat(view, false, false, Theme::dark());
+    render();
+
+    REQUIRE(plaque.item.compositions() == first + 1);
+    REQUIRE(image.pixel(probe) == middle("man-dark-hair-beard"));
+}
+
 // ONE CHROME FOR EVERY PANEL ALIKE. Five of six seats are the same size at the
 // same ratio, and each rendering its own blurred the same two shadows five times
 // over on every settle of a resize.
@@ -438,7 +484,9 @@ TEST_CASE("A portrait's edge shows no row from its other edge", "[seat]")
 
     const auto paintWith = [&](const std::string& look)
     {
-        plaque.item.setPortrait(look);
+        SeatView view = unseen(QStringLiteral("Ana"));
+        view.avatar = look;
+        plaque.item.setSeat(view, false, false, Theme::dark());
 
         QImage image(qCeil(layout.panel.width() * ratio) + 40, qCeil(layout.panel.height() * ratio) + 40,
                      QImage::Format_ARGB32_Premultiplied);

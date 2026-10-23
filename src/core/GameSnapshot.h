@@ -48,6 +48,10 @@ struct SeatView
     // without one - every fixture that builds a GameSetup by hand.
     Gender gender = Gender::Male;
 
+    // The portrait this seat wears, an avatar id (PlayerProfile::avatar), stamped
+    // on by GameBridge as the gender is. Empty without a profile: the bare box.
+    std::string avatar;
+
     // Position in this round's bidding, 1 for whoever opened it.
     unsigned int bidOrder = 0;
 

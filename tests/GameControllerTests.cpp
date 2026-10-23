@@ -4,6 +4,7 @@
 #include "GameFixtures.h"
 
 #include "engine/GameController.h"
+#include "paint/Avatars.h"
 #include "ui/NewGameDialog.h"
 
 #include <romanian_whist/AiMoveProvider.h>
@@ -158,7 +159,7 @@ TEST_CASE("A game left to itself reaches onGameOver", "[controller]")
     controller.stop();
 }
 
-TEST_CASE("A game dealt from New Game publishes the genders it was dealt", "[controller]")
+TEST_CASE("A game dealt from New Game publishes the genders and faces it was dealt", "[controller]")
 {
     // THE WHOLE ROUTE: buildDeal() puts the profiles on the deal, start() hands
     // them to the bridge before the game thread starts, and every snapshot the
@@ -183,14 +184,22 @@ TEST_CASE("A game dealt from New Game publishes the genders it was dealt", "[con
                      {
                          const std::vector<Gender> dealt = { Gender::Female, Gender::Male, Gender::Female };
                          std::vector<Gender> seats;
+                         bool faces = true;
 
+                         // AND A FACE OF THAT GENDER on every seat: buildDeal()
+                         // chose them, the bridge carried them.
                          for(const SeatView& seat : snapshot->seats)
+                         {
                              seats.push_back(seat.gender);
+
+                             const avatars::Avatar* avatar = avatars::find(seat.avatar);
+                             faces = faces && avatar != nullptr && avatar->gender == seat.gender;
+                         }
 
                          std::lock_guard lock(mutex);
                          snapshots++;
 
-                         if(seats != dealt)
+                         if(seats != dealt || !faces)
                              wrong++;
                      },
                      Qt::DirectConnection);

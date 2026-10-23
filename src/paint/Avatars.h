@@ -5,6 +5,7 @@
 
 #include <QString>
 
+#include <random>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -36,6 +37,16 @@ const std::vector<Avatar>& catalogue();
 
 // The avatar with this id, or null.
 const Avatar* find(std::string_view id);
+
+// ONE AVATAR PER PLAYER, by the owner's rule (2026-10-23). For each player in
+// order, take an avatar of that player's gender at random from what is left of
+// that gender, and remove it, so no two players share a face while there are
+// faces enough. A gender whose avatars have all been taken starts again from the
+// full set. A gender the catalogue has none of gets an empty id: the bare box.
+//
+// The catalogue is a parameter so a test can hand it one of its own.
+std::vector<std::string> assign(const std::vector<Gender>& genders, const std::vector<Avatar>& catalogue,
+                                std::mt19937& random);
 }
 
 #endif

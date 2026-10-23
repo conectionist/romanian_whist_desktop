@@ -54,7 +54,10 @@ void GameBridge::publish(const GameEngine& engine)
     // refreshFromEngine() stays a pure function of the engine, as the terminal's
     // is (SnapshotTests). Seat i is profile i (GameDeal::profiles).
     for(std::size_t seat = 0 ; seat < snapshot.seats.size() && seat < profiles.size() ; seat++)
+    {
         snapshot.seats[seat].gender = profiles[seat].gender;
+        snapshot.seats[seat].avatar = profiles[seat].avatar;
+    }
 
     // Wrapped only on the way out - built by value above, so GameSnapshot's rule
     // that every member is copyable and default-constructible is unchanged.

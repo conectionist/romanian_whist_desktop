@@ -24,13 +24,22 @@ enum class Gender
 // rejects two equal names, and the Cyborg finds its own seat by it), so
 // newgame::buildDeal() hands it over from here.
 //
-// A nationality and an avatar are to join it, so a player's look stays in one
-// place and cannot contradict their name or gender.
+// A nationality is to join it, so a player's look stays in one place and cannot
+// contradict their name or gender.
 struct PlayerProfile
 {
     // UTF-8, as the engine takes it (QString::toStdString()).
     std::string name;
     Gender gender = Gender::Male;
+
+    // THE PORTRAIT THIS PLAYER WEARS: an id from the avatar catalogue
+    // (avatars::catalogue()), always one of the player's gender. CHOSEN WHEN THE
+    // GAME IS DEALT, at random by the owner's rule (avatars::assign()), so New
+    // Game's settings leave it empty and every game gets new faces.
+    //
+    // Braced, so a profile written { name, gender } leaves it empty without
+    // -Wmissing-field-initializers.
+    std::string avatar{};
 
     bool operator==(const PlayerProfile&) const = default;
 };
