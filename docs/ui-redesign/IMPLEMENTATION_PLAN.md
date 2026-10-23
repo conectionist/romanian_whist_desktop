@@ -4,9 +4,9 @@ This plan turns the approved HTML mock-up into the Qt client. It is written for 
 person) picking the work up cold: it says what the target looks like, where every number comes
 from, which classes change, in what order, and how to tell each step is done.
 
-> **COMPLETE.** All thirteen phases are built (phase 12 last, on 2026-10-22). Each phase's outcome
-> below says what was built, what the owner decided and what the build departed from. What is left
-> is listed at the end of phase 12's outcome.
+> **COMPLETE.** All thirteen phases are built (phase 12 on 2026-10-22), and phase 13 holds the
+> owner's final changes (2026-10-23). Each phase's outcome below says what was built, what the owner
+> decided and what the build departed from. What is left is listed at the end of phase 12's outcome.
 
 **Read first, in this order**
 
@@ -179,6 +179,13 @@ stroke 1.2 in `#d9b46a`: above the text two straight strokes with a diamond betw
 side of it; below, the same strokes as waves and the diamond, no dots (the inline SVGs in
 `page.html`). Draw it under the played cards.
 
+> **AMENDED IN PHASE 13, by the owner's call of 2026-10-23: on the table the logo is round.** A
+> medallion 215 across (`tablespace::logoDiameter`), picked from screenshots at 140, 170, 195 and
+> 215: the plaque's layers drawn as circles (`tabletop::medallion()`), no ♣ either side, and the
+> ornaments and lettering scaled to sit inside the fine gold line, never past the plaque's size
+> (`tabletop::letteringScale()`). Every played card, yours too, lies with its inner edge on its rim
+> (section 2.7). The main-menu page keeps the plaque above.
+
 ### 2.5 Seats
 
 `table.js` "geometry" section.
@@ -335,6 +342,17 @@ cache behaviour; it is already a single seam for exactly this.
   is still on the table. (Corrected in phase 6's review; phase 6 first read `betsPlaced` and
   `activeSeat`.)
 
+> **AMENDED IN PHASE 13, by the owner's call of 2026-10-23: the trick rings the round logo.**
+> Every played card, yours included, lies with its inner edge on the logo's rim
+> (`tablespace::playedFromCentre`, half of section 2.4's amended 215), so the whole trick sits on
+> one circle about it. An opponent's card is still on its rack's line and turned to it; yours is
+> straight below the centre, unturned, 35 units lower than the mock-up's with up to four players
+> and 11 with five or six, and still clear of your hand. Your rhombus stays half way between your
+> card and your hand. Section 2.5's seats are not evenly spaced, so with five or six players some
+> neighbours' inner corners overlap a little, and with six your card stands about 4 degrees apart
+> from each neighbour where the others touch. The owner saw both and kept them, rather than
+> spacing the cards evenly, which would turn them up to 17 degrees off their racks.
+
 ### 2.8 The human's hand
 
 `table.js` `renderHand()`; `.hcard`.
@@ -405,6 +423,9 @@ to bottom:
    letter-spaced 0.24em, muted); the trump card at **154.9 table units wide** (same as a hand card,
    radius 10, shadow); the suit name, Marcellus 19.8, e.g. "♣ Clubs" (♥/♦ glyph in red suit
    colour). In an 8-card round: "TRUMP" then "None this round", no card.
+   - **No suit name under the card** (the owner's call, 2026-10-23, in phase 13): at a hand card's
+     size the card says its suit itself, so the card ends the panel. The name was for the old
+     client's small trump card. "None this round" stays, in the card's place.
 
 The round-score and streak columns of the old scoreboard are not in the mock-up. **Decided by the
 owner, 2026-10-20 (Q3):** the round score goes, because it showed for only a second or two at the end
@@ -1331,7 +1352,8 @@ Done when: the whole page matches `screenshots/table-6-players.jpg` except the m
   - **Icons:** `paint/Icons.h`, the mock-up's inline SVGs drawn in any colour. Phase 9 adds the menu
     bar's four.
   - **Words:**
-    - `table/CardText.h` spells a card for people: "K♥", "♣ Clubs".
+    - `table/CardText.h` spells a card for people: "K♥", "♣ Clubs". *(Phase 13 removed
+      `suitName()` with the scoreboard's suit name, its only reader.)*
     - The info strip's words (`infostrip::`) live in `ScoreboardItem.h` now, under their old
       translation context.
     - The round sheet keeps Won/Round/Total as its own until phase 10 restyles it.
@@ -1786,7 +1808,7 @@ Done when: both buttons open working sheets.
   - **The last trick is kept the moment it is complete**, while it is still on the felt. The
     mock-up's is kept as the felt clears; the trick on the felt is the same one either way.
   - **The trick's cards sit left in the sheet**, as the mock-up's flex row does; this phase's plan
-    said centred.
+    said centred. *(Phase 13 centres them, the owner's call: see there.)*
 - **What the build is:**
   - **`MainWindow::roundHistory`** keeps every `RoundResult`, appended first thing in
     `onRoundScored()`, so an unattended game's final round, which gets no round sheet, is in it.
@@ -2070,11 +2092,60 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
     mouse event to say so. Catch2 runs the cases in a random order, so such a leak fails some runs
     and not others; when a run stops early, rerun it with its `--rng-seed`.
 - **Left open:**
-  - **The rest of the Romanian draft wants the owner's review** in Qt Linguist: 192 strings, the
-    glossary's open words among them (licitație, făcute, rundă, Popă, the scoreboard's columns).
+  - ~~**The rest of the Romanian draft wants the owner's review**~~ **Done, 2026-10-23** (on
+    `redesign/phase-13-final_changes`): the owner went through the 192 drafts in Qt Linguist and
+    accepted each as written, the glossary's open words included. All 206 strings are finished.
   - **"%1 e primul"**, for a woman's name and for "Tu".
   - **2x textures**, if the owner wants them after the numbers above.
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
+
+### Phase 13: the owner's final changes ✅ COMPLETE
+
+On `redesign/phase-13-final_changes`, branched from `claude/zealous-lamport-zac87a` once phase 12
+was merged. Small changes the owner asked for after playing the finished redesign, each its own
+commit, all on 2026-10-23:
+
+- **The Romanian translation is reviewed**: all 206 strings finished, the drafts accepted as written.
+- **No suit name under the trump card**: section 2.9 says why. "None this round" stays.
+- **The window opens maximized**, not in true full screen: the title bar and the taskbar stay.
+- **The New Game estimate counts you**: with a person at the table, about 30 minutes for two
+  players and 5 more for each player added, at the default bot speed, with another speed adding or
+  taking off what the bots then wait. `QT_CLIENT_PLAN_proposal1.md` section 13 has the amendment.
+- **The Last trick sheet is centred and no wider than it needs**: its title, the line under it, the
+  cards and Close down the middle, the sheet as wide as the widest of them (650 for six players,
+  where every other sheet is 720). `Overlay::preferredWidth()` is the hook; every other sheet keeps
+  section 2.13's 720.
+- **The logo on the table is round**, a medallion 215 across, chosen from four sizes: section 2.4's
+  amendment. The main-menu page keeps the plaque.
+- **The trick rings the round logo**: every played card, yours too, touches it, so yours is on
+  the others' circle. Section 2.7's amendment.
+- **The app asks for its language first**: a dialog of two flags, Română and English, each named
+  under it, Romanian lit to start, before the window is built, so nothing is translated twice;
+  `--language en|ro` skips it. `src/ui/LanguageDialog.h`; `QT_CLIENT_PLAN_proposal1.md` section 12
+  carries the amendment.
+- **"Ana won it", not "Ana took it"**, on the Last trick sheet, and in Romanian "Ana a câștigat-o"
+  for "A luat-o Ana". Phase 11's notes above keep the words it shipped with.
+- **The redesign, phase by phase**, for the owner to keep: `history/index.html`, a slideshow of
+  the client at every phase (the table, bidding and your hand) with a wipe between 1.0 and 2.0,
+  and `history/redesign.mp4`, a film of the table whose captions type out after each picture has
+  been on screen alone.
+
+**Outcome:**
+
+- **The count is 637 tests** (624 + 13), passing on the `default`, `release` and `clang` presets
+  with Qt 6.11.2 and building without a warning. Added: three for the game's length, two for the
+  Last trick sheet, one for the round logo and seven for the language. Rewritten, keeping their
+  intent: the trump name's two cases, the Last trick's sentences, the sheets' width, the New Game
+  line at Instant, the table logo's border, and seven trick-placement cases.
+- **Checked in the running app**, on a nested Xephyr screen: the maximized window, every way into
+  the language dialog and out of it, and the trick round the logo, which the owner then played.
+- **Left open, by the owner's call:** the menu bar's grouping into File, Game and View menus
+  (estimated, not built); the language choice remembered between runs, with the settings of
+  section 20.
+- **PR #39's review:** seven findings fixed, adding one test (638, run on the `default` preset).
+  Four are left as known issues, in `docs/KNOWN_ISSUES.md`: your lead rhombus under a raised card,
+  the Last trick sheet clipped in a short window, and two places where the language dialog copies
+  code rather than sharing it.
 
 ---
 

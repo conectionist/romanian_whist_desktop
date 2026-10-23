@@ -72,7 +72,8 @@ constexpr QRectF squareAround(qreal radius)
 // round it: the light is directly overhead, so there is no offset.
 inline constexpr qreal woodRadius = 510.0;
 
-// The felt. Played cards are placed relative to its edge.
+// The felt. Every played card stays inside it; where they lie is measured from the
+// logo's rim, playedFromCentre below.
 inline constexpr qreal feltRadius = 440.0;
 
 // The bead between the two: three rings just outside the felt, each given by its
@@ -89,10 +90,18 @@ inline constexpr qreal beadOuterRadius = 453.0;
 inline constexpr qreal goldLineRadius = 416.0;
 inline constexpr qreal goldLineWidth = 1.5;
 
-// The logo plaque: the mock-up's 270 x 142 box, drawn at 0.9 of that about the
-// table's centre, which is where it sits.
+// The logo plaque: the mock-up's 270 x 142 box, drawn at 0.9 of that. It sat at
+// the table's centre until phase 13 made the table's logo round (logoDiameter
+// below); the main-menu page and the language dialog keep it.
 inline constexpr QSizeF logoBox(270.0, 142.0);
 inline constexpr qreal logoScale = 0.9;
+
+// THE LOGO ON THE TABLE IS ROUND (phase 13, the owner's call of 2026-10-23): a
+// medallion this many units across, its border included, picked from screenshots
+// at 140, 170, 195 and 215. At 215 the English lettering is close to the plaque's
+// size. Every played card's inner edge touches its rim (playedFromCentre below).
+// The main-menu page keeps the plaque.
+inline constexpr qreal logoDiameter = 215.0;
 
 // The table's shadow: CSS's blur of 70 round the rim, which is a Gaussian of
 // sigma 35 - and shadows::reach() is where it has faded to nothing, so the
@@ -106,19 +115,16 @@ inline constexpr qreal tableReach = woodRadius + shadows::reach(tableShadowBlur)
 // playedCardHeight() below, and the racks' cards rackCardHeight.
 inline constexpr qreal handCardHeight = 225.0;
 
-// Where the top of the human's hand is (section 2.8). Their played card sits 60
-// above it.
+// Where the top of the human's hand is (section 2.8).
 inline constexpr qreal handTop = 850.0;
 
-// THE PLAYED CARDS (section 2.7). Each opponent's lies on the line from the centre
-// to its rack with its outer end this far inside the felt's edge, and yours with
-// its bottom edge this far above your hand. trickitem::cardPlacement() is where.
-inline constexpr qreal playedInset = 60.0;
-
-// THE LEAD RHOMBUS (section 2.7): an opponent's sits on the gold circle
-// (goldLineRadius) in line with their rack. Yours would sit under your hand there,
-// so it goes in the gap between your card and your hand, half way.
-inline constexpr qreal leadMarkHumanY = handTop - playedInset / 2.0;
+// THE TRICK ROUND THE LOGO (section 2.7, as phase 13 amends it by the owner's call
+// of 2026-10-23): every played card - yours too - lies with its inner edge this far
+// from the centre, touching the round logo, so the trick sits on one circle about
+// it. trickitem::cardPlacement() is where. The mock-up put each opponent's outer
+// end 60 inside the felt's edge and yours 60 above your hand, which left yours
+// well off the others' circle.
+inline constexpr qreal playedFromCentre = logoDiameter / 2.0;
 
 // THE NAME PANELS (section 2.5). Where each one goes is seatlayout::panelRect(),
 // from a table hand-tuned per player count for the mock-up's panel of this size:

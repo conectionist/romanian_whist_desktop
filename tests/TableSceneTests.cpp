@@ -648,12 +648,11 @@ TEST_CASE("A card under a still cursor lifts when your turn comes", "[table]")
     REQUIRE(aCardIsLifted(*hand));
 }
 
-TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]")
+TEST_CASE("Played cards are section 2.7's size and ring the logo", "[table]")
 {
     // Four seats with you in seat 1, and two cards down: yours and the next
-    // seat's. Yours sits 60 above the top of your hand, unturned; the other in
-    // front of its owner's rack, turned to line up with it, its outer end 60
-    // inside the felt's edge.
+    // seat's. Both touch the round logo (phase 13): yours straight below it,
+    // unturned; the other in front of its owner's rack, turned to line up with it.
     GameSnapshot snapshot = seatedTable(4, 1);
 
     snapshot.table = { PlayedCardView{ 1, Card(Rank::Ten, Suit::Hearts) },
@@ -668,8 +667,8 @@ TEST_CASE("Played cards are section 2.7's size, yours above your hand", "[table]
     REQUIRE(played.size() == 2);
 
     const qreal height = tablespace::playedCardHeight(4);
-    const QPointF yours(tablespace::centre.x(), tablespace::handTop - 60.0 - height / 2.0);
-    const qreal radius = tablespace::feltRadius - 60.0 - height / 2.0;
+    const qreal radius = tablespace::playedFromCentre + height / 2.0;
+    const QPointF yours = tablespace::centre + QPointF(0.0, radius);
 
     // Seat 2 is the first clockwise of you, on the left, where its rack is.
     const qreal rack = seatlayout::place(4, 1, 2)->angle.value();
@@ -755,13 +754,16 @@ TEST_CASE("The rhombus is on the felt only while a trick is played", "[table]")
     REQUIRE(mark()->isVisible());
     REQUIRE(mark()->pos() == trickitem::leadMarkPlacement(4, 1, 3)->centre);
 
-    // Your lead: between your card and your hand.
+    // Your lead: half way between your card's bottom edge and your hand's top.
     snapshot.activeSeat = 1;
     snapshot.table = { PlayedCardView{ 1, Card(Rank::Ten, Suit::Hearts) } };
     scene.setSnapshot(std::make_shared<const GameSnapshot>(snapshot));
 
+    const qreal cardBottom = tablespace::centre.y() + tablespace::playedFromCentre + tablespace::playedCardHeight(4);
+
     REQUIRE(mark()->isVisible());
-    REQUIRE(mark()->pos() == QPointF(768.0, 820.0));
+    REQUIRE(mark()->pos().x() == tablespace::centre.x());
+    REQUIRE(mark()->pos().y() == Approx((cardBottom + tablespace::handTop) / 2.0));
 
     // The round scored, its last trick still on the table: nothing marked.
     snapshot.phase = romanian_whist::GamePhase::RoundScored;

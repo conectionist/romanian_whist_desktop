@@ -40,16 +40,16 @@ QString lasttrick::metaFor(const std::optional<Trick>& trick, unsigned int curre
         const QString round = QString::number(trick->roundNumber);
 
         if(yours)
-            return QCoreApplication::translate("lasttrick", "You took it · round %1").arg(round);
+            return QCoreApplication::translate("lasttrick", "You won it · round %1").arg(round);
 
         // One arg() taking both, so a name with a %2 in it is not filled in.
-        return QCoreApplication::translate("lasttrick", "%1 took it · round %2").arg(winner->name, round);
+        return QCoreApplication::translate("lasttrick", "%1 won it · round %2").arg(winner->name, round);
     }
 
     if(yours)
-        return QCoreApplication::translate("lasttrick", "You took it");
+        return QCoreApplication::translate("lasttrick", "You won it");
 
-    return QCoreApplication::translate("lasttrick", "%1 took it").arg(winner->name);
+    return QCoreApplication::translate("lasttrick", "%1 won it").arg(winner->name);
 }
 
 QSizeF lasttrick::cardSize()
@@ -73,32 +73,42 @@ LastTrickSheet::LastTrickSheet(QWidget* parent) : Overlay(parent)
     QWidget* panel = this->panel();
     QVBoxLayout* inside = panelLayout();
 
+    // ONE LINE EACH, CENTRED. Not wrapped, so a label's size hint is the line's
+    // whole width, which is what preferredWidth() sizes the sheet by: the widest
+    // line, "Bartholomew Fairbank won it · round 12", is half the narrowest page.
     title = new QLabel(QCoreApplication::translate("lasttrick", "Last trick"), panel);
     title->setObjectName("lastTrickTitle");
     dress(title, sheet::Role::Title);
+    title->setWordWrap(false);
+    title->setAlignment(Qt::AlignHCenter);
 
     inside->addWidget(title);
 
     meta = new QLabel(panel);
     meta->setObjectName("lastTrickMeta");
     dress(meta, sheet::Role::Meta);
+    meta->setWordWrap(false);
+    meta->setAlignment(Qt::AlignHCenter);
 
     inside->addSpacing(2);
     inside->addWidget(meta);
 
-    // .mini's margin-top, and the row left-aligned in the column as a flex row is.
+    // .mini's margin-top, and the row centred in the column.
     row = new QWidget(panel);
     row->setObjectName("lastTrickCards");
 
     inside->addSpacing(16);
-    inside->addWidget(row, 0, Qt::AlignLeft);
+    inside->addWidget(row, 0, Qt::AlignHCenter);
 
     closeButton = new SheetButton(QCoreApplication::translate("lasttrick", "Close"),
                                   SheetButton::Kind::Primary, panel);
     closeButton->setObjectName("closeLastTrick");
     closeButton->setDefault(true);
 
-    addActions({ closeButton });
+    // Centred too: the row addActions() makes pushes its buttons right with a
+    // stretch before them, and a stretch after them as well holds Close in the
+    // middle.
+    addActions({ closeButton })->addStretch(1);
 
     connect(closeButton, &QPushButton::clicked, this, &LastTrickSheet::closeRequested);
 
@@ -133,6 +143,19 @@ void LastTrickSheet::focusDefault()
 QRect LastTrickSheet::cardsArea() const
 {
     return row->isVisible() ? row->geometry() : QRect();
+}
+
+int LastTrickSheet::preferredWidth() const
+{
+    // Asked by the base class from its first layout on, before this sheet has
+    // built its widgets.
+    if(!title || !meta || !closeButton)
+        return sheet::width;
+
+    const int widest = std::max({ rowSize().width(), title->sizeHint().width(), meta->sizeHint().width(),
+                                  closeButton->sizeHint().width() });
+
+    return std::min(sheet::width, widest + 2 * (sheet::border + sheet::paddingX));
 }
 
 QSize LastTrickSheet::rowSize() const

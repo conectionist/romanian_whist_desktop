@@ -120,8 +120,10 @@ QString headingTaken();
 QString headingPoints();
 QString headingRun();
 
-// The trump: its card and "♣ Clubs" - or, in a round with no trump, no card and
-// "None this round".
+// The trump: its card alone - or, in a round with no trump, no card and "None this
+// round". The mock-up names the suit under its card ("♣ Clubs"); the client does
+// not, by the owner's call of 2026-10-23: the card is a hand card's size, and its
+// face says its suit.
 struct Trump
 {
     bool hasCard = false;

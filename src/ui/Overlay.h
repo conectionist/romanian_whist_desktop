@@ -308,9 +308,15 @@ protected:
     QHBoxLayout* addActions(std::initializer_list<SheetButton*> buttons);
 
     // Sizes the sheet to what it now holds, and centres it: called when its
-    // content changes. No wider than section 2.13's 720 or the page less its
+    // content changes. No wider than preferredWidth() or the page less its
     // margins, and no taller than the page - past that, its body scrolls.
     void placeSheet();
+
+    // HOW WIDE THE SHEET IS, its border included, on a page with room for it:
+    // section 2.13's 720, unless a sheet says otherwise - the last trick is as
+    // wide as its row of cards (the owner's call, 2026-10-23). placeSheet() still
+    // keeps it on the page.
+    virtual int preferredWidth() const { return sheet::width; }
 
     // WHAT THE SHEET'S CONTENT HAS ACROSS, inside its border and padding: 658 at
     // full width, less on a narrow page - and less the scroll bar when the body
@@ -350,7 +356,8 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-    // The sheet's width, its border included: 720, or the page less its margins.
+    // The sheet's width, its border included: preferredWidth(), or the page less
+    // its margins.
     int sheetWidth() const;
 
     Theme palette = Theme::dark();

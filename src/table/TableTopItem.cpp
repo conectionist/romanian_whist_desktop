@@ -20,6 +20,7 @@
 #include <QtMath>
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -86,6 +87,19 @@ QPainterPath disc(qreal radius)
 QPainterPath ring(qreal inner, qreal outer)
 {
     return paths::ring(tablespace::centre, inner, outer);
+}
+
+// THE LETTERING'S FONT, the one letteringScale() measures and paintLogo() draws,
+// so what is measured is what is drawn. letter-spacing is a fixed 0.37 after
+// every letter - an absolute spacing, not Qt's percentage of each letter's own
+// width.
+QFont letteringFont()
+{
+    QFont font = fonts::logo();
+    font.setPixelSize(letterSize);
+    font.setWeight(QFont::Bold);
+    font.setLetterSpacing(QFont::AbsoluteSpacing, letterSpacing);
+    return font;
 }
 
 using paths::rounded;
@@ -293,9 +307,58 @@ QStringList tabletop::logoLines()
                                                      "One line or two."));
 }
 
-QRectF tabletop::letteringRect(int lineCount)
+tabletop::LogoShape tabletop::plaque()
 {
-    const QRectF padding = QRectF(QPointF(0.0, 0.0), tablespace::logoBox)
+    return { tablespace::logoBox, logoRadius, logoInnerLineRadius, true };
+}
+
+tabletop::LogoShape tabletop::medallion(qreal diameter)
+{
+    // In the logo's own frame, which is drawn at 0.9.
+    const qreal side = diameter / tablespace::logoScale;
+    const qreal radius = side / 2.0;
+
+    // Every ring concentric: the fine line's radius is its box's half side.
+    const qreal innerLine = radius - logoBorderWidth - logoInnerLineInset;
+
+    return { QSizeF(side, side), radius, innerLine, false };
+}
+
+tabletop::LogoShape tabletop::tableLogo()
+{
+    return medallion(tablespace::logoDiameter);
+}
+
+qreal tabletop::letteringScale(const LogoShape& shape, const QStringList& lines)
+{
+    if(shape.clubs)
+        return 1.0;
+
+    // What the lettering may reach: the fine gold line, less as much again as it is
+    // inset, so the words never crowd it.
+    const qreal reach = shape.box.width() / 2.0 - logoBorderWidth - 2.0 * logoInnerLineInset;
+
+    const QFontMetricsF metrics(letteringFont());
+
+    qreal widest = 0.0;
+
+    for(const QString& line : lines)
+        widest = std::max(widest, metrics.horizontalAdvance(line));
+
+    // The corners that stick out furthest from the middle: the lettering's, and the
+    // ornaments' at the top and bottom of the stack.
+    const qreal lettering = std::max<qsizetype>(1, lines.size()) * letterSize;
+    const qreal stack = lettering + 2.0 * ornamentHeight;
+
+    const qreal furthest = std::max(std::hypot(widest / 2.0, lettering / 2.0 + letterShadowDrop),
+                                    std::hypot(ornamentWidth / 2.0, stack / 2.0));
+
+    return std::min(1.0, reach / furthest);
+}
+
+QRectF tabletop::letteringRect(int lineCount, const LogoShape& shape)
+{
+    const QRectF padding = QRectF(QPointF(0.0, 0.0), shape.box)
                                .adjusted(logoBorderWidth, logoBorderWidth, -logoBorderWidth, -logoBorderWidth);
 
     const qreal lettering = std::max(1, lineCount) * letterSize;
@@ -307,24 +370,26 @@ QRectF tabletop::letteringRect(int lineCount)
 
 // THE LOGO PLAQUE (.panel.logo), in its own 270 x 142 frame, drawn at 0.9 of that
 // about `centre`.
-void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, const QStringList& lines)
+void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, const QStringList& lines,
+                         const LogoShape& shape)
 {
     const Theme::TablePalette& table = theme.table;
+    const qreal outerRadius = shape.radius;
 
     painter.save();
     painter.translate(centre);
     painter.scale(tablespace::logoScale, tablespace::logoScale);
-    painter.translate(-tablespace::logoBox.width() / 2.0, -tablespace::logoBox.height() / 2.0);
+    painter.translate(-shape.box.width() / 2.0, -shape.box.height() / 2.0);
 
-    const QRectF outer(QPointF(0.0, 0.0), tablespace::logoBox);
+    const QRectF outer(QPointF(0.0, 0.0), shape.box);
     const QRectF padding = outer.adjusted(logoBorderWidth, logoBorderWidth,
                                           -logoBorderWidth, -logoBorderWidth);
-    const qreal paddingRadius = logoRadius - logoBorderWidth;
+    const qreal paddingRadius = outerRadius - logoBorderWidth;
 
     // .panel's drop shadow, which section 2.4 leaves out: the logo is
     // class="panel logo", and .logo overrides the panel's background and border
     // but not its shadows.
-    shadows::drawShapeShadow(painter, rounded(outer, logoRadius), logoShadowOffset,
+    shadows::drawShapeShadow(painter, rounded(outer, outerRadius), logoShadowOffset,
                              logoShadowBlur, table.panelShadow);
 
     // The background, over the whole border box and positioned on the padding box,
@@ -333,7 +398,7 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
                                    { logoGradientMiddle, table.logoMiddle },
                                    { 1.0, table.logoEdge } };
 
-    painter.fillPath(rounded(outer, logoRadius),
+    painter.fillPath(rounded(outer, outerRadius),
                      gradients::cssRadial(padding, logoGradientAt, gradients::Shape::Ellipse,
                                           green));
 
@@ -353,7 +418,7 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
                      table.panelInnerShadow);
 
     // The border, over the inset rings as CSS paints it.
-    painter.fillPath(roundedBand(outer, logoRadius, padding, paddingRadius), table.logoBorder);
+    painter.fillPath(roundedBand(outer, outerRadius, padding, paddingRadius), table.logoBorder);
 
     // .logo::before: a 1-unit line, so its stroke runs half a unit inside its box.
     const qreal lineInset = logoInnerLineInset + 0.5;
@@ -362,12 +427,20 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
     painter.setPen(QPen(table.logoInnerLine, 1.0));
     painter.setBrush(Qt::NoBrush);
     painter.drawRoundedRect(padding.adjusted(lineInset, lineInset, -lineInset, -lineInset),
-                            logoInnerLineRadius - 0.5, logoInnerLineRadius - 0.5);
+                            shape.innerLineRadius - 0.5, shape.innerLineRadius - 0.5);
     painter.restore();
 
     // THE STACK: an ornament, the lettering, an ornament - 98 units tall with two
-    // lines, centred in the padding box as the plaque's grid centres it.
-    const QRectF letteringBox = letteringRect(static_cast<int>(lines.size()));
+    // lines, centred in the padding box as the plaque's grid centres it. In a
+    // medallion the whole stack is scaled about the middle to fit.
+    const qreal fit = letteringScale(shape, lines);
+
+    painter.save();
+    painter.translate(padding.center());
+    painter.scale(fit, fit);
+    painter.translate(-padding.center());
+
+    const QRectF letteringBox = letteringRect(static_cast<int>(lines.size()), shape);
     const qreal lettering = letteringBox.height();
     const qreal stackTop = letteringBox.top() - ornamentHeight;
     const qreal ornamentLeft = padding.center().x() - ornamentWidth / 2.0;
@@ -378,14 +451,8 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
 
     // THE LETTERING, MIXED CASE AS page.html WRITES IT: Cinzel Decorative draws a
     // lowercase letter as a small capital, so "Romanian" is a tall R and smaller
-    // capitals, where "ROMANIAN" would be eight tall ones. letter-spacing is a
-    // fixed 0.37 after every letter - an absolute spacing, not Qt's percentage of
-    // each letter's own width.
-    QFont font = fonts::logo();
-    font.setPixelSize(letterSize);
-    font.setWeight(QFont::Bold);
-    font.setLetterSpacing(QFont::AbsoluteSpacing, letterSpacing);
-
+    // capitals, where "ROMANIAN" would be eight tall ones.
+    const QFont font = letteringFont();
     const QFontMetricsF metrics(font);
 
     QPainterPath letters;
@@ -415,6 +482,14 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
 
     painter.fillPath(letters, gold);
 
+    painter.restore();
+
+    if(!shape.clubs)
+    {
+        painter.restore();
+        return;
+    }
+
     // THE CLUBS, in the body face as the mock-up's spans are - which has no club, so
     // the glyph is whatever face the platform falls back to, here as in a browser.
     // Each sits 16 units in from the padding box, centred down it.
@@ -440,12 +515,12 @@ void tabletop::paintLogo(QPainter& painter, const Theme& theme, QPointF centre, 
     painter.restore();
 }
 
-QRectF tabletop::logoBounds()
+QRectF tabletop::logoBounds(const LogoShape& shape)
 {
-    // The 270 x 142 frame and its drop shadow - 12 down, blurred 26 - all at 0.9.
+    // The frame and its drop shadow - 12 down, blurred 26 - all at 0.9.
     const qreal reach = shadows::reach(logoShadowBlur);
-    const QRectF frame(-tablespace::logoBox.width() / 2.0, -tablespace::logoBox.height() / 2.0,
-                       tablespace::logoBox.width(), tablespace::logoBox.height());
+    const QRectF frame(-shape.box.width() / 2.0, -shape.box.height() / 2.0,
+                       shape.box.width(), shape.box.height());
 
     const QRectF shadowed = frame.adjusted(-reach, -reach, reach, reach + logoShadowOffset.y());
 
@@ -481,7 +556,7 @@ QPixmap tabletop::render(const Theme& theme, qreal ratio)
     painter.translate(-box.topLeft());
 
     paintTable(painter, theme, ratio);
-    paintLogo(painter, theme, tablespace::centre);
+    paintLogo(painter, theme, tablespace::centre, logoLines(), tableLogo());
 
     return picture;
 }

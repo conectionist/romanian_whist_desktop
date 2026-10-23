@@ -34,7 +34,7 @@ struct Trick
     // The round it was won in, 1-based as the snapshot counts.
     unsigned int roundNumber = 0;
 
-    // Your seat, or -1 when you are watching: whose win is "You took it".
+    // Your seat, or -1 when you are watching: whose win is "You won it".
     int humanSeat = -1;
 
     // In play order, the leader's first.

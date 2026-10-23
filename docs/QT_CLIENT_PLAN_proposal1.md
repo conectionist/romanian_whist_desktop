@@ -2027,6 +2027,12 @@ Menus stay thin: **View** (Round history…, Preferences…, Full screen), **Hel
 About box prints the client version and the linked engine version, exactly as the terminal's
 `--version` does).
 
+> **AMENDED IN THE TABLE REDESIGN'S PHASE 13 (the owner's call of 2026-10-23): the language is asked
+> first.** Before the window is built, a small dialog offers **Română** and **English** as two
+> flags, each named under it, Romanian lit to start; closing it quits. `--language en` or `--language ro` answers it
+> from the command line. The app still needs no command line: the switch only skips the question.
+> Nothing is remembered between runs until settings are saved (§20).
+
 > **AMENDED IN D1: there is no Game menu.** This section specified one — New Game…, Abandon Game,
 > Quit — and what was built instead is a **main-menu page** and a **pause menu**:
 >
@@ -2127,6 +2133,13 @@ whole shape of the game before starting it is strictly better.
 - **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.
+
+  > **AMENDED 2026-10-23 (the table redesign's phase 13), by the owner's measure: off the slider only
+  > for a watched game.** With a person playing, the game goes at their pace, and the bots' beats
+  > had it at a few minutes. It is now about 30 minutes for two players and 5 more for each player
+  > added with the bots at the default speed; another speed adds or takes off what the bots then wait
+  > more or less, counted exactly over the schedule (a six-player game: 62 minutes at the slowest,
+  > 38 at Instant). `newgame::estimatedMinutes()`.
 
   > **CORRECTED IN D1: the count is `3·seats + 12 + (endWithForeheadAndHidden ? 2 : 0)`**, and the
   > mockup above said 24 for a four-seat game with the box ticked. 24 is the count *without* the

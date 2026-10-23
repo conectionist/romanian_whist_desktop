@@ -8,6 +8,7 @@
 #include <QPixmap>
 #include <QPointF>
 #include <QRectF>
+#include <QSizeF>
 #include <QStringList>
 
 #include <cstddef>
@@ -44,19 +45,55 @@ QStringList logoLines();
 // `phrase` as the logo's lines: split at its line breaks, blank lines dropped.
 QStringList logoLinesFrom(const QString& phrase);
 
-// THE LOGO PLAQUE ALONE (.panel.logo), centred on `centre` in the painter's units:
-// part of render()'s picture, and the main-menu page's title since the redesign's
-// phase 10. Drawn at section 2.4's 0.9 of its 270 x 142 frame, its drop shadow
-// included. `lines` are its words, one line of lettering each.
-void paintLogo(QPainter& painter, const Theme& theme, QPointF centre, const QStringList& lines = logoLines());
+// THE LOGO'S OUTLINE, in its own frame before the 0.9 it is drawn at: page.html's
+// plaque, 270 x 142 rounded 14, which the main-menu page keeps; or, on the table
+// since phase 13 (the owner's call, 2026-10-23), a MEDALLION - a circle, which is
+// a square box rounded by half its side, so every layer of the plaque is drawn
+// the same way round.
+struct LogoShape
+{
+    QSizeF box;
+    qreal radius = 0.0;
 
-// WHERE THE LETTERING GOES for `lineCount` lines, in the plaque's own 270 x 142
-// frame: as tall as its lines, its two ornaments above and below it, and the three
-// centred in the plaque together - so a one-line logo sits in the middle.
-QRectF letteringRect(int lineCount);
+    // .logo::before's fine gold line, rounded 9 on the plaque.
+    qreal innerLineRadius = 0.0;
+
+    // The ♣ either side of the words: the plaque's. A circle has no room beside
+    // its words, which take its whole width.
+    bool clubs = true;
+
+    bool operator==(const LogoShape&) const = default;
+};
+
+LogoShape plaque();
+
+// A circle `diameter` table units across, its border included.
+LogoShape medallion(qreal diameter);
+
+// THE LOGO ON THE TABLE: the medallion, at tablespace::logoDiameter.
+LogoShape tableLogo();
+
+// HOW MUCH THE ORNAMENTS AND LETTERING ARE SCALED to sit in `shape`: 1 on the plaque.
+// In a medallion, as large as fits inside its fine gold line with room to spare,
+// and never larger than on the plaque - so a short word, Romanian's "Whist", keeps
+// the plaque's size where the English two lines shrink.
+qreal letteringScale(const LogoShape& shape, const QStringList& lines);
+
+// THE LOGO ALONE (.panel.logo), centred on `centre` in the painter's units: part
+// of render()'s picture, and the main-menu page's title since the redesign's phase
+// 10. Drawn at section 2.4's 0.9 of its frame, its drop shadow included. `lines`
+// are its words, one line of lettering each.
+void paintLogo(QPainter& painter, const Theme& theme, QPointF centre, const QStringList& lines = logoLines(),
+               const LogoShape& shape = plaque());
+
+// WHERE THE LETTERING GOES for `lineCount` lines, in the logo's own frame and
+// before letteringScale(): as tall as its lines, its two ornaments above and below
+// it, and the three centred in the logo together - so a one-line logo sits in the
+// middle.
+QRectF letteringRect(int lineCount, const LogoShape& shape = plaque());
 
 // What paintLogo() covers about the centre it is given, its shadow included.
-QRectF logoBounds();
+QRectF logoBounds(const LogoShape& shape = plaque());
 
 } // namespace tabletop
 

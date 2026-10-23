@@ -24,6 +24,8 @@
 #include <QSpinBox>
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -296,27 +298,83 @@ unsigned int newgame::roundCount(const Config& config)
     return 3u * seatCount(config) + 12u + (config.endWithForeheadAndHidden ? 2u : 0u);
 }
 
-QString newgame::summaryText(const Config& config)
+namespace
 {
-    const unsigned int rounds = roundCount(config);
 
-    // A RULE OF THUMB OFF THE SLIDER, which is all section 13 asks for - and the
-    // honest division of this line, whose round count is exact arithmetic over
-    // the engine's schedule and whose minutes are a guess.
-    //
-    // The schedule runs 1..8 and back, so it averages about four tricks a round
-    // at any table size. Each trick costs one beat per seat plus one dwell, and
-    // a spectated game paces at the shorter beat (section 4.1).
+// EVERY TRICK THE GAME DEALS, from roundCount()'s schedule: N rounds of one card,
+// 2..7, N of eight, 7..2 and N of one - 10N + 54 tricks whichever end it starts
+// from - and the appended Forehead and Hidden rounds, one each.
+unsigned int trickCount(const newgame::Config& config)
+{
+    return 10u * newgame::seatCount(config) + 54u + (config.endWithForeheadAndHidden ? 2u : 0u);
+}
+
+// WHAT THE GAME SPENDS WAITING ON THE BOTS in a game you play, at `pacing`: every
+// timed pace() GameBridge takes with you at the table. A beat after each bot's
+// bid, and one as the bidding ends; a beat before each bot's card; and the dwell
+// after each trick and after each round. Your own turns are not in it - they are
+// yours to take.
+//
+// NOR IS THE ROUND'S DWELL WHEN THE GAME WAITS AFTER EACH ROUND: the result is
+// then held until you go on, and pace() takes no timed wait on a held frame
+// (GameBridge::onRoundScored()). That time is yours too.
+std::chrono::milliseconds botWaiting(const newgame::Config& config, const Pacing& pacing)
+{
+    const long long bots = static_cast<long long>(config.botNames.size());
+    const long long rounds = newgame::roundCount(config);
+    const long long tricks = trickCount(config);
+
+    const long long beats = rounds * (bots + 1) + tricks * bots;
+    const long long dwells = tricks + (config.waitAfterEachRound ? 0 : rounds);
+
+    return pacing.beat * beats + pacing.trickDwell * dwells;
+}
+
+}
+
+int newgame::estimatedMinutes(const Config& config)
+{
+    // WITH YOU AT THE TABLE, YOUR PACE IS MOST OF THE GAME: the owner's measure of
+    // 2026-10-23 is about 30 minutes for two players and 5 more for each player
+    // added, with the bots at the default speed. Another speed adds or takes off
+    // what the bots then wait more or less, which is exact arithmetic over the
+    // schedule: at the slowest, a six-player game is about 62 minutes; at Instant,
+    // about 38.
+    if(!config.spectator)
+    {
+        const int seats = static_cast<int>(seatCount(config));
+        const std::chrono::milliseconds measured =
+            std::chrono::minutes(playingMinutesForTwo + playingMinutesPerSeat * std::max(seats - 2, 0));
+
+        const std::chrono::milliseconds total = measured
+                                                + botWaiting(config, pacingFor(config.botSpeed))
+                                                - botWaiting(config, pacingFor(DefaultSpeed));
+
+        // To the NEAREST minute: the measure is in whole minutes, and truncating
+        // would take one off it for a few seconds the bots save.
+        return static_cast<int>(std::lround(static_cast<double>(total.count()) / 60000.0));
+    }
+
+    // A WATCHED GAME IS THE BOTS' PACE: a rule of thumb off the slider. The
+    // schedule runs 1..8 and back, so it averages about four tricks a round at
+    // any table size. Each trick costs one spectator beat per seat plus one
+    // dwell (section 4.1).
     const Pacing pacing = pacingFor(config.botSpeed);
-    const auto beat = config.spectator ? pacing.spectatorBeat : pacing.beat;
 
     constexpr int averageTricksPerRound = 4;
 
-    const auto perTrick = beat * seatCount(config) + pacing.trickDwell;
-    const auto total = perTrick * averageTricksPerRound * rounds;
+    const auto perTrick = pacing.spectatorBeat * seatCount(config) + pacing.trickDwell;
+    const auto total = perTrick * averageTricksPerRound * roundCount(config);
 
-    const int minutes = static_cast<int>(
-        std::chrono::duration_cast<std::chrono::minutes>(total).count());
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(total).count());
+}
+
+QString newgame::summaryText(const Config& config)
+{
+    // The honest division of this line: its round count is exact arithmetic over
+    // the engine's schedule, and its minutes are a guess (estimatedMinutes()).
+    const unsigned int rounds = roundCount(config);
+    const int minutes = estimatedMinutes(config);
 
     // "%n rounds" AND NOT "%n round(s)", which is the idiom and is wrong here.
     // The parenthesised plural only resolves through a translator; with none
@@ -327,8 +385,8 @@ QString newgame::summaryText(const Config& config)
     // the count here is never 1 (the smallest table gives 18).
     //
     // TWO SENTENCES, NOT ONE INTERPOLATED, when the estimate rounds to nothing.
-    // An "about 0 minutes" is worse than saying nothing, and at the instant end
-    // of the slider that is the honest answer.
+    // An "about 0 minutes" is worse than saying nothing, and for a watched game at
+    // the instant end of the slider that is the honest answer.
     if(minutes < 1)
         return QCoreApplication::translate("newgame", "%n rounds", "", static_cast<int>(rounds));
 

@@ -15,6 +15,7 @@
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
 #include "ui/HistorySheet.h"
+#include "ui/LanguageDialog.h"
 #include "ui/LastTrickSheet.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
@@ -1025,4 +1026,27 @@ TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
     std::cout << path.toStdString() << ": the main menu page\n";
 
     CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1080));
+}
+
+// ---- the language dialog, for the redesign's phase 13 ----
+//
+// language.png: the dialog that asks for the language before the window is built,
+// at its own size, Romanian lit to start (lit only in an active window, so
+// not here: the offscreen platform never activates one).
+TEST_CASE("A screenshot of the language dialog", "[.screenshot]")
+{
+    const QString dir = shotsDirectory();
+    REQUIRE(QDir().mkpath(dir));
+
+    LanguageDialog dialog;
+    dialog.show();
+    pump(200);
+
+    const QPixmap picture = dialog.grab();
+    const QString path = QDir(dir).filePath(QStringLiteral("language.png"));
+    REQUIRE(picture.save(path));
+
+    std::cout << path.toStdString() << ": the language dialog\n";
+
+    CHECK(picture.deviceIndependentSize().toSize() == dialog.size());
 }

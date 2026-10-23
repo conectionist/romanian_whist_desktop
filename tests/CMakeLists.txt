@@ -53,6 +53,7 @@ add_executable(desktop_tests
     SettingsSheetTests.cpp
     OverlayTests.cpp
     MainMenuPageTests.cpp
+    LanguageTests.cpp
     ScoreboardTests.cpp
     ScreenshotTool.cpp
     ResizeTiming.cpp

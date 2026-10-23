@@ -196,21 +196,91 @@ TEST_CASE("The table's shadow fades outward from the rim", "[table-top]")
     REQUIRE(at(picture(), up(tablespace::tableReach - 1.0)).alpha() <= 1);
 }
 
-// The logo plaque, centred on the table at 0.9 of its 270 x 142: its gold border
-// is at its top edge, and the felt is just above it.
-TEST_CASE("The logo plaque sits on the table's centre with its gold border", "[table-top]")
+// THE LOGO ON THE TABLE IS A MEDALLION (phase 13, the owner's call of 2026-10-23):
+// a circle tablespace::logoDiameter across, centred on the table. Its gold border
+// is the same distance out whichever way you go - up, down, left and right - and the
+// felt is just past it.
+TEST_CASE("The table's logo is a round medallion on its centre", "[table-top]")
 {
     const Theme::TablePalette table = Theme::dark().table;
 
-    const qreal halfHeight = tablespace::logoBox.height() * tablespace::logoScale / 2.0;
+    const qreal radius = tablespace::logoDiameter / 2.0;
     const qreal border = 2.0 * tablespace::logoScale;
 
-    // In the middle of the 2-unit border, drawn at 1.8.
-    REQUIRE(same(at(picture(), up(halfHeight - border / 2.0)), table.logoBorder));
+    // In the middle of the 2-unit border, drawn at 1.8, in four directions: a
+    // circle, where the plaque's border was 64 above the centre and 121 beside it.
+    const qreal middle = radius - border / 2.0;
 
-    // And above the plaque, the felt: green, not the border's gold.
-    const QColor felt = at(picture(), up(halfHeight + 6.0));
-    REQUIRE(felt.green() > felt.red());
+    for(const QPointF direction : { QPointF(0.0, -1.0), QPointF(0.0, 1.0), QPointF(-1.0, 0.0), QPointF(1.0, 0.0) })
+    {
+        INFO("direction " << direction.x() << ", " << direction.y());
+        REQUIRE(same(at(picture(), tablespace::centre + direction * middle), table.logoBorder));
+
+        // And past it, the felt: green, not the border's gold.
+        const QColor felt = at(picture(), tablespace::centre + direction * (radius + 6.0));
+        REQUIRE(felt.green() > felt.red());
+    }
+
+    // Along a diagonal, where a rectangle's corner would be, the felt again.
+    const QColor corner = at(picture(), tablespace::centre + QPointF(radius, -radius) * 0.85);
+    REQUIRE(corner.green() > corner.red());
+}
+
+// THE LETTERING FITS THE CIRCLE: shrunk until its corners and the ornaments' are
+// well inside the fine gold line, and never larger than on the plaque - so the
+// short Romanian "Whist" keeps the plaque's size where the English two lines shrink.
+TEST_CASE("The medallion's lettering fits inside it and never outgrows the plaque's", "[table-top]")
+{
+    const tabletop::LogoShape round = tabletop::tableLogo();
+
+    REQUIRE(round.box.width() == Catch::Approx(round.box.height()));
+    REQUIRE(round.radius == Catch::Approx(round.box.width() / 2.0));
+    REQUIRE_FALSE(round.clubs);
+
+    // The plaque, which the main-menu page keeps, is as it was.
+    const tabletop::LogoShape plaque = tabletop::plaque();
+
+    REQUIRE(plaque.box == tablespace::logoBox);
+    REQUIRE(plaque.clubs);
+    REQUIRE(tabletop::letteringScale(plaque, tabletop::logoLines()) == 1.0);
+
+    // English shrinks a little at 215; Romanian's one word not at all.
+    const qreal english = tabletop::letteringScale(round, tabletop::logoLines());
+    const qreal romanian = tabletop::letteringScale(round, { QStringLiteral("Whist") });
+
+    REQUIRE(english < 1.0);
+    REQUIRE(english > 0.85);
+    REQUIRE(romanian == 1.0);
+
+    // A smaller medallion shrinks the words further.
+    REQUIRE(tabletop::letteringScale(tabletop::medallion(140.0), tabletop::logoLines()) < english);
+
+    // And drawn, the lettering's gold stays inside the fine line: nothing gold on a
+    // ring just inside it, at the height of the words, either side.
+    QImage image(QSize(400, 400), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    {
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        tabletop::paintLogo(painter, Theme::dark(), QPointF(200.0, 200.0), tabletop::logoLines(), round);
+    }
+
+    const qreal lineRadius = (round.innerLineRadius - 1.0) * tablespace::logoScale;
+    const Theme::TablePalette table = Theme::dark().table;
+
+    for(const qreal y : { -18.0, 0.0, 18.0 })
+    {
+        for(const qreal side : { -1.0, 1.0 })
+        {
+            const qreal x = side * std::sqrt(lineRadius * lineRadius - y * y) * 0.97;
+            const QColor pixel = image.pixelColor(qRound(200.0 + x), qRound(200.0 + y));
+
+            INFO("at " << x << ", " << y);
+            REQUIRE_FALSE(same(pixel, table.logoTextTop));
+            REQUIRE_FALSE(same(pixel, table.logoTextMiddle));
+            REQUIRE(pixel.green() >= pixel.red());
+        }
+    }
 }
 
 // THE LOGO'S WORDS (the owner's call, 2026-10-23): one translated phrase, a line of
