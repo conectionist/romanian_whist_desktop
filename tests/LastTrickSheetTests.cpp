@@ -6,6 +6,7 @@
 #include "paint/CardRenderer.h"
 #include "paint/Theme.h"
 #include "ui/LastTrickSheet.h"
+#include "ui/Overlay.h"
 
 #include <romanian_whist/Card.h>
 
@@ -263,6 +264,126 @@ TEST_CASE("Without its art the last trick keeps the art's card shape", "[last-tr
 
     REQUIRE_FALSE(drawn.cardsArea().isEmpty());
     REQUIRE(bare.cardsArea().size() == drawn.cardsArea().size());
+}
+
+namespace
+{
+// A trick of `count` cards, the first one winning.
+lasttrick::Trick trickOf(std::size_t count)
+{
+    static const char* names[] = { "Ana", "Bogdan", "Cristina", "Dan", "Elena", "Florin" };
+
+    lasttrick::Trick trick;
+    trick.roundNumber = 5;
+    trick.humanSeat = -1;
+
+    for(std::size_t i = 0 ; i < count ; i++)
+        trick.cards.push_back({ Card(Rank::Ace, Suit::Spades), static_cast<unsigned int>(i),
+                                QString::fromLatin1(names[i]), i == 0 });
+
+    return trick;
+}
+
+// How far `widget`'s middle is from the middle of the sheet, across.
+int offCentre(const LastTrickSheet& sheet, const QWidget* widget)
+{
+    const QPoint middle = widget->mapTo(&sheet, widget->rect().center());
+    return std::abs(middle.x() - sheet.sheetRect().center().x());
+}
+}
+
+// THE OWNER'S CALL, 2026-10-23: the title, the line under it, the cards and Close
+// down the middle, where the mock-up has them on the left and Close on the right.
+TEST_CASE("The last trick's title cards and Close are centred", "[last-trick]")
+{
+    CardRenderer cards;
+
+    QWidget page;
+    page.resize(1920, 1034);
+
+    LastTrickSheet sheet(&page);
+    sheet.setCards(&cards);
+    sheet.showTrick(trickOf(3), 5);
+
+    page.show();
+    QCoreApplication::processEvents();
+
+    QLabel* title = sheet.findChild<QLabel*>("lastTrickTitle");
+    QLabel* meta = sheet.findChild<QLabel*>("lastTrickMeta");
+    QPushButton* close = sheet.findChild<QPushButton*>("closeLastTrick");
+
+    REQUIRE(title != nullptr);
+    REQUIRE(meta != nullptr);
+    REQUIRE(close != nullptr);
+
+    // The words centred in their lines, and the lines across the sheet.
+    REQUIRE(title->alignment().testFlag(Qt::AlignHCenter));
+    REQUIRE(meta->alignment().testFlag(Qt::AlignHCenter));
+    REQUIRE(offCentre(sheet, title) <= 1);
+    REQUIRE(offCentre(sheet, meta) <= 1);
+
+    // The row of cards and Close in the middle.
+    REQUIRE(offCentre(sheet, sheet.findChild<QWidget*>("lastTrickCards")) <= 1);
+    REQUIRE(offCentre(sheet, close) <= 1);
+}
+
+// AS WIDE AS IT NEEDS: its row of cards and the padding round it, so the sheet
+// narrows with the number of players - but never narrower than its words or
+// Close, which would cut them short.
+TEST_CASE("The last trick is as wide as its cards need", "[last-trick]")
+{
+    CardRenderer cards;
+
+    QWidget page;
+    page.resize(1920, 1034);
+    page.show();
+
+    const auto widthFor = [&](const std::optional<lasttrick::Trick>& trick)
+    {
+        LastTrickSheet sheet(&page);
+        sheet.setCards(&cards);
+        sheet.showTrick(trick, 5);
+        sheet.show();
+        QCoreApplication::processEvents();
+
+        // Whatever the width, every word shows whole.
+        for(const char* name : { "lastTrickTitle", "lastTrickMeta" })
+        {
+            const QLabel* label = sheet.findChild<QLabel*>(name);
+
+            INFO(name);
+            REQUIRE(label->width() >= label->sizeHint().width());
+        }
+
+        const QPushButton* close = sheet.findChild<QPushButton*>("closeLastTrick");
+        REQUIRE(close->width() >= close->sizeHint().width());
+
+        return sheet.sheetRect().width();
+    };
+
+    constexpr int padding = 2 * (sheet::border + sheet::paddingX);
+
+    // Six cards: the row, 6 x 88 and 5 gaps of 12, inside the padding.
+    REQUIRE(widthFor(trickOf(6)) == 6 * 88 + 5 * 12 + padding);
+    REQUIRE(widthFor(trickOf(6)) < sheet::width);
+
+    // Fewer players, a narrower sheet, down to three.
+    REQUIRE(widthFor(trickOf(4)) == 4 * 88 + 3 * 12 + padding);
+    REQUIRE(widthFor(trickOf(3)) == 3 * 88 + 2 * 12 + padding);
+
+    // Two cards are narrower than a long line under them, which then sets the
+    // width: the longest name the setup dialog takes, in a trick from the round
+    // before.
+    lasttrick::Trick longName = trickOf(2);
+    longName.roundNumber = 4;
+    longName.cards.front().name = QStringLiteral("Bartholomew Fairbank");
+
+    REQUIRE(widthFor(trickOf(2)) == 2 * 88 + 12 + padding);
+    REQUIRE(widthFor(longName) > widthFor(trickOf(2)));
+    REQUIRE(widthFor(longName) < sheet::width);
+
+    // And with none finished, the line that says so.
+    REQUIRE(widthFor(std::nullopt) < sheet::width);
 }
 
 TEST_CASE("The last trick with none finished shows no cards", "[last-trick]")

@@ -273,11 +273,17 @@ TEST_CASE("Every sheet stays on the page at the smallest window and Rules scroll
     // And at the screenshot's size, none does.
     EverySheet roomy(QSize(1920, 1034));
 
+    // Each at section 2.13's 720 - but the last trick, which is as wide as its
+    // cards (the owner's call, 2026-10-23), and narrower.
     for(Overlay* sheet : roomy.sheets)
     {
         INFO(sheet->metaObject()->className());
         REQUIRE(sheet->findChild<QScrollArea*>()->verticalScrollBar()->maximum() == 0);
-        REQUIRE(sheet->sheetRect().width() == sheet::width);
+
+        if(qobject_cast<LastTrickSheet*>(sheet))
+            REQUIRE(sheet->sheetRect().width() < sheet::width);
+        else
+            REQUIRE(sheet->sheetRect().width() == sheet::width);
     }
 }
 

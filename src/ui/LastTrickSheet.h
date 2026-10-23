@@ -55,6 +55,11 @@ QRectF cardRect(std::size_t i, QSizeF card);
 
 // The widget, an Overlay like every sheet the table's corner buttons and the menu
 // bar open: over everything, and holding a game in play while it is up.
+//
+// CENTRED AND NO WIDER THAN IT NEEDS (the owner's call, 2026-10-23), where the
+// mock-up's is section 2.13's 720 with everything on its left and Close on its
+// right: the title, the line under it, the cards and Close down the middle of a
+// sheet as wide as the widest of them.
 class LastTrickSheet : public Overlay
 {
     Q_OBJECT
@@ -83,6 +88,10 @@ signals:
     void closeRequested();
 
 protected:
+    // As wide as the widest of the row of cards, the title, the line under it and
+    // Close, inside the sheet's padding - and never past section 2.13's 720.
+    int preferredWidth() const override;
+
     // The row of cards is painted on the sheet's body, under the place a widget
     // keeps for it: the winner's glow reaches past that place, into the sheet's
     // padding, as the mock-up's box-shadow does.

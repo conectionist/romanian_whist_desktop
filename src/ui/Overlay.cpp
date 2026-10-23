@@ -857,7 +857,7 @@ QRect Overlay::sheetRect() const
 
 int Overlay::sheetWidth() const
 {
-    return std::min(sheet::width, std::max(0, width() - 2 * sheet::pageMargin));
+    return std::min(preferredWidth(), std::max(0, width() - 2 * sheet::pageMargin));
 }
 
 int Overlay::contentWidth() const

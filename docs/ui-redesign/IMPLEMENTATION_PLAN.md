@@ -1790,7 +1790,7 @@ Done when: both buttons open working sheets.
   - **The last trick is kept the moment it is complete**, while it is still on the felt. The
     mock-up's is kept as the felt clears; the trick on the felt is the same one either way.
   - **The trick's cards sit left in the sheet**, as the mock-up's flex row does; this phase's plan
-    said centred.
+    said centred. *(Phase 13 centres them, the owner's call: see there.)*
 - **What the build is:**
   - **`MainWindow::roundHistory`** keeps every `RoundResult`, appended first thing in
     `onRoundScored()`, so an unattended game's final round, which gets no round sheet, is in it.
@@ -2080,6 +2080,23 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - **"%1 e primul"**, for a woman's name and for "Tu".
   - **2x textures**, if the owner wants them after the numbers above.
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
+
+### Phase 13: the owner's final changes (in progress)
+
+On `redesign/phase-13-final_changes`, branched from `claude/zealous-lamport-zac87a` once phase 12
+was merged. Small changes the owner asked for after playing the finished redesign, each its own
+commit, all on 2026-10-23:
+
+- **The Romanian translation is reviewed**: all 206 strings finished, the drafts accepted as written.
+- **No suit name under the trump card**: section 2.9 says why. "None this round" stays.
+- **The window opens maximized**, not in true full screen: the title bar and the taskbar stay.
+- **The New Game estimate counts you**: with a person at the table, about 30 minutes for two
+  players and 5 more for each player added, at the default bot speed, with another speed adding or
+  taking off what the bots then wait. `QT_CLIENT_PLAN_proposal1.md` section 13 has the amendment.
+- **The Last trick sheet is centred and no wider than it needs**: its title, the line under it, the
+  cards and Close down the middle, the sheet as wide as the widest of them (650 for six players,
+  where every other sheet is 720). `Overlay::preferredWidth()` is the hook; every other sheet keeps
+  section 2.13's 720.
 
 ---
 
