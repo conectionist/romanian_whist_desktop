@@ -157,3 +157,25 @@ since it is a rule about a player's name). `assign()` could then stay with the c
 `Wearer`.
 
 **Where it goes.** Not scheduled. Left by the owner's call after PR #40's review.
+
+## The avatar catalogue and the names list are read by two copies of one loop
+
+*Found in PR #40's review (finding #5). Scheduled with nationality.*
+
+**What you see.** Nothing on screen. It is a cost for the next change: `avatars::parse()`
+(`src/paint/Avatars.cpp`) and `playernames::parse()` (`src/ui/PlayerNames.cpp`) each read their JSON
+array the same way. Each reads `"gender"` as "male", "female" or "any", reads the optional
+`"strategy"` and checks it is text, and skips a bad entry with a warning. A field both gain has to be
+written twice, and the two can drift.
+
+**Why.** The names list was built after the avatar catalogue, on its pattern, and the two rightly
+differ in part. An avatar's id is a key, compared exactly. A name is shown to people, so it is
+trimmed, held to `newgame::MaximumNameLength`, and compared ignoring case within its language. One
+reader for both would have to choose one rule, and neither fits the other.
+
+**Why it was left.** Two fields in common, gender and strategy, did not pay for a shared helper and
+the changes to both modules and their tests. The owner's call after PR #40's review.
+
+**Where it goes.** With nationality, which both are to gain. Then share a small helper for the common
+fields (gender, strategy, nationality), and keep each file's own rules for its id or name and its
+duplicates.
