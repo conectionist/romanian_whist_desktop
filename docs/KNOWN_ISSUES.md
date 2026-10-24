@@ -125,9 +125,11 @@ carries its own context. lupdate would be told to read it as another spelling of
 `LUPDATE_OPTIONS` of `CMakeLists.txt`; Qt 6.11's lupdate lists `QT_TRANSLATE_NOOP3` among the
 functions it can alias, but this is untried). Each variant would then be looked up under the context
 lupdate filed it under, so there would be no second copy to get wrong, and `Sentence::context` and
-`translate()`'s context argument would go. The review chose a cheaper guard for now: a test that
-loads the Romanian translation and checks that every gendered variant is translated, which catches a
-mismatch as soon as it is made.
+`translate()`'s context argument would go. The review chose a cheaper guard for now: two tests load
+the app's own Romanian and fail as soon as any variant would show English in the app. They are "The
+leader and first-bidder lines are in Romanian for everyone" (`TrickPanelTests.cpp`) and "You bid
+last is in Romanian as a man and as a woman" (`BidStripTests.cpp`). A new gendered sentence needs
+adding to one of them.
 
 **Where it goes.** Not scheduled. Left by the owner's call after PR #40's review.
 

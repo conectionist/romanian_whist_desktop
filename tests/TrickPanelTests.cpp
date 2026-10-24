@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "DisambiguationTranslator.h"
+#include "RomanianTranslation.h"
 
 #include "paint/TextRuns.h"
 #include "table/TrickPanelItem.h"
@@ -312,6 +313,48 @@ TEST_CASE("The first bidder is said of a man or a woman or of you", "[trick-pane
 
     snapshot.seats[0].gender = Gender::Female;
     REQUIRE(firstToBid(0) == QStringLiteral("[you woman] First to bid: You"));
+}
+
+TEST_CASE("The leader and first-bidder lines are in Romanian for everyone", "[trick-panel]")
+{
+    // EVERY VARIANT, IN THE APP'S OWN ROMANIAN (PR #40's review, finding #4). A
+    // gendered sentence names its translation context twice: in its
+    // QT_TRANSLATE_NOOP3s, which file the Romanian, and in its persontext::Sentence,
+    // which looks it up (docs/KNOWN_ISSUES.md). Copies that disagree show that one
+    // variant in English in the Romanian app, with no warning. A new gendered
+    // sentence in the panel belongs here too.
+    const RomanianTranslation romanian;
+
+    GameSnapshot snapshot = playing();
+    snapshot.table.clear();
+    snapshot.hasLeadSuit = false;
+
+    // Seat 1 is somebody else and seat 0 is you, each as a man and as a woman.
+    for(const unsigned int seat : { 1U, 0U })
+    {
+        for(const Gender gender : { Gender::Male, Gender::Female })
+        {
+            snapshot.seats[seat].gender = gender;
+
+            snapshot.phase = GamePhase::Playing;
+            snapshot.leadSeat = seat;
+            const QString leader = rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0);
+
+            snapshot.phase = GamePhase::Betting;
+            for(SeatView& view : snapshot.seats)
+                view.bidOrder = view.seatIndex == seat ? 1 : 2;
+            const QString first = rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0);
+
+            INFO("seat " << seat << (gender == Gender::Female ? ", a woman" : ", a man"));
+            INFO("leader line: " << leader.toStdString());
+            INFO("first-bidder line: " << first.toStdString());
+
+            REQUIRE_FALSE(leader.isEmpty());
+            REQUIRE_FALSE(leader.contains(QStringLiteral("Leader")));
+            REQUIRE_FALSE(first.isEmpty());
+            REQUIRE_FALSE(first.contains(QStringLiteral("First to bid")));
+        }
+    }
 }
 
 TEST_CASE("A scored round and a finished game say so", "[trick-panel]")

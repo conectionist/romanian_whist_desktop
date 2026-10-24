@@ -98,6 +98,25 @@ add_executable(desktop_tests
 qt_add_resources(TEST_RESOURCES ${WHIST_DESKTOP_RESOURCES})
 target_sources(desktop_tests PRIVATE ${TEST_RESOURCES})
 
+# THE ROMANIAN TRANSLATION, compiled again from the parent's .ts files and
+# embedded where the app embeds it (:/i18n/), so a test loads it by
+# language::translationResource() exactly as main() does (RomanianTranslation.h).
+# Compiled HERE, for this target, for the reason the .qrc files above are: a
+# generated file belongs to the scope that made it. The tests it is for check
+# that every sentence said of a man or a woman shows its Romanian (PR #40's
+# review, finding #4).
+qt_add_lrelease(
+    LRELEASE_TARGET desktop_tests_lrelease
+    TS_FILES ${WHIST_DESKTOP_TS_FILES}
+    QM_FILES_OUTPUT_VARIABLE TEST_QM_FILES
+)
+qt_add_resources(desktop_tests "desktop_tests_translations"
+    PREFIX "/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${TEST_QM_FILES}
+)
+add_dependencies(desktop_tests desktop_tests_lrelease)
+
 target_link_libraries(desktop_tests PRIVATE
     desktop_core
     Catch2::Catch2WithMain

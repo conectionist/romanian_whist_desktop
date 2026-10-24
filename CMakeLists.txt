@@ -308,8 +308,15 @@ target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 set_property(TARGET romanian_whist_desktop PROPERTY
     QT_EXCLUDE_SOURCES_FROM_TRANSLATION ${WHIST_DESKTOP_RESOURCES})
 
+# THE .ts FILES, absolute for the reason WHIST_DESKTOP_RESOURCES is:
+# tests/CMakeLists.txt compiles them again for the test binary, which loads the
+# Romanian as main() does.
+set(WHIST_DESKTOP_TS_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/romanian_whist_desktop_ro_RO.ts
+)
+
 qt_add_translations(romanian_whist_desktop
-    TS_FILES i18n/romanian_whist_desktop_ro_RO.ts
+    TS_FILES ${WHIST_DESKTOP_TS_FILES}
     SOURCE_TARGETS desktop_core romanian_whist_desktop
     LUPDATE_OPTIONS -locations relative
 )
