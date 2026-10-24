@@ -358,7 +358,8 @@ private:
     BidStripItem* bidStrip = nullptr;
 
     // SECTION 12'S FOURTH REGION, "where the game talks to you", which is the
-    // trick panel in the table's top-right corner since the redesign's phase 8.
+    // trick panel in the table's top-left corner (top-right from the redesign's phase
+    // 8 until the owner's call of 2026-10-24).
     // Owned by the scene; a handle, as `hand` is, for the same second source.
     TrickPanelItem* trickPanel = nullptr;
 

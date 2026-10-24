@@ -17,10 +17,11 @@
 #include <optional>
 #include <vector>
 
-// SECTION 2.10's CURRENT-TRICK PANEL, pinned to the window's top-right corner:
-// which trick this is, who led it and with what, who is winning it - and, under a
-// rule, where the game talks to you: "Your turn. You must follow ♥.", "Ana is
-// thinking…", "You win the trick.".
+// SECTION 2.10's CURRENT-TRICK PANEL, pinned to the window's top-left corner
+// (top-right in the mock-up; the owner's call of 2026-10-24): which trick this is,
+// who led it and with what, who is winning it - and, under a rule, where the game
+// talks to you: "Your turn. You must follow ♥.", "Ana is thinking…", "You win the
+// trick.".
 //
 // IT REPLACES THE PROMPT BAR, section 12's "one line, always in the same place,
 // so you learn where to look" - which this still is, in a corner of the table
