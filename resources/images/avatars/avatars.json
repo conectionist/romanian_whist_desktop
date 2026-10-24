@@ -12,5 +12,8 @@
     { "id": "cyborg-man-bald",       "gender": "male",   "strategy": "cyborg", "file": "cyborg-man-bald.png" },
     { "id": "cyborg-man-half",       "gender": "male",   "strategy": "cyborg", "file": "cyborg-man-half.png" },
     { "id": "cyborg-man-eye",        "gender": "male",   "strategy": "cyborg", "file": "cyborg-man-eye.png" },
-    { "id": "cyborg-woman-eye",      "gender": "female", "strategy": "cyborg", "file": "cyborg-woman-eye.png" }
+    { "id": "cyborg-woman-eye",      "gender": "female", "strategy": "cyborg", "file": "cyborg-woman-eye.png" },
+    { "id": "man-black-tee",         "gender": "male",   "file": "man-black-tee.png" },
+    { "id": "woman-wavy-black-hair", "gender": "female", "file": "woman-wavy-black-hair.png" },
+    { "id": "cyborg-man-gold",       "gender": "male",   "strategy": "cyborg", "file": "cyborg-man-gold.png" }
 ]

@@ -21,6 +21,9 @@
 
          WHAT A FILE MUST BE:
          - SVG or PNG. Not JPEG: it needs an image plugin the deploy step strips.
+           That includes a JPEG saved under a .png name, which loads in a
+           development build and shows the bare box in the shipped app;
+           AvatarTests checks every .png is a PNG inside.
          - 100 wide by 114 tall in shape, the seat panel's portrait box. Another
            shape is scaled to fill the box and cropped, centred.
          - A PNG at least 400 x 456 pixels; the box is about 140 pixels at its
@@ -48,5 +51,8 @@
         <file alias="cyborg-man-half.png">images/avatars/cyborg-man-half.png</file>
         <file alias="cyborg-man-eye.png">images/avatars/cyborg-man-eye.png</file>
         <file alias="cyborg-woman-eye.png">images/avatars/cyborg-woman-eye.png</file>
+        <file alias="man-black-tee.png">images/avatars/man-black-tee.png</file>
+        <file alias="woman-wavy-black-hair.png">images/avatars/woman-wavy-black-hair.png</file>
+        <file alias="cyborg-man-gold.png">images/avatars/cyborg-man-gold.png</file>
     </qresource>
 </RCC>

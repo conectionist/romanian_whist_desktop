@@ -86,7 +86,13 @@ TEST_CASE("Every avatar's id is its own and its file loads", "[avatars]")
         }
         else
         {
+            // A PNG INSIDE, NOT ONLY BY NAME: a JPEG saved as .png decodes here,
+            // where the jpeg plugin is installed, and shows the bare box in the
+            // shipped app, whose deploy step strips every image plugin. PNG is
+            // built into Qt.
             QImageReader reader(avatar.path);
+            reader.setDecideFormatFromContent(true);
+            REQUIRE(reader.format() == QByteArrayLiteral("png"));
             REQUIRE_FALSE(reader.read().isNull());
         }
     }
