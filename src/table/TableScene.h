@@ -136,12 +136,12 @@ public:
     // drawn without a view, or a table with no snapshot yet, has no corner panels.
     void pinHud(const QRectF& visible, qreal scale);
 
-    // Section 2.9's scoreboard, top-left. READ-ONLY and for tests.
+    // Section 2.9's scoreboard, top-right since 2026-10-24. READ-ONLY and for tests.
     const ScoreboardItem* scoreboardItem() const { return scoreboard; }
 
-    // Section 2.10's trick panel, top-right. Like the fan, it has a second source
-    // the snapshot cannot supply - the prompt for your card - and MainWindow hands
-    // that over through here.
+    // Section 2.10's trick panel, top-left since 2026-10-24. Like the fan, it has a
+    // second source the snapshot cannot supply - the prompt for your card - and
+    // MainWindow hands that over through here.
     TrickPanelItem* trickPanelItem() const { return trickPanel; }
 
     // Section 2.11's two buttons, whose clicked() MainWindow opens a sheet on.

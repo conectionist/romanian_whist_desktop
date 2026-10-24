@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "TableFixtures.h"
 
@@ -13,6 +14,7 @@
 #include "table/TableSpace.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
+#include "ui/NewGameDialog.h"
 
 #include <QCursor>
 #include <QCoreApplication>
@@ -28,6 +30,7 @@
 
 #include <cmath>
 #include <memory>
+#include <string>
 #include <vector>
 
 // THE CORNER PANELS (the table redesign's sections 2.9 to 2.11): pinned to the
@@ -125,6 +128,24 @@ GameSnapshot tableOf(unsigned int seats)
         snapshot.seats[i].bidOrder = i + 1;
 
     snapshot.table.clear();
+
+    return snapshot;
+}
+
+// The same table with the scoreboard at its WIDEST: every name as long as New Game
+// allows, in the widest capital, and every score a minus and three digits. Its
+// columns then reach the panel's cap, past which names are elided. Since the
+// scoreboard moved to the top-right corner (2026-10-24) it is the panel beside the
+// top-right seat, and "Seat 0" kept it narrow.
+GameSnapshot widestTableOf(unsigned int seats)
+{
+    GameSnapshot snapshot = tableOf(seats);
+
+    for(unsigned int i = 0 ; i < seats ; i++)
+    {
+        snapshot.seats[i].name = std::string(newgame::MaximumNameLength - 1, 'W') + std::to_string(i);
+        snapshot.seats[i].totalScore = -888;
+    }
 
     return snapshot;
 }
@@ -430,7 +451,7 @@ TEST_CASE("The corner buttons stay eight pixels in from the bottom-left corner",
     }
 }
 
-TEST_CASE("The scoreboard stays eight pixels in from the top-left corner", "[hud]")
+TEST_CASE("The scoreboard stays eight pixels in from the top-right corner", "[hud]")
 {
     TableScene scene;
     scene.setTheme(Theme::dark());
@@ -450,8 +471,10 @@ TEST_CASE("The scoreboard stays eight pixels in from the top-left corner", "[hud
         const ScoreboardItem& scoreboard = *scene.scoreboardItem();
         const QRectF placed = onScreen(view, scoreboard);
 
+        // THE MOCK-UP'S CORNERS SWAPPED, the owner's call of 2026-10-24: placed by
+        // its right edge, as wide as its columns.
         REQUIRE(scoreboard.isVisible());
-        REQUIRE(std::abs(placed.left() - tablespace::hudInset) < 1e-6);
+        REQUIRE(std::abs(placed.right() - (view.viewport()->width() - tablespace::hudInset)) < 1e-6);
         REQUIRE(std::abs(placed.top() - tablespace::hudInset) < 1e-6);
 
         // Drawn 1.2 times the table, as page.html's .score is.
@@ -467,7 +490,9 @@ TEST_CASE("The scoreboard stays eight pixels in from the top-left corner", "[hud
 TEST_CASE("The corner panels sit inside the window and clear of every seat", "[hud]")
 {
     // 4:3 and 5:4 since the scoreboard became as wide as its columns: narrower
-    // than about 3:2, the mock-up's 236 reached the top-left seat.
+    // than about 3:2, the mock-up's 236 reached the seat beside it - the top-left
+    // seat then, the top-right since the corners swapped (2026-10-24). So the
+    // scoreboard is at its widest here (widestTableOf()).
     //
     // 2560 x 1440 since phase 12, which the plan names with the other three.
     const QSize windows[] = { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900),
@@ -477,7 +502,10 @@ TEST_CASE("The corner panels sit inside the window and clear of every seat", "[h
     {
         TableScene scene;
         scene.setTheme(Theme::dark());
-        scene.setSnapshot(std::make_shared<const GameSnapshot>(tableOf(seats)));
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(widestTableOf(seats)));
+
+        // At its cap: as wide as the scoreboard ever is.
+        REQUIRE(scene.scoreboardItem()->size().width() == Catch::Approx(scoreboard::mockupWidth));
 
         TableView view(&scene);
         view.show();
@@ -511,7 +539,7 @@ TEST_CASE("The corner panels sit inside the window and clear of every seat", "[h
     }
 }
 
-TEST_CASE("The trick panel stays eight pixels in from the top-right corner", "[hud]")
+TEST_CASE("The trick panel stays eight pixels in from the top-left corner", "[hud]")
 {
     TableScene scene;
     scene.setTheme(Theme::dark());
@@ -531,8 +559,9 @@ TEST_CASE("The trick panel stays eight pixels in from the top-right corner", "[h
         const TrickPanelItem& panel = *scene.trickPanelItem();
         const QRectF placed = onScreen(view, panel);
 
+        // THE MOCK-UP'S CORNERS SWAPPED, the owner's call of 2026-10-24.
         REQUIRE(panel.isVisible());
-        REQUIRE(std::abs(placed.right() - (view.viewport()->width() - tablespace::hudInset)) < 1e-6);
+        REQUIRE(std::abs(placed.left() - tablespace::hudInset) < 1e-6);
         REQUIRE(std::abs(placed.top() - tablespace::hudInset) < 1e-6);
 
         // 264 units, drawn 1.2 times the table, as page.html's .trickinfo is.
