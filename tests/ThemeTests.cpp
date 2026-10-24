@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include "paint/Avatars.h"
 #include "paint/Theme.h"
 
 #include <QColor>
@@ -10,6 +11,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 // Theme is mostly a palette, and a palette has no test worth writing - a colour
@@ -21,7 +23,12 @@
 // until the table redesign's phase 2 replaced it with fixed table space
 // (TableSpaceTests.cpp).
 
-
+namespace
+{
+// The catalogue's first two avatars (resources/images/avatars/avatars.json).
+const std::string firstAvatar = "man-dark-hair-beard";
+const std::string secondAvatar = "man-hat-mustache";
+}
 
 TEST_CASE("Light and dark are different palettes", "[theme]")
 {
@@ -52,12 +59,12 @@ TEST_CASE("The background and the avatar fill the box they are given", "[theme]"
     const Theme theme = Theme::light();
 
     REQUIRE(theme.background(QSize(320, 200), 1.0).size() == QSize(320, 200));
-    REQUIRE(theme.avatar(0, QSize(48, 48), 1.0).size() == QSize(48, 48));
+    REQUIRE(theme.avatar(firstAvatar, QSize(48, 48), 1.0).size() == QSize(48, 48));
 
     // An empty request is an empty pixmap rather than a QPixmap of undefined
     // size, which is what a widget asks for on its first layout pass.
     REQUIRE(theme.background(QSize(), 1.0).isNull());
-    REQUIRE(theme.avatar(0, QSize(), 1.0).isNull());
+    REQUIRE(theme.avatar(firstAvatar, QSize(), 1.0).isNull());
 }
 
 // THE PROPERTY THAT MATTERS WHEN THE ART ARRIVES. Theme is a copyable value that
@@ -89,19 +96,19 @@ TEST_CASE("Avatars are cached, and a new box size replaces the set", "[theme]")
 {
     const Theme theme = Theme::light();
 
-    const QPixmap first = theme.avatar(0, QSize(48, 48), 1.0);
+    const QPixmap first = theme.avatar(firstAvatar, QSize(48, 48), 1.0);
 
-    // Same seat, same box: the stored pixels, not a second paint.
-    REQUIRE(theme.avatar(0, QSize(48, 48), 1.0).cacheKey() == first.cacheKey());
+    // Same avatar, same box: the stored pixels, not a second paint.
+    REQUIRE(theme.avatar(firstAvatar, QSize(48, 48), 1.0).cacheKey() == first.cacheKey());
 
-    // A different seat at the same box is a different avatar, not the same one
-    // handed back - the seat has to be in the key at all.
-    REQUIRE(theme.avatar(1, QSize(48, 48), 1.0).cacheKey() != first.cacheKey());
+    // A different avatar at the same box is a different picture, not the same one
+    // handed back - the id has to be in the key at all.
+    REQUIRE(theme.avatar(secondAvatar, QSize(48, 48), 1.0).cacheKey() != first.cacheKey());
 
     // A different box repaints, and then the original size repaints again
     // because the set it was in was discarded.
-    REQUIRE(theme.avatar(0, QSize(64, 64), 1.0).size() == QSize(64, 64));
-    REQUIRE(theme.avatar(0, QSize(48, 48), 1.0).cacheKey() != first.cacheKey());
+    REQUIRE(theme.avatar(firstAvatar, QSize(64, 64), 1.0).size() == QSize(64, 64));
+    REQUIRE(theme.avatar(firstAvatar, QSize(48, 48), 1.0).cacheKey() != first.cacheKey());
 }
 
 // The palette members are public, so a caller may assign one. Keying the cache
@@ -119,53 +126,55 @@ TEST_CASE("Recolouring a theme invalidates its cached background", "[theme]")
     REQUIRE(theme.background(view, 1.0).cacheKey() != before.cacheKey());
 }
 
-// The same rule for the avatar, and it is the one that was actually wrong: the
-// avatar cache was keyed on seatPlaque, but paintAvatar() derived its per-seat
-// tint from the accent as well, so recolouring the accent handed back the
-// identical pixmap. WHICH COLOURS A PAINTER READS IS NOT VISIBLE FROM THE LOOKUP,
-// which is why the key is the whole palette rather than the members named at the
-// top of the painter beneath it.
-//
-// Since the redesign's phase 4 the portraits read their own colours, a look per
-// seat inside an array, which is the same blind spot one level deeper.
-TEST_CASE("Recolouring a portrait invalidates the cached avatars", "[theme]")
-{
-    Theme theme = Theme::light();
-    const QSize box(48, 48);
-
-    const QPixmap before = theme.avatar(0, box, 1.0);
-
-    theme.table.portraits[0].skin = QColor(1, 2, 3);
-
-    const QPixmap after = theme.avatar(0, box, 1.0);
-
-    REQUIRE(after.cacheKey() != before.cacheKey());
-
-    // Repainted AND different: a cache miss that produced the same picture would
-    // pass the line above and still mean the colour had not been read.
-    REQUIRE(after.toImage() != before.toImage());
-}
-
-// SIX DIFFERENT PEOPLE: each seat's look is its own picture, and the looks repeat
-// only past the six seats the engine allows.
-TEST_CASE("The six portraits are six different pictures", "[theme]")
+// EVERY AVATAR IS ITS OWN PERSON: no two files in the catalogue draw the same
+// picture. Since the owner's call of 2026-10-23 the portraits are files
+// (avatars::catalogue()), and the six the table mock-up drew in code are the
+// first six.
+TEST_CASE("Every avatar in the catalogue is a different picture", "[theme]")
 {
     const Theme theme = Theme::dark();
     const QSize box(86, 98);
 
+    REQUIRE(avatars::catalogue().size() >= 6);
+
     std::vector<QImage> seen;
 
-    for(unsigned int seat = 0 ; seat < 6 ; seat++)
+    for(const avatars::Avatar& avatar : avatars::catalogue())
     {
-        const QImage image = theme.avatar(seat, box, 1.0).toImage();
+        INFO("avatar " << avatar.id);
+
+        const QImage image = theme.avatar(avatar.id, box, 1.0).toImage();
+
+        REQUIRE(image.size() == box);
 
         for(const QImage& other : seen)
             REQUIRE(image != other);
 
         seen.push_back(image);
     }
+}
 
-    REQUIRE(theme.avatar(6, box, 1.0).toImage() == seen.front());
+// A MISSING FACE SHOWS AND HARMS NOTHING: an id the catalogue does not have, or
+// none, draws the box's bare dark, through the same filter as every portrait.
+TEST_CASE("An avatar the catalogue does not have draws the bare box", "[theme]")
+{
+    const Theme theme = Theme::dark();
+    const QSize box(86, 98);
+
+    for(const std::string& id : { std::string("no-such-avatar"), std::string() })
+    {
+        const QImage image = theme.avatar(id, box, 1.0).toImage();
+
+        REQUIRE(image.size() == box);
+
+        const QRgb corner = image.pixel(0, 0);
+
+        for(const QPoint point : { QPoint(43, 49), QPoint(85, 97), QPoint(10, 80) })
+            REQUIRE(image.pixel(point) == corner);
+
+        // And it is not a real avatar's picture.
+        REQUIRE(image != theme.avatar(firstAvatar, box, 1.0).toImage());
+    }
 }
 
 // THE SAME CONTRACT CardRenderer HAS, and it has to be the same one: the table
@@ -188,7 +197,7 @@ TEST_CASE("The background and the avatar are rasterized at the device pixel rati
     // stamping the ratio on rather than handing the caller a bigger pixmap.
     REQUIRE(background.deviceIndependentSize().toSize() == view);
 
-    const QPixmap avatar = theme.avatar(0, box, 2.0);
+    const QPixmap avatar = theme.avatar(firstAvatar, box, 2.0);
 
     REQUIRE(avatar.size() == QSize(96, 96));
     REQUIRE(avatar.devicePixelRatio() == Catch::Approx(2.0));
@@ -205,13 +214,13 @@ TEST_CASE("The theme's caches are keyed on the device pixel ratio", "[theme]")
     const QSize box(48, 48);
 
     REQUIRE(theme.background(view, 1.0).cacheKey() != theme.background(view, 2.0).cacheKey());
-    REQUIRE(theme.avatar(0, box, 1.0).cacheKey() != theme.avatar(0, box, 2.0).cacheKey());
+    REQUIRE(theme.avatar(firstAvatar, box, 1.0).cacheKey() != theme.avatar(firstAvatar, box, 2.0).cacheKey());
 
     // A ratio of zero or less is not a screen; it is a caller with an
     // uninitialised value, and it must not divide the layout by it or paint a
     // one-pixel table. Same guard CardRenderer::face() has.
     REQUIRE(theme.background(view, 0.0).isNull());
-    REQUIRE(theme.avatar(0, box, -1.0).isNull());
+    REQUIRE(theme.avatar(firstAvatar, box, -1.0).isNull());
 }
 
 // Section 18 asks for green and red by name - a gain and a loss on the round
@@ -358,7 +367,7 @@ TEST_CASE("Recolouring a table colour invalidates every cache", "[theme]")
 
     const QPixmap background = theme.background(view, 1.0);
     const QPixmap room = theme.room(view, 1.0);
-    const QPixmap avatar = theme.avatar(0, box, 1.0);
+    const QPixmap avatar = theme.avatar(firstAvatar, box, 1.0);
 
     // A colour the palette does not hold, so the assignment is a change.
     const QColor recolour(1, 2, 3);
@@ -367,7 +376,7 @@ TEST_CASE("Recolouring a table colour invalidates every cache", "[theme]")
 
     REQUIRE(theme.background(view, 1.0).cacheKey() != background.cacheKey());
     REQUIRE(theme.room(view, 1.0).cacheKey() != room.cacheKey());
-    REQUIRE(theme.avatar(0, box, 1.0).cacheKey() != avatar.cacheKey());
+    REQUIRE(theme.avatar(firstAvatar, box, 1.0).cacheKey() != avatar.cacheKey());
 }
 
 // ---- the room behind the table, added in the table redesign's phase 2 ----

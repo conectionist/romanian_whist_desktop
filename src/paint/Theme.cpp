@@ -1,30 +1,27 @@
 #include "Theme.h"
 
+#include "paint/Avatars.h"
 #include "paint/DevicePixels.h"
 #include "paint/Gradients.h"
 
 #include <QGradientStops>
-#include <QHash>
 #include <QImage>
 #include <QImageReader>
 #include <QPainter>
-#include <QPainterPath>
-#include <QPen>
 #include <QRadialGradient>
 #include <QSizeF>
 #include <QString>
+#include <QSvgRenderer>
 #include <QtLogging>
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 namespace
 {
-
-// table.js portrait()'s viewBox, which every coordinate in paintAvatar() is in.
-constexpr QSizeF portraitView(100.0, 114.0);
 
 // page.html's .portrait filter: sepia(0.18) contrast(1.05), in that order, as the
 // Filter Effects spec defines both - sepia a colour matrix interpolated from the
@@ -187,10 +184,9 @@ Theme::TablePalette tablePalette()
     // the whole element, border included.
     table.portraitBorder = QColor::fromRgba(portraitFiltered(table.buttonBorder.rgba()));
 
-    // The background's outer stop, the eyebrows' stroke and the plain mouth.
+    // The mock-up's portrait background's outer stop (table.js portrait()), which
+    // fills the box under every avatar's art.
     table.portraitEdge = QColor(0x17, 0x10, 0x0A);
-    table.portraitBrow = QColor(0x2A, 0x1A, 0x10);
-    table.portraitMouth = QColor(0x8A, 0x4F, 0x3C);
 
     // Section 2.6, from page.html's .fan, .fan .back and .fan .ledge.
     //
@@ -283,38 +279,6 @@ Theme::TablePalette tablePalette()
     // gold-bright, 0 0 16px rgba(242, 211, 140, 0.5).
     table.sheetWinGlow = rgba(242, 211, 140, 0.5);
 
-    // table.js PLAYERS, in its order: bg, skin, shade, hair, coat, shirt, then the
-    // optional hat, mustache and beard, and long hair.
-    using Look = Theme::TablePalette::PortraitLook;
-    const QColor none;
-
-    table.portraits = { {
-        // You: dark hair, a light beard.
-        Look{ QColor(0x6B, 0x52, 0x33), QColor(0xD9, 0xAB, 0x86), QColor(0xB9, 0x8A, 0x68),
-              QColor(0x2A, 0x1C, 0x14), QColor(0x3A, 0x35, 0x30), QColor(0xD8, 0xCF, 0xBF),
-              none, none, QColor(0x3A, 0x2A, 0x1E), false },
-        // A hat and a mustache.
-        Look{ QColor(0x5A, 0x4A, 0x35), QColor(0xCF, 0x9F, 0x7C), QColor(0xA8, 0x7C, 0x5E),
-              QColor(0x3B, 0x2A, 0x1C), QColor(0x4A, 0x35, 0x24), QColor(0xBF, 0xB3, 0x9E),
-              QColor(0x3D, 0x3A, 0x36), QColor(0x3B, 0x2A, 0x1C), none, false },
-        // Long brown hair.
-        Look{ QColor(0x6E, 0x5A, 0x3E), QColor(0xE2, 0xB9, 0x97), QColor(0xC0, 0x95, 0x76),
-              QColor(0x4A, 0x2F, 0x1D), QColor(0x4B, 0x33, 0x24), QColor(0xE8, 0xE0, 0xCF),
-              none, none, none, true },
-        // White hair, a hat and a white mustache.
-        Look{ QColor(0x5F, 0x54, 0x40), QColor(0xD5, 0xA8, 0x88), QColor(0xAE, 0x84, 0x66),
-              QColor(0xD8, 0xD2, 0xC6), QColor(0x3C, 0x3A, 0x32), QColor(0xCF, 0xC6, 0xB2),
-              QColor(0x6A, 0x51, 0x34), QColor(0xEC, 0xE6, 0xDA), none, false },
-        // Long red hair.
-        Look{ QColor(0x5C, 0x46, 0x36), QColor(0xE8, 0xC2, 0xA2), QColor(0xC7, 0x9E, 0x80),
-              QColor(0x8A, 0x3F, 0x22), QColor(0x2F, 0x3B, 0x34), QColor(0xE4, 0xDC, 0xCB),
-              none, none, none, true },
-        // Black hair and a beard.
-        Look{ QColor(0x4F, 0x4A, 0x3C), QColor(0xC9, 0x98, 0x77), QColor(0xA3, 0x76, 0x5A),
-              QColor(0x1F, 0x17, 0x12), QColor(0x5A, 0x4A, 0x32), QColor(0xD2, 0xC8, 0xB4),
-              none, none, QColor(0x1F, 0x17, 0x12), false }
-    } };
-
     return table;
 }
 
@@ -358,6 +322,82 @@ QPixmap cachedTexture(QPixmap* slot, const QString& path)
         *slot = loadTexture(path);
 
     return *slot;
+}
+
+// THE TALLEST A PNG AVATAR IS KEPT. The art comes 800 x 912, about 2.9 MB decoded,
+// and the box it fills is 100 x 114 at the mock-up's scale: about 228 tall on a 4K
+// screen, so 456 leaves twice that. Kept at full size, every face worn stayed 2.9 MB
+// for the cache's life (PR #40's review, finding #3); at this size it is about 0.7 MB.
+constexpr int maximumArtHeight = 456;
+
+// ONE AVATAR'S ART AS LOADED: a parsed SVG, or a decoded PNG no taller than
+// maximumArtHeight. Neither when the file is missing or unreadable, which draws
+// the bare box and says so on stderr.
+struct AvatarArt
+{
+    std::shared_ptr<QSvgRenderer> svg;
+    QImage image;
+};
+
+AvatarArt loadAvatarArt(const QString& path)
+{
+    AvatarArt art;
+
+    if(path.endsWith(QStringLiteral(".svg"), Qt::CaseInsensitive))
+    {
+        auto renderer = std::make_shared<QSvgRenderer>(path);
+
+        if(renderer->isValid())
+            art.svg = std::move(renderer);
+    }
+    else
+    {
+        // THROUGH QImageReader, as the textures are (loadTexture() says why): a
+        // QPixmap load would file the art in the process-wide QPixmapCache.
+        QImageReader reader(path);
+        art.image = reader.read();
+
+        // ONCE, here, rather than at every draw: drawCovering() scales it again
+        // to the box, from this smaller picture.
+        if(art.image.height() > maximumArtHeight)
+            art.image = art.image.scaledToHeight(maximumArtHeight, Qt::SmoothTransformation);
+    }
+
+    if(!art.svg && art.image.isNull())
+        qWarning("Theme: could not load the avatar %s - is avatars.qrc compiled into this binary?",
+                 qUtf8Printable(path));
+
+    return art;
+}
+
+// The art scaled to cover `box` and cropped to it, centred: CSS's object-fit:
+// cover. A PNG is scaled down smoothly first, since the painter's own bilinear
+// filter would alias a picture several times the box's size.
+void drawCovering(QPainter& painter, const AvatarArt& art, const QRectF& box)
+{
+    const QSizeF natural = art.svg ? art.svg->viewBoxF().size() : QSizeF(art.image.size());
+
+    if(natural.isEmpty())
+        return;
+
+    const qreal scale = std::max(box.width() / natural.width(), box.height() / natural.height());
+    const QSizeF drawn = natural * scale;
+    const QRectF target(box.center() - QPointF(drawn.width() / 2.0, drawn.height() / 2.0), drawn);
+
+    painter.save();
+    painter.setClipRect(box);
+
+    if(art.svg)
+    {
+        art.svg->render(&painter, target);
+    }
+    else
+    {
+        const QImage scaled = art.image.scaled(drawn.toSize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        painter.drawImage(target, scaled);
+    }
+
+    painter.restore();
 }
 
 // WHAT A CACHED PICTURE WAS PAINTED FOR: a size, a ratio and the colours. One
@@ -446,7 +486,13 @@ struct Theme::Cache
     // its sizes genuinely differ from each other within one frame; here they do
     // not, and discarding the old set is both simpler and more complete.
     PictureKey avatarKey;
-    QHash<unsigned int, QPixmap> avatars;
+    std::unordered_map<std::string, QPixmap> avatars;
+
+    // EACH AVATAR'S FILE, read once and kept: the source art, not a box's size, as
+    // the textures below are, though a PNG is kept no taller than maximumArtHeight.
+    // A PNG decoded again for every seat at every settled resize would cost
+    // milliseconds a seat.
+    std::unordered_map<std::string, AvatarArt> avatarArt;
 
     // Keyed on nothing. A texture is source art, not a colour and not a size,
     // so the first load is the only one this cache ever needs to make.
@@ -516,13 +562,13 @@ QPixmap Theme::room(QSize view, qreal dpr) const
                          [&] { return rasterize(paintRoom(physicalSize(view, dpr)), dpr); });
 }
 
-QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
+QPixmap Theme::avatar(const std::string& id, QSize box, qreal dpr) const
 {
     if(box.isEmpty() || dpr <= 0.0)
         return QPixmap();
 
     if(!cache)
-        return rasterize(paintAvatar(seat, physicalSize(box, dpr)), dpr);
+        return rasterize(paintAvatar(id, physicalSize(box, dpr)), dpr);
 
     // A changed ratio discards the set exactly as a changed box does, and for
     // the same reason: the window moved to another screen, so every avatar in
@@ -535,12 +581,11 @@ QPixmap Theme::avatar(unsigned int seat, QSize box, qreal dpr) const
         cache->avatarKey = key;
     }
 
-    auto found = cache->avatars.constFind(seat);
-    if(found != cache->avatars.constEnd())
-        return found.value();
+    auto found = cache->avatars.find(id);
+    if(found != cache->avatars.end())
+        return found->second;
 
-    return *cache->avatars.insert(seat,
-                                  rasterize(paintAvatar(seat, physicalSize(box, dpr)), dpr));
+    return cache->avatars.emplace(id, rasterize(paintAvatar(id, physicalSize(box, dpr)), dpr)).first->second;
 }
 
 QPixmap Theme::woodTexture() const
@@ -613,148 +658,44 @@ QBrush Theme::roomBrush(const QRectF& view) const
     return gradients::cssRadial(view, QPointF(0.5, 0.42), gradients::Shape::Ellipse, stops);
 }
 
-// table.js portrait(): a head-and-shoulders bust on a dark vignette, drawn in the
-// SVG's own 100 x 114 viewBox and fitted into the box as SVG fits one - scaled
-// to the nearer side and centred (xMidYMid meet) - then given page.html's
-// sepia(0.18) contrast(1.05). Every path below is the SVG's, command for command,
-// so the mock-up is the document for each number.
+// THE AVATAR'S FILE, drawn to fill the box as CSS's object-fit: cover does -
+// scaled until both sides are covered and cropped, centred - over the dark the
+// mock-up's vignette fades to, then given page.html's sepia(0.18) contrast(1.05).
+// The table mock-up's six are 100 x 114, the box's own shape, so for them the
+// crop is a fraction of a pixel.
 //
 // PHYSICAL PIXELS, as paintBackground() above and for the same reason.
-QPixmap Theme::paintAvatar(unsigned int seat, QSize physical) const
+QPixmap Theme::paintAvatar(const std::string& id, QSize physical) const
 {
-    const TablePalette::PortraitLook& look = table.portraits[seat % table.portraits.size()];
-
     // An image rather than a pixmap, for the filter's pixel pass at the end.
     QImage image(physical, QImage::Format_ARGB32_Premultiplied);
     image.fill(table.portraitEdge);
 
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(Qt::NoPen);
-
-    const qreal scale = std::min(physical.width() / portraitView.width(),
-                                 physical.height() / portraitView.height());
-
-    painter.translate((physical.width() - portraitView.width() * scale) / 2.0,
-                      (physical.height() - portraitView.height() * scale) / 2.0);
-    painter.scale(scale, scale);
-
-    const QRectF view(QPointF(0.0, 0.0), portraitView);
-
-    // radialGradient cx 50% cy 36% r 72%, in the rect's bounding box - so it is an
-    // ellipse as tall as the box is.
-    QRadialGradient background(QPointF(0.5, 0.36), 0.72);
-    background.setCoordinateMode(QGradient::ObjectBoundingMode);
-    background.setColorAt(0.0, look.background);
-    background.setColorAt(1.0, table.portraitEdge);
-    painter.fillRect(view, background);
-
-    if(look.longHair)
+    if(const avatars::Avatar* avatar = avatars::find(id))
     {
-        QPainterPath hair(QPointF(29, 46));
-        hair.quadTo(24, 84, 32, 100);
-        hair.lineTo(68, 100);
-        hair.quadTo(76, 84, 71, 46);
-        hair.closeSubpath();
-        painter.fillPath(hair, look.hair);
+        const AvatarArt* art = nullptr;
+        AvatarArt loaded;
+
+        if(cache)
+        {
+            auto found = cache->avatarArt.find(id);
+
+            if(found == cache->avatarArt.end())
+                found = cache->avatarArt.emplace(id, loadAvatarArt(avatar->path)).first;
+
+            art = &found->second;
+        }
+        else
+        {
+            loaded = loadAvatarArt(avatar->path);
+            art = &loaded;
+        }
+
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        drawCovering(painter, *art, QRectF(QPointF(0.0, 0.0), QSizeF(physical)));
     }
-
-    QPainterPath coat(QPointF(6, 114));
-    coat.quadTo(10, 82, 34, 77);
-    coat.lineTo(66, 77);
-    coat.quadTo(90, 82, 94, 114);
-    coat.closeSubpath();
-    painter.fillPath(coat, look.coat);
-
-    QPainterPath shirt(QPointF(39, 77));
-    shirt.lineTo(50, 94);
-    shirt.lineTo(61, 77);
-    shirt.closeSubpath();
-    painter.fillPath(shirt, look.shirt);
-
-    painter.setBrush(look.shade);
-    painter.drawRoundedRect(QRectF(43, 62, 14, 17), 5, 5);
-
-    painter.setBrush(look.skin);
-    painter.drawEllipse(QPointF(50, 48), 16, 19.5);
-
-    painter.setBrush(look.shade);
-    painter.drawEllipse(QPointF(33.5, 50), 2.6, 4.4);
-    painter.drawEllipse(QPointF(66.5, 50), 2.6, 4.4);
-
-    QPainterPath hair(QPointF(34, 44));
-    hair.quadTo(33, 26, 50, 25);
-    hair.quadTo(67, 26, 66, 44);
-    hair.quadTo(62, 34, 50, 33.5);
-    hair.quadTo(38, 34, 34, 44);
-    hair.closeSubpath();
-    painter.fillPath(hair, look.hair);
-
-    if(look.hat.isValid())
-    {
-        QPainterPath crown(QPointF(32, 38));
-        crown.quadTo(33, 22, 50, 21);
-        crown.quadTo(68, 22, 69, 37);
-        crown.quadTo(50, 32, 32, 38);
-        crown.closeSubpath();
-        painter.fillPath(crown, look.hat);
-
-        // The brim, at the SVG's opacity .8.
-        QPainterPath brim(QPointF(30, 39));
-        brim.quadTo(50, 31, 74, 37);
-        brim.lineTo(72, 42);
-        brim.quadTo(50, 36, 31, 42);
-        brim.closeSubpath();
-
-        painter.setOpacity(0.8);
-        painter.fillPath(brim, look.hat);
-        painter.setOpacity(1.0);
-    }
-
-    painter.setBrush(Qt::NoBrush);
-
-    QPainterPath brows(QPointF(41, 46.5));
-    brows.quadTo(44, 44.8, 47, 46.5);
-    brows.moveTo(53, 46.5);
-    brows.quadTo(56, 44.8, 59, 46.5);
-    painter.strokePath(brows, QPen(table.portraitBrow, 1.6, Qt::SolidLine, Qt::RoundCap));
-
-    QPainterPath nose(QPointF(48, 52));
-    nose.quadTo(50, 56, 52, 52);
-    painter.strokePath(nose, QPen(look.shade, 1.4, Qt::SolidLine, Qt::FlatCap));
-
-    if(look.mustache.isValid())
-    {
-        QPainterPath mustache(QPointF(41, 58));
-        mustache.quadTo(50, 53, 59, 58);
-        mustache.quadTo(55, 61, 50, 59);
-        mustache.quadTo(45, 61, 41, 58);
-        mustache.closeSubpath();
-        painter.fillPath(mustache, look.mustache);
-    }
-    else
-    {
-        QPainterPath mouth(QPointF(45, 60));
-        mouth.quadTo(50, 62.5, 55, 60);
-        painter.strokePath(mouth, QPen(table.portraitMouth, 1.5, Qt::SolidLine, Qt::RoundCap));
-    }
-
-    if(look.beard.isValid())
-    {
-        // At the SVG's opacity .35: a shadow of stubble rather than a beard.
-        QPainterPath beard(QPointF(36, 54));
-        beard.quadTo(38, 70, 50, 70);
-        beard.quadTo(62, 70, 64, 54);
-        beard.quadTo(60, 64, 50, 64);
-        beard.quadTo(40, 64, 36, 54);
-        beard.closeSubpath();
-
-        painter.setOpacity(0.35);
-        painter.fillPath(beard, look.beard);
-        painter.setOpacity(1.0);
-    }
-
-    painter.end();
 
     applyPortraitFilter(image);
 

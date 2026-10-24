@@ -100,3 +100,82 @@ keyboard (`setKeyboardLit()`, say), used by the dialog and by `Overlay`, which r
 Focus code needs careful testing, and the fix changes nothing visible.
 
 **Where it goes.** Not scheduled. Left by the owner's call after PR #39's review.
+
+## A gendered sentence's translation context is written out by hand several times
+
+*Found in PR #40's review. Not scheduled.*
+
+**What you see.** Nothing today: every gendered sentence shows its Romanian. The risk is the next
+change. If one copy of a context is mistyped, that sentence shows English in the Romanian app, for
+the one gender or the one seat (yours or somebody else's) whose variant has the wrong copy.
+
+**Why.** `QT_TRANSLATE_NOOP3` gives lupdate the context, but its expansion keeps only the source and
+the disambiguation (`persontext::Variant`). So the code names the context a second time where the
+string is looked up: in `persontext::Sentence::context`, or as the first argument of
+`persontext::translate()` for a `Gendered`. `leaderSentence` and `firstToBidSentence` in
+`TrickPanelItem.cpp` write `"trickpanel"` five times each, and `youBidLast` in `BidStripItem.cpp`
+writes `"bidstrip"` three times. Nothing checks that the copies agree. When they don't, lupdate files
+the Romanian under the macro's context, the lookup asks for the other one, and Qt returns the English
+source without a warning. A test run in English can't tell.
+
+**Why it was left.** The full fix changes how the sentences are written and how lupdate runs. A macro
+of our own, `PERSONTEXT_NOOP(context, source, disambiguation)` say, would expand to a `Variant` that
+carries its own context. lupdate would be told to read it as another spelling of
+`QT_TRANSLATE_NOOP3` (`-tr-function-alias QT_TRANSLATE_NOOP3+=PERSONTEXT_NOOP` in the
+`LUPDATE_OPTIONS` of `CMakeLists.txt`; Qt 6.11's lupdate lists `QT_TRANSLATE_NOOP3` among the
+functions it can alias, but this is untried). Each variant would then be looked up under the context
+lupdate filed it under, so there would be no second copy to get wrong, and `Sentence::context` and
+`translate()`'s context argument would go. The review chose a cheaper guard for now: two tests load
+the app's own Romanian and fail as soon as any variant would show English in the app. They are "The
+leader and first-bidder lines are in Romanian for everyone" (`TrickPanelTests.cpp`) and "You bid
+last is in Romanian as a man and as a woman" (`BidStripTests.cpp`). A new gendered sentence needs
+adding to one of them.
+
+**Where it goes.** Not scheduled. Left by the owner's call after PR #40's review.
+
+## The avatar rule lives in the paint layer, and two UI modules include each other
+
+*Found in PR #40's review. Not scheduled.*
+
+**What you see.** Nothing on screen. It is a cost for the next change. `avatars::Wearer` (a gender
+and a bot's strategy) and `avatars::assign()` decide who wears which face. They are game-setup
+rules, but they live in `paint/Avatars.h`, beside the catalogue that `Theme` draws from. So
+`NewGameDialog.h` and `PlayerNames.h` include a paint header, and `playernames::draw()` takes an
+`avatars::Wearer` although names have nothing to do with avatars. `PlayerNames.cpp` also includes
+`ui/NewGameDialog.h` only for `newgame::MaximumNameLength`, while `NewGameDialog.cpp` includes
+`ui/PlayerNames.h`, so each module depends on the other. The strategy keys both catalogues use
+(`newgame::avatarStrategyOf()`) are in the dialog too.
+
+**Why.** `Wearer` was written for the avatar rule (65be5fb). When bots' names came to be drawn by
+gender and strategy as well (56cf77e), the names rule reused it where it was, and took the length
+limit from the dialog that already had it.
+
+**Why it was left.** The fix moves code between modules and touches about ten files, tests included,
+and changes nothing the player sees. `Wearer` and the strategy keys would move to `core/`, beside
+`PlayerProfile`. `MaximumNameLength` would go to a header both modules can use (`PlayerProfile.h`,
+since it is a rule about a player's name). `assign()` could then stay with the catalogue or move with
+`Wearer`.
+
+**Where it goes.** Not scheduled. Left by the owner's call after PR #40's review.
+
+## The avatar catalogue and the names list are read by two copies of one loop
+
+*Found in PR #40's review (finding #5). Scheduled with nationality.*
+
+**What you see.** Nothing on screen. It is a cost for the next change: `avatars::parse()`
+(`src/paint/Avatars.cpp`) and `playernames::parse()` (`src/ui/PlayerNames.cpp`) each read their JSON
+array the same way. Each reads `"gender"` as "male", "female" or "any", reads the optional
+`"strategy"` and checks it is text, and skips a bad entry with a warning. A field both gain has to be
+written twice, and the two can drift.
+
+**Why.** The names list was built after the avatar catalogue, on its pattern, and the two rightly
+differ in part. An avatar's id is a key, compared exactly. A name is shown to people, so it is
+trimmed, held to `newgame::MaximumNameLength`, and compared ignoring case within its language. One
+reader for both would have to choose one rule, and neither fits the other.
+
+**Why it was left.** Two fields in common, gender and strategy, did not pay for a shared helper and
+the changes to both modules and their tests. The owner's call after PR #40's review.
+
+**Where it goes.** With nationality, which both are to gain. Then share a small helper for the common
+fields (gender, strategy, nationality), and keep each file's own rules for its id or name and its
+duplicates.

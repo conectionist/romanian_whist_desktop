@@ -83,6 +83,21 @@ QString language::codeOf(Language language)
     return language == Language::Romanian ? QStringLiteral("ro") : QStringLiteral("en");
 }
 
+namespace
+{
+language::Language running = language::Language::English;
+}
+
+language::Language language::current()
+{
+    return running;
+}
+
+void language::setCurrent(Language language)
+{
+    running = language;
+}
+
 QString language::nativeName(Language language)
 {
     return language == Language::Romanian ? QStringLiteral("Română") : QStringLiteral("English");

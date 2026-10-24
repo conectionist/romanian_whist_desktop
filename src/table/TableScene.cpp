@@ -289,9 +289,6 @@ seatlayout::Places TableScene::relayout()
     for(std::size_t i = 0 ; i < seatCount ; i++)
     {
         SeatItem* item = seats[i];
-
-        const unsigned int seat = static_cast<unsigned int>(i);
-        const unsigned int count = static_cast<unsigned int>(seatCount);
         const std::optional<seatlayout::Place>& place = places[i];
 
         RackItem* rack = racks[i];
@@ -307,10 +304,6 @@ seatlayout::Places TableScene::relayout()
 
         item->setPanelSize(place->panel.size());
         item->setPos(place->panel.center());
-
-        // THE LOOK FOLLOWS THE PLACE, not the seat index: the bottom seat wears the
-        // first, as the mock-up's "You" does, and the rest go clockwise from it.
-        item->setPortrait(seatlayout::stepsFromBottom(count, snapshot->humanSeat, seat));
 
         // YOURS UNDER THE OTHERS, AND OVER YOUR HAND (tablespace::z). Set here
         // rather than when the panel is made, because which panel is yours is a

@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "DisambiguationTranslator.h"
 #include "GameFixtures.h"
 #include "RestingMouse.h"
+#include "RomanianTranslation.h"
 
 #include "core/GameSnapshot.h"
 #include "engine/Prompts.h"
@@ -173,6 +175,48 @@ TEST_CASE("A forbidden bid is carried with the reason for it", "[bid-strip]")
     // not say why, and "the bids would add up to 6" does not say which bid.
     REQUIRE(fields.note == QStringLiteral("You bid last. 3 would make the bids add up to 6, "
                                           "and somebody has to be wrong."));
+}
+
+TEST_CASE("You bid last is said as a man or as a woman", "[bid-strip]")
+{
+    // ROMANIAN AGREES WITH YOU: "Licitezi ultimul", "Licitezi ultima". The
+    // translator reports which variant was asked for; English reads the same.
+    const DisambiguationTranslator translator;
+
+    GameSnapshot snapshot = biddingTable(4);
+    const QString rest = QStringLiteral("You bid last. 3 would make the bids add up to 6, "
+                                        "and somebody has to be wrong.");
+
+    REQUIRE(bidstrip::fieldsFor(promptFor(6, 3u), snapshot).note == QStringLiteral("[you man] ") + rest);
+
+    snapshot.seats[0].gender = Gender::Female;
+    REQUIRE(bidstrip::fieldsFor(promptFor(6, 3u), snapshot).note == QStringLiteral("[you woman] ") + rest);
+
+    // Somebody else's gender is not yours.
+    snapshot.seats[0].gender = Gender::Male;
+    snapshot.seats[1].gender = Gender::Female;
+    REQUIRE(bidstrip::fieldsFor(promptFor(6, 3u), snapshot).note == QStringLiteral("[you man] ") + rest);
+}
+
+TEST_CASE("You bid last is in Romanian as a man and as a woman", "[bid-strip]")
+{
+    // BOTH VARIANTS, IN THE APP'S OWN ROMANIAN (PR #40's review, finding #4): its
+    // context is written in the QT_TRANSLATE_NOOP3s and again where it is looked
+    // up, and copies that disagree show English in the Romanian app. TrickPanelTests
+    // says the whole of it.
+    const RomanianTranslation romanian;
+
+    GameSnapshot snapshot = biddingTable(4);
+
+    for(const Gender gender : { Gender::Male, Gender::Female })
+    {
+        snapshot.seats[0].gender = gender;
+        const QString note = bidstrip::fieldsFor(promptFor(6, 3u), snapshot).note;
+
+        INFO((gender == Gender::Female ? "a woman: " : "a man: ") << note.toStdString());
+        REQUIRE_FALSE(note.isEmpty());
+        REQUIRE_FALSE(note.contains(QStringLiteral("You bid last")));
+    }
 }
 
 TEST_CASE("A forbidden bid of zero is still a forbidden bid", "[bid-strip]")

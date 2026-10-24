@@ -219,7 +219,8 @@ opponent: a rack on the rim at angle 90° (bottom), no hand.
 - Portrait 88×100, radius 7, border 1 `#a3824a`, slight sepia. Use `Theme::avatar(seat, box, dpr)`:
   replace its painter with a head-and-shoulders bust (see `portrait()` in `table.js` for shapes
   and per-seat colours; it is six hand-drawn variants indexed by seat, which matches avatar()'s
-  existing per-seat contract).
+  existing per-seat contract). *(Since 2026-10-23 the portraits are files, and each player wears
+  their own: see Q6 in section 7.)*
 - Line 1: name, Marcellus 25, cream. No "AI" tag (see Q5). **No score after it** (the owner's call,
   2026-10-21, replacing the mock-up's muted `Bogdan (44)`): the scoreboard has every seat's score.
   So the text column is **as wide as the widest pill** ("Taken/Bid: 0/0", 133) and no wider, which
@@ -2095,7 +2096,10 @@ Done when: side-by-side screenshots of the client and `screenshots/` match close
   - ~~**The rest of the Romanian draft wants the owner's review**~~ **Done, 2026-10-23** (on
     `redesign/phase-13-final_changes`): the owner went through the 192 drafts in Qt Linguist and
     accepted each as written, the glossary's open words included. All 206 strings are finished.
-  - **"%1 e primul"**, for a woman's name and for "Tu".
+  - ~~**"%1 e primul"**, for a woman's name and for "Tu".~~ **Done, 2026-10-23** (on
+    `feature/player-gender`): each player has a gender, chosen in New Game
+    (`QT_CLIENT_PLAN_proposal1.md` section 13's amendment), and the leader line, the first bidder
+    and "You bid last" agree with it: "Ana e prima", "Tu ești primul".
   - **2x textures**, if the owner wants them after the numbers above.
   - **Settings are held in memory**: `QSettings` is section 20's, not the redesign's.
 
@@ -2186,5 +2190,5 @@ Ask the owner if possible. If not, use the default and record it.
 | Q3 | Scoreboard: the old Round-score and Streak columns are gone in the mock-up. Bring them back? | No; round scores live in the round sheet and history. Streak bonuses show there too. **Decided by the owner, 2026-10-20: the round score stays out; the streak comes back as a RUN column, W2 or L3** (phase 8; section 2.9) |
 | Q4 | Settings: what should it hold? The client has no settings beyond `NewGameDialog` (pace etc.) | A sheet with the bot pace control, applied to the next game; anything else later. **Decided by the owner, 2026-10-21: the bot speed and "Wait for me after each round", applied to the game in play at once and to the next New Game** (phase 9) |
 | Q5 | Bot names: the mock-up dropped the small "AI" tag. Keep it off? | Off. **Built as the default in phase 4; not asked** |
-| Q6 | Portraits: drawn busts as in the mock-up, or real art later? | Drawn busts now through `Theme::avatar()`, which is the seam for real art later. **Built as the default in phase 4; not asked** |
+| Q6 | Portraits: drawn busts as in the mock-up, or real art later? | Drawn busts now through `Theme::avatar()`, which is the seam for real art later. **Built as the default in phase 4; not asked.** **Amended by the owner, 2026-10-23: the portraits are files** (SVG or PNG) in a catalogue, `resources/avatars.qrc` with `avatars.json`, the mock-up's six busts first; and **each player wears their own**, one of their gender picked at random when the game is dealt (`avatars::assign()`), not the bust of their place |
 | Q7 | 2 players: not in the mock-up | Opponent at the top position, as in section 2.5. **Built as the default in phase 4; not asked** |

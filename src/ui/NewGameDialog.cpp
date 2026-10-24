@@ -1,5 +1,9 @@
 #include "NewGameDialog.h"
 
+#include "paint/Avatars.h"
+#include "ui/LanguageDialog.h"
+#include "ui/PlayerNames.h"
+
 #include <romanian_whist/AiMoveProvider.h>
 #include <romanian_whist/strategies/CyborgStrategy.h>
 #include <romanian_whist/strategies/DuckingStrategy.h>
@@ -27,30 +31,34 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <random>
 #include <utility>
 
 using namespace romanian_whist;
 
 namespace
 {
-// The stock opponent names, in seat order. The terminal's list is three letters
-// each because its seat table is fixed-width; this one has room, so these are
-// the names phase A's setup and tests/GameFixtures.h both use.
-//
-// SIX, NOT FIVE, and the difference is a whole seat. Five is the most opponents
-// a PLAYING game can have, and a watched one has no human taking a chair - so a
-// five-name list runs out on the largest watched table and the sixth row fell
-// through to a "Bot 6" placeholder. Found by rendering a six-seat game; nothing
-// in the suite was looking at what the rows were pre-filled with.
-const QStringList& stockNames()
+// A BOT'S GENDER WHEN NOTHING HAS CHOSEN ONE: either, at random (the owner's call,
+// 2026-10-23). Its name is then drawn to match (playernames::draw()).
+Gender randomGender(std::mt19937& random)
 {
-    static const QStringList names = { QStringLiteral("Ana"),
-                                       QStringLiteral("Bogdan"),
-                                       QStringLiteral("Cristina"),
-                                       QStringLiteral("Dan"),
-                                       QStringLiteral("Elena"),
-                                       QStringLiteral("Florin") };
-    return names;
+    return std::bernoulli_distribution(0.5)(random) ? Gender::Female : Gender::Male;
+}
+
+// A gender drop-down: Male, then Female, at the enum's own values, which is what
+// genderOf() reads back.
+QComboBox* genderBox(QWidget* parent, Gender gender)
+{
+    QComboBox* box = new QComboBox(parent);
+    box->addItem(QCoreApplication::translate("NewGameDialog", "Male"));
+    box->addItem(QCoreApplication::translate("NewGameDialog", "Female"));
+    box->setCurrentIndex(static_cast<int>(gender));
+    return box;
+}
+
+Gender genderOf(const QComboBox* box)
+{
+    return box->currentIndex() == static_cast<int>(Gender::Female) ? Gender::Female : Gender::Male;
 }
 
 // The default level for the nth opponent: THE TERMINAL'S LINE-UPS, but for one
@@ -234,9 +242,10 @@ QStringList allNames(const newgame::Config& config)
     QStringList names;
 
     if(!config.spectator)
-        names.push_back(config.humanName);
+        names.push_back(QString::fromStdString(config.human.name));
 
-    names.append(config.botNames);
+    for(const PlayerProfile& bot : config.bots)
+        names.push_back(QString::fromStdString(bot.name));
 
     return names;
 }
@@ -269,15 +278,28 @@ newgame::Config newgame::defaults()
     // is a name to replace, not a label. (SeatItem used to append " (you)" to
     // the seated player's plaque, which drew "You (you)"; the table redesign's
     // name panel marks yours by its place at the bottom instead.)
-    config.humanName = QCoreApplication::translate("newgame", "Player");
+    config.human = PlayerProfile{ QCoreApplication::translate("newgame", "Player").toStdString(), Gender::Male };
 
     // THREE, as in the terminal's quick game - see defaultLevel() for who they
     // are and why. Three bots plus the human is four seats and 26 rounds, where the four
     // Reckoner presets this replaced made five and 29.
+    //
+    // EACH A MAN OR A WOMAN AT RANDOM, named to match (playernames::draw()), as
+    // the dialog names a new row - which it does again for every row when it
+    // opens on this.
+    std::mt19937 random(std::random_device{}());
+    QStringList taken{ QString::fromStdString(config.human.name) };
+
     for(int i = 0 ; i < 3 ; i++)
     {
-        config.botNames.push_back(stockNames().at(i));
-        config.botLevels.push_back(defaultLevel(i));
+        const Gender gender = randomGender(random);
+        const BotLevel level = defaultLevel(i);
+        const QString name = playernames::draw(avatars::Wearer{ gender, avatarStrategyOf(level) }, language::current(),
+                                               playernames::catalogue(), taken, i + 1, random);
+
+        taken.push_back(name);
+        config.bots.push_back(PlayerProfile{ name.toStdString(), gender });
+        config.botLevels.push_back(level);
     }
 
     config.botSpeed = DefaultSpeed;
@@ -287,7 +309,7 @@ newgame::Config newgame::defaults()
 
 unsigned int newgame::seatCount(const Config& config)
 {
-    return static_cast<unsigned int>(config.botNames.size()) + (config.spectator ? 0u : 1u);
+    return static_cast<unsigned int>(config.bots.size()) + (config.spectator ? 0u : 1u);
 }
 
 unsigned int newgame::roundCount(const Config& config)
@@ -320,7 +342,7 @@ unsigned int trickCount(const newgame::Config& config)
 // (GameBridge::onRoundScored()). That time is yours too.
 std::chrono::milliseconds botWaiting(const newgame::Config& config, const Pacing& pacing)
 {
-    const long long bots = static_cast<long long>(config.botNames.size());
+    const long long bots = static_cast<long long>(config.bots.size());
     const long long rounds = newgame::roundCount(config);
     const long long tricks = trickCount(config);
 
@@ -514,10 +536,16 @@ GameDeal newgame::buildDeal(const Config& config)
     // exactly this seat, addressed by humanSeatOf() above. Any OTHER null seat
     // stays null and GameEngine::start() rejects it BY NAME, which is the
     // behaviour worth preserving.
+    //
+    // THE PROFILES IN THE SAME ORDER, pushed beside each seat, so seat i is
+    // profile i. Nothing matches them up by name afterwards.
     if(!config.spectator)
-        setup.seats.push_back(SeatSetup{ config.humanName.toStdString(), nullptr });
+    {
+        setup.seats.push_back(SeatSetup{ config.human.name, nullptr });
+        deal.profiles.push_back(config.human);
+    }
 
-    for(int i = 0 ; i < config.botNames.size() ; i++)
+    for(std::size_t i = 0 ; i < config.bots.size() ; i++)
     {
         // The seed varies per seat, so two bots that draw at one table do not play
         // the same stream as each other. It is indexed by the SEAT and not by the
@@ -529,9 +557,9 @@ GameDeal newgame::buildDeal(const Config& config)
                                                + static_cast<std::uint32_t>(setup.seats.size()))
                 : std::nullopt;
 
-        const std::string name = config.botNames.at(i).toStdString();
+        const std::string& name = config.bots.at(i).name;
 
-        BuiltSeat built = providerFor(config.botLevels.at(static_cast<std::size_t>(i)), name, seed);
+        BuiltSeat built = providerFor(config.botLevels.at(i), name, seed);
 
         // COLLECTED BEFORE THE PROVIDER IS MOVED AWAY, and only when there is one
         // - an observer per seat that watches, nothing for the seats that do not.
@@ -541,6 +569,23 @@ GameDeal newgame::buildDeal(const Config& config)
             deal.observers.push_back(built.observer);
 
         setup.seats.push_back(SeatSetup{ name, std::move(built.provider) });
+        deal.profiles.push_back(config.bots.at(i));
+    }
+
+    // EVERY SEAT'S FACE, chosen now, so each game - Play again included - gets new
+    // ones: one of the player's own gender, at random by the owner's rule
+    // (avatars::assign()). A FIXED DEAL DEALS THE SAME FACES, seeded from the
+    // same number as the shuffle, so a rendering change can still be reviewed
+    // as a diff.
+    //
+    // A BOT'S STRATEGY COUNTS TOO: a strategy with avatars of its own (a Cyborg's
+    // cyborg face) wears only those (avatars::assign() says the whole rule).
+    {
+        std::mt19937 random(config.shuffleSeed ? *config.shuffleSeed : std::random_device{}());
+        const std::vector<std::string> faces = avatars::assign(wearersOf(config), avatars::catalogue(), random);
+
+        for(std::size_t seat = 0 ; seat < deal.profiles.size() ; seat++)
+            deal.profiles[seat].avatar = faces.at(seat);
     }
 
     setup.structure = config.structure;
@@ -549,6 +594,40 @@ GameDeal newgame::buildDeal(const Config& config)
     setup.shuffleSeed = config.shuffleSeed;
 
     return deal;
+}
+
+const char* newgame::avatarStrategyOf(BotLevel level)
+{
+    switch(level)
+    {
+    case BotLevel::Random:        return "random";
+    case BotLevel::FirstCard:     return "first-card";
+    case BotLevel::LowRisk:       return "low-risk";
+    case BotLevel::Ducking:       return "ducking";
+    case BotLevel::Cyborg:        return "cyborg";
+    case BotLevel::ReckonerAlpha: return "reckoner-alpha";
+    case BotLevel::ReckonerBeta:  return "reckoner-beta";
+    case BotLevel::ReckonerGamma: return "reckoner-gamma";
+    case BotLevel::ReckonerDelta: return "reckoner-delta";
+    }
+
+    // Unreachable for any enumerator above; the switch warns when one is added.
+    return "";
+}
+
+std::vector<avatars::Wearer> newgame::wearersOf(const Config& config)
+{
+    std::vector<avatars::Wearer> wearers;
+
+    if(!config.spectator)
+        wearers.push_back(avatars::Wearer{ config.human.gender, std::string() });
+
+    for(std::size_t i = 0 ; i < config.bots.size() ; i++)
+        wearers.push_back(avatars::Wearer{ config.bots[i].gender,
+                                           i < config.botLevels.size() ? avatarStrategyOf(config.botLevels[i])
+                                                                       : std::string() });
+
+    return wearers;
 }
 
 QString newgame::nameOf(BotLevel level)
@@ -782,7 +861,14 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // nothing. Names cost a line each and make the lookup say what it means.
     humanName->setObjectName("humanName");
     humanNameLabel = new QLabel(tr("Your name"), this);
-    top->addRow(humanNameLabel, humanName);
+
+    humanGender = genderBox(this, current.human.gender);
+    humanGender->setObjectName("humanGender");
+
+    QHBoxLayout* humanRow = new QHBoxLayout;
+    humanRow->addWidget(humanName);
+    humanRow->addWidget(humanGender);
+    top->addRow(humanNameLabel, humanRow);
 
     opponents = new QSpinBox(this);
     opponents->setObjectName("opponents");
@@ -896,7 +982,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // a half-built dialog. Every setter below fires its signal.
     playing->setChecked(!current.spectator);
     watching->setChecked(current.spectator);
-    humanName->setText(current.humanName);
+    humanName->setText(QString::fromStdString(current.human.name));
     structure181->setChecked(current.structure == GameStructure::S_181);
     structure818->setChecked(current.structure == GameStructure::S_818);
     foreheadAndHidden->setChecked(current.endWithForeheadAndHidden);
@@ -922,7 +1008,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // yet when this runs, so the initial state was the one path with nothing
     // maintaining it.
     applyOpponentRange(!current.spectator);
-    opponents->setValue(static_cast<int>(current.botNames.size()));
+    opponents->setValue(static_cast<int>(current.bots.size()));
 
     const auto onChange = [this]{ refresh(); };
 
@@ -931,10 +1017,12 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
         applyOpponentRange(on);
         humanNameLabel->setEnabled(on);
         humanName->setEnabled(on);
+        humanGender->setEnabled(on);
         refresh();
     });
 
     connect(humanName, &QLineEdit::textChanged, this, onChange);
+    connect(humanGender, &QComboBox::currentIndexChanged, this, onChange);
     connect(opponents, &QSpinBox::valueChanged, this, [this]{ rebuildOpponentRows(); refresh(); });
     connect(structure181, &QRadioButton::toggled, this, onChange);
     connect(foreheadAndHidden, &QCheckBox::toggled, this, onChange);
@@ -947,6 +1035,7 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     seed->setEnabled(fixedDeal->isChecked());
     humanNameLabel->setEnabled(!current.spectator);
     humanName->setEnabled(!current.spectator);
+    humanGender->setEnabled(!current.spectator);
 
     rebuildOpponentRows();
     refresh();
@@ -994,38 +1083,29 @@ void NewGameDialog::rebuildOpponentRows()
         row.name->setMaxLength(newgame::MaximumNameLength);
         row.name->setObjectName(QStringLiteral("botName%1").arg(index));
 
-        // THE OPPONENT THIS SEAT HAD WHEN THE DIALOG OPENED, if it had one. The
-        // dialog is opened on the last game's config so that play again
-        // pre-fills with its settings (section 16.2), and every control did that
-        // except these: the rows were built from the stock list regardless, and
-        // refresh() then wrote those defaults back over the config that was
-        // handed in. So reopening a game against Ana, Bogdan and Cristi on three
-        // different levels offered - and then dealt - the stock three.
+        // THE OPPONENT THIS SEAT HAD WHEN THE DIALOG OPENED - its gender and its
+        // level - if it had one: the dialog is opened on the last game's config, so
+        // that play again pre-fills with its settings (section 16.2). FROM `initial`
+        // AND NOT FROM `current`, which refresh() rebuilds from the rows on every
+        // keystroke, so it describes the rows that exist rather than the game that
+        // was asked for. A seat the config never had is a man or a woman at random.
         //
-        // FROM `initial` AND NOT FROM `current`, which cannot answer: refresh()
-        // rebuilds current's bot lists from the rows on every keystroke, so it
-        // describes the rows that exist rather than the game that was asked for.
+        // ITS NAME IS DRAWN AFRESH, every time the dialog opens and the row is made
+        // (the owner's call, 2026-10-23): one of its gender and, for a strategy with
+        // names of its own, its strategy's, in the app's language
+        // (playernames::draw()), and none another row or you already have. It can
+        // still be typed over, and Deal deals what the row shows.
         //
-        // A PRE-FILLED DEFAULT OTHERWISE, so no row starts blank - a blank one
-        // disables Deal for a reason the player did not cause. The stock list
-        // holds one name per seat at the largest table there is, so its fallback
-        // is unreachable; it is one line against the day MaximumSeats moves.
-        //
-        // IT DOES NOT AVOID THE HUMAN'S NAME, unlike the terminal's quick start,
-        // and that is section 13's own answer: a player who types "Ana" gets the
-        // duplicate marked and Deal disabled, which names the collision instead
-        // of silently renaming a seat under them.
-        // TWO SPELLINGS OF THE SAME SEAT, because the two lists are different
-        // containers: botNames is a QStringList and sizes in qsizetype, botLevels
-        // a std::vector and sizes in size_t. Comparing one index against both
-        // signednesses is what -Wsign-compare is for.
+        // IT DOES AVOID YOUR NAME AS IT STANDS, but a name you type afterwards that
+        // matches a bot's is section 13's own case: the duplicate is marked and Deal
+        // disabled, which names the collision instead of silently renaming a seat.
         const std::size_t seat = static_cast<std::size_t>(index);
 
-        if(index < initial.botNames.size())
-            row.name->setText(initial.botNames.at(index));
-        else
-            row.name->setText(index < stockNames().size() ? stockNames().at(index)
-                                                          : tr("Bot %1").arg(index + 1));
+        PlayerProfile profile;
+        profile.gender = seat < initial.bots.size() ? initial.bots.at(seat).gender : randomGender(random);
+
+        row.gender = genderBox(this, profile.gender);
+        row.gender->setObjectName(QStringLiteral("botGender%1").arg(index));
 
         row.level = new QComboBox(this);
         row.level->setObjectName(QStringLiteral("botLevel%1").arg(index));
@@ -1047,11 +1127,19 @@ void NewGameDialog::rebuildOpponentRows()
                                        ? static_cast<int>(initial.botLevels.at(seat))
                                        : static_cast<int>(defaultLevel(index)));
 
+        // THE NAME LAST, once the gender and the level it is drawn for are known.
+        row.drawn = drawName(profile.gender, newgame::BotLevels[row.level->currentIndex()], seat);
+        row.name->setText(row.drawn);
+
+        // A NEW GENDER OR LEVEL DRAWS A NEW NAME to match, unless the row's name is
+        // no longer the one drawn for it: a name typed in is the player's to keep.
         connect(row.name, &QLineEdit::textChanged, this, [this]{ refresh(); });
-        connect(row.level, &QComboBox::currentIndexChanged, this, [this]{ refresh(); });
+        connect(row.gender, &QComboBox::currentIndexChanged, this, [this, seat]{ redrawUntouched(seat); refresh(); });
+        connect(row.level, &QComboBox::currentIndexChanged, this, [this, seat]{ redrawUntouched(seat); refresh(); });
 
         QHBoxLayout* line = new QHBoxLayout;
         line->addWidget(row.name);
+        line->addWidget(row.gender);
         line->addWidget(new QLabel(tr("plays"), this));
         line->addWidget(row.level);
 
@@ -1060,17 +1148,45 @@ void NewGameDialog::rebuildOpponentRows()
     }
 }
 
+QString NewGameDialog::drawName(Gender gender, newgame::BotLevel level, std::size_t seat)
+{
+    // EVERY NAME AT THE TABLE BUT THIS ROW'S: yours while you play, and the other
+    // rows as they now read.
+    QStringList taken;
+
+    if(playing->isChecked())
+        taken.push_back(humanName->text());
+
+    for(std::size_t other = 0 ; other < rows.size() ; other++)
+        if(other != seat)
+            taken.push_back(rows[other].name->text());
+
+    return playernames::draw(avatars::Wearer{ gender, newgame::avatarStrategyOf(level) }, language::current(),
+                             playernames::catalogue(), taken, static_cast<int>(seat) + 1, random);
+}
+
+void NewGameDialog::redrawUntouched(std::size_t seat)
+{
+    Row& row = rows.at(seat);
+
+    if(row.name->text() != row.drawn)
+        return;
+
+    row.drawn = drawName(genderOf(row.gender), newgame::BotLevels[row.level->currentIndex()], seat);
+    row.name->setText(row.drawn);
+}
+
 void NewGameDialog::refresh()
 {
     current.spectator = watching->isChecked();
-    current.humanName = humanName->text();
+    current.human = PlayerProfile{ humanName->text().toStdString(), genderOf(humanGender) };
 
-    current.botNames.clear();
+    current.bots.clear();
     current.botLevels.clear();
 
     for(const Row& row : rows)
     {
-        current.botNames.push_back(row.name->text());
+        current.bots.push_back(PlayerProfile{ row.name->text().toStdString(), genderOf(row.gender) });
         current.botLevels.push_back(newgame::BotLevels[row.level->currentIndex()]);
     }
 

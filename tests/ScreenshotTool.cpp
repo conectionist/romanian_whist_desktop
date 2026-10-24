@@ -12,6 +12,7 @@
 #include "table/TableScene.h"
 #include "table/TableView.h"
 #include "table/TrickPanelItem.h"
+#include "paint/Avatars.h"
 #include "paint/Theme.h"
 #include "ui/GameOverPanel.h"
 #include "ui/HistorySheet.h"
@@ -145,22 +146,22 @@ const std::vector<Game> games = {
 // seeded it replays, but it is also slow.
 newgame::Config shotConfig(int players)
 {
-    static const QStringList names = { QStringLiteral("Ana"),
-                                       QStringLiteral("Bogdan"),
-                                       QStringLiteral("Cristina"),
-                                       QStringLiteral("Dan"),
-                                       QStringLiteral("Elena") };
+    static const std::vector<PlayerProfile> opponents = { { "Ana", Gender::Female },
+                                                          { "Bogdan", Gender::Male },
+                                                          { "Cristina", Gender::Female },
+                                                          { "Dan", Gender::Male },
+                                                          { "Elena", Gender::Female } };
 
     newgame::Config config;
     config.spectator = false;
 
     // NOT THE MOCK-UP'S "You", which is a name to replace rather than a label -
     // NewGameDialog's default for the same reason.
-    config.humanName = QStringLiteral("Player");
+    config.human = PlayerProfile{ "Player", Gender::Male };
 
     for(int i = 0 ; i < players - 1 ; i++)
     {
-        config.botNames.push_back(names.at(i));
+        config.bots.push_back(opponents.at(static_cast<std::size_t>(i)));
         config.botLevels.push_back(i % 2 == 0 ? newgame::BotLevel::LowRisk
                                               : newgame::BotLevel::Ducking);
     }
@@ -189,8 +190,8 @@ QStringList differences(const newgame::Config& want, const newgame::Config& got)
     };
 
     compare(want.spectator == got.spectator, "spectator");
-    compare(want.humanName == got.humanName, "humanName");
-    compare(want.botNames == got.botNames, "botNames");
+    compare(want.human == got.human, "human");
+    compare(want.bots == got.bots, "bots");
     compare(want.botLevels == got.botLevels, "botLevels");
     compare(want.structure == got.structure, "structure");
     compare(want.endWithForeheadAndHidden == got.endWithForeheadAndHidden, "endWithForeheadAndHidden");
@@ -218,20 +219,29 @@ void fillShotDialog(NewGameDialog& dialog, DialogAnswer& answer, const newgame::
         playing->setChecked(true);
 
     if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("humanName"), answer))
-        name->setText(want.humanName);
+        name->setText(QString::fromStdString(want.human.name));
+
+    // The index is the enum's own value: Male, then Female.
+    if(QComboBox* gender = need<QComboBox>(dialog, QStringLiteral("humanGender"), answer))
+        gender->setCurrentIndex(static_cast<int>(want.human.gender));
 
     // BEFORE the rows: they follow the opponent count.
     if(QSpinBox* opponents = need<QSpinBox>(dialog, QStringLiteral("opponents"), answer))
-        opponents->setValue(static_cast<int>(want.botNames.size()));
+        opponents->setValue(static_cast<int>(want.bots.size()));
 
-    for(qsizetype i = 0 ; i < want.botNames.size() ; i++)
+    // THE NAME LAST: a new gender or level draws a new name for a row that still
+    // shows the one drawn for it, which could be the very name wanted here.
+    for(std::size_t i = 0 ; i < want.bots.size() ; i++)
     {
-        if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("botName%1").arg(i), answer))
-            name->setText(want.botNames.at(i));
+        if(QComboBox* gender = need<QComboBox>(dialog, QStringLiteral("botGender%1").arg(i), answer))
+            gender->setCurrentIndex(static_cast<int>(want.bots.at(i).gender));
 
         // The index is the enum's own value, which is what BotLevels is ordered by.
         if(QComboBox* level = need<QComboBox>(dialog, QStringLiteral("botLevel%1").arg(i), answer))
-            level->setCurrentIndex(static_cast<int>(want.botLevels.at(static_cast<std::size_t>(i))));
+            level->setCurrentIndex(static_cast<int>(want.botLevels.at(i)));
+
+        if(QLineEdit* name = need<QLineEdit>(dialog, QStringLiteral("botName%1").arg(i), answer))
+            name->setText(QString::fromStdString(want.bots.at(i).name));
     }
 
     const QString structure = want.structure == romanian_whist::GameStructure::S_181
@@ -653,6 +663,11 @@ GameSnapshot handMoment(const HandShot& shot)
         seat.name = names[i];
         seat.isHuman = i == 0;
 
+        // THE MOCK-UP'S FACES, which go with its names: You, Bogdan, Ana and Costel
+        // are the catalogue's first four, so these pictures still pair with its.
+        seat.avatar = avatars::catalogue().at(i).id;
+        seat.gender = avatars::catalogue().at(i).gender.value_or(Gender::Male);
+
         // Seat 1 bid first, as it leads. ONE-BASED, as the engine's
         // getBiddingOrder() is: the scoreboard lists the rows in this order since
         // the redesign's phase 8, and a 0 there is "not known yet".
@@ -770,12 +785,25 @@ namespace
 
 const char* const sheetNames[] = { "Player", "Ana", "Bogdan", "Cristina", "Dan", "Elena" };
 
+// A face of each player's own gender, as a dealt game gives them. Two women's
+// faces for three women, until there is more art: Elena wears Ana's.
+const PlayerProfile sheetFaces[] = { { "", Gender::Male, "man-dark-hair-beard" },
+                                     { "", Gender::Female, "woman-long-brown-hair" },
+                                     { "", Gender::Male, "man-hat-mustache" },
+                                     { "", Gender::Female, "woman-long-red-hair" },
+                                     { "", Gender::Male, "man-white-hair-hat" },
+                                     { "", Gender::Female, "woman-long-brown-hair" } };
+
 GameSnapshot sheetTable()
 {
     GameSnapshot snapshot = fullTable();
 
     for(std::size_t i = 0 ; i < snapshot.seats.size() ; i++)
+    {
         snapshot.seats[i].name = sheetNames[i];
+        snapshot.seats[i].gender = sheetFaces[i].gender;
+        snapshot.seats[i].avatar = sheetFaces[i].avatar;
+    }
 
     return snapshot;
 }

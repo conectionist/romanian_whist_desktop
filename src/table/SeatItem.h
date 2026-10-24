@@ -12,6 +12,7 @@
 #include <QString>
 
 #include <cstddef>
+#include <string>
 
 // One seat's name panel (the table redesign's section 2.5): a portrait, the name,
 // the Taken/Bid pill, and the turn ring.
@@ -114,12 +115,16 @@ NameLine nameLineFor(const SeatView& seat, bool active, qreal width);
 // EVERYTHING THE PANEL'S PICTURE SHOWS of a seat, worked out once per snapshot.
 // The picture is painted from this and composed again only when it changes, so
 // a thing drawn on the panel cannot be left out of that comparison: to be drawn
-// it has to be in here. The chrome's palette, size and ratio and the portrait's
-// look are not about the seat, and SeatItem compares them itself.
+// it has to be in here. The chrome's palette, size and ratio are not about the
+// seat, and SeatItem compares them itself.
 struct Shown
 {
     NameLine name;
     PillView pill;
+
+    // The seat's own portrait (SeatView::avatar), since the owner's call of
+    // 2026-10-23: the player's, wherever they sit.
+    std::string avatar;
 
     bool operator==(const Shown&) const = default;
 };
@@ -147,10 +152,6 @@ public:
     // The panel's size in TABLE units: tablespace::panelSize, which the bottom
     // panel is too.
     void setPanelSize(QSizeF size);
-
-    // Which of the Theme's portraits this seat wears. A fact about where the seat
-    // sits rather than about the snapshot, so it is set with the size.
-    void setPortrait(unsigned int look);
 
     // The panel plus everything it paints past its edge - the drop shadow, and the
     // ring and glow whether or not they are showing: a rect that changed as the
@@ -198,7 +199,6 @@ private:
     SeatView seat;
     bool active = false;
     bool biddingOpen = false;
-    unsigned int look = 0;
     Theme theme = Theme::dark();
     QSizeF size;
 

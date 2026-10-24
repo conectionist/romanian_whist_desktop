@@ -2130,6 +2130,44 @@ whole shape of the game before starting it is strictly better.
 - **Names are validated as you type.** The engine rejects an empty name and rejects two names equal
   **byte for byte** — no trimming, no case folding, which is deliberate on its side. The dialog
   marks the offending field and disables **Deal** rather than letting `start()` throw.
+
+  > **AMENDED 2026-10-23, by the owner's call: every name has a gender beside it**, a Male / Female
+  > drop-down, yours included (greyed with your name while watching). It is chosen, never guessed
+  > from the name. A row's gender comes with its name: from the last game's settings, otherwise from
+  > the stock players (Ana F, Bogdan M, Cristina F, Dan M, Elena F, Florin M). You start as Male, as
+  > "Player" ("Jucător") is masculine. Romanian needs it: "Ana e prima", "Bogdan e primul", "Tu ești
+  > primul" (`src/table/PersonText.h`).
+  >
+  > **Where it lives: `PlayerProfile` (`src/core/PlayerProfile.h`), a name and a gender, in the
+  > client and not in the engine's `Player`.** The engine is the rules and is shared with the
+  > terminal client, and gender changes nothing in them. `newgame::Config` holds your profile and one
+  > per opponent; `GameDeal::profiles` carries them in seat order; `GameBridge` stamps each seat's
+  > gender onto every snapshot's `SeatView`. A nationality is to join the profile.
+  >
+  > **And the portrait follows the player** (the owner's call, same day). The profile's `avatar` is
+  > an id from the catalogue of portrait files (`resources/avatars.qrc`, listed by `avatars.json`;
+  > the table mock-up's six busts first), chosen when the game is dealt, not in this dialog: for each
+  > player, one of their gender at random from those not yet taken, the set starting again for a
+  > gender that runs out (`avatars::assign()`). Every new game gets new faces; a fixed deal deals the
+  > same faces each time. `GameBridge` stamps the avatar beside the gender, and the seat panel draws
+  > it, wherever the player sits.
+  >
+  > **Two more rules, the same day.** An avatar may be **gender-neutral** ("any"), worn by either
+  > gender and by one player at a time while others are free. And an avatar may be **dedicated to a
+  > bot strategy** ("strategy": "cyborg"; each Reckoner preset is a strategy of its own): only a bot
+  > of that strategy wears it, and such a bot wears its strategy's avatars whenever the catalogue has
+  > one of its gender - two Cyborgs and one cyborg face, and both wear it. Without one of its gender,
+  > the bot wears an ordinary face, as you always do.
+  >
+  > **And the bots' names are drawn the same way** (the owner's call, same day), from
+  > `resources/names/player_names.json`: each opponent row gets a name of its gender, in the app's
+  > language ("ro" or "en", or "any"), from its strategy's own names when there are any free
+  > (`playernames::draw()`). Unlike a face, a name is drawn in this dialog, where it can still be
+  > typed over, and never repeats at one table: a strategy's names run out into the ordinary names of
+  > that gender, and those into "Bot 3". Every time the dialog opens, each row keeps its gender and
+  > level and gets a fresh name; a new row is a man or a woman at random; a new gender or level draws
+  > a new name for a row that still shows the one drawn for it, and a typed name is kept. Your own
+  > name is never drawn.
 - **"26 rounds · about 7 minutes" updates live** from the four shape controls. The round count is a
   pure function of the player count and the structure, so it is computable before an engine exists;
   the estimate is a rule of thumb off the bot-speed slider.

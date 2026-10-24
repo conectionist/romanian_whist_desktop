@@ -4,6 +4,7 @@
 #include "GameFixtures.h"
 
 #include "engine/GameController.h"
+#include "paint/Avatars.h"
 #include "ui/NewGameDialog.h"
 
 #include <romanian_whist/AiMoveProvider.h>
@@ -158,6 +159,65 @@ TEST_CASE("A game left to itself reaches onGameOver", "[controller]")
     controller.stop();
 }
 
+TEST_CASE("A game dealt from New Game publishes the genders and faces it was dealt", "[controller]")
+{
+    // THE WHOLE ROUTE: buildDeal() puts the profiles on the deal, start() hands
+    // them to the bridge before the game thread starts, and every snapshot the
+    // game publishes carries them. Watched, so bot i is seat i and nobody has to
+    // answer a prompt.
+    newgame::Config config;
+    config.spectator = true;
+    config.bots = { { "Ana", Gender::Female }, { "Bogdan", Gender::Male }, { "Elena", Gender::Female } };
+    config.botLevels = { newgame::BotLevel::LowRisk, newgame::BotLevel::Ducking, newgame::BotLevel::LowRisk };
+    config.shuffleSeed = 42u;
+
+    GameController controller;
+    controller.prepare(newgame::humanSeatOf(config), instant());
+
+    std::mutex mutex;
+    std::size_t snapshots = 0;
+    std::size_t wrong = 0;
+
+    QObject context;
+    QObject::connect(controller.bridge(), &GameBridge::stateChanged, &context,
+                     [&](std::shared_ptr<const GameSnapshot> snapshot)
+                     {
+                         const std::vector<Gender> dealt = { Gender::Female, Gender::Male, Gender::Female };
+                         std::vector<Gender> seats;
+                         bool faces = true;
+
+                         // AND A FACE OF THAT GENDER on every seat: buildDeal()
+                         // chose them, the bridge carried them.
+                         for(const SeatView& seat : snapshot->seats)
+                         {
+                             seats.push_back(seat.gender);
+
+                             const avatars::Avatar* avatar = avatars::find(seat.avatar);
+                             faces = faces && avatar != nullptr && avatars::suits(*avatar, seat.gender);
+                         }
+
+                         std::lock_guard lock(mutex);
+                         snapshots++;
+
+                         if(seats != dealt || !faces)
+                             wrong++;
+                     },
+                     Qt::DirectConnection);
+
+    Outcome outcome(controller);
+
+    controller.start(newgame::buildDeal(config));
+
+    REQUIRE(outcome.await());
+    REQUIRE(outcome.overCount == 1);
+
+    controller.stop();
+
+    std::lock_guard lock(mutex);
+    REQUIRE(snapshots > 0);
+    REQUIRE(wrong == 0);
+}
+
 TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[controller]")
 {
     // THE ONE THING buildDeal() CANNOT PROVE ON ITS OWN. NewGameTests asserts that
@@ -181,7 +241,7 @@ TEST_CASE("A Reckoner seat is registered with the engine before it starts", "[co
     {
         newgame::Config config;
         config.spectator = true;   // so bot i is seat i, with no human seat shifting them
-        config.botNames = QStringList{ "Ana", "Bogdan", "Reckoner" };
+        config.bots = { { "Ana", Gender::Female }, { "Bogdan", Gender::Male }, { "Reckoner", Gender::Male } };
         config.botLevels = { newgame::BotLevel::LowRisk,
                              newgame::BotLevel::Ducking,
                              // ALPHA, whose K_play and K_bid are 0 - the rollout
@@ -308,7 +368,7 @@ TEST_CASE("A Cyborg seat is registered with the engine before it starts", "[cont
     {
         newgame::Config config;
         config.spectator = true;   // so bot i is seat i, with no human seat shifting them
-        config.botNames = QStringList{ "Ana", "Bogdan", "Cyborg" };
+        config.bots = { { "Ana", Gender::Female }, { "Bogdan", Gender::Male }, { "Cyborg", Gender::Male } };
         config.botLevels = { newgame::BotLevel::LowRisk,
                              newgame::BotLevel::Ducking,
                              newgame::BotLevel::Cyborg };
@@ -471,7 +531,7 @@ TEST_CASE("The default table registers every one of its watching seats", "[contr
 
     config.shuffleSeed = 42u;
 
-    REQUIRE(config.botNames.size() == 3);
+    REQUIRE(config.bots.size() == 3);
     REQUIRE_FALSE(config.spectator);
 
     GameController controller;

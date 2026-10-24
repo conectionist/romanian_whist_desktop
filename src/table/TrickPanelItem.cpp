@@ -4,6 +4,7 @@
 #include "paint/Fonts.h"
 #include "table/CardText.h"
 #include "table/HudText.h"
+#include "table/PersonText.h"
 #include "table/TrickItem.h"
 
 #include <QCoreApplication>
@@ -18,6 +19,23 @@ using romanian_whist::GamePhase;
 
 namespace
 {
+
+// THE TWO LINES THAT NAME A SEAT AND AGREE WITH IT in Romanian: "Ana e prima",
+// "Bogdan e primul", "Tu ești primul" (persontext::). One English sentence each,
+// filed four times for the translator.
+constexpr persontext::Sentence leaderSentence{
+    "trickpanel",
+    { QT_TRANSLATE_NOOP3("trickpanel", "Leader: %1", "about a man"),
+      QT_TRANSLATE_NOOP3("trickpanel", "Leader: %1", "about a woman") },
+    { QT_TRANSLATE_NOOP3("trickpanel", "Leader: %1", "about you, a man"),
+      QT_TRANSLATE_NOOP3("trickpanel", "Leader: %1", "about you, a woman") } };
+
+constexpr persontext::Sentence firstToBidSentence{
+    "trickpanel",
+    { QT_TRANSLATE_NOOP3("trickpanel", "First to bid: %1", "about a man"),
+      QT_TRANSLATE_NOOP3("trickpanel", "First to bid: %1", "about a woman") },
+    { QT_TRANSLATE_NOOP3("trickpanel", "First to bid: %1", "about you, a man"),
+      QT_TRANSLATE_NOOP3("trickpanel", "First to bid: %1", "about you, a woman") } };
 
 // page.html's .trickinfo, in the panel's own units: a border of 1, padding of 12
 // above and below and 16 either side, and its text 17 on lines 1.45 tall.
@@ -201,7 +219,7 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     // trick", "First to bid: You". A spectator has no seat, so is never "You".
     const auto nameOf = [&](unsigned int seat)
     {
-        if(snapshot.humanSeat >= 0 && static_cast<unsigned int>(snapshot.humanSeat) == seat)
+        if(snapshot.isHumanSeat(seat))
             return QCoreApplication::translate("trickpanel", "You");
 
         return seat < snapshot.seats.size() ? QString::fromStdString(snapshot.seats[seat].name)
@@ -248,11 +266,13 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
         {
             if(snapshot.seats[seat].bidOrder == 1)
             {
-                fields.rows.push_back(onOneLine(nameOf(static_cast<unsigned int>(seat)), styles.row,
-                                                textruns::Emphasis::Strong, [](const QString& name)
+                const unsigned int first = static_cast<unsigned int>(seat);
+
+                fields.rows.push_back(onOneLine(nameOf(first), styles.row, textruns::Emphasis::Strong,
+                                                [&snapshot, first](const QString& name)
                                                 {
                                                     return textruns::emphasised(
-                                                        QCoreApplication::translate("trickpanel", "First to bid: %1"), name);
+                                                        persontext::translate(firstToBidSentence, snapshot, first), name);
                                                 }));
                 break;
             }
@@ -279,7 +299,7 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
     {
         const auto leaderLine = [&](const QString& name)
         {
-            textruns::Line row = textruns::emphasised(QCoreApplication::translate("trickpanel", "Leader: %1"), name);
+            textruns::Line row = textruns::emphasised(persontext::translate(leaderSentence, snapshot, *leader), name);
 
             if(snapshot.hasLeadSuit)
             {
@@ -323,8 +343,7 @@ trickpanel::Fields trickpanel::fieldsFor(const GameSnapshot& snapshot, const Pla
 
     if(trickFull && winning != snapshot.table.end())
     {
-        const bool yours = snapshot.humanSeat >= 0
-                           && static_cast<unsigned int>(snapshot.humanSeat) == winning->seatIndex;
+        const bool yours = snapshot.isHumanSeat(winning->seatIndex);
 
         if(yours)
         {

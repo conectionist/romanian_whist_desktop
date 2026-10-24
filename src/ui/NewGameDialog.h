@@ -1,7 +1,9 @@
 #ifndef NEW_GAME_DIALOG_H
 #define NEW_GAME_DIALOG_H
 
+#include "core/PlayerProfile.h"
 #include "engine/GameController.h"
+#include "paint/Avatars.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/Scoreboard.h>
@@ -12,9 +14,11 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <optional>
+#include <random>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -175,11 +179,14 @@ struct Config
     // state sections 4.3 and 6 null-check for.
     bool spectator = false;
 
-    QString humanName;
+    // Kept while watching, though nobody takes the seat, so a player who flips to
+    // watching and back finds their name and gender as they left them.
+    PlayerProfile human;
 
-    // One level per name, in the same order - the terminal's parallel-vector
-    // shape, kept because it is what the dialog's rows are.
-    QStringList botNames;
+    // One level per opponent, in the same order - the terminal's parallel-vector
+    // shape, kept because it is what the dialog's rows are. The level is beside
+    // the profile, not in it: it is how a bot plays, not who it is.
+    std::vector<PlayerProfile> bots;
     std::vector<BotLevel> botLevels;
 
     romanian_whist::GameStructure structure = romanian_whist::GameStructure::S_181;
@@ -308,6 +315,18 @@ GameDeal buildDeal(const Config& config);
 // tooltipFor(). Free functions rather than a table in the widget so the test can
 // read them without a window.
 QString nameOf(BotLevel level);
+
+// HOW THE AVATAR CATALOGUE NAMES A LEVEL, in an entry's "strategy" (avatars.json):
+// "random", "first-card", "low-risk", "ducking", "cyborg", and each Reckoner
+// preset its own - "reckoner-alpha" to "reckoner-delta" - since an avatar for one
+// preset is not one for another (the owner's call, 2026-10-23). Stable text, not
+// the enum's number, for the reason the enum's own comment gives.
+const char* avatarStrategyOf(BotLevel level);
+
+// WHO SITS IN EACH SEAT, as the avatar rule sees them (avatars::assign()): seat
+// order, as buildDeal() deals them - you first, with no strategy, unless watching;
+// then each bot with its level's.
+std::vector<avatars::Wearer> wearersOf(const Config& config);
 QString tooltipFor(BotLevel level);
 
 // THE PACE CONTROLS, built here for the setup dialog and the menu bar's Settings
@@ -374,16 +393,32 @@ private:
     // depend on all of it: the summary line and whether Deal is enabled.
     void refresh();
 
+    // A name for opponent `seat`, of this gender and level, drawn at random by the
+    // owner's rules (playernames::draw()) and none another row or you have.
+    QString drawName(Gender gender, newgame::BotLevel level, std::size_t seat);
+
+    // A new name for opponent `seat` to match its gender and level, if it still
+    // shows the one drawn for it.
+    void redrawUntouched(std::size_t seat);
+
     // One opponent. Held as a struct rather than as parallel vectors of widgets
     // because a row is added and removed as a unit.
     struct Row
     {
         QLabel* number = nullptr;
         QLineEdit* name = nullptr;
+        QComboBox* gender = nullptr;
         QComboBox* level = nullptr;
+
+        // The name last drawn for this row. While the row still shows it, a new
+        // gender or level draws another; once it is typed over, it is kept.
+        QString drawn;
     };
 
     newgame::Config current;
+
+    // What every name this dialog draws is drawn with.
+    std::mt19937 random{ std::random_device{}() };
 
     // WHAT THE DIALOG WAS OPENED ON, kept whole and never written to. `current`
     // cannot serve: refresh() rebuilds its bot lists FROM the rows on every
@@ -407,6 +442,7 @@ private:
     QRadioButton* playing = nullptr;
     QLabel* humanNameLabel = nullptr;
     QLineEdit* humanName = nullptr;
+    QComboBox* humanGender = nullptr;
     QSpinBox* opponents = nullptr;
     QLabel* opponentsHint = nullptr;
     QFormLayout* opponentRows = nullptr;

@@ -1,5 +1,6 @@
 #include "CardArtWindow.h"
 
+#include "paint/Avatars.h"
 #include "table/SeatItem.h"
 #include "table/TableSpace.h"
 
@@ -14,6 +15,8 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
 using romanian_whist::Card;
 using romanian_whist::Rank;
@@ -131,7 +134,11 @@ void CardArtCanvas::paintEvent(QPaintEvent*)
     // card.
     const QSize box = (seatitem::portraitPicture() * (unit / tablespace::handCardHeight)).toSize();
 
-    painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(0, box, dpr));
+    // The catalogue's first avatar, or the bare box if there is none.
+    const std::vector<avatars::Avatar>& catalogue = avatars::catalogue();
+    const std::string sample = catalogue.empty() ? std::string() : catalogue.front().id;
+
+    painter.drawPixmap(QPointF(x, baseline - box.height()), theme.avatar(sample, box, dpr));
     painter.drawText(QRectF(x, baseline + 4.0, box.width() * 2.0, captionHeight),
                      Qt::AlignLeft | Qt::AlignVCenter, tr("Avatar"));
 }

@@ -20,6 +20,8 @@
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/RoundType.h>
 
+#include "PlayerProfile.h"
+
 #include <string>
 #include <vector>
 
@@ -40,6 +42,15 @@ struct SeatView
 {
     std::string name;
     unsigned int seatIndex = 0;
+
+    // FROM THE SEAT'S PlayerProfile, not the engine, which knows only the name:
+    // GameBridge stamps it on from the deal's profiles. Male for a seat that came
+    // without one - every fixture that builds a GameSetup by hand.
+    Gender gender = Gender::Male;
+
+    // The portrait this seat wears, an avatar id (PlayerProfile::avatar), stamped
+    // on by GameBridge as the gender is. Empty without a profile: the bare box.
+    std::string avatar;
 
     // Position in this round's bidding, 1 for whoever opened it.
     unsigned int bidOrder = 0;
@@ -112,6 +123,13 @@ struct GameSnapshot
 
     unsigned int betsPlaced = 0;
     unsigned int betSum = 0;
+
+    // Whether `seat` is the human's: never in a spectator game. The one place this
+    // is worked out from humanSeat (PR #40's review, finding #8).
+    bool isHumanSeat(unsigned int seat) const
+    {
+        return humanSeat >= 0 && static_cast<unsigned int>(humanSeat) == seat;
+    }
 };
 
 #endif

@@ -19,6 +19,10 @@
 // its play phase, so the lead rhombus is on the felt; and the King of Spades
 // winning, so the largest shadow picture - the winner's deeper shadow, glow and
 // ring - is among those a drag has to leave alone.
+//
+// EACH SEAT WEARS THE CATALOGUE'S AVATAR AT ITS PLACE, the six in order, which is
+// what every seat wore before portraits followed the player: so the pictures and
+// the times taken over this table are comparable across that change.
 inline GameSnapshot fullTable()
 {
     using romanian_whist::Card;
@@ -36,9 +40,18 @@ inline GameSnapshot fullTable()
     snapshot.leadSeat = 1;
     snapshot.seats.resize(6);
 
+    const PlayerProfile faces[] = { { "", Gender::Male, "man-dark-hair-beard" },
+                                    { "", Gender::Male, "man-hat-mustache" },
+                                    { "", Gender::Female, "woman-long-brown-hair" },
+                                    { "", Gender::Male, "man-white-hair-hat" },
+                                    { "", Gender::Female, "woman-long-red-hair" },
+                                    { "", Gender::Male, "man-black-hair-beard" } };
+
     for(unsigned int i = 0 ; i < 6 ; i++)
     {
         snapshot.seats[i].seatIndex = i;
+        snapshot.seats[i].gender = faces[i].gender;
+        snapshot.seats[i].avatar = faces[i].avatar;
         snapshot.seats[i].name = "Seat " + std::to_string(i);
         snapshot.seats[i].cardsLeft = 8;
         snapshot.seats[i].hasBet = true;

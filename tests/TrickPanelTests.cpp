@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "DisambiguationTranslator.h"
+#include "RomanianTranslation.h"
+
 #include "paint/TextRuns.h"
 #include "table/TrickPanelItem.h"
 
@@ -255,6 +258,103 @@ TEST_CASE("The bidding panel names the first bidder and who is bidding", "[trick
     fields = trickpanel::fieldsFor(snapshot, nullptr);
 
     REQUIRE(promptOf(fields) == QStringLiteral("Your bid. How many tricks?"));
+}
+
+TEST_CASE("The leader line is said of a man or a woman or of you", "[trick-panel]")
+{
+    // ROMANIAN AGREES WITH THE LEADER: "Bogdan e primul", "Ana e prima", "Tu ești
+    // prima". The translator below reports which of the four variants was asked
+    // for; English shows the same words for all four (the cases above).
+    const DisambiguationTranslator translator;
+
+    GameSnapshot snapshot = playing();
+    snapshot.table.clear();
+    snapshot.hasLeadSuit = false;
+    snapshot.seats[2].gender = Gender::Female;
+
+    snapshot.leadSeat = 1;
+    REQUIRE(rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0) == QStringLiteral("[man] Leader: Bogdan"));
+
+    snapshot.leadSeat = 2;
+    REQUIRE(rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0) == QStringLiteral("[woman] Leader: Ana"));
+
+    snapshot.leadSeat = 0;
+    REQUIRE(rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0) == QStringLiteral("[you man] Leader: You"));
+
+    snapshot.seats[0].gender = Gender::Female;
+    REQUIRE(rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0) == QStringLiteral("[you woman] Leader: You"));
+
+    // A WATCHED GAME HAS NO YOU: seat 0 is somebody else, named.
+    snapshot.humanSeat = -1;
+    REQUIRE(rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0) == QStringLiteral("[woman] Leader: Player"));
+}
+
+TEST_CASE("The first bidder is said of a man or a woman or of you", "[trick-panel]")
+{
+    const DisambiguationTranslator translator;
+
+    GameSnapshot snapshot = playing();
+    snapshot.phase = GamePhase::Betting;
+    snapshot.table.clear();
+    snapshot.seats[2].gender = Gender::Female;
+
+    // bidOrder 1 opens the bidding: Bogdan in playing().
+    const auto firstToBid = [&](unsigned int seat)
+    {
+        for(SeatView& view : snapshot.seats)
+            view.bidOrder = view.seatIndex == seat ? 1 : 2;
+
+        return rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0);
+    };
+
+    REQUIRE(firstToBid(1) == QStringLiteral("[man] First to bid: Bogdan"));
+    REQUIRE(firstToBid(2) == QStringLiteral("[woman] First to bid: Ana"));
+    REQUIRE(firstToBid(0) == QStringLiteral("[you man] First to bid: You"));
+
+    snapshot.seats[0].gender = Gender::Female;
+    REQUIRE(firstToBid(0) == QStringLiteral("[you woman] First to bid: You"));
+}
+
+TEST_CASE("The leader and first-bidder lines are in Romanian for everyone", "[trick-panel]")
+{
+    // EVERY VARIANT, IN THE APP'S OWN ROMANIAN (PR #40's review, finding #4). A
+    // gendered sentence names its translation context twice: in its
+    // QT_TRANSLATE_NOOP3s, which file the Romanian, and in its persontext::Sentence,
+    // which looks it up (docs/KNOWN_ISSUES.md). Copies that disagree show that one
+    // variant in English in the Romanian app, with no warning. A new gendered
+    // sentence in the panel belongs here too.
+    const RomanianTranslation romanian;
+
+    GameSnapshot snapshot = playing();
+    snapshot.table.clear();
+    snapshot.hasLeadSuit = false;
+
+    // Seat 1 is somebody else and seat 0 is you, each as a man and as a woman.
+    for(const unsigned int seat : { 1U, 0U })
+    {
+        for(const Gender gender : { Gender::Male, Gender::Female })
+        {
+            snapshot.seats[seat].gender = gender;
+
+            snapshot.phase = GamePhase::Playing;
+            snapshot.leadSeat = seat;
+            const QString leader = rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0);
+
+            snapshot.phase = GamePhase::Betting;
+            for(SeatView& view : snapshot.seats)
+                view.bidOrder = view.seatIndex == seat ? 1 : 2;
+            const QString first = rowOf(trickpanel::fieldsFor(snapshot, nullptr), 0);
+
+            INFO("seat " << seat << (gender == Gender::Female ? ", a woman" : ", a man"));
+            INFO("leader line: " << leader.toStdString());
+            INFO("first-bidder line: " << first.toStdString());
+
+            REQUIRE_FALSE(leader.isEmpty());
+            REQUIRE_FALSE(leader.contains(QStringLiteral("Leader")));
+            REQUIRE_FALSE(first.isEmpty());
+            REQUIRE_FALSE(first.contains(QStringLiteral("First to bid")));
+        }
+    }
 }
 
 TEST_CASE("A scored round and a finished game say so", "[trick-panel]")

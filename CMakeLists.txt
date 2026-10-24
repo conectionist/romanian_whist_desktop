@@ -55,6 +55,7 @@ qt_add_library(desktop_core STATIC
     src/core/CardOrder.h
     src/core/CardOrder.cpp
     src/core/GameSnapshot.h
+    src/core/PlayerProfile.h
     src/core/HandLayout.h
     src/core/HandLayout.cpp
     src/core/Snapshot.h
@@ -74,6 +75,8 @@ qt_add_library(desktop_core STATIC
 
     src/paint/Theme.h
     src/paint/Theme.cpp
+    src/paint/Avatars.h
+    src/paint/Avatars.cpp
     src/paint/Fonts.h
     src/paint/Fonts.cpp
     src/paint/CardRenderer.h
@@ -131,6 +134,8 @@ qt_add_library(desktop_core STATIC
     src/table/ScoreboardItem.cpp
     src/table/TrickPanelItem.h
     src/table/TrickPanelItem.cpp
+    src/table/PersonText.h
+    src/table/PersonText.cpp
     src/table/BidStripItem.h
     src/table/BidStripItem.cpp
     src/table/BidBubbleItem.h
@@ -146,6 +151,8 @@ qt_add_library(desktop_core STATIC
     src/ui/CardArtWindow.cpp
 
     src/ui/NewGameDialog.h
+    src/ui/PlayerNames.h
+    src/ui/PlayerNames.cpp
     src/ui/NewGameDialog.cpp
     src/ui/LitButton.h
     src/ui/LitButton.cpp
@@ -226,8 +233,10 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # Two more .qrc files follow the same pattern, both added by the table redesign
 # (docs/ui-redesign/): resources/table.qrc puts the wood and felt textures under
 # /table, and resources/fonts.qrc puts the three bundled typefaces and their
-# licences under /fonts. Everything below applies to all three - they are one
-# call because they share every one of its pitfalls.
+# licences under /fonts. A fourth, resources/avatars.qrc, puts the seat portraits
+# and their catalogue under /avatars, and a fifth, resources/names.qrc, the names
+# New Game draws under /names. Everything below applies to all five - they are
+# one call because they share every one of its pitfalls.
 #
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
@@ -248,7 +257,8 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # .qrc files, with the generated .cpp put into the target by hand. It does not
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
 # build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
-# for the textures and qrc_fonts.cpp for the typefaces.
+# for the textures, qrc_fonts.cpp for the typefaces, qrc_avatars.cpp for the
+# portraits and qrc_names.cpp for the names.
 #
 # The list is a variable because tests/CMakeLists.txt consumes the same one (see
 # below), and absolute because that directory would resolve a relative path
@@ -257,6 +267,8 @@ set(WHIST_DESKTOP_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/cards.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/table.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/avatars.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/names.qrc
 )
 qt_add_resources(APP_RESOURCES ${WHIST_DESKTOP_RESOURCES})
 target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
@@ -296,8 +308,15 @@ target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 set_property(TARGET romanian_whist_desktop PROPERTY
     QT_EXCLUDE_SOURCES_FROM_TRANSLATION ${WHIST_DESKTOP_RESOURCES})
 
+# THE .ts FILES, absolute for the reason WHIST_DESKTOP_RESOURCES is:
+# tests/CMakeLists.txt compiles them again for the test binary, which loads the
+# Romanian as main() does.
+set(WHIST_DESKTOP_TS_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/romanian_whist_desktop_ro_RO.ts
+)
+
 qt_add_translations(romanian_whist_desktop
-    TS_FILES i18n/romanian_whist_desktop_ro_RO.ts
+    TS_FILES ${WHIST_DESKTOP_TS_FILES}
     SOURCE_TARGETS desktop_core romanian_whist_desktop
     LUPDATE_OPTIONS -locations relative
 )
