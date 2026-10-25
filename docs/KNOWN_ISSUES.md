@@ -179,3 +179,34 @@ the changes to both modules and their tests. The owner's call after PR #40's rev
 **Where it goes.** With nationality, which both are to gain. Then share a small helper for the common
 fields (gender, strategy, nationality), and keep each file's own rules for its id or name and its
 duplicates.
+
+## In a huge, squarish window the scoreboard touches the top-right player's panel
+
+*Found in PR #41's review (findings #1 and #2). Not scheduled.*
+
+**What you see.** In a window about 4:3 or squarer and more than about 3,230 pixels wide, with three,
+five or six players and long names, the scoreboard's left edge reaches the top-right player's panel.
+The two panels touch, the scoreboard's border over the panel's rounded edge by a pixel or two at
+3840 × 2880. Nothing on either is covered: the name, the pill and the portrait stay clear.
+
+**Why.** In a window narrower than the fit box's 1880 : 1324, about 1.42 : 1, the window's width sets
+the table's scale. The scoreboard's right edge is pinned 8 pixels from the window's edge, and the
+table's side margin is 16 pixels. Both shrink in table units as the scale grows. So the scoreboard's
+left edge (283 units wide at its cap, with 20-character names) moves out towards 1424.8 units, short
+of the top-right seat's right edge at 1429.5 once the scale passes about 1.7. With ordinary names
+the scoreboard is narrower and clear. The old layout had the same edge case, mirrored, on the
+top-left seat.
+
+**Why it was left.** No common setup reaches it. 16:9, 16:10 and wider screens are always clear,
+because there the window's height sets the scale. Squarish monitors are far narrower than 3,230
+pixels, and a 4K screen at the usual 150% or 200% scaling counts as 2560 or 1920 wide. About the only
+way there is a window stretched over two big monitors stacked one above the other, at 100% scaling.
+And what you see is two panels touching. The owner saw it simulated and left it, after PR #41's
+review.
+
+**Where it goes.** Not scheduled. If it is wanted: widen `tablespace::fitBox` from 1880 to about 1900
+units. That leaves about 5 units of room at any scale, and changes nothing in windows wider than
+about 1.43 : 1 (the screenshots included). In narrower windows the table is drawn at most about 1%
+smaller, and the window's minimum size grows by a few pixels (update `TableSpaceTests`). Then add
+large squarish sizes, such as 2560 × 1800 and 3840 × 2700, to `HudTests`' clearance case; the
+second fails without the change.
