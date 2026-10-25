@@ -225,9 +225,10 @@ void TableScene::placeHud()
     trickPanel->setPos(pin->visible.left() + inset, pin->visible.top() + inset);
 
     // TOP-RIGHT, growing left and down: placed by its right edge, at its drawn
-    // width. That width follows the names, and this runs again on every snapshot
-    // (relayout()), so the panel stays pinned as it grows or shrinks.
-    scoreboard->setPos(pin->visible.right() - inset - scoreboard->size().width() * tablespace::hudScale,
+    // width - its own size at its own scale, so the 1.2 is set in one place, where
+    // the item is made. That width follows the names, and this runs again on every
+    // snapshot (relayout()), so the panel stays pinned as it grows or shrinks.
+    scoreboard->setPos(pin->visible.right() - inset - scoreboard->size().width() * scoreboard->scale(),
                        pin->visible.top() + inset);
 
     // BOTTOM-LEFT, side by side (table.js fit()).
