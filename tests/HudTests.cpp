@@ -480,6 +480,43 @@ TEST_CASE("The scoreboard stays eight pixels in from the top-right corner", "[hu
     }
 }
 
+// PINNED BY ITS RIGHT EDGE, AND ITS WIDTH FOLLOWS THE NAMES: the first corner panel
+// that is both (PR #41's review, findings #3 and #4). The scene re-places the corner
+// panels after the scoreboard takes each snapshot (TableScene::relayout()); placed
+// before, a scoreboard that widened would reach past the window's edge by what it
+// grew, and one that narrowed would leave a gap.
+TEST_CASE("The scoreboard keeps its right edge on the corner as its width changes", "[hud]")
+{
+    TableScene scene;
+    scene.setTheme(Theme::dark());
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+
+    TableView view(&scene);
+    view.resize(1920, 1080);
+    view.show();
+    QCoreApplication::processEvents();
+
+    const auto rightEdge = [&]
+    {
+        return onScreen(view, *scene.scoreboardItem()).right();
+    };
+
+    const qreal corner = view.viewport()->width() - tablespace::hudInset;
+    const qreal narrow = scene.scoreboardItem()->size().width();
+
+    REQUIRE(std::abs(rightEdge() - corner) < 1e-6);
+
+    // Long names: wider, and still on the corner.
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(widestTableOf(6)));
+    REQUIRE(scene.scoreboardItem()->size().width() > narrow);
+    REQUIRE(std::abs(rightEdge() - corner) < 1e-6);
+
+    // Short names again: narrower, and still on the corner.
+    scene.setSnapshot(std::make_shared<const GameSnapshot>(fullTable()));
+    REQUIRE(scene.scoreboardItem()->size().width() == Catch::Approx(narrow));
+    REQUIRE(std::abs(rightEdge() - corner) < 1e-6);
+}
+
 // THE PLAN'S PROMISE FOR PHASE 8: at the window sizes people play at, nothing in a
 // corner covers a seat, and nothing in a corner is cut off by the window. Each
 // size as a bare view the size of the whole window, which is a little stricter
