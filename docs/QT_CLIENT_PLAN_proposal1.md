@@ -2064,9 +2064,9 @@ About box prints the client version and the linked engine version, exactly as th
 > table's scale:
 >
 > - **Top right, the scoreboard** (top left until the owner's call of 2026-10-24, which swapped the
->   two): the round, the cards dealt and the round type; the bid tension; a row per seat in bid order
->   (B, T, PTS and a RUN streak column); the trump stacked under them. It is the info strip and the
->   scoreboard in one. Still **never animated**.
+>   two): the round, the cards dealt and the round type; the bid tension; a row per seat in bid
+>   order (B, T, PTS and a RUN streak column); the trump stacked under them. It is the info strip
+>   and the scoreboard in one. Still **never animated**.
 > - **Top left, the trick panel** (top right until 2026-10-24): the trick, its leader and suit, who
 >   is winning, and the prompt bar's sentence. The prompt bar is gone.
 > - **Bottom left, two buttons**: Round history (§16.3) and Last trick.

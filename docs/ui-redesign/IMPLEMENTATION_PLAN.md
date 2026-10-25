@@ -415,11 +415,11 @@ to bottom:
      The letter carries which, so colour is not the only cue.
    - **The panel is as wide as its columns**, not the mock-up's fixed 236 shared out (the owner's
      call, 2026-10-20, so the scoreboard clears the top-left seat in windows narrower than about
-     3:2; the top-right seat since 2026-10-24): each column as wide as its widest content, with a gap of 12 before each number column.
-     The headings BID and TAKEN are **B** and **T**. Names are measured as though each carried
-     the "▸", and the numbers at their widest values (a minus and three digits for a score, two
-     digits for a run, which the engine keeps counting past the fifth round), so the columns hold
-     still as play moves.
+     3:2; the top-right seat since 2026-10-24): each column as wide as its widest content, with a
+     gap of 12 before each number column. The headings BID and TAKEN are **B** and **T**. Names are
+     measured as though each carried the "▸", and the numbers at their widest values (a minus and
+     three digits for a score, two digits for a run, which the engine keeps counting past the fifth
+     round), so the columns hold still as play moves.
      The panel is never narrower than the bid tension at its widest, so that line never wraps;
      and never wider than 236, past which the names are elided. "Widest" is measured with the
      font's widest digit: the tension's figures are proportional, and in Alegreya Sans a 0 and a
@@ -469,16 +469,17 @@ pinned 8 from the window's right edge and 8 below the menu bar, growing left and
 > **AMENDED AFTER PHASE 13, by the owner's call of 2026-10-24: the trick panel top-left, the
 > scoreboard top-right.** The mock-up's two corners swapped, chosen from side-by-side screenshots of
 > both layouts. The short trick panel, with its "Your turn" prompt, sits where reading starts, above
-> the Round history and Last trick buttons (which stay bottom-left). The tall scoreboard stands alone
-> on the right, so the page is more evenly balanced. Each panel is pinned as before, 8 in from its
-> corner and 8 below the menu bar. The scoreboard is now placed by its right edge, at its drawn
+> the Round history and Last trick buttons (which stay bottom-left). The tall scoreboard stands
+> alone on the right, so the page is more evenly balanced. Each panel is pinned as before, 8 in from
+> its corner and 8 below the menu bar. The scoreboard is now placed by its right edge, at its drawn
 > width, as the trick panel was (`TableScene::placeHud()`).
 >
 > **No seat moved.** `HudTests`' clearance case holds every corner panel inside the window and clear
 > of every seat for 3 to 6 players at 1920×1080, 1920×1200, 1440×900, 1024×768, 1280×1024 and
 > 2560×1440. It now runs with the scoreboard at its widest (20-character names; the number columns
-> are already at their widest whatever the scores), since it is the panel beside the top-right seat. `BidStripTests` holds the bid strip
-> clear of both. The window shots no longer pair with the mock-up's pictures for these two panels.
+> are already at their widest whatever the scores), since it is the panel beside the top-right seat.
+> `BidStripTests` holds the bid strip clear of both. The window shots no longer pair with the
+> mock-up's pictures for these two panels.
 
 ### 2.11 Bottom-left buttons
 
