@@ -216,12 +216,19 @@ void TableScene::placeHud()
     // smaller the table is drawn.
     const qreal inset = tablespace::hudInset / pin->scale;
 
+    // THE TRICK PANEL TOP-LEFT AND THE SCOREBOARD TOP-RIGHT, the mock-up's corners
+    // swapped (the owner's call, 2026-10-24): the short panel with "Your turn" where
+    // reading starts, above the two buttons, and the tall scoreboard on its own. No
+    // seat moved; both still clear every seat (HudTests).
+    //
     // TOP-LEFT, growing right and down.
-    scoreboard->setPos(pin->visible.left() + inset, pin->visible.top() + inset);
+    trickPanel->setPos(pin->visible.left() + inset, pin->visible.top() + inset);
 
     // TOP-RIGHT, growing left and down: placed by its right edge, at its drawn
-    // width.
-    trickPanel->setPos(pin->visible.right() - inset - trickPanel->size().width() * tablespace::hudScale,
+    // width - its own size at its own scale, so the 1.2 is set in one place, where
+    // the item is made. That width follows the names, and this runs again on every
+    // snapshot (relayout()), so the panel stays pinned as it grows or shrinks.
+    scoreboard->setPos(pin->visible.right() - inset - scoreboard->size().width() * scoreboard->scale(),
                        pin->visible.top() + inset);
 
     // BOTTOM-LEFT, side by side (table.js fit()).

@@ -152,8 +152,9 @@ inline constexpr qreal rackCardHeight = 90.0;
 inline constexpr QRectF bottomPanel(768.0 - panelSize.width() / 2.0, 1046.0,
                                     panelSize.width(), panelSize.height());
 
-// THE CORNER PANELS (sections 2.1 and 2.9 to 2.11): the scoreboard top-left, the
-// trick panel top-right, the two buttons bottom-left. PINNED TO THE WINDOW, NOT TO
+// THE CORNER PANELS (sections 2.1 and 2.9 to 2.11): the trick panel top-left, the
+// scoreboard top-right (the mock-up's two swapped, the owner's call of 2026-10-24),
+// the two buttons bottom-left. PINNED TO THE WINDOW, NOT TO
 // TABLE SPACE - each this many device-independent pixels in from its corner of
 // the viewport, whose top is already under the menu bar - and drawn at the
 // table's scale, so they grow and shrink with it. TableScene::pinHud() places

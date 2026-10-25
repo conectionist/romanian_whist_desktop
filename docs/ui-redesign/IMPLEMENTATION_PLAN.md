@@ -77,7 +77,8 @@ cards land on the felt directly in front of each owner's rack, turned to line up
 rhombus on the gold circle marks the trick's leader. The human's hand fans face-up on the bottom of
 the rim. Fixed panels are pinned to the window corners: scoreboard (with a stacked trump section)
 top-left, current-trick panel top-right, "Round history" and "Last trick" buttons bottom-left. A
-styled menu bar runs across the top.
+styled menu bar runs across the top. *(Since 2026-10-24 the scoreboard is top-right and the trick
+panel top-left: see the amendment under section 2.10.)*
 
 ---
 
@@ -95,7 +96,8 @@ The mock-up lays everything out in a fixed logical space and scales it uniformly
   on its own 1536 width and vertically on the 1324 box. Equivalently: fit `QRectF(-172, -150, 1880,
   1324)` into the viewport with `Qt::KeepAspectRatio`, centred.
   (`table.js` `fit()`; the 1880 was widened from 1820 so the 20%-enlarged scoreboard clears the
-  top-left seat in narrow windows.)
+  top-left seat in narrow windows. Since 2026-10-24 the scoreboard is top-right and clears the
+  top-right seat; section 2.10's amendment.)
 - Elements may sit at negative coordinates or beyond 1536: the top seat's panel is at y = −140, the
   human's at y = 1046, left-hand panels reach x = −34.
 - **Window-pinned elements** (scoreboard, trick panel, bottom-left buttons) are NOT at fixed table
@@ -225,7 +227,8 @@ opponent: a rack on the rim at angle 90° (bottom), no hand.
   2026-10-21, replacing the mock-up's muted `Bogdan (44)`): the scoreboard has every seat's score.
   So the text column is **as wide as the widest pill** ("Taken/Bid: 0/0", 133) and no wider, which
   makes the panel 259 wide, yours included, and keeps the top-left seat clear of the scoreboard in
-  narrow windows even at the scoreboard's widest. *(Phase 8.)*
+  narrow windows even at the scoreboard's widest. *(Phase 8. The scoreboard is top-right since
+  2026-10-24, and clears the top-right seat the same way.)*
 - Line 2: a pill, Alegreya Sans 19, padding 2/12, fully rounded, 1 px border
   `rgba(201,164,92,0.4)`. Text **`Taken/Bid: w/b`** (tricks taken first, then the bid). States:
   before bidding "No bid yet", while this seat is bidding "Bidding…", neutral colours; once play has
@@ -384,13 +387,14 @@ cache behaviour; it is already a single seam for exactly this.
   all `HandItem`'s existing behaviour and do not change.
 - The human's panel (z above the hand) covers the bottom of the hand. That is intended.
 
-### 2.9 Scoreboard (top-left)
+### 2.9 Scoreboard (top-left; top-right since 2026-10-24)
 
 `page.html` `.score`, `table.js` `renderScore()`. Merges today's `InfoStrip` into the scoreboard.
 Screenshot: any `table-*.jpg`.
 
 Panel, as wide as its columns (at most 236, below), padding 12/14, **drawn at 1.2× the table scale**,
-pinned 8 from the window's left edge and 8 below the menu bar, growing right and down. Content, top
+pinned 8 from the window's left edge and 8 below the menu bar, growing right and down *(since
+2026-10-24: from the right edge, growing left and down; section 2.10's amendment)*. Content, top
 to bottom:
 
 1. "Round 11 of 30", Marcellus 22, centred, one size for the whole line.
@@ -411,11 +415,11 @@ to bottom:
      The letter carries which, so colour is not the only cue.
    - **The panel is as wide as its columns**, not the mock-up's fixed 236 shared out (the owner's
      call, 2026-10-20, so the scoreboard clears the top-left seat in windows narrower than about
-     3:2): each column as wide as its widest content, with a gap of 12 before each number column.
-     The headings BID and TAKEN are **B** and **T**. Names are measured as though each carried
-     the "▸", and the numbers at their widest values (a minus and three digits for a score, two
-     digits for a run, which the engine keeps counting past the fifth round), so the columns hold
-     still as play moves.
+     3:2; the top-right seat since 2026-10-24): each column as wide as its widest content, with a
+     gap of 12 before each number column. The headings BID and TAKEN are **B** and **T**. Names are
+     measured as though each carried the "▸", and the numbers at their widest values (a minus and
+     three digits for a score, two digits for a run, which the engine keeps counting past the fifth
+     round), so the columns hold still as play moves.
      The panel is never narrower than the bid tension at its widest, so that line never wraps;
      and never wider than 236, past which the names are elided. "Widest" is measured with the
      font's widest digit: the tension's figures are proportional, and in Alegreya Sans a 0 and a
@@ -432,12 +436,13 @@ The round-score and streak columns of the old scoreboard are not in the mock-up.
 owner, 2026-10-20 (Q3):** the round score goes, because it showed for only a second or two at the end
 of a round; the streak stays, as the RUN column above.
 
-### 2.10 Current-trick panel (top-right)
+### 2.10 Current-trick panel (top-right; top-left since 2026-10-24)
 
 `page.html` `.trickinfo`, `table.js` `renderTrickInfo()`. Replaces the prompt bar's hint line.
 
 Panel, width 264, padding 12/16, body 17 px line-height 1.45, **drawn at 1.2× the table scale**,
-pinned 8 from the window's right edge and 8 below the menu bar, growing left and down.
+pinned 8 from the window's right edge and 8 below the menu bar, growing left and down *(since
+2026-10-24: from the left edge, growing right and down; the amendment below)*.
 
 - Play phase: title "Trick 3 of 6" (Marcellus 21); "Leader: **Bogdan** · Led ♥"; "Winning:
   **Costel, K♥**" (or "–"); then, above a faint rule, the prompt in gold-bright.
@@ -460,6 +465,21 @@ pinned 8 from the window's right edge and 8 below the menu bar, growing left and
     "Your bid. How many tricks will you take?" and "Your turn. No ♥, so you must trump." are
     shortened to the two above, which fit the 230-unit column. A long name gives way, elided so
     its line still fits: "Leader: **Bartholomew Fea…** · Led ♥".
+
+> **AMENDED AFTER PHASE 13, by the owner's call of 2026-10-24: the trick panel top-left, the
+> scoreboard top-right.** The mock-up's two corners swapped, chosen from side-by-side screenshots of
+> both layouts. The short trick panel, with its "Your turn" prompt, sits where reading starts, above
+> the Round history and Last trick buttons (which stay bottom-left). The tall scoreboard stands
+> alone on the right, so the page is more evenly balanced. Each panel is pinned as before, 8 in from
+> its corner and 8 below the menu bar. The scoreboard is now placed by its right edge, at its drawn
+> width, as the trick panel was (`TableScene::placeHud()`).
+>
+> **No seat moved.** `HudTests`' clearance case holds every corner panel inside the window and clear
+> of every seat for 3 to 6 players at 1920×1080, 1920×1200, 1440×900, 1024×768, 1280×1024 and
+> 2560×1440. It now runs with the scoreboard at its widest (20-character names; the number columns
+> are already at their widest whatever the scores), since it is the panel beside the top-right seat.
+> `BidStripTests` holds the bid strip clear of both. The window shots no longer pair with the
+> mock-up's pictures for these two panels.
 
 ### 2.11 Bottom-left buttons
 
@@ -540,8 +560,8 @@ chosen in `NewGameDialog`).
 | Racks on the rim | Card count drawn as a small stack on the plaque | New `RackItem` (phase 5) |
 | Played cards in front of racks, lead rhombus | `TrickItem` on its own ring, pip under the first card | New positions, rotation, rhombus (phase 6) |
 | Hand on the bottom rim | `HandItem` in a reserved strip at the bottom | New geometry, same behaviour (phase 7) |
-| Scoreboard with stacked trump | `InfoStrip` (top) + `ScoreboardWidget` (right column) | One panel, pinned top-left (phase 8) |
-| Current-trick panel | `PromptBar` (bottom) | Pinned top-right panel (phase 8) |
+| Scoreboard with stacked trump | `InfoStrip` (top) + `ScoreboardWidget` (right column) | One panel, pinned top-left (phase 8); top-right since 2026-10-24 |
+| Current-trick panel | `PromptBar` (bottom) | Pinned top-right panel (phase 8); top-left since 2026-10-24 |
 | Round history / Last trick buttons | Nothing | New (phases 8 and 11) |
 | Menu bar | `QMenuBar` with a View menu; main-menu page and pause menu | A bar of our own as the menu widget, new top-level actions (phase 9) |
 | Bid strip in the felt | `BidStrip` overlay above `TableScene::overlayBottom()` | A painted scene item on the felt, `BidStripItem` (phase 10; section 2.13's amendment) |

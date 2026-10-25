@@ -448,7 +448,8 @@ TEST_CASE("A trump card has no suit named under it", "[scoreboard]")
 // ---- the columns ----
 
 // AS WIDE AS ITS COLUMNS, not the mock-up's 236 shared out: the owner's call of
-// 2026-10-20, so the panel clears the top-left seat in a narrow window.
+// 2026-10-20, so the panel clears the seat beside it in a narrow window - the
+// top-left seat then, the top-right since the corners swapped (2026-10-24).
 TEST_CASE("The panel is as wide as its columns", "[scoreboard]")
 {
     const scoreboard::Columns columns = scoreboard::columnsFor(scoreboard::rowsFor(fourSeats()));

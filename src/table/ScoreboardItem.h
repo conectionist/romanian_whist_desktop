@@ -18,9 +18,10 @@
 #include <cstddef>
 #include <vector>
 
-// SECTION 2.9's SCOREBOARD, pinned to the window's top-left corner: the round, the
-// cards dealt and the round type; how the bids stand against the tricks; a row per
-// seat in bid order; and the trump, its card stacked under its name.
+// SECTION 2.9's SCOREBOARD, pinned to the window's top-right corner (top-left in the
+// mock-up; the owner's call of 2026-10-24): the round, the cards dealt and the round
+// type; how the bids stand against the tricks; a row per seat in bid order; and the
+// trump, its card stacked under its name.
 //
 // WHAT IT SAYS IS DECIDED HERE, in free functions that need no scene and no
 // painter - the split SnapshotLog.h argues for and seatitem follows - and the item
