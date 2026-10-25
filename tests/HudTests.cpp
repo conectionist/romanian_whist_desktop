@@ -133,19 +133,17 @@ GameSnapshot tableOf(unsigned int seats)
 }
 
 // The same table with the scoreboard at its WIDEST: every name as long as New Game
-// allows, in the widest capital, and every score a minus and three digits. Its
-// columns then reach the panel's cap, past which names are elided. Since the
-// scoreboard moved to the top-right corner (2026-10-24) it is the panel beside the
-// top-right seat, and "Seat 0" kept it narrow.
+// allows, in the widest capital. The names are what widen it - its number columns
+// are already as wide as their widest values whatever the scores are - and they
+// take it to the panel's cap, past which they are elided. Since the scoreboard
+// moved to the top-right corner (2026-10-24) it is the panel beside the top-right
+// seat, and "Seat 0" kept it narrow.
 GameSnapshot widestTableOf(unsigned int seats)
 {
     GameSnapshot snapshot = tableOf(seats);
 
     for(unsigned int i = 0 ; i < seats ; i++)
-    {
         snapshot.seats[i].name = std::string(newgame::MaximumNameLength - 1, 'W') + std::to_string(i);
-        snapshot.seats[i].totalScore = -888;
-    }
 
     return snapshot;
 }

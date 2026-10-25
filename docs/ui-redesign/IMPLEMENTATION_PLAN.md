@@ -476,8 +476,8 @@ pinned 8 from the window's right edge and 8 below the menu bar, growing left and
 >
 > **No seat moved.** `HudTests`' clearance case holds every corner panel inside the window and clear
 > of every seat for 3 to 6 players at 1920×1080, 1920×1200, 1440×900, 1024×768, 1280×1024 and
-> 2560×1440. It now runs with the scoreboard at its widest (20-character names, three-digit negative
-> scores), since it is the panel beside the top-right seat. `BidStripTests` holds the bid strip
+> 2560×1440. It now runs with the scoreboard at its widest (20-character names; the number columns
+> are already at their widest whatever the scores), since it is the panel beside the top-right seat. `BidStripTests` holds the bid strip
 > clear of both. The window shots no longer pair with the mock-up's pictures for these two panels.
 
 ### 2.11 Bottom-left buttons
