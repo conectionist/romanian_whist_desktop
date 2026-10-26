@@ -1,20 +1,17 @@
 #ifndef GAME_OVER_PANEL_H
 #define GAME_OVER_PANEL_H
 
-#include "paint/Theme.h"
+#include "ui/Overlay.h"
 
 #include <romanian_whist/GameEngine.h>
 
 #include <QCoreApplication>
 #include <QString>
-#include <QWidget>
 
 #include <vector>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
-class QPushButton;
-class QVBoxLayout;
 QT_END_NAMESPACE
 
 // Section 16.2's end of the game: the final standings, who won, and the two ways
@@ -30,9 +27,9 @@ namespace gameover
 {
 
 // Translated through QCoreApplication::translate() with an explicit context, for
-// the reason InfoStrip.h and ScoreboardWidget.h give at length: this is chrome a
-// player reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of our
-// own would hide every string in here from lupdate.
+// the reason table/ScoreboardItem.h gives at length: this is chrome a player
+// reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of our own
+// would hide every string in here from lupdate.
 
 // PORTED FROM romanian_whist_terminal, src/Renderer.cpp - Renderer::
 // winnerAnnouncement(), with its test (section 21.4). Verbatim in its wording
@@ -52,22 +49,17 @@ QString winnerAnnouncement(const std::vector<romanian_whist::Standing>& winners)
 
 } // namespace gameover
 
-// The panel itself. A CHILD OVERLAY, the shape PauseOverlay arrived at and for
-// the same two reasons: section 16.2 draws this OVER the final state - section
-// 4.1 publishes the last snapshot before emitting gameOver precisely so the
-// table underneath is the game that just ended - and section 4.4 wants nothing
-// application-modal standing over a window whose X must keep working.
-//
-// So it dims what is behind it, swallows the clicks that land on it, and reads
-// as modal without blocking the window.
-class GameOverPanel : public QWidget
+// The panel itself. An Overlay, for two reasons: section 16.2 draws this OVER
+// the final state - section 4.1 publishes the last snapshot before emitting
+// gameOver precisely so the table underneath is the game that just ended - and
+// section 4.4 wants nothing application-modal standing over a window whose X
+// must keep working.
+class GameOverPanel : public Overlay
 {
     Q_OBJECT
 
 public:
     explicit GameOverPanel(QWidget* parent = nullptr);
-
-    void setTheme(const Theme& theme);
 
     // The ordinary ending. Both vectors come straight off the gameOver signal.
     void showResult(const std::vector<romanian_whist::Standing>& standings,
@@ -76,34 +68,24 @@ public:
     // THE OTHER ENDING, and it is here so that the failure path is not the dead
     // end this class was written to remove. The run slot caught something, so
     // there are no standings to show and nothing to play again from - the error
-    // takes the announcement's place and Main menu is the only button.
+    // takes the announcement's place and Main menu, the green one now, goes last.
     void showFailure(const QString& what);
 
-    // Puts the keyboard on the button that face leads with - Play again on the
-    // ordinary ending, Main menu on the failure. Called by the window after it
-    // shows this, rather than from showEvent(), for the reason PauseOverlay
-    // records: focus taken during a show is easy to lose to whatever is shown
-    // next.
-    void focusDefaultButton();
+    // The button the face on show leads with: Play again on the ordinary
+    // ending, Main menu on the failure.
+    void focusDefault() override;
 
 signals:
     void playAgainRequested();
     void mainMenuRequested();
 
-protected:
-    // The dim, as PauseOverlay paints it - Theme's own colour rather than one
-    // constructed here (section 18.1).
-    void paintEvent(QPaintEvent* event) override;
-
-    // Swallowed rather than left to the default, which would propagate to the
-    // PARENT rather than to the widgets underneath. Accepting says so on purpose.
-    void mousePressEvent(QMouseEvent* event) override;
+    // The quiet Round history between the two (the redesign's phase 11, by the
+    // owner's call of 2026-10-22): the game's every round, which this panel's dim
+    // otherwise keeps the table's own button from. Opened over the panel and closed
+    // back to it.
+    void historyRequested();
 
 private:
-    // Empties the standings rows. Both faces below start from a clean panel, and
-    // a second game over must not append to the first one's table.
-    void clearRows();
-
     // One standing, spelled and laid out: place, name, score, and the star every
     // winner takes.
     //
@@ -113,31 +95,29 @@ private:
     // 1, 2, 3, 4 and quietly rank players the engine had ranked equal.
     void addRow(const romanian_whist::Standing& standing, bool isWinner);
 
-    Theme theme = Theme::light();
-
-    // The words on a plaque rather than straight on the table surface. Theme has
-    // no colour for text on the green - textPrimary is chosen against seatPlaque
-    // - and D1 found that out by rendering a menu title that was dark grey on
-    // dark green. MainMenuPage and PauseOverlay both sit on one for this reason.
-    QWidget* panel = nullptr;
+    // Main menu before Round history, or - on the failure face, where it is the
+    // green one - after it.
+    void placeMainMenu(bool last);
 
     QLabel* title = nullptr;
+
+    // The announcement, under the title where the mock-up's sheets keep their
+    // .meta line - or, on the failure face, what went wrong.
+    QLabel* announcement = nullptr;
 
     // The standings table, as labels in a grid. Not painted like the scoreboard
     // is: that panel repaints on every one of a game's ~1300 frames and this one
     // is built once at the end of a game, so the reason for painting there is
     // absent here - and labels keep the text selectable and reachable, which
     // section 20's accessibility pass will thank this for.
-    QWidget* rows = nullptr;
+    SheetTable* rows = nullptr;
 
-    QLabel* announcement = nullptr;
+    SheetButton* playAgain = nullptr;
+    SheetButton* history = nullptr;
+    SheetButton* mainMenu = nullptr;
 
-    // How many standings are in the grid. See clearRows() for why this is a
-    // member and not QGridLayout::rowCount().
-    int placedRows = 0;
-
-    QPushButton* playAgain = nullptr;
-    QPushButton* mainMenu = nullptr;
+    // The buttons' row, which placeMainMenu() reorders.
+    QHBoxLayout* actions = nullptr;
 };
 
 #endif

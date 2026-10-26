@@ -1,0 +1,47 @@
+#ifndef PLAYER_PROFILE_H
+#define PLAYER_PROFILE_H
+
+#include <string>
+
+// Chosen in New Game, never guessed from the name: names are typed freely, and
+// a name says nothing reliable about who it belongs to.
+//
+// Romanian needs it: an adjective agrees with the person it describes, so the
+// trick panel says "Ana e prima" but "Bogdan e primul" (persontext::).
+enum class Gender
+{
+    Male,
+    Female
+};
+
+// WHO SITS IN A SEAT, as the client knows them: everything about a player that
+// is not the game. Built by New Game, carried with the deal (GameDeal::profiles)
+// and stamped onto every snapshot's SeatView by GameBridge.
+//
+// NOT IN THE ENGINE, whose Player knows only a name. The engine is the rules and
+// is shared with the terminal client; nothing here changes how a hand is played
+// or scored. The name is the one field both hold: the engine needs it (it
+// rejects two equal names, and the Cyborg finds its own seat by it), so
+// newgame::buildDeal() hands it over from here.
+//
+// A nationality is to join it, so a player's look stays in one place and cannot
+// contradict their name or gender.
+struct PlayerProfile
+{
+    // UTF-8, as the engine takes it (QString::toStdString()).
+    std::string name;
+    Gender gender = Gender::Male;
+
+    // THE PORTRAIT THIS PLAYER WEARS: an id from the avatar catalogue
+    // (avatars::catalogue()), always one of the player's gender. CHOSEN WHEN THE
+    // GAME IS DEALT, at random by the owner's rule (avatars::assign()), so New
+    // Game's settings leave it empty and every game gets new faces.
+    //
+    // Braced, so a profile written { name, gender } leaves it empty without
+    // -Wmissing-field-initializers.
+    std::string avatar{};
+
+    bool operator==(const PlayerProfile&) const = default;
+};
+
+#endif

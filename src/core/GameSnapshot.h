@@ -4,7 +4,8 @@
 // Ported from romanian_whist_terminal, src/GameView.h - struct GameView and the
 // three types under it, minus the fields a GUI has no use for: `message`,
 // `hint`, `error`, `elapsedMinutes`, `Phase`, and HandEntry::choice, which is
-// the number a terminal player types.
+// the number a terminal player types. The terminal's own Phase went; the
+// engine's GamePhase is carried below, so nothing here guesses it.
 //
 // What the screen shows, as plain data. Widgets read only this, never the
 // engine - see QT_CLIENT_PLAN_proposal1.md section 3. The engine has no locking
@@ -16,7 +17,10 @@
 // unique_ptr, and no bare Seat - Seat has no default constructor.
 
 #include <romanian_whist/Card.h>
+#include <romanian_whist/GameEngine.h>
 #include <romanian_whist/RoundType.h>
+
+#include "PlayerProfile.h"
 
 #include <string>
 #include <vector>
@@ -38,6 +42,15 @@ struct SeatView
 {
     std::string name;
     unsigned int seatIndex = 0;
+
+    // FROM THE SEAT'S PlayerProfile, not the engine, which knows only the name:
+    // GameBridge stamps it on from the deal's profiles. Male for a seat that came
+    // without one - every fixture that builds a GameSetup by hand.
+    Gender gender = Gender::Male;
+
+    // The portrait this seat wears, an avatar id (PlayerProfile::avatar), stamped
+    // on by GameBridge as the gender is. Empty without a profile: the bare box.
+    std::string avatar;
 
     // Position in this round's bidding, 1 for whoever opened it.
     unsigned int bidOrder = 0;
@@ -77,6 +90,12 @@ struct GameSnapshot
     unsigned int trickNumber = 0;      // 0 between the deal and the first trick
     romanian_whist::RoundType roundType = romanian_whist::RoundType::Normal;
 
+    // GameEngine::getPhase(), AS IT IS - not worked out from the bets and the seat
+    // on turn. Playing from onBettingComplete on, before anyone is asked for a
+    // card; RoundScored or GameOver once the last trick is won. The lead rhombus
+    // is drawn in Playing only, and the last bidder is still on turn in Betting.
+    romanian_whist::GamePhase phase = romanian_whist::GamePhase::NotStarted;
+
     bool hasTrump = false;             // no trump in an 8-card round
     romanian_whist::Card trump{};
 
@@ -104,6 +123,13 @@ struct GameSnapshot
 
     unsigned int betsPlaced = 0;
     unsigned int betSum = 0;
+
+    // Whether `seat` is the human's: never in a spectator game. The one place this
+    // is worked out from humanSeat (PR #40's review, finding #8).
+    bool isHumanSeat(unsigned int seat) const
+    {
+        return humanSeat >= 0 && static_cast<unsigned int>(humanSeat) == seat;
+    }
 };
 
 #endif

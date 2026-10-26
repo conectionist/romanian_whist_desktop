@@ -16,8 +16,8 @@
 //     only from the engine and therefore only on the game thread (section 3);
 //   * a HISTORY. The engine stores no per-round score, and onRoundScored() is
 //     the only callback at which one can be read against the right round index
-//     (section 21.3). Nothing accumulates these yet - see the note at the foot
-//     of this header.
+//     (section 21.3). MainWindow keeps every one for the Round history sheet -
+//     see the note at the foot of this header.
 //
 // AND ONE REASON THAT DOES NOT HOLD, written down so it is not re-derived: that
 // a snapshot-driven sheet would be wiped by onRoundComplete()'s next publish. It
@@ -89,19 +89,22 @@ struct RoundResult
     // False on the final round, where there is no next round to count.
     bool nextRoundCountsForStreaks = false;
 
+    // WHETHER THE BRIDGE HELD THE GAME FOR THIS RESULT, until the window's
+    // Continue: the round wait as the game thread read it, once, for this round.
+    // The window reads the hold from here rather than from a copy of its own,
+    // which Settings could change between the two (PR #35's review, finding #6).
+    bool held = false;
+
     // In seat order, which is the order the scoreboard and the sheet both draw.
     std::vector<RoundSeatResult> seats;
 };
 
-// NOTHING ACCUMULATES THESE YET, and section 16.3's sketch of a history owned by
-// GameBridge should not be followed literally when phase E does. That object
-// lives on the GAME thread and writes this from there; a dialog reading the
-// history would be the GUI thread reading engine-thread state, which is the one
-// rule section 3 has.
-//
-// MainWindow appending from the queued signal is the same data with no boundary
-// crossed, and it is one line whenever it is wanted. Deferred rather than built
-// here because nothing in D2 reads it.
+// MAINWINDOW ACCUMULATES THESE, since the table redesign's phase 11: one per
+// round, appended from the queued signal and read by the Round history sheet. Not
+// section 16.3's sketch of a history owned by GameBridge, which lives on the GAME
+// thread and would write it from there; a sheet reading that would be the GUI
+// thread reading engine-thread state, which is the one rule section 3 has. The
+// window's copy is the same data with no boundary crossed.
 
 // Beside the struct rather than in GameBridge.h, for the reason Prompts.h gives
 // at length: a translation unit that includes only this header must see the same

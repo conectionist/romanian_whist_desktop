@@ -58,6 +58,7 @@ void refreshFromEngine(GameSnapshot& snapshot, const GameEngine& game)
     snapshot.trickCount = game.getCurrentRoundTrickCount();
     snapshot.trickNumber = game.getCurrentTrickNumber();
     snapshot.roundType = game.getCurrentRoundType();
+    snapshot.phase = game.getPhase();
 
     const std::optional<romanian_whist::Card> trump = game.getCurrentTrumpCard();
     snapshot.hasTrump = trump.has_value();
@@ -75,8 +76,7 @@ void refreshFromEngine(GameSnapshot& snapshot, const GameEngine& game)
 
         seat.name = player.getName();
         seat.seatIndex = i;
-        seat.isHuman = snapshot.humanSeat >= 0 &&
-                       static_cast<unsigned int>(snapshot.humanSeat) == i;
+        seat.isHuman = snapshot.isHumanSeat(i);
 
         // Bidding runs from whoever opened the round, wrapping round the table.
         // The engine works that out - reimplementing the modular arithmetic here

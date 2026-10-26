@@ -3,6 +3,7 @@
 
 #include "GameBridge.h"
 #include "QtMoveProvider.h"
+#include "core/PlayerProfile.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/IGameObserver.h>
@@ -57,6 +58,13 @@ struct GameDeal
 {
     romanian_whist::GameSetup setup;
     std::vector<romanian_whist::IGameObserver*> observers;
+
+    // WHO SITS IN EACH SEAT, in setup.seats' order: profile i is seat i, which is
+    // also the engine's seat index. What the client knows of a player and the
+    // engine does not (PlayerProfile), handed to the bridge by start() and
+    // stamped onto every snapshot. Empty is allowed - every fixture that builds
+    // a GameSetup by hand - and leaves each SeatView at its defaults.
+    std::vector<PlayerProfile> profiles;
 
     // Load-bearing: the converting constructor below suppresses the implicit
     // default one, and the tests default-construct.
@@ -187,6 +195,11 @@ public:
     // thread is parked in a prompt waiting for the player - which is already a
     // pause, so there is nothing there to do.
     void setPaused(bool paused);
+
+    // NEW DELAYS FOR THE GAME IN PLAY, from the menu bar's Settings. Forwards to
+    // GameBridge::setPacing(); see there. A no-op with no game, like setPaused():
+    // the next game takes its pacing from prepare().
+    void setPacing(Pacing pacing);
 
     // Built by prepare(), destroyed by the next one. NOT the GUI's seam: GUI code
     // connects to this object's mirrored signals instead, which outlive a game -

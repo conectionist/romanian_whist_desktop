@@ -1,0 +1,24 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <!-- Runtime path :/names/player_names.json - the alias strips the source
+         directory, as table.qrc does.
+
+         THE NAMES NEW GAME GIVES THE BOTS, drawn at random (src/ui/PlayerNames.h).
+         One entry per name, in any order:
+         - "name": as it is shown, at most 20 characters (the panels' limit).
+         - "gender": "male", "female", or "any" for a name either can have.
+         - "language": "ro" or "en", the app's language it is drawn in, or "any"
+           for both.
+         - "strategy" (optional): the bot strategy it is dedicated to. Only a bot
+           of that strategy is given it, and that bot is given its strategy's
+           names of its gender whenever there are any free. The names: random,
+           first-card, low-risk, ducking, cyborg, reckoner-alpha, reckoner-beta,
+           reckoner-gamma, reckoner-delta (newgame::avatarStrategyOf()).
+         For example:
+           { "name": "T-800", "gender": "male", "language": "any",
+             "strategy": "cyborg" }
+         PlayerNamesTests fails on an entry the app would skip, and on a strategy
+         the game does not have. -->
+    <qresource prefix="/names">
+        <file alias="player_names.json">names/player_names.json</file>
+    </qresource>
+</RCC>

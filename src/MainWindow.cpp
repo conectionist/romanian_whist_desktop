@@ -2,36 +2,40 @@
 #include "ui_MainWindow.h"
 
 #include "paint/Theme.h"
+#include "table/BidStripItem.h"
 #include "table/HandItem.h"
+#include "table/TableButtonItem.h"
 #include "table/TableScene.h"
 #include "table/TableView.h"
-#include "ui/BidStrip.h"
+#include "table/TrickPanelItem.h"
 #include "ui/CardArtWindow.h"
 #include "ui/GameOverPanel.h"
-#include "ui/InfoStrip.h"
+#include "ui/HistorySheet.h"
+#include "ui/LastTrickSheet.h"
 #include "ui/MainMenuPage.h"
+#include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
-#include "ui/PromptBar.h"
 #include "ui/RoundSheet.h"
-#include "ui/ScoreboardWidget.h"
+#include "ui/RulesSheet.h"
+#include "ui/SettingsSheet.h"
 #include "ui/SnapshotLog.h"
 
 #include <romanian_whist/GameEngine.h>
 
-#include <QBoxLayout>
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QDockWidget>
+#include <QGraphicsSceneEvent>
 #include <QGuiApplication>
 #include <QMenu>
-#include <QMenuBar>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QStackedWidget>
-#include <QStatusBar>
-#include <QStringList>
-#include <QResizeEvent>
+#include <QShortcut>
 #include <QStyleHints>
+#include <QTimer>
 
 #include <algorithm>
 #include <cstdint>
@@ -54,6 +58,19 @@ namespace
 // a client that dropped humanSeat entirely would have looked correct at 0. The
 // dialog seats the human at 0 now - the terminal does the same - and the
 // property that index was standing in for is a test in NewGameTests instead.
+
+// THE DELAYS A CONFIG ASKS FOR, the slider's and the round wait together. Two
+// callers now: a game being dealt, and Settings changing the game in play.
+//
+// ON THE Pacing RATHER THAN ONLY ON THE WINDOW, because the bridge is what has to
+// hold the game - see Pacing::waitAfterEachRound. pacingFor() stays a pure
+// mapping of the slider, which is what its own tests assert.
+Pacing pacingOf(const newgame::Config& config)
+{
+    Pacing pacing = newgame::pacingFor(config.botSpeed);
+    pacing.waitAfterEachRound = config.waitAfterEachRound;
+    return pacing;
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -99,7 +116,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     buildTable();
     buildLogDock();
-    buildViewMenu();
+    buildMenuBar();
 
     // NO GAME AT LAUNCH, which is what phase D's "the app never needs a command
     // line" actually means and what the terminal does - its startGame() runs the
@@ -112,31 +129,27 @@ MainWindow::MainWindow(QWidget *parent)
     showMainMenu();
 }
 
-// Section 12's four regions, minus the two that are not B2b's: the prompt bar,
-// which has no prompts to carry until phase C, and the elapsed clock, which
-// section 19 keeps off the snapshot and phase E puts on a QTimer.
+// The table page: the table and nothing else. Since the table redesign's phase 8
+// the scoreboard, the trick panel and the corner buttons are pinned to its corners
+// inside it, drawn by the scene at the table's scale.
 //
-// THE PALETTE IS RESOLVED ONCE, here, and handed to all three. Each widget
+// THE PALETTE IS RESOLVED ONCE, here, and handed to everything. Each widget
 // asking QGuiApplication for the scheme itself would work today and would be
-// three places to change when section 20's preference arrives.
+// several places to change when section 20's preference arrives.
 void MainWindow::buildTable()
 {
     theme = Theme::forScheme(QGuiApplication::styleHints()->colorScheme());
 
     scene = new TableScene(this);
     table = new TableView(scene, this);
-    infoStrip = new InfoStrip(this);
-    scoreboard = new ScoreboardWidget(this);
 
-    // OVER the table rather than in the layout below it: a strip that appears
-    // only on your turn would move everything beneath it every round, which is
-    // the defect B2b's review recorded against the info strip. Parented and
-    // placed by the view - see TableView::setBottomOverlay().
-    bidStrip = new BidStrip(table);
-    bidStrip->hide();
-    table->setBottomOverlay(bidStrip);
+    // SECTION 2.13's STRIP, ON THE FELT and owned by the scene, which shows it while
+    // it holds a prompt. A handle here for its second source, the prompt for your
+    // bid - and, like the fan's, its digit keys are read on this window
+    // (keyPressEvent()).
+    bidStrip = scene->bidStripItem();
 
-    connect(bidStrip, &BidStrip::bidChosen, this, &MainWindow::onBidChosen);
+    connect(bidStrip, &BidStripItem::bidChosen, this, &MainWindow::onBidChosen);
 
     // OWNED BY THE SCENE, not by this window: the fan is a QGraphicsObject in the
     // table rather than a widget, because section 18.2 animates a card from it to
@@ -146,38 +159,20 @@ void MainWindow::buildTable()
 
     connect(hand, &HandItem::cardClicked, this, &MainWindow::onCardPicked);
 
-    promptBar = new PromptBar(this);
+    // THE TRICK PANEL, owned by the scene as the fan is, and for the fan's reason a
+    // handle here: it has the same second source, the prompt for your card.
+    trickPanel = scene->trickPanelItem();
 
-    connect(promptBar, &PromptBar::menuRequested, this, &MainWindow::showPauseMenu);
+    // THE CORNER BUTTONS, in the scene as the panels are: Round history and Last
+    // trick, which open their sheets below (phase 11).
+    connect(scene->historyButton(), &TableButtonItem::clicked, this, &MainWindow::showHistory);
+    connect(scene->lastTrickButton(), &TableButtonItem::clicked, this, &MainWindow::showLastTrick);
 
     scene->setTheme(theme);
-    infoStrip->setTheme(theme);
-    scoreboard->setTheme(theme);
-    bidStrip->setTheme(theme);
-    promptBar->setTheme(theme);
 
-    // The strip full width across the top, then the table and the scoreboard
-    // side by side. The table takes the stretch: the scoreboard is as wide as
-    // its widest name and no wider, and everything left over is green.
-    auto* body = new QHBoxLayout;
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(0);
-    body->addWidget(table, 1);
-    body->addWidget(scoreboard);
-
-    auto* central = new QWidget(this);
-
-    auto* stack = new QVBoxLayout(central);
-    stack->setContentsMargins(0, 0, 0, 0);
-    stack->setSpacing(0);
-    stack->addWidget(infoStrip);
-    stack->addLayout(body, 1);
-
-    // SECTION 12'S FOURTH REGION, full width beneath the table AND the
-    // scoreboard, which is where that section's mockup draws it: it is where the
-    // game talks to you, and one line always in the same place is the whole
-    // point of it.
-    stack->addWidget(promptBar);
+    // THE SHIPPED PACE. The scene starts with its motion off, as a scene built on its
+    // own should; the window is where the player's choice lives.
+    scene->setMotion(animationPace);
 
     // TWO PAGES, and the table keeps its own state between games. The menu is
     // page 0 because that is what the window opens on; nothing is destroyed when
@@ -195,16 +190,19 @@ void MainWindow::buildTable()
     // and the uniformity free.
     connect(menuPage, &MainMenuPage::quitRequested, this, &MainWindow::close);
 
+    // THE TABLE TAKES THE PAGE. The info strip that ran across its top, the
+    // scoreboard column beside it and the prompt bar beneath it are the
+    // scoreboard and the trick panel in its corners now (sections 2.9 and 2.10).
     pages = new QStackedWidget(this);
     pages->addWidget(menuPage);
-    pages->addWidget(central);
+    pages->addWidget(table);
 
     setCentralWidget(pages);
 
     // A CHILD OF THE STACK, not a page in it, and not a dialog. It covers
     // whichever page is showing rather than replacing one - the point is to dim
-    // the table and still show it. Hidden until a game is paused, and its
-    // geometry is kept by resizeEvent() below.
+    // the table and still show it. Hidden until a game is paused; it keeps
+    // itself the page's size (Overlay).
     pauseOverlay = new PauseOverlay(pages);
     pauseOverlay->setTheme(theme);
     pauseOverlay->hide();
@@ -243,6 +241,51 @@ void MainWindow::buildTable()
     gameOverPanel->setTheme(theme);
     gameOverPanel->hide();
 
+    // THE MENU BAR'S RULES, the fourth overlay and the same arrangement. It opens
+    // over any of the three above and closes back to it.
+    rulesSheet = new RulesSheet(pages);
+    rulesSheet->setTheme(theme);
+    rulesSheet->hide();
+
+    connect(rulesSheet, &RulesSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    settingsSheet = new SettingsSheet(pages);
+    settingsSheet->setTheme(theme);
+    settingsSheet->hide();
+
+    connect(settingsSheet, &SettingsSheet::settingsChanged, this, &MainWindow::applySettings);
+    connect(settingsSheet, &SettingsSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    // THE CORNER BUTTONS' TWO, opened as Rules is. The last trick is drawn from
+    // the table's own card art, whose pictures it shares.
+    historySheet = new HistorySheet(pages);
+    historySheet->setTheme(theme);
+    historySheet->hide();
+
+    connect(historySheet, &HistorySheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    lastTrickSheet = new LastTrickSheet(pages);
+    lastTrickSheet->setTheme(theme);
+    lastTrickSheet->setCards(&scene->cardRenderer());
+    lastTrickSheet->hide();
+
+    connect(lastTrickSheet, &LastTrickSheet::closeRequested, this, &MainWindow::hideMenuSheets);
+
+    menuSheets = { rulesSheet, settingsSheet, historySheet, lastTrickSheet };
+
+    // EVERY SHEET, as it comes up, lets the table's lit things go out under it.
+    sheets = { pauseOverlay, roundSheet, gameOverPanel, rulesSheet, settingsSheet, historySheet,
+               lastTrickSheet };
+
+    for(Overlay* sheet : sheets)
+        sheet->installEventFilter(this);
+
+    // AND THE HISTORY FROM THE TWO SHEETS THAT REPORT SCORES: over the round sheet,
+    // whose hold it keeps, and over the standings, which otherwise cover the table's
+    // own button. Each closes back to the sheet it opened from.
+    connect(roundSheet, &RoundSheet::historyRequested, this, &MainWindow::showHistory);
+    connect(gameOverPanel, &GameOverPanel::historyRequested, this, &MainWindow::showHistory);
+
     // THE SAME abandonToMenu() THE PAUSE MENU USES, and it needs nothing added
     // for a game that has already ended: stop() is idempotent, and a game that
     // reached gameOver emits no gameStopped for the returningToMenu latch to
@@ -250,32 +293,16 @@ void MainWindow::buildTable()
     // requested, and this game was not stopped, it finished.
     connect(gameOverPanel, &GameOverPanel::mainMenuRequested, this, &MainWindow::abandonToMenu);
 
-    connect(gameOverPanel, &GameOverPanel::playAgainRequested, this, [this]
-    {
-        // HIDDEN FIRST, because what follows opens a modal dialog and this panel
-        // would otherwise stand over the table behind it for as long as the
-        // player takes to answer.
-        gameOverPanel->hide();
-
-        // SECTION 16.2's "play again reopens the setup dialog pre-filled with
-        // the same settings" - which is exactly what this slot already does,
-        // from lastConfig. It is section 4.3's ordering from the top: stop(),
-        // join, prepare(), start(), with a freshly built GameSetup.
-        //
-        // The dialog's exec() runs BEFORE startGame(), so the trap that function
-        // records - no modal event loop between prepare() and start() - holds
-        // here as it does from the menu page.
-        showNewGameDialog();
-
-        // AND BACK UP IF THE PLAYER CANCELLED IT, which is the dead end this
-        // whole panel exists to remove, walked into from the other side: a
-        // dismissed dialog leaves a finished game on the table, and hiding the
-        // panel on the way in would have left nothing to press. startGame() is
-        // what moves the state on, so this reads the state rather than the
-        // dialog's answer.
-        if(tableState == TableState::Finished)
-            showGameOverPanel();
-    });
+    // SECTION 16.2's "play again reopens the setup dialog pre-filled with the
+    // same settings" - which is exactly what showNewGameDialog() does, from
+    // lastConfig, taking this panel down while it is open and putting it back
+    // if it is cancelled. It is section 4.3's ordering from the top: stop(),
+    // join, prepare(), start(), with a freshly built GameSetup.
+    //
+    // The dialog's exec() runs BEFORE startGame(), so the trap that function
+    // records - no modal event loop between prepare() and start() - holds here
+    // as it does from the menu page.
+    connect(gameOverPanel, &GameOverPanel::playAgainRequested, this, &MainWindow::showNewGameDialog);
 }
 
 void MainWindow::showMainMenu()
@@ -294,7 +321,6 @@ void MainWindow::showMainMenu()
     // for the elapsed column's sake, so a dock left open shows the new game from
     // its first line, and this window goes on holding no "is the log showing"
     // state of its own to get wrong.
-    statusBar()->clearMessage();
 }
 
 void MainWindow::showTable()
@@ -309,47 +335,63 @@ void MainWindow::showNewGameDialog()
     // QSettings, which is section 20 and phase E.
     NewGameDialog dialog(lastConfig, this);
 
-    if(dialog.exec() != QDialog::Accepted)
+    // THE STANDINGS COME DOWN WHILE IT IS UP, from Play again, the menu bar's
+    // New Game and Alt+N alike. Left up, the panel stands over the table behind
+    // the dialog for as long as the player takes to answer - which only Play
+    // again used to see to (PR #35's review, finding #7).
+    gameOverPanel->hide();
+
+    // A RUNNING GAME WAITS FOR THE ANSWER, which the menu bar's New Game made
+    // possible: before the redesign's phase 9 the dialog opened only over the
+    // menu page or a game that had ended. Cancelled, the game runs on from where
+    // it stood; accepted, startGame() replaces it.
+    dialogHolding = tableState == TableState::Playing;
+    applyHold();
+
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+
+    dialogHolding = false;
+
+    if(!accepted)
+    {
+        // AND BACK UP IF THE PLAYER CANCELLED IT, which is the dead end that
+        // panel exists to remove, walked into from the other side: a dismissed
+        // dialog leaves a finished game on the table, and hiding the panel on
+        // the way in would have left nothing to press. startGame() is what
+        // moves the state on, so this reads the state rather than the answer.
+        if(tableState == TableState::Finished)
+            showGameOverPanel();
+
+        applyHold();
+
+        // The dialog had the keyboard, and Qt gives it back to wherever it was
+        // when the dialog closes: only what is on top now may need it.
+        restoreFocus(false);
         return;
+    }
 
     lastConfig = dialog.config();
 
     // A FRESH GameSetup EVERY TIME, never a stashed one: it is move-only and
     // spent by the move into start(), so even the path where start() throws
     // needs the dialog's config re-built rather than a copy kept (section 13).
-    // THE SHEET'S DISMISSAL IS A PER-GAME SETTING, so it is read here with the
-    // rest of what the dialog answered rather than kept on the Config the window
-    // holds for pre-filling - those are the last game's settings, and this is
-    // the game being dealt.
-    waitAfterEachRound = lastConfig.waitAfterEachRound;
-
-    // ON THE Pacing RATHER THAN ONLY HERE, because the bridge is what has to
-    // hold the game - see Pacing::waitAfterEachRound. pacingFor() stays a pure
-    // mapping of the slider, which is what its own tests assert.
-    Pacing pacing = newgame::pacingFor(lastConfig.botSpeed);
-    pacing.waitAfterEachRound = lastConfig.waitAfterEachRound;
-
     startGame(newgame::buildDeal(lastConfig),
               newgame::humanSeatOf(lastConfig),
-              pacing);
+              pacingOf(lastConfig));
 }
 
-void MainWindow::setPauseMenuVisible(bool visible)
+bool MainWindow::canPause() const
 {
-    // ONE FACT, NOT TWO. "The menu is up" and "the game is held" are set here
-    // together and nowhere else, so no caller can put them out of step - which
-    // is the hardening phase E's box asks for on the fan's two sources, applied
-    // to the pause before it has a chance to go wrong.
-    //
     // NOTHING TO PAUSE ON THE MENU PAGE, or on a game that has already ended.
-    // Esc is bound on the window, so it arrives here whichever page is showing.
+    // Esc is bound on the window, so it arrives at the pause whichever page is
+    // showing.
     //
     // PLAYING EXACTLY, not "anything but NoGame". A finished game now has a
     // panel of its own with the two ways on, and a Resume raised over it would
     // promise a game that has already ended - which is the same reason the flag
     // this reads was cleared at gameOver before there was anywhere to go.
-    if(visible && tableState != TableState::Playing)
-        return;
+    if(tableState != TableState::Playing)
+        return false;
 
     // NOT OVER A ROUND SHEET THAT IS HOLDING THE GAME. That sheet has its own way
     // on and its own hold; a pause menu over it would be a second overlay on the
@@ -365,8 +407,31 @@ void MainWindow::setPauseMenuVisible(bool visible)
     // clicked Menu and found nothing opened.
     //
     // A dwelling sheet is transient chrome, so the menu takes precedence and the
-    // sheet goes on the way past.
-    if(visible && roundSheetHolding)
+    // sheet goes on the way past (setPauseMenuVisible()).
+    return !roundSheetHolding;
+}
+
+// EXIT SAYS WHAT A CLICK ON IT WOULD DO: greyed wherever canPause() would refuse
+// it - on the menu page, over the game-over panel, under a round sheet that is
+// holding the game - rather than live and doing nothing (PR 34's review, finding
+// #4, made of the Menu item Exit replaced). Called wherever either of canPause()'s
+// two facts changes.
+void MainWindow::updatePauseAction()
+{
+    if(exitAction)
+        exitAction->setEnabled(canPause());
+}
+
+void MainWindow::setPauseMenuVisible(bool visible)
+{
+    // ONE FACT, NOT TWO. "The menu is up" and "the game is held" are set here
+    // together and nowhere else, so no caller can put them out of step - which
+    // is the hardening phase E's box asks for on the fan's two sources, applied
+    // to the pause before it has a chance to go wrong.
+    //
+    // NOTHING TO PAUSE, OR NOTHING TO RAISE IT OVER: see canPause(). Esc comes
+    // here whatever Exit shows.
+    if(visible && !canPause())
         return;
 
     if(visible && roundSheet->isVisible())
@@ -386,39 +451,180 @@ void MainWindow::setPauseMenuVisible(bool visible)
 
     if(!visible)
     {
+        const bool hadKeyboard = holdsKeyboard(pauseOverlay);
+
         pauseOverlay->hide();
 
-        // AND THE KEYBOARD BACK WHERE THE PAUSE TOOK IT FROM. focusResume() put
+        // AND THE KEYBOARD BACK WHERE THE PAUSE TOOK IT FROM. focusDefault() put
         // it on the Resume button, and hiding that button does not give it back
         // - so a pause taken at a bid prompt left the strip's digit keys dead
         // afterwards, with its buttons still working, which is the shape that
-        // looks finished. The same call onBetRequested() makes when it raises
-        // the strip, and for the same reason stated there.
+        // looks finished.
         //
-        // ASKED OF THE STRIP rather than remembered across the pause: it is
-        // visible exactly while the engine is parked waiting for a bid, which is
-        // the whole of the question.
-        if(bidStrip->isVisible())
-            bidStrip->setFocus();
+        // ASKED OF WHAT IS SHOWING rather than remembered across the pause: the
+        // strip is visible exactly while the engine is parked waiting for a bid,
+        // which is the whole of the question.
+        restoreFocus(hadKeyboard);
 
         return;
     }
 
-    pauseOverlay->setGeometry(pages->rect());
     pauseOverlay->show();
     pauseOverlay->raise();
-    pauseOverlay->focusResume();
+    pauseOverlay->focusDefault();
 }
 
 void MainWindow::showPauseMenu()
 {
     setPauseMenuVisible(true);
+
+    // EXIT OVER RULES OR SETTINGS: the pause menu goes up and the sheet comes
+    // down. In that order, so the game is never released between the two holds.
+    if(pauseOverlay->isVisible())
+        hideMenuSheets();
+}
+
+void MainWindow::showRules()
+{
+    rulesSheet->showRules(lastConfig);
+    showMenuSheet(rulesSheet);
+}
+
+void MainWindow::showSettings()
+{
+    // The pace changes the moment the slider moves, so the bots take it up as
+    // soon as the sheet is closed.
+    settingsSheet->setValues(lastConfig.botSpeed, lastConfig.waitAfterEachRound, animationPace);
+    showMenuSheet(settingsSheet);
+}
+
+void MainWindow::showMenuSheet(Overlay* sheet)
+{
+    // THE OTHER SHEET GOES DOWN WITHOUT A RELEASE, and so does this one when it
+    // is opened over itself. Closing it through hideMenuSheets() released the
+    // game before this sheet held it again, and the game thread, parked in
+    // pace(), woke into that gap and played on - a round and a half in the app
+    // from 40 presses of Alt+S (PR #35's review, finding #1). Hiding them here
+    // and holding below leaves the hold set throughout.
+    for(Overlay* other : menuSheets)
+    {
+        if(other != sheet)
+            other->hide();
+    }
+
+    sheet->show();
+    sheet->raise();
+
+    // ONLY A GAME IN PLAY IS HELD. Over the menu page there is nothing to hold,
+    // and over the game-over panel nothing left to.
+    sheetHolding = tableState == TableState::Playing;
+    applyHold();
+
+    sheet->focusDefault();
+}
+
+void MainWindow::applySettings(int botSpeed, bool wait, motion::Pace animations)
+{
+    // THE TABLE'S MOTION FIRST, and whatever is on screen: it is not part of a game,
+    // so it applies on the menu page as well, and to the next game.
+    animationPace = animations;
+    scene->setMotion(animations);
+
+    // FOR THE NEXT GAME, whatever is on screen: New Game opens on lastConfig.
+    lastConfig.botSpeed = botSpeed;
+    lastConfig.waitAfterEachRound = wait;
+
+    if(tableState != TableState::Playing)
+        return;
+
+    // AND FOR THIS ONE. The bridge reads the wait as each round is scored, and
+    // tells the window what it read (RoundResult::held).
+    controller.setPacing(pacingOf(lastConfig));
+}
+
+void MainWindow::showHistory()
+{
+    fillHistory();
+    showMenuSheet(historySheet);
+}
+
+void MainWindow::fillHistory()
+{
+    // THE NAMES FROM THE TABLE, in seat order, so the columns are headed before
+    // the first round is scored.
+    std::vector<QString> names;
+
+    if(const std::shared_ptr<const GameSnapshot> snapshot = scene->lastSnapshot())
+    {
+        for(const SeatView& seat : snapshot->seats)
+            names.push_back(QString::fromStdString(seat.name));
+    }
+
+    historySheet->showHistory(roundHistory, names);
+}
+
+void MainWindow::showLastTrick()
+{
+    // The round on the table, which says whether the trick's own needs naming.
+    const std::shared_ptr<const GameSnapshot> snapshot = scene->lastSnapshot();
+
+    lastTrickSheet->showTrick(lastTrick.last(), snapshot ? snapshot->roundNumber : 0);
+    showMenuSheet(lastTrickSheet);
+}
+
+void MainWindow::hideMenuSheets()
+{
+    if(!openMenuSheet() && !sheetHolding)
+        return;
+
+    const bool hadKeyboard = holdsKeyboard(openMenuSheet());
+
+    dropMenuSheets();
+    applyHold();
+
+    restoreFocus(hadKeyboard);
+}
+
+void MainWindow::dropMenuSheets()
+{
+    for(Overlay* sheet : menuSheets)
+        sheet->hide();
+
+    sheetHolding = false;
+}
+
+Overlay* MainWindow::openMenuSheet() const
+{
+    for(Overlay* sheet : menuSheets)
+    {
+        if(sheet->isVisible())
+            return sheet;
+    }
+
+    return nullptr;
+}
+
+void MainWindow::keepMenuSheetOnTop()
+{
+    // A round scored or a game ended under Rules: the hold lands at the game's
+    // next pause, and the last trick of a round or a game can finish first. The
+    // sheet the player is reading stays where it is.
+    if(Overlay* sheet = openMenuSheet())
+    {
+        sheet->raise();
+
+        // Nothing went, so nothing's keyboard needs giving back: the sheet is on
+        // top, and keeps it or takes it.
+        restoreFocus(false);
+    }
 }
 
 void MainWindow::applyHold()
 {
     // THE ONLY CALLER OF setPaused() IN THE CLIENT, and that is the whole point
-    // of it existing.
+    // of it existing. (Since the redesign's phase 9 there is a third reason, the
+    // setup dialog opened over a running game; it is one more member here, and
+    // the argument below holds for it unchanged.)
     //
     // D1 had one reason to hold a game and set the flag where it showed the
     // menu. D2 adds a second - section 16.1's round sheet, for a player who
@@ -431,47 +637,194 @@ void MainWindow::applyHold()
     // So the two reasons are two members, this computes the hold from both, and
     // GameBridge is untouched - the arbitration belongs to the one object that
     // knows every reason there is.
-    controller.setPaused(pauseMenuHolding || roundSheetHolding);
+    controller.setPaused(pauseMenuHolding || roundSheetHolding || dialogHolding || sheetHolding);
 }
 
 void MainWindow::showRoundSheet(const RoundResult& result)
 {
     roundSheet->showResult(result);
 
-    roundSheet->setGeometry(pages->rect());
     roundSheet->show();
     roundSheet->raise();
 
-    if(roundSheetHolding)
-        roundSheet->focusContinue();
+    // A SHEET THAT WAITS FOR YOU TAKES THE KEYBOARD - but not from under the history
+    // or Rules, open over it. Taken, it was handed back to the sheet on top, whose
+    // default scrolled the history to its foot under a reader of its first rounds
+    // (PR #37's review, finding #4). Closing that sheet gives it to Continue.
+    if(roundSheetHolding && !openMenuSheet())
+        roundSheet->focusDefault();
+
+    keepMenuSheetOnTop();
 }
 
 void MainWindow::hideRoundSheet()
 {
+    // Only a sheet that waits for you takes the keyboard (showRoundSheet()).
+    const bool hadKeyboard = holdsKeyboard(roundSheet);
+
     roundSheet->hide();
 
     // THE HOLD GOES WITH THE SHEET, always, and through applyHold() so that a
     // pause menu standing at the same time is not released with it.
     roundSheetHolding = false;
+    updatePauseAction();
     applyHold();
 
     // The keyboard back to the strip if the strip is what is waiting, exactly as
-    // the pause menu returns it - focusContinue() took it, and hiding the button
+    // the pause menu returns it - focusDefault() took it, and hiding the button
     // does not give it back.
+    restoreFocus(hadKeyboard);
+}
+
+void MainWindow::restoreFocus(bool hadKeyboard)
+{
+    // The sheet on top keeps the keyboard where it already is inside it - on its
+    // Main menu, say - and otherwise takes it. When what went had the keyboard,
+    // the sheet did not have it before the hide: Qt put it there, on its first
+    // control, and the sheet takes it at its default.
+    if(Overlay* sheet = activeOverlay())
+    {
+        if(hadKeyboard || !holdsKeyboard(sheet))
+            sheet->focusDefault();
+
+        return;
+    }
+
+    // THE TABLE WHILE YOU BID, whose digit keys reach this window and bid - and
+    // not the next widget in the Tab order, the menu bar's New Game, where Space
+    // would open the setup dialog over the game.
     if(bidStrip->isVisible())
-        bidStrip->setFocus();
+    {
+        table->setFocus(Qt::OtherFocusReason);
+        return;
+    }
+
+    // AND OTHERWISE THE PAGE, when what went had the keyboard. Hiding the button
+    // that had it hands it to the next widget in the window's Tab order, which
+    // is the menu bar's New Game, made last: it showed as hovered with the mouse
+    // far away, and Space opened the setup dialog over the game (PR #35's
+    // review, finding #3).
+    //
+    // NOT OTHERWISE: then the keyboard is where the player put it. The first
+    // version of #3's fix fell back every time, and an unwaited round sheet,
+    // which never has the keyboard, took it from the log once a round.
+    if(!hadKeyboard)
+        return;
+
+    if(pages->currentWidget() == menuPage)
+        menuPage->focusNewGame();
+    else
+        table->setFocus(Qt::OtherFocusReason);
+}
+
+void MainWindow::leaveTable()
+{
+    // NAMING THE VIEW'S VIEWPORT, which the scene reads the view through: a leave
+    // naming no widget crashes it.
+    QGraphicsSceneEvent leave(QEvent::GraphicsSceneLeave);
+    leave.setWidget(table->viewport());
+    QCoreApplication::sendEvent(scene, &leave);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    // ONCE THE EVENT UNDER WAY IS DONE, not now. A corner button's sheet opens
+    // from inside the scene's mouse release, and the scene ends a release by
+    // sending a hover at where it happened (QGraphicsScene::mouseReleaseEvent()),
+    // which lit the button again straight after a leave sent from here.
+    //
+    // ONLY FOR THE SHEET THAT FIRST COVERS THE TABLE, and only if it is still up
+    // by then (leaveTable()).
+    Overlay* shown = event->type() == QEvent::Show ? qobject_cast<Overlay*>(watched) : nullptr;
+
+    if(shown)
+    {
+        const bool alreadyCovered = std::any_of(sheets.begin(), sheets.end(), [shown](const Overlay* sheet)
+        {
+            return sheet != shown && sheet->isVisible();
+        });
+
+        if(!alreadyCovered)
+        {
+            QTimer::singleShot(0, this, [this, sheet = QPointer<Overlay>(shown)]
+            {
+                if(sheet && sheet->isVisible())
+                    leaveTable();
+            });
+        }
+    }
+
+    return QMainWindow::eventFilter(watched, event);
+}
+
+bool MainWindow::holdsKeyboard(const QWidget* widget) const
+{
+    // The window's focus widget rather than QApplication's, which is null
+    // whenever this window is not the active one.
+    const QWidget* focus = focusWidget();
+
+    return widget && focus && (focus == widget || widget->isAncestorOf(focus));
+}
+
+Overlay* MainWindow::activeOverlay() const
+{
+    // The menu bar's sheets open over everything else.
+    if(Overlay* sheet = openMenuSheet())
+        return sheet;
+
+    // THEN THE REST, TOP FIRST. The pause menu hides any round sheet on its way
+    // up, and a game that has ended has neither a sheet holding it nor a strip
+    // waiting, so at most one of these is ever the answer - the order only says
+    // which wins if a later change lets two stand at once.
+    if(pauseOverlay && pauseOverlay->isVisible())
+        return pauseOverlay;
+
+    if(gameOverPanel && gameOverPanel->isVisible())
+        return gameOverPanel;
+
+    if(roundSheet && roundSheet->isVisible() && roundSheetHolding)
+        return roundSheet;
+
+    return nullptr;
+}
+
+bool MainWindow::focusNextPrevChild(bool next)
+{
+    // Handled even when the sheet has nothing to stop on: the keyboard stays
+    // put rather than leaving for what is under the dim.
+    if(Overlay* sheet = activeOverlay())
+    {
+        sheet->focusNextInside(next);
+        return true;
+    }
+
+    return QMainWindow::focusNextPrevChild(next);
 }
 
 void MainWindow::showGameOverPanel()
 {
-    gameOverPanel->setGeometry(pages->rect());
     gameOverPanel->show();
     gameOverPanel->raise();
-    gameOverPanel->focusDefaultButton();
+
+    // Not from under an open sheet, as the round sheet (showRoundSheet()).
+    if(!openMenuSheet())
+        gameOverPanel->focusDefault();
+
+    keepMenuSheetOnTop();
 }
 
 void MainWindow::abandonToMenu()
 {
+    // WHETHER THE KEYBOARD IS ON WHAT GOES, read before anything goes: the Main
+    // menu button just pressed, on the pause or on the game-over panel, or a
+    // sheet, or the table. restoreFocus() at the end gives it to the menu page.
+    // Without that, hiding the button let Qt hand it to the next widget in the
+    // window's Tab order, the menu bar's New Game: it showed as hovered with the
+    // mouse elsewhere, and Enter did nothing on the menu page (PR #42's review,
+    // finding #5).
+    const bool hadKeyboard = holdsKeyboard(pauseOverlay) || holdsKeyboard(gameOverPanel)
+                             || holdsKeyboard(openMenuSheet()) || holdsKeyboard(pages->currentWidget());
+
     setPauseMenuVisible(false);
 
     // AND THE GAME-OVER PANEL, because this is the button on BOTH of them. From
@@ -484,6 +837,10 @@ void MainWindow::abandonToMenu()
     // the game thread either way.
     roundSheet->hide();
     roundSheetHolding = false;
+    updatePauseAction();
+
+    // And the menu bar's sheets, which can stand over the game-over panel.
+    dropMenuSheets();
 
     // SET BEFORE THE STOP, exactly as closeEvent() sets `closing` before its
     // own - onGameStopped() closes the window for any stop it cannot account
@@ -496,8 +853,7 @@ void MainWindow::abandonToMenu()
     // game's queue is worthless, which is why the purge is no longer private to
     // prepare(). Every frame the game thread published between this click and
     // the join above is still in this thread's queue, and is delivered after
-    // showMainMenu() below: a line into the log of a game that no longer exists,
-    // and the status bar with it whenever the round or the trick moved in one.
+    // showMainMenu() below: a line into the log of a game that no longer exists.
     //
     // SMALL HERE, AND NOT NOTHING. Main menu is only reachable from the pause,
     // which has usually let the window go idle and drain the queue first -
@@ -509,41 +865,21 @@ void MainWindow::abandonToMenu()
     // rather than a race.
     controller.discardQueuedSignals();
 
+    // THE PROMPTS GO HERE, because onGameStopped() never runs on this path: the
+    // purge above drops the queued gameStopped with everything else. The strip is
+    // an item in the scene since the redesign's phase 10, so hiding the table's
+    // page does not hide it - left up, the menu page took its digits for a game
+    // that was gone, and restoreFocus() sent the keyboard to the hidden table
+    // (PR #36's review, findings #1 and #2).
+    bidStrip->clearPrompt();
+    hand->setPlayable(false);
+    trickPanel->clearPrompt();
+
     tableState = TableState::NoGame;
+    updatePauseAction();
     showMainMenu();
-}
 
-void MainWindow::capScoreboard()
-{
-    if(!scoreboard)
-        return;
-
-    // A THIRD OF THE WINDOW at most, which is about what section 12's mockup
-    // gives it. Never below the panel's own minimum, which is the numbers in
-    // full plus enough name to elide - past that the panel would be lying
-    // rather than merely cramped.
-    const int wanted = width() / 3;
-    const int floor = scoreboard->minimumSizeHint().width();
-
-    scoreboard->setMaximumWidth(std::max(wanted, floor));
-}
-
-void MainWindow::resizeEvent(QResizeEvent* event)
-{
-    QMainWindow::resizeEvent(event);
-    capScoreboard();
-
-    // The overlay is a child rather than a layout item, so nothing else moves
-    // it. Only while it is up: a hidden widget's geometry is nobody's business,
-    // and it is set again on the way in.
-    if(pauseOverlay && pauseOverlay->isVisible())
-        pauseOverlay->setGeometry(pages->rect());
-
-    if(gameOverPanel && gameOverPanel->isVisible())
-        gameOverPanel->setGeometry(pages->rect());
-
-    if(roundSheet && roundSheet->isVisible())
-        roundSheet->setGeometry(pages->rect());
+    restoreFocus(hadKeyboard);
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this
@@ -561,7 +897,11 @@ void MainWindow::buildLogDock()
 {
     logDock = new QDockWidget(tr("Log"), this);
     logDock->setObjectName(QStringLiteral("logDock"));
-    logDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    // AT THE BOTTOM ONLY. Docked at the top it sat right under the menu bar, and
+    // the bar's shadow - which falls on whatever is under it - lay across the
+    // log's title bar (PR #35's review, finding #14). A diagnostic needs one
+    // place to be, not a choice of two.
+    logDock->setAllowedAreas(Qt::BottomDockWidgetArea);
 
     // Reparented out of the .ui's central layout and into the dock. Every
     // existing `ui->log` call site keeps working, which is the point of moving
@@ -576,13 +916,47 @@ void MainWindow::buildLogDock()
     logDock->hide();
 }
 
-void MainWindow::buildViewMenu()
+void MainWindow::buildMenuBar()
 {
-    // The menu bar is in MainWindow.ui and is empty; this is the first thing put
-    // into it. In code rather than in the .ui because the action needs a
-    // connection either way, and a designer-declared action that is only ever
-    // reached from here would be split across two files for nothing.
-    QMenu* view = menuBar()->addMenu(tr("&View"));
+    // SECTION 2.12's FOUR, and a QAction each so that what a menu action gives -
+    // a trigger, a greyed state, a shortcut - works as it did on the QMenuBar this
+    // replaced. The bar's buttons stand for them (QToolButton::setDefaultAction()).
+    //
+    // ALT AND A LETTER, set as each action's shortcut. A painted label has no
+    // underline to show a mnemonic with, and the button takes its text from the
+    // action without the '&' anyway.
+    newGameAction = new QAction(tr("New Game"), this);
+    newGameAction->setObjectName(QStringLiteral("newGameAction"));
+    newGameAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_N));
+    connect(newGameAction, &QAction::triggered, this, &MainWindow::showNewGameDialog);
+
+    // Both live on every page. Settings changes the game in play and the next
+    // one; Rules gives the rules for the game on the table, or on the menu page
+    // for the one New Game will offer.
+    settingsAction = new QAction(tr("Settings"), this);
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
+    settingsAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_S));
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::showSettings);
+
+    rulesAction = new QAction(tr("Rules"), this);
+    rulesAction->setObjectName(QStringLiteral("rulesAction"));
+    rulesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_R));
+    connect(rulesAction, &QAction::triggered, this, &MainWindow::showRules);
+
+    // THE PAUSE MENU'S WAY IN FOR THE MOUSE, and Esc is its keyboard half. The
+    // mock-up's Exit "returns to the main menu"; it does so through the pause
+    // menu, so it can be taken back with Resume. It replaces the temporary Menu
+    // item phase 8 put here when it took the prompt bar's Menu button away.
+    exitAction = new QAction(tr("Exit"), this);
+    exitAction->setObjectName(QStringLiteral("exitAction"));
+    exitAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_X));
+    connect(exitAction, &QAction::triggered, this, &MainWindow::showPauseMenu);
+
+    // THE DEVELOPER'S MENU, kept: the log is the thing to reach for when the table
+    // looks wrong. At the right, in the place of the mock-up's Players switch,
+    // which was not a game control either (the owner's call, 2026-10-21).
+    QMenu* view = new QMenu(tr("&View"), this);
+    view->setObjectName(QStringLiteral("viewMenu"));
 
     // Qt's own action for the dock, not one of ours - see buildLogDock().
     QAction* logAction = logDock->toggleViewAction();
@@ -593,6 +967,16 @@ void MainWindow::buildViewMenu()
 
     QAction* cardArtAction = view->addAction(tr("&Card art..."));
     connect(cardArtAction, &QAction::triggered, this, &MainWindow::showCardArt);
+
+    bar = new MenuBar({ newGameAction, settingsAction, rulesAction, view, exitAction }, this);
+    bar->setTheme(theme);
+    setMenuWidget(bar);
+
+    // View pops its menu up on a press, so a shortcut's click would do nothing.
+    QShortcut* viewShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_V), this);
+    connect(viewShortcut, &QShortcut::activated, bar, &MenuBar::showViewMenu);
+
+    updatePauseAction();
 }
 
 void MainWindow::showCardArt()
@@ -616,7 +1000,6 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // a game's first snapshot, so the origin has to be re-armed by whatever
     // starts a game rather than once by whatever builds the window.
     haveStarted = false;
-    haveShownStatus = false;
 
     // AND THE LOG WITH IT, for the same reason. The elapsed column only means
     // anything against the origin it was measured from, so leaving the previous
@@ -633,26 +1016,27 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // The two cached prompts matter most: they name a promptId belonging to a
     // provider prepare() is about to destroy. The generation gate would drop a
     // click carrying one (section 4.2), so this is belt and braces rather than
-    // the defence - but a stale PlayPrompt is also what the prompt bar and the
-    // fan would be redrawn from.
+    // the defence - but a stale PlayPrompt is also what the fan would be redrawn
+    // from. The trick panel holds its own copy, and is cleared below.
     activeBetPrompt = BetPrompt{};
     activePrompt = PlayPrompt{};
-    lastSnapshot.reset();
 
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->clear();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
+
+    // AND WHAT THE TABLE HAD IN MOTION: the last game's trick, its sweep, and its
+    // bid bubbles, which the new game's first frame cannot be told apart from.
+    scene->newGame();
 
     // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
-    // lives on. Unreachable today - every path here comes from the menu page,
-    // where no game is running - and one line against a menu left standing over
-    // a game that has just been dealt.
+    // lives on. Reachable since phase 9: the menu bar's New Game stays live
+    // while the pause menu is up, so a game can be dealt from under it.
     pauseOverlay->hide();
 
-    // AND THE PANEL THE LAST GAME ENDED ON, which is not unreachable at all: it
-    // is where Play again is pressed, and it is still up while the setup dialog
-    // it opens is answered.
+    // AND THE PANEL THE LAST GAME ENDED ON. showNewGameDialog() takes it down
+    // while the dialog is up; this keeps it down for the game the dialog dealt.
     gameOverPanel->hide();
 
     // AND THE SHEET, with its hold - a game abandoned from a round sheet would
@@ -660,35 +1044,48 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // would pause a game nobody asked to pause.
     roundSheet->hide();
     roundSheetHolding = false;
+    updatePauseAction();
     pauseMenuHolding = false;
+    dialogHolding = false;
+
+    // AND THE MENU BAR'S SHEETS, which can be up over a game New Game replaces.
+    dropMenuSheets();
+
+    // AND WHAT THE CORNER BUTTONS SHOW: the last game's rounds and its last trick.
+    roundHistory.clear();
+    lastTrick.clear();
 
     // Cleared here rather than in showPauseMenu(), so that the flag is false for
     // exactly one stop and cannot survive into a game it was not raised for.
     returningToMenu = false;
     tableState = TableState::Playing;
+    updatePauseAction();
 
     showTable();
 
-    // Replaced by the first snapshot, which arrives from inside start() below -
-    // so this is on screen only for as long as the deal takes.
-    statusBar()->showMessage(tr("Dealing..."));
+    // A NEW GAME STARTS WITH THE KEYBOARD ON ITS TABLE. It comes from the setup
+    // dialog, which had it, and often from under the standings, whose Play again
+    // had it before them: that panel went down while the dialog was up, handing
+    // the keyboard to the next widget in the Tab order - the menu bar's New Game,
+    // lit as though hovered - or to nothing at all.
+    table->setFocus(Qt::OtherFocusReason);
 
     // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one
     // optional decides three things at once and they must not be separable:
     // GameBridge stamps it onto every snapshot as humanSeat, which is what gives
     // canSeeHand() a viewer to be asked about; GameController builds a
-    // QtMoveProvider from it and fills that seat in start(); and botBeat() reads
+    // QtMoveProvider from it and fills that seat in start(); and delayOf() reads
     // it to choose which beat to pace at.
     //
     // THE GAME IS SLOWER FROM HERE, and correctly so. Pacing{} is unchanged, but
-    // botBeat() picks spectatorBeat (250ms) only when nobody is seated and
+    // delayOf() picks spectatorBeat (250ms) only when nobody is seated and
     // beat (700ms) when somebody is - section 4.1's split, which phases A and B
     // only ever saw one side of. A spectator watches; a player is waited for.
     // FROM THE DIALOG SINCE D1, both of them. The one optional decides three
     // things at once and they must not be separable: GameBridge stamps it onto
     // every snapshot as humanSeat, which is what gives canSeeHand() a viewer;
     // GameController builds a QtMoveProvider from it and fills that seat in
-    // start(); and botBeat() reads it to choose which beat to pace at.
+    // start(); and delayOf() reads it to choose which beat to pace at.
     //
     // NO MODAL DIALOG MAY RUN BETWEEN prepare() AND HERE, and that is the one
     // ordering trap in the reuse. prepare() calls stop() and then purges this
@@ -746,8 +1143,6 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
 
     appendLine(snapshotlog::format(*snapshot, elapsed));
 
-    lastSnapshot = snapshot;
-
     // THE SHEET GOES WHEN THE GAME MOVES ON, which is what dismisses it for a
     // player who did not ask to be waited for: the dwell ends, onRoundComplete()
     // publishes the next round, and this is where that arrives.
@@ -769,45 +1164,14 @@ void MainWindow::render(std::shared_ptr<const GameSnapshot> snapshot)
     // thing they click.
     scene->setSnapshot(snapshot);
     hand->setPlayable(false);
-    infoStrip->setSnapshot(*snapshot);
-    scoreboard->setSnapshot(*snapshot);
 
-    updateStatus(*snapshot);
-}
+    // THE LAST TRICK, kept from the frame that finishes it. A hold lands at the
+    // game's next pause, so a frame or two can still arrive under an open sheet;
+    // it shows the trick they finish rather than one already gone by.
+    lastTrick.observe(*snapshot);
 
-void MainWindow::updateStatus(const GameSnapshot& snapshot)
-{
-    // Only when it moved. render() runs on every frame a game publishes - about
-    // 1300 of them - and the status bar says nothing new on most of those, so
-    // building the string every time would be work nobody reads. The round type
-    // is not compared: it changes only when the round does.
-    if(haveShownStatus && snapshot.roundNumber == shownRound
-                       && snapshot.trickNumber == shownTrick)
-    {
-        return;
-    }
-
-    haveShownStatus = true;
-    shownRound = snapshot.roundNumber;
-    shownTrick = snapshot.trickNumber;
-
-    // Trick 0 is a real state - dealt and bid, nothing played yet - rather than
-    // an off-by-one, so it is named rather than printed as "0/8".
-    const QString trick = snapshot.trickNumber == 0
-                              ? tr("bidding")
-                              : tr("trick %1/%2").arg(snapshot.trickNumber)
-                                                 .arg(snapshot.trickCount);
-
-    // THE ROUND TYPE COMES FROM infostrip, not from a switch of its own. This
-    // window had a third spelling of the same three words until B2b: the log's
-    // fixed ASCII, the info strip's, and this. Two is the right number and the
-    // comment on snapshotlog says why - one for machines, one for people - so
-    // the people-facing one is shared and the log's stays separate.
-    statusBar()->showMessage(tr("Round %1/%2 - %3 (%4)")
-                                 .arg(QString::number(snapshot.roundNumber),
-                                      QString::number(snapshot.roundCount),
-                                      trick,
-                                      infostrip::roundTypeText(snapshot.roundType)));
+    if(lastTrickSheet->isVisible())
+        lastTrickSheet->showTrick(lastTrick.last(), snapshot->roundNumber);
 }
 
 // THE GAME THREAD IS PARKED IN makeBet() FROM HERE UNTIL onBidChosen(), which is
@@ -828,18 +1192,15 @@ void MainWindow::onBetRequested(BetPrompt prompt)
     // survive until then.
     activeBetPrompt = prompt;
 
+    // Shown by the strip itself, which holds the prompt until onBidChosen() or the
+    // game's end takes it back. NO FOCUS TO GIVE IT: its digit keys are read on
+    // this window, as the fan's are, wherever the keyboard is.
     bidStrip->setPrompt(prompt);
-    bidStrip->show();
-
-    // So the digit keys work without the player clicking the strip first.
-    // Section 15.1 asks for them and a strip that never gets focus never sees a
-    // key press - which looks finished, because the buttons still work.
-    bidStrip->setFocus();
 }
 
 void MainWindow::onBidChosen(unsigned int bet)
 {
-    bidStrip->hide();
+    bidStrip->clearPrompt();
 
     // NULL IN A SPECTATOR GAME, which this window no longer starts but phase D
     // can start in the same process - "watching" is one of the setup dialog's
@@ -876,7 +1237,9 @@ void MainWindow::onCardRequested(PlayPrompt prompt)
     hand->setPrompt(prompt);
     hand->setPlayable(true);
 
-    promptBar->setFields(promptbar::fieldsFor(prompt, lastSnapshot ? *lastSnapshot : GameSnapshot{}));
+    // AND THE TRICK PANEL, which says why the dimmed cards are out: legality from
+    // the prompt, the suit being followed from the frame it already holds.
+    trickPanel->setPrompt(prompt);
 }
 
 void MainWindow::onCardPicked(std::size_t slot)
@@ -905,7 +1268,7 @@ void MainWindow::onCardPicked(std::size_t slot)
         return;
 
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     if(!controller.provider())
         return;
@@ -922,34 +1285,80 @@ void MainWindow::onCardPicked(std::size_t slot)
     controller.provider()->submit(activePrompt.promptId, activePrompt.handIndex[slot]);
 }
 
-// THE THREE ENDINGS ALL HIDE THE STRIP, and it is one line in each rather than
-// one in a shared helper because they are reached from different places and two
-// of them are not reached at all on the path the third is. Between them they
-// close the same hole: a strip left standing over a finished game is a live
+// THE FOUR ENDINGS ALL HIDE THE STRIP - onGameStopped(), onGameOver(),
+// showFailure() and abandonToMenu() - and it is one line in each rather than one
+// in a shared helper because they are reached from different places, and an
+// ending cannot count on another one running after it: abandonToMenu()'s purge
+// is what keeps onGameStopped() from running at all on its path. Between them
+// they close the same hole: a strip left standing over a finished game is a live
 // button whose click would submit into a provider whose engine is gone. The
 // promptId gate would drop that answer, so this is the belt to its braces - but
 // a control that looks live and does nothing is its own defect.
 void MainWindow::keyPressEvent(QKeyEvent* event)
 {
+    // A HELD KEY ACTS ONCE. A bid and a played card are irrevocable, and the bid
+    // digits and the card digits are read here together: a 2 held to bid repeated
+    // into the fan once the card prompt arrived - inside the keyboard's repeat
+    // delay, with fast bots - and played a card nobody chose (PR #36's review,
+    // finding #4). Esc too, which held would raise and drop the pause in turn.
+    if(event->isAutoRepeat())
+    {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
     // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc raises the pause
-    // menu, which is the keyboard half of the prompt bar's Menu button, and
+    // menu, which is the keyboard half of the menu bar's Exit, and
     // dismisses it again - so the key that opened it is the key that leaves.
     // Checked first because the digit path below subtracts Key_1 from whatever
     // arrives and would otherwise have to reason about the result.
+    //
+    // THE MENU BAR'S SHEETS FIRST, which open over the pause menu as over
+    // everything else: Esc closes the one on top, as the mock-up's does.
     if(event->key() == Qt::Key_Escape)
     {
-        setPauseMenuVisible(!pauseOverlay->isVisible());
+        if(openMenuSheet())
+            hideMenuSheets();
+        else
+            setPauseMenuVisible(!pauseOverlay->isVisible());
+
         return;
     }
 
     // THE TABLE'S KEYS ARE NOT LIVE WHILE THE MENU IS UP. The overlay swallows
     // the mouse by covering the table; the keyboard needs saying, because these
     // digits are read HERE on the window rather than on the fan - so a 3 pressed
-    // over the pause menu would otherwise play the third card.
-    if(pauseOverlay->isVisible())
+    // over the pause menu would otherwise play the third card. The same goes for
+    // the menu bar's sheets.
+    if(pauseOverlay->isVisible() || openMenuSheet())
     {
         QMainWindow::keyPressEvent(event);
         return;
+    }
+
+    // SECTION 15.1's DIGITS, while the strip is asking: ZERO-BASED, because a bid of
+    // zero is a real bid. Read here since the redesign's phase 10 put the strip on
+    // the table, as the fan's digits always were; the strip's own rule decides
+    // (bidstrip::answerKey()), modifiers included. The engine asks one thing at a
+    // time, so the fan is never playable while the strip is up.
+    if(bidStrip->isVisible())
+    {
+        const bidstrip::KeyAnswer answer =
+            bidstrip::answerKey(event->key(), event->modifiers(), bidStrip->fields());
+
+        switch(answer.kind)
+        {
+        case bidstrip::KeyAnswer::Kind::Bid:
+            bidStrip->activate(answer.bet);
+            return;
+
+        // The struck-out bid's digit, ignored as section 15.1 asks.
+        case bidstrip::KeyAnswer::Kind::Refuse:
+            return;
+
+        case bidstrip::KeyAnswer::Kind::Pass:
+            break;
+        }
     }
 
     // UNMODIFIED DIGITS ONLY, the guard C2's review put on the bid strip and for
@@ -990,9 +1399,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 
 void MainWindow::onGameStopped()
 {
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     appendLine(tr("-- stopped --"));
 
@@ -1017,6 +1426,14 @@ void MainWindow::onGameStopped()
 
 void MainWindow::onRoundScored(RoundResult result)
 {
+    // INTO THE HISTORY BEFORE ANYTHING ELSE, the final round of an unattended game
+    // included: it gets no sheet below, and the standings' Round history is where
+    // it is read. An open history takes it in, as the hold may land after it.
+    roundHistory.push_back(result);
+
+    if(historySheet->isVisible())
+        fillHistory();
+
     // THE LAST ROUND OF AN UNATTENDED GAME GETS NO SHEET. Its numbers are the
     // ones the game-over panel is about to show in full, and a sheet that
     // flashed for a dwell and was replaced would be two panels in a second.
@@ -1026,7 +1443,7 @@ void MainWindow::onRoundScored(RoundResult result)
     // Continue rather than naming a round to deal.
     const bool finalRound = result.roundNumber >= result.roundCount;
 
-    if(finalRound && !waitAfterEachRound)
+    if(finalRound && !result.held)
         return;
 
     // THE WINDOW'S RECORD OF A HOLD THE BRIDGE HAS ALREADY TAKEN. It is not what
@@ -1039,7 +1456,12 @@ void MainWindow::onRoundScored(RoundResult result)
     // set. The applyHold() below therefore re-asserts a hold that is already
     // taken, which is idempotent, and matters only when a pause menu is up at
     // the same time.
-    roundSheetHolding = waitAfterEachRound;
+    //
+    // FROM THE RESULT, which carries the wait as the bridge read it for this
+    // round. Settings can change the wait mid-game, so a copy kept here could
+    // disagree with the hold actually taken (PR #35's review, finding #6).
+    roundSheetHolding = result.held;
+    updatePauseAction();
     applyHold();
 
     showRoundSheet(result);
@@ -1052,9 +1474,9 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
     // panel below would otherwise be raised behind it.
     hideRoundSheet();
 
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     appendLine(tr("-- game over --"));
 
@@ -1069,18 +1491,6 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
                             QString::number(row.score)));
     }
 
-    // getWinners(), not standings.front(). A drawn game has more than one
-    // winner and the engine is what decides that; reading the first row quietly
-    // names one of them, which is a bug that shipped once already in the
-    // terminal client's 2.1.0.
-    QStringList names;
-    for(const Standing& winner : winners)
-        names << QString::fromStdString(winner.name);
-
-    statusBar()->showMessage(names.size() == 1
-                                 ? tr("%1 wins").arg(names.front())
-                                 : tr("Drawn between %1").arg(names.join(tr(", "))));
-
     // THE GAME IS OVER BUT THE TABLE STAYS UP, which is what section 16.2's
     // panel is drawn over - the final snapshot arrived before this signal did
     // (section 4.1), so what is underneath the panel is the game that ended.
@@ -1090,6 +1500,7 @@ void MainWindow::onGameOver(std::vector<Standing> standings, std::vector<Standin
     // a game that has already ended. The panel below is the way on, and D1's
     // review is what found that there had to be one.
     tableState = TableState::Finished;
+    updatePauseAction();
 
     gameOverPanel->showResult(standings, winners);
     showGameOverPanel();
@@ -1101,13 +1512,13 @@ void MainWindow::showFailure(QString what)
     // they move has to be moved here too - otherwise the pause menu is still
     // reachable on a game whose thread has already unwound.
     tableState = TableState::Finished;
+    updatePauseAction();
 
-    bidStrip->hide();
+    bidStrip->clearPrompt();
     hand->setPlayable(false);
-    promptBar->setFields(promptbar::idle());
+    trickPanel->clearPrompt();
 
     appendLine(tr("-- the game thread failed: %1 --").arg(what));
-    statusBar()->showMessage(tr("The game ended in an error: %1").arg(what));
 
     // THE PANEL'S OTHER FACE, and the reason it has one: this ending is as much
     // a dead end as the ordinary one was, and it is the ending a player is least

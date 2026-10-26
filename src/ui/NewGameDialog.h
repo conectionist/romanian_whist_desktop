@@ -1,7 +1,9 @@
 #ifndef NEW_GAME_DIALOG_H
 #define NEW_GAME_DIALOG_H
 
+#include "core/PlayerProfile.h"
 #include "engine/GameController.h"
+#include "paint/Avatars.h"
 
 #include <romanian_whist/GameEngine.h>
 #include <romanian_whist/Scoreboard.h>
@@ -12,9 +14,11 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <optional>
+#include <random>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -22,12 +26,14 @@ class QButtonGroup;
 class QCheckBox;
 class QComboBox;
 class QFormLayout;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QRadioButton;
 class QSlider;
 class QSpinBox;
+class QWidget;
 QT_END_NAMESPACE
 
 // Section 13's setup dialog: one modal screen rather than a wizard, because a
@@ -61,9 +67,9 @@ QT_END_NAMESPACE
 namespace newgame
 {
 
-// TRANSLATED, the choice BidStrip and InfoStrip make, through
-// QCoreApplication::translate() with an explicit context at every call site
-// rather than a tr() of our own - Q_DECLARE_TR_FUNCTIONS is class-only whatever
+// TRANSLATED, the choice the bid strip (BidStripItem.h) and the scoreboard make,
+// through QCoreApplication::translate() with an explicit context at every call
+// site rather than a tr() of our own - Q_DECLARE_TR_FUNCTIONS is class-only whatever
 // its name suggests, and a hand-rolled wrapper hides every string from lupdate.
 // Section 7 is explicit that this includes the strategy names and the
 // round-count sentence, which are the two here least likely to look like UI
@@ -159,11 +165,11 @@ bool isObserver(BotLevel level);
 inline constexpr unsigned int MinimumSeats = 2;
 inline constexpr unsigned int MaximumSeats = 6;
 
-// Long enough for any name a scoreboard can show without eliding, and the reason
-// there is a cap at all: ScoreboardWidget sizes its name column from the widest
-// name it is given, so an unbounded one takes the table's width with it. The
-// terminal's own limit is 10, set by a fixed-width seat table this client does
-// not have.
+// Long enough for any name a player would choose, and the reason there is a cap
+// at all: the scoreboard and the seat panels are fixed widths that elide a name
+// past them, and an unbounded one would be read as its first few letters and an
+// ellipsis. The terminal's own limit is 10, set by a fixed-width seat table this
+// client does not have.
 inline constexpr int MaximumNameLength = 20;
 
 struct Config
@@ -173,11 +179,14 @@ struct Config
     // state sections 4.3 and 6 null-check for.
     bool spectator = false;
 
-    QString humanName;
+    // Kept while watching, though nobody takes the seat, so a player who flips to
+    // watching and back finds their name and gender as they left them.
+    PlayerProfile human;
 
-    // One level per name, in the same order - the terminal's parallel-vector
-    // shape, kept because it is what the dialog's rows are.
-    QStringList botNames;
+    // One level per opponent, in the same order - the terminal's parallel-vector
+    // shape, kept because it is what the dialog's rows are. The level is beside
+    // the profile, not in it: it is how a bot plays, not who it is.
+    std::vector<PlayerProfile> bots;
     std::vector<BotLevel> botLevels;
 
     romanian_whist::GameStructure structure = romanian_whist::GameStructure::S_181;
@@ -225,9 +234,23 @@ unsigned int seatCount(const Config& config);
 // the engine's; the mockup is stale.
 unsigned int roundCount(const Config& config);
 
+// HOW LONG A GAME TAKES, in whole minutes, as a rule of thumb.
+//
+// - WITH YOU PLAYING, your own pace is most of it: about 30 minutes for two
+//   players, and 5 more for each player added, with the bots at DefaultSpeed (the
+//   owner's measure, 2026-10-23). Another bot speed adds or takes off what the bots
+//   then wait more or less. Worked out from the bots' pace alone, a game with you
+//   in it came out at a few minutes, which it never is.
+// - A WATCHED GAME goes at the bots' pace: off the bot-speed slider, and zero at
+//   its instant end.
+inline constexpr int playingMinutesForTwo = 30;
+inline constexpr int playingMinutesPerSeat = 5;
+
+int estimatedMinutes(const Config& config);
+
 // Section 13's live line: "26 rounds - about 20 minutes". The count is exact and
-// the time is a rule of thumb off the bot-speed slider, which is the honest
-// division - one is arithmetic over the schedule and the other is a guess.
+// the time is estimatedMinutes()'s rule of thumb, which is the honest division -
+// one is arithmetic over the schedule and the other is a guess.
 QString summaryText(const Config& config);
 
 // What is wrong with this config, or nothing. THE DIALOG DISABLES Deal ON IT
@@ -292,14 +315,52 @@ GameDeal buildDeal(const Config& config);
 // tooltipFor(). Free functions rather than a table in the widget so the test can
 // read them without a window.
 QString nameOf(BotLevel level);
+
+// HOW THE AVATAR CATALOGUE NAMES A LEVEL, in an entry's "strategy" (avatars.json):
+// "random", "first-card", "low-risk", "ducking", "cyborg", and each Reckoner
+// preset its own - "reckoner-alpha" to "reckoner-delta" - since an avatar for one
+// preset is not one for another (the owner's call, 2026-10-23). Stable text, not
+// the enum's number, for the reason the enum's own comment gives.
+const char* avatarStrategyOf(BotLevel level);
+
+// WHO SITS IN EACH SEAT, as the avatar rule sees them (avatars::assign()): seat
+// order, as buildDeal() deals them - you first, with no strategy, unless watching;
+// then each bot with its level's.
+std::vector<avatars::Wearer> wearersOf(const Config& config);
 QString tooltipFor(BotLevel level);
+
+// THE PACE CONTROLS, built here for the setup dialog and the menu bar's Settings
+// alike, so that a player who has set them in one place finds the same control
+// in the other - the same five positions under the same words, and the same
+// newgame::pacingFor() turning them into delays. Each caller names them and
+// lays them out (PR #35's review, finding #12).
+//
+// A SLIDER AND ITS ROW of words: `name`, then `low`, the slider from `lowest` to
+// `highest` with a tick at each step, and `high`. `labelGap` is extra room after
+// `name`. Settings' two rows are this one shape, the bot speed's and the card
+// animations', and so is the setup dialog's (PR #38's review, finding #8).
+struct SliderRow
+{
+    QHBoxLayout* row = nullptr;
+    QSlider* slider = nullptr;
+};
+
+SliderRow buildSliderRow(QWidget* parent, const QString& name, const QString& low, const QString& high,
+                         int lowest, int highest, int labelGap = 0);
+
+// The bot speed's: "Bot speed", "Slow", the slider, "Instant".
+SliderRow buildSpeedRow(QWidget* parent, int labelGap = 0);
+
+// "Wait for me after each round": section 16.1's round sheet, held or not.
+QCheckBox* buildWaitCheckBox(QWidget* parent);
 
 } // namespace newgame
 
-// The widget. Built in code rather than in a .ui, for the reason
-// MainWindow::buildViewMenu() gives about its actions and one more that is
-// specific to this dialog: the opponent rows APPEAR AND DISAPPEAR WITH THE
-// COUNT, so half of it does not exist until it is asked for.
+// The widget. Built in code rather than in a .ui, for two reasons. Every control
+// needs a connection or a read-back here either way, and a designer file reached
+// only from here would split the dialog across two files for nothing. And the
+// opponent rows APPEAR AND DISAPPEAR WITH THE COUNT, so half of it does not
+// exist until it is asked for.
 class NewGameDialog : public QDialog
 {
     Q_OBJECT
@@ -332,16 +393,32 @@ private:
     // depend on all of it: the summary line and whether Deal is enabled.
     void refresh();
 
+    // A name for opponent `seat`, of this gender and level, drawn at random by the
+    // owner's rules (playernames::draw()) and none another row or you have.
+    QString drawName(Gender gender, newgame::BotLevel level, std::size_t seat);
+
+    // A new name for opponent `seat` to match its gender and level, if it still
+    // shows the one drawn for it.
+    void redrawUntouched(std::size_t seat);
+
     // One opponent. Held as a struct rather than as parallel vectors of widgets
     // because a row is added and removed as a unit.
     struct Row
     {
         QLabel* number = nullptr;
         QLineEdit* name = nullptr;
+        QComboBox* gender = nullptr;
         QComboBox* level = nullptr;
+
+        // The name last drawn for this row. While the row still shows it, a new
+        // gender or level draws another; once it is typed over, it is kept.
+        QString drawn;
     };
 
     newgame::Config current;
+
+    // What every name this dialog draws is drawn with.
+    std::mt19937 random{ std::random_device{}() };
 
     // WHAT THE DIALOG WAS OPENED ON, kept whole and never written to. `current`
     // cannot serve: refresh() rebuilds its bot lists FROM the rows on every
@@ -365,6 +442,7 @@ private:
     QRadioButton* playing = nullptr;
     QLabel* humanNameLabel = nullptr;
     QLineEdit* humanName = nullptr;
+    QComboBox* humanGender = nullptr;
     QSpinBox* opponents = nullptr;
     QLabel* opponentsHint = nullptr;
     QFormLayout* opponentRows = nullptr;

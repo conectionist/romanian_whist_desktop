@@ -114,7 +114,7 @@ inline romanian_whist::GameSetup buildSetup(std::size_t seatCount = 2,
 // The lowest bid a prompt permits: 0, or 1 where 0 is the forbidden one.
 //
 // IN THE TEST TREE SINCE C2, and it used to be promptstandin::chooseBet() beside
-// the client's own stand-in. BidStrip took its only production caller, and a
+// the client's own stand-in. The bid strip took its only production caller, and a
 // function in src/ that only tests call is worse than one that lives with them -
 // so it moved here, where the seated-game tests still need something to answer a
 // bid with. C3 does the same to chooseSlot() and deletes that file.

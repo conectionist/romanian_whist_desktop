@@ -1,9 +1,12 @@
 #ifndef CARD_ITEM_H
 #define CARD_ITEM_H
 
+#include "paint/CardShadow.h"
+#include "paint/PictureMemo.h"
+#include "paint/Theme.h"
+
 #include <romanian_whist/Card.h>
 
-#include <QColor>
 #include <QGraphicsObject>
 
 #include <optional>
@@ -42,30 +45,59 @@ public:
     // CardRenderer::back() existing at all.
     void setBack();
 
-    // In LOGICAL pixels, and it is the only size this takes: the width follows
+    // In SCENE units - table units, which the view scales to the window - and it
+    // is the only size this takes: the width follows
     // from the art's aspect through CardRenderer::sizeForHeight(), so a card
     // cannot be set to a shape the art does not have.
     void setCardHeight(qreal height);
 
-    // The winning card of a partly played trick: a raised shadow and a thin
-    // accent hairline (section 18). THE CALLER READS PlayedCardView::isWinning
+    // A CARD ON THE FELT (the table redesign's section 2.7): it casts a shadow,
+    // and the winning card of a partly played trick rises toward its own top,
+    // ringed in gold-bright and glowing. THE CALLER READS PlayedCardView::isWinning
     // AND NEVER RECOMPUTES IT - that is the engine's own ranking, so the
     // highlight cannot disagree with the winner it eventually declares.
-    void setWinning(bool winning, QColor accent);
+    //
+    // `shadows` is the picture cache every card that casts a shadow shares, owned
+    // with the renderer, which outlives the item.
+    void setPlayed(bool winning, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
 
-    // 45% opacity plus a slight desaturation, baked into the cached pixmap by
-    // CardRenderer rather than applied here, so this stays a blit.
+    // A CARD IN YOUR HAND (section 2.8): it casts the hand's shadow, and raised -
+    // the playable card under the cursor - it rises toward its own top, ringed in
+    // gold-bright and glowing. THE RISE IS DRAWN, NOT A MOVE: the item stays where
+    // the fan put it and turned as the fan turned it, so the card rises along its
+    // own tilt, and what lies under the cursor is decided by HandItem: where each
+    // card rests, and where the raised one has risen to.
+    void setHeld(bool raised, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
+
+    // What setPlayed() or setHeld() last said: READ-ONLY and for tests. None for a
+    // card set neither, which casts nothing.
+    std::optional<cardshadow::Look> look() const { return cast; }
+    bool isPlayed() const { return cast == cardshadow::Look::Played || cast == cardshadow::Look::Winning; }
+    bool isWinning() const { return cast == cardshadow::Look::Winning; }
+    bool isRaised() const { return cast == cardshadow::Look::Raised; }
+
+    // Darkened and dulled (CardRenderer::State::Dimmed), baked into the cached
+    // pixmap by CardRenderer rather than applied here, so this stays a blit.
     void setDimmed(bool dimmed);
 
-    // ORIGIN AT THE CENTRE, not the top left. A card is placed at a seat's
-    // centre and rotated toward the middle of the table, and both of those are
-    // one line when the origin is the middle of the card.
+    // The card itself, in table units, from the art's aspect: empty without a
+    // renderer or a height. Not boundingRect(), which a played card's shadow and
+    // rise reach past.
+    QSizeF cardSize() const;
+
+    // That size where paint() draws it, centred on the origin and before any rise
+    // (cardshadow::cardRect()). Not boundingRect() either. What "on the card" means
+    // to HandItem's hit test and to the tests.
+    QRectF cardRect() const;
+
+    // ORIGIN AT THE CENTRE, not the top left. A card is placed in front of its
+    // owner's rack and turned to line up with it, and both of those are one line
+    // when the origin is the middle of the card.
     QRectF boundingRect() const override;
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
-    QSizeF cardSize() const;
 
     const CardRenderer* renderer;
 
@@ -73,9 +105,23 @@ private:
     std::optional<romanian_whist::Card> card;
 
     qreal cardHeight = 0.0;
-    bool winning = false;
     bool dimmed = false;
-    QColor accent;
+
+    // The shadow's picture, asked of the cache only when it is stale or the ratio
+    // has moved, through the same PictureMemo the racks and panels keep theirs in,
+    // rather than on every paint.
+    const cardshadow::Picture& shadow(QSizeF size, qreal ratio) const;
+
+    // What it casts: on the felt or in your hand, and how. The colours are the
+    // shadows', the glows' and the ring's - a few of the table's, not all of
+    // them - and the cache is where their picture comes from.
+    void setCast(cardshadow::Look look, const Theme::TablePalette& palette, cardshadow::Cache* shadows);
+
+    std::optional<cardshadow::Look> cast;
+    cardshadow::Colours colours;
+    cardshadow::Cache* shadows = nullptr;
+
+    mutable PictureMemo shadowMemo;
 };
 
 #endif

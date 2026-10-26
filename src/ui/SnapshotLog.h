@@ -47,8 +47,8 @@ QString format(const PlayPrompt& prompt);
 // deliberately" until C1, and the argument it was making survives unchanged:
 // what must not be exported from here are the two SPELLINGS - the card and the
 // round type - which were exported once and taken back. The card because tests
-// hardcoded the strings anyway, the round type because MainWindow's status bar
-// cannot share fixed ASCII a log test asserts on with text that has to go
+// hardcoded the strings anyway, the round type because the scoreboard cannot
+// share fixed ASCII a log test asserts on with text that has to go
 // through tr(); the comment on infostrip::roundTypeText() says why two switches
 // over RoundType is the right number.
 //

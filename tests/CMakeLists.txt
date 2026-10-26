@@ -21,30 +21,58 @@ add_executable(desktop_tests
     NewGameTests.cpp
     GameOverTests.cpp
     RoundSheetTests.cpp
+    HistorySheetTests.cpp
+    LastTrickSheetTests.cpp
     MainWindowTests.cpp
     HandItemTests.cpp
-    PromptBarTests.cpp
+    TrickPanelTests.cpp
     ThemeTests.cpp
+    AvatarTests.cpp
+    PlayerNamesTests.cpp
+    FontsTests.cpp
     CardRendererTests.cpp
+    DevicePixelsTests.cpp
+    TableSpaceTests.cpp
+    MotionTests.cpp
+    TrickMotionTests.cpp
+    BidBubbleTests.cpp
+    ItemCursorTests.cpp
+    TableTopTests.cpp
+    ShadowsTests.cpp
+    PanelTests.cpp
+    TextRunsTests.cpp
+    PictureCacheTests.cpp
+    GradientsTests.cpp
     SeatLayoutTests.cpp
     TrickItemTests.cpp
+    RackItemTests.cpp
     SeatItemTests.cpp
     TableSceneTests.cpp
     TableViewTests.cpp
-    InfoStripTests.cpp
+    HudTests.cpp
+    MenuBarTests.cpp
+    RulesSheetTests.cpp
+    SettingsSheetTests.cpp
+    OverlayTests.cpp
+    MainMenuPageTests.cpp
+    LanguageTests.cpp
     ScoreboardTests.cpp
+    ScreenshotTool.cpp
+    ResizeTiming.cpp
     TestApp.cpp
 )
 
-# The card art, compiled into the test binary. CardRendererTests.cpp loads
-# ":/cards/..." for real, and the parent CMakeLists.txt attaches its own
-# qt_add_resources output to the application target only - resources belong to a
-# binary, not to the desktop_core both binaries link.
+# The card art, the table textures and the fonts, compiled into the test binary.
+# CardRendererTests.cpp loads ":/cards/..." for real, ThemeTests.cpp loads
+# ":/table/...", and TestApp.cpp registers ":/fonts/..." exactly as main() does -
+# and the parent CMakeLists.txt attaches its own qt_add_resources output to the
+# application target only. Resources belong to a binary, not to the desktop_core
+# both binaries link.
 #
 # A SECOND qt_add_resources ON THE SAME .qrc, which looks like duplication and
 # is the only form that works. Two tidier-looking arrangements were tried:
 #
-#   1. Attaching the parent's ${CARD_RESOURCES} to this target - either from
+#   1. Attaching the parent's ${APP_RESOURCES} to this target - either from
 #      here or from the parent after add_subdirectory(). The path resolves and
 #      `cmake --build build` succeeds, which is what makes this one dangerous.
 #      `cmake --build <dir> --target desktop_tests` then fails outright with
@@ -60,8 +88,34 @@ add_executable(desktop_tests
 # in the scope of the target that uses it. The cost is compiling ~30 MB of
 # generated source a second time; the alternative is a suite that cannot be run
 # under a sanitizer.
-qt_add_resources(TEST_CARD_RESOURCES ${CMAKE_SOURCE_DIR}/resources/cards.qrc)
-target_sources(desktop_tests PRIVATE ${TEST_CARD_RESOURCES})
+#
+# THE INPUT LIST IS SHARED; THE OUTPUT IS NOT. WHIST_DESKTOP_RESOURCES is the
+# parent's list of .qrc files - plain paths, which any scope can read - while
+# TEST_RESOURCES is this scope's own generated files, which is the distinction
+# attempt 1 above failed on. A second copy of the list would drift, and a .qrc
+# left off it is not a build error: it is a test that loads nothing and fails as
+# though the code under it were broken.
+qt_add_resources(TEST_RESOURCES ${WHIST_DESKTOP_RESOURCES})
+target_sources(desktop_tests PRIVATE ${TEST_RESOURCES})
+
+# THE ROMANIAN TRANSLATION, compiled again from the parent's .ts files and
+# embedded where the app embeds it (:/i18n/), so a test loads it by
+# language::translationResource() exactly as main() does (RomanianTranslation.h).
+# Compiled HERE, for this target, for the reason the .qrc files above are: a
+# generated file belongs to the scope that made it. The tests it is for check
+# that every sentence said of a man or a woman shows its Romanian (PR #40's
+# review, finding #4).
+qt_add_lrelease(
+    LRELEASE_TARGET desktop_tests_lrelease
+    TS_FILES ${WHIST_DESKTOP_TS_FILES}
+    QM_FILES_OUTPUT_VARIABLE TEST_QM_FILES
+)
+qt_add_resources(desktop_tests "desktop_tests_translations"
+    PREFIX "/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${TEST_QM_FILES}
+)
+add_dependencies(desktop_tests desktop_tests_lrelease)
 
 target_link_libraries(desktop_tests PRIVATE
     desktop_core

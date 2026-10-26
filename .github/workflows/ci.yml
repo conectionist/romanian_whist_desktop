@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 # Qt is not on any runner in a usable version - ubuntu-latest's apt Qt6 is 6.4,
-# below the 6.5 floor in find_package(Qt6 6.5 REQUIRED ...) - so every build job
+# below the 6.7 floor in find_package(Qt6 6.7 REQUIRED ...) - so every build job
 # installs the official Qt binary distribution first. That install is also where
 # the shipped libraries come from: cmake --install runs the deploy script
 # CMakeLists.txt generates with qt_generate_deploy_app_script(), and that script

@@ -12,7 +12,10 @@
 #include <QPixmap>
 #include <QSet>
 #include <QSvgRenderer>
+#include <QtMath>
 
+#include <cstdlib>
+#include <ios>
 #include <vector>
 
 using romanian_whist::Card;
@@ -169,6 +172,30 @@ TEST_CASE("The cache is keyed on the device pixel ratio", "[card-renderer]")
     REQUIRE(retina.size() == QSize(82, 120));
 }
 
+// AND FINELY ENOUGH FOR A SCALED VIEW. Since the table redesign's phase 2 the ratio
+// a card asks for is the screen's times the view's scale, which is continuous -
+// not the 1, 1.25, 1.5 or 2 a screen reports. A key quantized to hundredths served
+// one of these two the other's pixmap: 127 pixels tall where 125 were asked for,
+// stamped with the wrong ratio, so it was resampled on screen and missed its own
+// card rect by a pixel or two. These are the ratios a resize from one window size
+// to the next really produces, for the hand's 225-unit card.
+TEST_CASE("Ratios a hundredth apart are cached apart", "[card-renderer]")
+{
+    const CardRenderer renderer;
+    const Card card(Rank::Ace, Suit::Spades);
+    const QSize size(155, 225);
+
+    REQUIRE(renderer.face(card, size, 0.5649).height() == 127);
+
+    const QPixmap next = renderer.face(card, size, 0.5551);
+
+    REQUIRE(next.height() == 125);
+    REQUIRE(next.devicePixelRatio() == Catch::Approx(0.5551));
+
+    REQUIRE(renderer.back(size, 0.5649).height() == 127);
+    REQUIRE(renderer.back(size, 0.5551).height() == 125);
+}
+
 // The size half of the key, which the dpr test above does NOT cover: it varies
 // the ratio at one size, so dropping the size from the key leaves it passing.
 // The window is what sets this, so the cards would stop resizing with it - and
@@ -225,12 +252,53 @@ TEST_CASE("A dimmed card is not the same image as a lit one", "[card-renderer]")
     const QPixmap dim = renderer.face(card, size, 1.0, CardRenderer::State::Dimmed);
 
     REQUIRE(fingerprint(lit) != fingerprint(dim));
+}
 
-    // And it is dimmer rather than merely different - the treatment is 45%
-    // opacity, so the card's own body must have lost alpha. The centre of a
-    // court card is inside the card body, where a lit card is fully opaque.
-    const QImage dimImage = dim.toImage().convertToFormat(QImage::Format_ARGB32);
-    REQUIRE(qAlpha(dimImage.pixel(dimImage.width() / 2, dimImage.height() / 2)) < 255);
+// THE MOCK-UP'S TREATMENT (page.html's .hcard.illegal .face): brightness(0.55)
+// then saturate(0.55), and the card as opaque as it was. Section 18 had it at 45%
+// opacity until the redesign's phase 7, and in a hand whose cards overlap by half
+// that showed the card beneath through it. Checked where the art is flat: the
+// white of the card, and the red of a heart.
+TEST_CASE("A dimmed card is darker and duller but still opaque", "[card-renderer]")
+{
+    const CardRenderer renderer;
+    const QSize size(167, 243);
+
+    // The Two of Hearts: white round its two pips, and a pip big enough to land on.
+    const Card card(Rank::Two, Suit::Hearts);
+
+    const QImage lit = renderer.face(card, size, 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+    const QImage dim = renderer.face(card, size, 1.0, CardRenderer::State::Dimmed)
+                           .toImage().convertToFormat(QImage::Format_ARGB32);
+
+    // A point on the card's white, a quarter of the way in from its left edge and
+    // half way down, between the pips.
+    const QPoint white(size.width() / 4, size.height() / 2);
+
+    REQUIRE(lit.pixelColor(white) == QColor(Qt::white));
+
+    // White is grey already, so saturate() leaves it: 255 x 0.55 is 140.25.
+    const QColor whiteDimmed = dim.pixelColor(white);
+
+    REQUIRE(whiteDimmed.alpha() == 255);
+    REQUIRE(whiteDimmed.red() == 140);
+    REQUIRE(whiteDimmed.green() == 140);
+    REQUIRE(whiteDimmed.blue() == 140);
+
+    // The top pip's middle. A red's channels draw together: the gap between its
+    // strongest and weakest is 0.55 x 0.55 of what it was, to a level either way.
+    const QPoint pip(size.width() / 2, size.height() / 5);
+    const QColor red = lit.pixelColor(pip);
+    const QColor redDimmed = dim.pixelColor(pip);
+
+    REQUIRE(red.red() > 150);
+    REQUIRE(red.green() < 100);
+    REQUIRE(redDimmed.alpha() == 255);
+
+    const qreal spread = red.red() - red.green();
+    const qreal spreadDimmed = redDimmed.red() - redDimmed.green();
+
+    REQUIRE(spreadDimmed == Catch::Approx(spread * 0.55 * 0.55).margin(1.5));
 }
 
 TEST_CASE("A card's size comes from the art's aspect ratio", "[card-renderer]")
@@ -247,4 +315,81 @@ TEST_CASE("A card's size comes from the art's aspect ratio", "[card-renderer]")
 
     // A degenerate request is a null size rather than a crash or a 1x1 card.
     REQUIRE(renderer.sizeForHeight(0.0).isEmpty());
+}
+
+// THE REDESIGN'S BACK (table.js backSvg()), checked where its colours are flat: the
+// cream border, the burgundy band between the border and the lattice, the gold
+// diamond in the middle, and the burgundy oval round it. At twice the mock-up's
+// 100 x 145 viewBox, so every point below is backSvg()'s coordinate doubled.
+TEST_CASE("The back is the mock-up's burgundy and gold", "[card-renderer]")
+{
+    const CardRenderer renderer;
+    const QImage back = renderer.back(QSize(200, 290), 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+
+    const auto near = [&](QPoint at, QRgb wanted)
+    {
+        const QRgb got = back.pixel(at);
+
+        INFO("at " << at.x() << ", " << at.y() << ": got " << std::hex << got << " wanted " << wanted);
+
+        return qAlpha(got) == 255 && std::abs(qRed(got) - qRed(wanted)) <= 3
+               && std::abs(qGreen(got) - qGreen(wanted)) <= 3
+               && std::abs(qBlue(got) - qBlue(wanted)) <= 3;
+    };
+
+    CHECK(near(QPoint(2, 145), qRgb(0xF2, 0xE8, 0xD2)));      // the border, x 1
+    CHECK(near(QPoint(12, 145), qRgb(0x7A, 0x1C, 0x1C)));     // the field, x 6
+    CHECK(near(QPoint(100, 145), qRgb(0xD8, 0xB5, 0x6A)));    // the diamond, at the centre
+    CHECK(near(QPoint(100, 175), qRgb(0x7A, 0x1C, 0x1C)));    // the oval, below the diamond
+
+    // And the lattice is there at all: its region holds more than one colour.
+    QSet<QRgb> colours;
+    for(int x = 20 ; x < 60 ; x++)
+        colours.insert(back.pixel(x, 40));
+
+    CHECK(colours.size() > 3);
+
+    // And a dark hairline round it, as the faces draw round themselves.
+    const QRgb edge = back.pixel(0, 145);
+
+    CHECK(qAlpha(edge) == 255);
+    CHECK(qRed(edge) < 0xF2 - 20);
+}
+
+// PHASE5_REVIEW_FINDINGS.md #6. The body's corner is 7 of its units on each axis,
+// and the units are scaled separately across and down, so at any shape but 100:145
+// it is an ellipse. The hairline round it used the horizontal scale for both radii:
+// on a tall card its corner was squarer than the body's, and it was drawn out past
+// the body, over the transparent corner.
+TEST_CASE("The back's hairline stays inside the body's corner at any shape", "[card-renderer]")
+{
+    const CardRenderer renderer;
+
+    for(const QSize size : { QSize(60, 300), QSize(300, 60), QSize(41, 90), QSize(200, 290) })
+    {
+        INFO("size " << size.width() << " x " << size.height());
+
+        const QImage back = renderer.back(size, 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+
+        // The body's top-left corner: an ellipse of these radii, in pixels.
+        const qreal across = 7.0 * size.width() / 100.0;
+        const qreal down = 7.0 * size.height() / 145.0;
+
+        for(int y = 0 ; y < qCeil(down) ; y++)
+        {
+            for(int x = 0 ; x < qCeil(across) ; x++)
+            {
+                // Outside the corner's ellipse grown by a pixel, for the edge's
+                // anti-aliasing: nothing of the card may be drawn there.
+                const qreal dx = (across - (x + 0.5)) / (across + 1.0);
+                const qreal dy = (down - (y + 0.5)) / (down + 1.0);
+
+                if(dx * dx + dy * dy <= 1.0)
+                    continue;
+
+                INFO("pixel " << x << ", " << y);
+                REQUIRE(qAlpha(back.pixel(x, y)) < 10);
+            }
+        }
+    }
 }

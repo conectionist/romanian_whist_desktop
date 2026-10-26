@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(romanian_whist_desktop
-    VERSION 1.0.0
+    VERSION 2.0.0
     DESCRIPTION "Qt desktop client for Romanian Whist"
     LANGUAGES CXX)
 
@@ -18,12 +18,18 @@ project(romanian_whist_desktop
 # back null in an installed build. Rasterizing through QSvgRenderer sidesteps
 # that plugin entirely - Svg is a linked library, not a plugin - so the card
 # art can stay vector without reopening the plugin trimming above.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets LinguistTools Svg)
+#
+# 6.7 IS THE FLOOR because the translation steps below need it:
+# qt_add_translations(SOURCE_TARGETS), QT_EXCLUDE_SOURCES_FROM_TRANSLATION and
+# tests/CMakeLists.txt's qt_add_lrelease(LRELEASE_TARGET) all arrived in 6.7.
+# Before it they do not fail with a version message: the older signatures read
+# these keywords as file or target names (PR #42's review, finding #1).
+find_package(Qt6 6.7 REQUIRED COMPONENTS Widgets LinguistTools Svg)
 
 # Turns on AUTOMOC and AUTOUIC and the rest of the modern defaults, so they do
 # not have to be set one at a time. NOT AUTORCC - see the card art below, where
 # that gap is the second of the three silent ways to embed no resources at all.
-qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup(REQUIRES 6.7)
 
 # MSVC compiles one .cpp per cl.exe invocation by default, leaving the rest of
 # a multi-core CI runner idle during the build - this is what made CI's Build
@@ -55,6 +61,7 @@ qt_add_library(desktop_core STATIC
     src/core/CardOrder.h
     src/core/CardOrder.cpp
     src/core/GameSnapshot.h
+    src/core/PlayerProfile.h
     src/core/HandLayout.h
     src/core/HandLayout.cpp
     src/core/Snapshot.h
@@ -74,19 +81,71 @@ qt_add_library(desktop_core STATIC
 
     src/paint/Theme.h
     src/paint/Theme.cpp
+    src/paint/Avatars.h
+    src/paint/Avatars.cpp
+    src/paint/Fonts.h
+    src/paint/Fonts.cpp
     src/paint/CardRenderer.h
     src/paint/CardRenderer.cpp
+    src/paint/DevicePixels.h
+    src/paint/DevicePixels.cpp
+    src/paint/Gradients.h
+    src/paint/Gradients.cpp
+    src/paint/Panel.h
+    src/paint/Panel.cpp
+    src/paint/Paths.h
+    src/paint/PictureCache.h
+    src/paint/PictureMemo.h
+    src/paint/Shadows.h
+    src/paint/Shadows.cpp
+    src/paint/CardShadow.h
+    src/paint/CardShadow.cpp
+    src/paint/TextRuns.h
+    src/paint/TextRuns.cpp
+    src/paint/Icons.h
+    src/paint/Icons.cpp
 
+    src/table/TableSpace.h
+    src/table/TableSpace.cpp
+    src/table/Motion.h
+    src/table/Motion.cpp
+    src/table/ItemCursor.h
+    src/table/ItemCursor.cpp
+    src/table/TableTopItem.h
+    src/table/TableTopItem.cpp
     src/table/SeatLayout.h
     src/table/SeatLayout.cpp
     src/table/CardItem.h
     src/table/CardItem.cpp
+    src/table/RackItem.h
+    src/table/RackItem.cpp
     src/table/SeatItem.h
     src/table/SeatItem.cpp
     src/table/TrickItem.h
     src/table/TrickItem.cpp
+    src/table/Turn.h
+    src/table/LeadMarkItem.h
+    src/table/LeadMarkItem.cpp
     src/table/HandItem.h
     src/table/HandItem.cpp
+    src/table/TableButtonItem.h
+    src/table/TableButtonItem.cpp
+    src/table/CardText.h
+    src/table/CardText.cpp
+    src/table/HudText.h
+    src/table/HudText.cpp
+    src/table/RoundText.h
+    src/table/RoundText.cpp
+    src/table/ScoreboardItem.h
+    src/table/ScoreboardItem.cpp
+    src/table/TrickPanelItem.h
+    src/table/TrickPanelItem.cpp
+    src/table/PersonText.h
+    src/table/PersonText.cpp
+    src/table/BidStripItem.h
+    src/table/BidStripItem.cpp
+    src/table/BidBubbleItem.h
+    src/table/BidBubbleItem.cpp
     src/table/TableScene.h
     src/table/TableScene.cpp
     src/table/TableView.h
@@ -96,26 +155,37 @@ qt_add_library(desktop_core STATIC
     src/ui/SnapshotLog.cpp
     src/ui/CardArtWindow.h
     src/ui/CardArtWindow.cpp
-    src/ui/InfoStrip.h
-    src/ui/InfoStrip.cpp
-    src/ui/ScoreboardWidget.h
-    src/ui/ScoreboardWidget.cpp
-
-    src/ui/BidStrip.h
-    src/ui/BidStrip.cpp
-    src/ui/PromptBar.h
-    src/ui/PromptBar.cpp
 
     src/ui/NewGameDialog.h
+    src/ui/PlayerNames.h
+    src/ui/PlayerNames.cpp
     src/ui/NewGameDialog.cpp
+    src/ui/LitButton.h
+    src/ui/LitButton.cpp
     src/ui/MainMenuPage.h
     src/ui/MainMenuPage.cpp
+    src/ui/LanguageDialog.h
+    src/ui/LanguageDialog.cpp
+    src/ui/MenuBar.h
+    src/ui/MenuBar.cpp
+    src/ui/Overlay.h
+    src/ui/Overlay.cpp
     src/ui/PauseOverlay.h
     src/ui/PauseOverlay.cpp
     src/ui/GameOverPanel.h
     src/ui/GameOverPanel.cpp
     src/ui/RoundSheet.h
     src/ui/RoundSheet.cpp
+    src/ui/HistorySheet.h
+    src/ui/HistorySheet.cpp
+    src/ui/LastTrick.h
+    src/ui/LastTrick.cpp
+    src/ui/LastTrickSheet.h
+    src/ui/LastTrickSheet.cpp
+    src/ui/RulesSheet.h
+    src/ui/RulesSheet.cpp
+    src/ui/SettingsSheet.h
+    src/ui/SettingsSheet.cpp
 )
 
 # C++20 because the engine demands it: romanian_whist_engine declares
@@ -166,6 +236,14 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # the runtime path is :/cards/ace_of_spades.png (and likewise ace_of_spades.svg
 # for the vector set) - moving the files on disk does not move the URLs.
 #
+# Two more .qrc files follow the same pattern, both added by the table redesign
+# (docs/ui-redesign/): resources/table.qrc puts the wood and felt textures under
+# /table, and resources/fonts.qrc puts the three bundled typefaces and their
+# licences under /fonts. A fourth, resources/avatars.qrc, puts the seat portraits
+# and their catalogue under /avatars, and a fifth, resources/names.qrc, the names
+# New Game draws under /names. Everything below applies to all five - they are
+# one call because they share every one of its pitfalls.
+#
 # Compiled in explicitly, because there are three silent ways to embed nothing
 # here and this call has none of them:
 #
@@ -184,9 +262,22 @@ target_link_libraries(romanian_whist_desktop PRIVATE desktop_core)
 # This is the form that actually consumes a .qrc: an output variable, then the
 # .qrc files, with the generated .cpp put into the target by hand. It does not
 # depend on AUTORCC. If cards ever stop appearing, look for qrc_cards.cpp in the
-# build tree - no such file means nothing was embedded.
-qt_add_resources(CARD_RESOURCES resources/cards.qrc)
-target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
+# build tree - no such file means nothing was embedded. Likewise qrc_table.cpp
+# for the textures, qrc_fonts.cpp for the typefaces, qrc_avatars.cpp for the
+# portraits and qrc_names.cpp for the names.
+#
+# The list is a variable because tests/CMakeLists.txt consumes the same one (see
+# below), and absolute because that directory would resolve a relative path
+# against itself. A .qrc added here reaches both binaries.
+set(WHIST_DESKTOP_RESOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/cards.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/table.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/avatars.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/names.qrc
+)
+qt_add_resources(APP_RESOURCES ${WHIST_DESKTOP_RESOURCES})
+target_sources(romanian_whist_desktop PRIVATE ${APP_RESOURCES})
 
 # The TESTS need the same blob, and it is not inherited. CardRenderer lives in
 # desktop_core, but resources are not a library property: the generated
@@ -195,9 +286,10 @@ target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
 # there, and every card would come back null - the same symptom as all three
 # failures above, from a fourth cause.
 #
-# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc,
-# for its own target. That looks redundant and is not - see the comment there,
-# which records the two ways of sharing this one that were tried and failed.
+# tests/CMakeLists.txt therefore calls qt_add_resources AGAIN, on the same .qrc
+# files (WHIST_DESKTOP_RESOURCES above), for its own target. That looks
+# redundant and is not - see the comment there, which records the two ways of
+# sharing this one that were tried and failed.
 #
 # NOT by moving this into desktop_core, which is the obvious-looking fix. A
 # static library's qrc_*.cpp is a translation unit nothing references - the
@@ -210,8 +302,29 @@ target_sources(romanian_whist_desktop PRIVATE ${CARD_RESOURCES})
 # ---------------------------------------------------------------------------
 # Embeds the compiled .qm under :/i18n/, which is where main.cpp looks for it.
 # Also defines an update_translations target that refreshes the .ts from source.
+#
+# SOURCE_TARGETS NAMES THE LIBRARY. The executable's only source is main.cpp, and
+# every string the player reads is in desktop_core; left to choose, lupdate also
+# reads the tests, whose translate() calls are there to compare against, and the
+# engine, which has none. Locations are relative so the .ts does not carry this
+# machine's paths.
+#
+# AND NOT THE .qrc FILES, which lupdate otherwise reads as C++ and warns about the
+# apostrophes in their comments.
+set_property(TARGET romanian_whist_desktop PROPERTY
+    QT_EXCLUDE_SOURCES_FROM_TRANSLATION ${WHIST_DESKTOP_RESOURCES})
+
+# THE .ts FILES, absolute for the reason WHIST_DESKTOP_RESOURCES is:
+# tests/CMakeLists.txt compiles them again for the test binary, which loads the
+# Romanian as main() does.
+set(WHIST_DESKTOP_TS_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/romanian_whist_desktop_ro_RO.ts
+)
+
 qt_add_translations(romanian_whist_desktop
-    TS_FILES i18n/romanian_whist_desktop_ro_RO.ts
+    TS_FILES ${WHIST_DESKTOP_TS_FILES}
+    SOURCE_TARGETS desktop_core romanian_whist_desktop
+    LUPDATE_OPTIONS -locations relative
 )
 
 # ---------------------------------------------------------------------------

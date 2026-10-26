@@ -8,6 +8,12 @@
 #include <QPixmap>
 #include <QSize>
 
+#include <cstddef>
+#include <memory>
+#include <unordered_map>
+
+class QSvgRenderer;
+
 // The second of the two seams of plan section 18.1: THE ONLY PLACE THAT KNOWS
 // CARD ART IS A FILE.
 //
@@ -40,9 +46,11 @@
 class CardRenderer
 {
 public:
-    // Whether the card is one the player may act on. Section 18 renders the
-    // illegal case as 45% opacity plus a slight desaturation, explicitly NOT as
-    // grey-on-white, which is unreadable at card size.
+    // Whether the card is one the player may act on. The illegal case is
+    // darkened and dulled, as the table redesign's mock-up does it - and
+    // explicitly NOT grey-on-white, which section 18 rejects as unreadable at
+    // card size. It stays opaque: section 18's 45% opacity let the card beneath
+    // show through an overlapping hand (amended in the redesign's phase 7).
     //
     // BAKED INTO THE CACHED PIXMAP rather than applied by the caller, so B2's
     // CardItem::paint() stays a blit and a dimmed card costs nothing to draw
@@ -54,6 +62,7 @@ public:
     };
 
     CardRenderer();
+    ~CardRenderer();
 
     // `size` is in LOGICAL pixels and `dpr` is the target device pixel ratio.
     // The returned pixmap is rasterized at size * dpr physical pixels and
@@ -63,7 +72,7 @@ public:
                  State state = State::Normal) const;
 
     // A back is not a special case in three widgets. It is drawn in a Forehead
-    // round, in a Hidden round and on every opponent's stack, and a back that is
+    // round, in a Hidden round and in every opponent's rack, and a back that is
     // drawn in three places is a back that gets changed in two.
     QPixmap back(QSize size, qreal dpr) const;
 
@@ -71,7 +80,16 @@ public:
     // card HEIGHT because section 18.1 makes every table metric derive from it;
     // turning that height into the size to ask for is this class's half, so that
     // art with a different aspect changes one function rather than the layout.
-    QSize sizeForHeight(qreal height) const;
+    //
+    // STATIC, since the aspect is the art's and not a renderer's: a sheet that has
+    // no renderer yet still lays out cards of the right shape (PR #37's review,
+    // finding #7).
+    static QSize sizeForHeight(qreal height);
+
+    // How many pictures this has painted rather than found in its cache: faces
+    // and backs both. READ-ONLY and for tests, which are how a window being resized
+    // is shown to leave the cards alone until it settles (TableViewTests).
+    std::size_t rasterizations() const { return misses; }
 
 private:
     // Both produce a QImage rather than a QPixmap, and both take PHYSICAL
@@ -90,12 +108,27 @@ private:
     // Stamps the ratio, stores under the key, and hands back a copy.
     QPixmap finish(const QImage& image, quint64 key, qreal dpr) const;
 
+    // EACH CARD'S ART, PARSED ONCE. Since the table redesign's phase 2 a resize
+    // changes the ratio every card is asked for at, so a window being dragged
+    // misses the pixmap cache below on every frame for every card on the table -
+    // and building a QSvgRenderer reads and parses the file each time, which was
+    // most of the cost of a miss. Keyed by indexOf() rather than an array of 52,
+    // for the reason backBit gives in the .cpp.
+    //
+    // Unbounded, because it cannot grow past the deck: one entry per card art.
+    // A file that fails to parse leaves its entry empty, so it is tried again,
+    // and fails again, on every call rather than once.
+    mutable std::unordered_map<unsigned int, std::unique_ptr<QSvgRenderer>> art;
+
     // MUTABLE AND BOUNDED. Mutable because caching is not observable through
     // this class's const interface, and bounded because the size in the key is
     // the window's: a window being dragged to resize asks for a different size
     // every frame, and an unbounded map would grow without limit for as long as
     // the drag lasted. QCache evicts the least recently used instead.
     mutable QCache<quint64, QPixmap> cache;
+
+    // See rasterizations().
+    mutable std::size_t misses = 0;
 };
 
 #endif

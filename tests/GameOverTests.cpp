@@ -2,7 +2,7 @@
 
 #include "ui/GameOverPanel.h"
 
-#include <QGridLayout>
+#include <QCoreApplication>
 #include <QLabel>
 #include <QPushButton>
 #include <QString>
@@ -33,26 +33,21 @@ Standing standing(unsigned int seat, const std::string& name, int score, unsigne
     return Standing{ Seat{seat}, name, score, place };
 }
 
-// The labels of one row of the panel's grid, left to right: place, name, score,
-// star. Read back through the layout rather than through findChildren<QLabel*>(),
-// which would also return the title and the announcement - and would return them
-// in construction order rather than in the order they are shown.
+// The labels of one row of the panel's standings, left to right: place, name,
+// score, star. Read back through the table rather than through
+// findChildren<QLabel*>(), which would also return the title, the announcement and
+// the headings - and would return them in construction order rather than in the
+// order they are shown.
 QStringList rowTexts(const GameOverPanel& panel, int row)
 {
-    QWidget* rows = panel.findChild<QWidget*>("standings");
+    SheetTable* rows = panel.findChild<SheetTable*>("standings");
     REQUIRE(rows);
-
-    QGridLayout* grid = qobject_cast<QGridLayout*>(rows->layout());
-    REQUIRE(grid);
 
     QStringList cells;
 
     for(int column = 0 ; column < 4 ; column++)
     {
-        QLayoutItem* item = grid->itemAtPosition(row, column);
-        REQUIRE(item);
-
-        QLabel* label = qobject_cast<QLabel*>(item->widget());
+        QLabel* label = rows->cell(row, column);
         REQUIRE(label);
 
         cells << label->text();
@@ -63,10 +58,10 @@ QStringList rowTexts(const GameOverPanel& panel, int row)
 
 int rowCount(const GameOverPanel& panel)
 {
-    QWidget* rows = panel.findChild<QWidget*>("standings");
+    SheetTable* rows = panel.findChild<SheetTable*>("standings");
     REQUIRE(rows);
 
-    return rows->layout()->count() / 4;
+    return rows->rowCount();
 }
 }
 
@@ -118,9 +113,17 @@ TEST_CASE("a negative winning score keeps its sign", "[game-over]")
 {
     // A whole table can finish below zero - missed bids score negative and
     // nothing floors the total - so the winner's score is not always positive.
+    //
+    // "A SCORE OF -12" since phase 12, not "-12 points": the points take Qt's %n so a
+    // translation can choose its plural form, and Qt fills %n in for a count of zero
+    // or more only. A score below zero is said without counting anything.
     const std::vector<Standing> winners{ standing(1, "Bogdan", -12, 1) };
 
-    REQUIRE(gameover::winnerAnnouncement(winners) == "Bogdan wins with -12 points.");
+    REQUIRE(gameover::winnerAnnouncement(winners) == "Bogdan wins with a score of -12.");
+
+    const std::vector<Standing> tied{ standing(0, "Ana", -3, 1), standing(1, "Bogdan", -3, 1) };
+
+    REQUIRE(gameover::winnerAnnouncement(tied) == "Ana and Bogdan tie for first with a score of -3.");
 }
 
 TEST_CASE("no winners is no announcement", "[game-over]")
@@ -176,6 +179,20 @@ TEST_CASE("Every winner is starred, from getWinners()", "[game-over]")
     REQUIRE(rowTexts(panel, 1).at(3) == QString::fromUtf8("★"));
 }
 
+TEST_CASE("A negative standing takes the sheets' minus sign", "[game-over]")
+{
+    // PR #36's review, finding #6: the round sheet's figures write U+2212, as wide
+    // as a digit in tabular figures, and the standings are the same kind of table.
+    const std::vector<Standing> standings{ standing(0, "Ana", 7, 1),
+                                           standing(1, "Bogdan", -12, 2) };
+
+    GameOverPanel panel;
+    panel.showResult(standings, { standings[0] });
+
+    REQUIRE(rowTexts(panel, 0).at(2) == QStringLiteral("7"));
+    REQUIRE(rowTexts(panel, 1).at(2) == QStringLiteral("\u221212"));
+}
+
 TEST_CASE("A second game over replaces the first one's table", "[game-over]")
 {
     // The panel outlives every game in it - it is a child of the stack, built
@@ -195,6 +212,26 @@ TEST_CASE("A second game over replaces the first one's table", "[game-over]")
 
     REQUIRE(rowCount(panel) == 2);
     REQUIRE(rowTexts(panel, 0) == QStringList{ "1.", "Dan", "8", QString::fromUtf8("★") });
+}
+
+TEST_CASE("A winner named in markup is announced as typed", "[game-over]")
+{
+    // PR #36's review, finding #5: the names come from the setup dialog as the
+    // player typed them, and the announcement once read "<b>Dan</b>" as bold. So
+    // does a failure's message, which is whatever an exception said.
+    const std::vector<Standing> standings{ standing(0, "<b>Dan</b>", 63, 1),
+                                           standing(1, "Ana", 40, 2) };
+
+    GameOverPanel panel;
+    panel.showResult(standings, { standings[0] });
+
+    QLabel* announcement = panel.findChild<QLabel*>("announcement");
+    REQUIRE(announcement);
+    REQUIRE(announcement->textFormat() == Qt::PlainText);
+    REQUIRE(announcement->text().startsWith(QStringLiteral("<b>Dan</b>")));
+
+    panel.showFailure(QStringLiteral("<i>bad</i> state"));
+    REQUIRE(announcement->textFormat() == Qt::PlainText);
 }
 
 TEST_CASE("The failure face shows no standings and no Play again", "[game-over]")
@@ -224,4 +261,58 @@ TEST_CASE("The failure face shows no standings and no Play again", "[game-over]"
     QLabel* announcement = panel.findChild<QLabel*>("announcement");
     REQUIRE(announcement);
     REQUIRE(announcement->text() == "the deck ran out");
+}
+
+TEST_CASE("The standings offer the round history between their two ways on", "[game-over]")
+{
+    // The owner's call, 2026-10-22 (phase 11): the standings' dim covers the
+    // table's own Round history button, so the panel carries one - quiet, between
+    // Main menu and Play again, and on the failure face as well, since a game that
+    // failed still played the rounds it scored.
+    GameOverPanel panel;
+    panel.showResult({ standing(0, "Ana", 47, 1) }, { standing(0, "Ana", 47, 1) });
+
+    QPushButton* history = panel.findChild<QPushButton*>("gameOverHistory");
+    QPushButton* mainMenu = panel.findChild<QPushButton*>("gameOverMainMenu");
+    QPushButton* playAgain = panel.findChild<QPushButton*>("playAgain");
+    REQUIRE(history != nullptr);
+    REQUIRE(mainMenu != nullptr);
+    REQUIRE(playAgain != nullptr);
+
+    REQUIRE(static_cast<SheetButton*>(history)->kind() == SheetButton::Kind::Quiet);
+    REQUIRE(playAgain->isDefault());
+    REQUIRE_FALSE(history->autoDefault());
+
+    panel.resize(1280, 754);
+    panel.show();
+    QCoreApplication::processEvents();
+
+    REQUIRE(mainMenu->geometry().right() < history->geometry().left());
+    REQUIRE(history->geometry().right() < playAgain->geometry().left());
+
+    int asked = 0;
+    QObject::connect(&panel, &GameOverPanel::historyRequested, [&asked] { asked++; });
+
+    history->click();
+    REQUIRE(asked == 1);
+
+    panel.showFailure("the deck ran out");
+    REQUIRE_FALSE(history->isHidden());
+
+    // THE GREEN ONE STILL LAST: Main menu is the green one on this face, so it
+    // goes after Round history, and Tab follows (PR #37's review, finding #1).
+    QCoreApplication::processEvents();
+
+    REQUIRE(static_cast<SheetButton*>(mainMenu)->kind() == SheetButton::Kind::Primary);
+    REQUIRE(history->geometry().right() < mainMenu->geometry().left());
+    REQUIRE(history->nextInFocusChain() == mainMenu);
+
+    // And back again for a game that ends as games do, on the same panel.
+    panel.showResult({ standing(0, "Ana", 47, 1) }, { standing(0, "Ana", 47, 1) });
+    QCoreApplication::processEvents();
+
+    REQUIRE(mainMenu->geometry().right() < history->geometry().left());
+    REQUIRE(history->geometry().right() < playAgain->geometry().left());
+    REQUIRE(mainMenu->nextInFocusChain() == history);
+    REQUIRE(history->nextInFocusChain() == playAgain);
 }

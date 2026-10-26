@@ -35,6 +35,9 @@ build/
 # Where CI stages the deployed tree before archiving it, and the natural place to
 # reproduce that step by hand (see .github/workflows/ci.yml).
 staging/
+
+# tests/ScreenshotTool.cpp's default output when WHIST_SHOTS_DIR is unset.
+shots/
 *.prl
 *.qmlls.ini
 
@@ -59,3 +62,7 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# Python bytecode, written when a script under docs/ or tools/ is imported.
+__pycache__/
+*.pyc

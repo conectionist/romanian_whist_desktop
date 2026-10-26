@@ -1,12 +1,7 @@
 #include "GameOverPanel.h"
 
 #include <QBoxLayout>
-#include <QFont>
-#include <QGridLayout>
 #include <QLabel>
-#include <QMouseEvent>
-#include <QPainter>
-#include <QPushButton>
 
 #include <algorithm>
 
@@ -22,11 +17,26 @@ QString winnerAnnouncement(const std::vector<Standing>& winners)
 
     // Every winner is on the same score by construction, so the front one's is
     // the score the sentence names however many there are.
-    const QString points = QString::number(winners.front().score);
+    //
+    // %n, NOT %2 (phase 12): a final score is often past 19, and Romanian says
+    // "47 de puncte" there but "5 puncte" below - three plural forms, which only
+    // the translator's %n can choose between. Untranslated, %n is the number, so
+    // the English reads as it did.
+    //
+    // BELOW ZERO, ANOTHER SENTENCE: Qt fills %n in only for a count of zero or
+    // more, and leaves a negative one as "%n". "A score of -12" counts nothing, so
+    // it needs no plural form in any language.
+    const int points = winners.front().score;
+    const QString score = QString::number(points);
 
     if(winners.size() == 1)
-        return QCoreApplication::translate("gameover", "%1 wins with %2 points.")
-            .arg(QString::fromStdString(winners.front().name), points);
+    {
+        const QString name = QString::fromStdString(winners.front().name);
+
+        return points < 0
+                   ? QCoreApplication::translate("gameover", "%1 wins with a score of %2.").arg(name, score)
+                   : QCoreApplication::translate("gameover", "%1 wins with %n points.", nullptr, points).arg(name);
+    }
 
     // "Ana and Bogdan", "Ana, Bogdan and Cristi" - the last name joined with
     // "and" rather than a comma, however many there are.
@@ -47,62 +57,45 @@ QString winnerAnnouncement(const std::vector<Standing>& winners)
         names += QString::fromStdString(winners[i].name);
     }
 
-    return QCoreApplication::translate("gameover", "%1 tie for first with %2 points.")
-        .arg(names, points);
+    return points < 0
+               ? QCoreApplication::translate("gameover", "%1 tie for first with a score of %2.").arg(names, score)
+               : QCoreApplication::translate("gameover", "%1 tie for first with %n points.", nullptr, points)
+                     .arg(names);
 }
 
 } // namespace gameover
 
-GameOverPanel::GameOverPanel(QWidget* parent) : QWidget(parent)
+GameOverPanel::GameOverPanel(QWidget* parent) : Overlay(parent)
 {
-    panel = new QWidget(this);
-    panel->setAutoFillBackground(true);
-
-    QVBoxLayout* inside = new QVBoxLayout(panel);
-    inside->setContentsMargins(48, 32, 48, 32);
+    QWidget* panel = this->panel();
+    QVBoxLayout* inside = panelLayout();
 
     title = new QLabel(panel);
-    title->setAlignment(Qt::AlignCenter);
     title->setObjectName("gameOverTitle");
-
-    // OFF THE WIDGET'S OWN FONT rather than a point size written here, the rule
-    // MainMenuPage records: a HiDPI display or a large system font gets a title
-    // that grew with everything else.
-    QFont titleFont = title->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.6);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
+    dress(title, sheet::Role::Title);
 
     inside->addWidget(title);
-    inside->addSpacing(20);
 
-    rows = new QWidget(panel);
+    // The one line that has to survive a long name at a six-seat table - it names
+    // every winner of a draw, so it can be four names long. dress() wraps it.
+    announcement = new QLabel(panel);
+    announcement->setObjectName("announcement");
+    dress(announcement, sheet::Role::Meta);
+
+    inside->addSpacing(2);
+    inside->addWidget(announcement);
+    inside->addSpacing(16);
+
+    // The mock-up's standings: Place, Player, Total - and the star, which needs no
+    // heading.
+    rows = new SheetTable(panel);
     rows->setObjectName("standings");
-
-    QGridLayout* grid = new QGridLayout(rows);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(18);
-    grid->setVerticalSpacing(4);
+    rows->setColumns({ { tr("Place"), Qt::AlignLeft },
+                       { tr("Player"), Qt::AlignLeft },
+                       { tr("Total"), Qt::AlignRight },
+                       { QString(), Qt::AlignLeft } });
 
     inside->addWidget(rows);
-    inside->addSpacing(20);
-
-    announcement = new QLabel(panel);
-    announcement->setAlignment(Qt::AlignCenter);
-    announcement->setObjectName("announcement");
-
-    // The one line that has to survive a long name at a six-seat table - it
-    // names every winner of a draw, so it can be four names long.
-    announcement->setWordWrap(true);
-
-    inside->addWidget(announcement);
-    inside->addSpacing(24);
-
-    playAgain = new QPushButton(tr("Play again"), panel);
-    playAgain->setObjectName("playAgain");
-    playAgain->setDefault(true);
-
-    mainMenu = new QPushButton(tr("Main menu"), panel);
 
     // NOT "mainMenu", WHICH IS THE PAUSE MENU'S. Both panels are children of the
     // same stack and both offer this button, so the plain name would make
@@ -110,65 +103,41 @@ GameOverPanel::GameOverPanel(QWidget* parent) : QWidget(parent)
     // reaches first - and a test that clicked the wrong one would still pass,
     // since the two are wired to the same slot. D1's rule that every control a
     // test reaches for is named is only worth anything if the name is unique.
+    mainMenu = new SheetButton(tr("Main menu"), SheetButton::Kind::Quiet, panel);
     mainMenu->setObjectName("gameOverMainMenu");
     mainMenu->setAutoDefault(false);
 
-    // SIDE BY SIDE, which is section 16.2's row and not the pause menu's column
-    // - that one offers a way back into the game and a way out of it, and this
-    // one offers two ways on from a game that has ended.
-    QHBoxLayout* buttons = new QHBoxLayout;
-    buttons->addStretch(1);
+    // ON BOTH FACES: a game that ended in an error still played the rounds it
+    // scored. Never the default.
+    history = new SheetButton(tr("Round history"), SheetButton::Kind::Quiet, panel);
+    history->setObjectName("gameOverHistory");
+    history->setAutoDefault(false);
 
-    for(QPushButton* button : { playAgain, mainMenu })
-    {
-        button->setMinimumWidth(160);
-        button->setMinimumHeight(34);
-        buttons->addWidget(button);
-    }
+    playAgain = new SheetButton(tr("Play again"), SheetButton::Kind::Primary, panel);
+    playAgain->setObjectName("playAgain");
+    playAgain->setDefault(true);
 
-    buttons->addStretch(1);
-    inside->addLayout(buttons);
-
-    // The panel centred both ways, and no bigger than its contents.
-    QVBoxLayout* stack = new QVBoxLayout(this);
-    stack->addStretch(1);
-
-    QHBoxLayout* row = new QHBoxLayout;
-    row->addStretch(1);
-    row->addWidget(panel);
-    row->addStretch(1);
-
-    stack->addLayout(row);
-    stack->addStretch(1);
-
+    // SIDE BY SIDE at the bottom right, the mock-up's sheets' place for them:
+    // two ways on from a game that has ended, the green one last, and a look back
+    // between them.
+    //
     // NO Close BUTTON, departing from section 16.2's mockup and recorded there.
     // That mockup predates D1's main-menu page: the window's X and the menu
     // page's Quit both already end the session, and D1 replaced the menu bar
     // with a page precisely so that leaving a GAME is not leaving the
     // APPLICATION.
+    actions = addActions({ mainMenu, history, playAgain });
+
     connect(playAgain, &QPushButton::clicked, this, &GameOverPanel::playAgainRequested);
+    connect(history, &QPushButton::clicked, this, &GameOverPanel::historyRequested);
     connect(mainMenu, &QPushButton::clicked, this, &GameOverPanel::mainMenuRequested);
-}
-
-void GameOverPanel::setTheme(const Theme& _theme)
-{
-    theme = _theme;
-
-    // Through the palette rather than a stylesheet, the call every other panel
-    // makes - section 18.1's rule is that colours come from Theme, and a
-    // stylesheet string is a colour constructed somewhere else.
-    QPalette scheme = panel->palette();
-    scheme.setColor(QPalette::Window, theme.seatPlaque);
-    scheme.setColor(QPalette::WindowText, theme.textPrimary);
-    panel->setPalette(scheme);
-
-    update();
 }
 
 void GameOverPanel::showResult(const std::vector<Standing>& standings,
                                const std::vector<Standing>& winners)
 {
-    clearRows();
+    // A second game over must not append to the first one's table.
+    rows->clearRows();
 
     title->setText(tr("Final results"));
 
@@ -191,11 +160,17 @@ void GameOverPanel::showResult(const std::vector<Standing>& standings,
 
     playAgain->show();
     playAgain->setDefault(true);
+
+    mainMenu->setKind(SheetButton::Kind::Quiet);
+    mainMenu->setDefault(false);
+    placeMainMenu(false);
+
+    placeSheet();
 }
 
 void GameOverPanel::showFailure(const QString& what)
 {
-    clearRows();
+    rows->clearRows();
 
     // NO STANDINGS ON THIS FACE, because there are none: the run slot threw, so
     // the round it landed in is unscored and the engine was never asked for a
@@ -208,12 +183,33 @@ void GameOverPanel::showFailure(const QString& what)
     // AND NOTHING TO PLAY AGAIN FROM. A game can be started again from the menu
     // - the controller is reusable and prepare() rebuilds everything - but a
     // button offering to repeat what just failed, with the same settings, is
-    // not the offer to make about a thread that caught something.
+    // not the offer to make about a thread that caught something. Main menu is
+    // then the one way on, and the green one.
     playAgain->hide();
+    mainMenu->setKind(SheetButton::Kind::Primary);
     mainMenu->setDefault(true);
+    placeMainMenu(true);
+
+    placeSheet();
 }
 
-void GameOverPanel::focusDefaultButton()
+void GameOverPanel::placeMainMenu(bool last)
+{
+    // THE GREEN ONE LAST, as on every sheet: on the failure face Main menu is the
+    // green one, so it moves past Round history (PR #37's review, finding #1). The
+    // Tab order moves with it.
+    actions->removeWidget(mainMenu);
+
+    const int at = actions->indexOf(history);
+    actions->insertWidget(last ? at + 1 : at, mainMenu);
+
+    if(last)
+        QWidget::setTabOrder(history, mainMenu);
+    else
+        QWidget::setTabOrder(mainMenu, history);
+}
+
+void GameOverPanel::focusDefault()
 {
     if(playAgain->isVisible())
         playAgain->setFocus(Qt::OtherFocusReason);
@@ -221,41 +217,8 @@ void GameOverPanel::focusDefaultButton()
         mainMenu->setFocus(Qt::OtherFocusReason);
 }
 
-void GameOverPanel::clearRows()
-{
-    QGridLayout* grid = qobject_cast<QGridLayout*>(rows->layout());
-
-    // deleteLater() rather than delete: a second game over is built from inside
-    // a slot, and the widgets being removed are not the ones being clicked, but
-    // the rule is cheap and the exception is not worth reasoning about.
-    while(QLayoutItem* item = grid->takeAt(0))
-    {
-        if(QWidget* widget = item->widget())
-            widget->deleteLater();
-
-        delete item;
-    }
-
-    // COUNTED HERE RATHER THAN ASKED OF THE LAYOUT, and this is the trap in
-    // reusing a QGridLayout: rowCount() reports the rows it has ever ALLOCATED
-    // and never shrinks when items are taken out of it. A second game over
-    // reading it back would start writing at row 4 of an empty grid.
-    placedRows = 0;
-}
-
 void GameOverPanel::addRow(const Standing& standing, bool isWinner)
 {
-    QGridLayout* grid = qobject_cast<QGridLayout*>(rows->layout());
-    const int line = placedRows++;
-
-    QLabel* place = new QLabel(tr("%1.").arg(standing.place), rows);
-    QLabel* name = new QLabel(QString::fromStdString(standing.name), rows);
-    QLabel* score = new QLabel(QString::number(standing.score), rows);
-
-    // Right-aligned, because a column of scores is read down rather than across
-    // - the same call the scoreboard's totals make.
-    score->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-
     // A GLYPH AND NOT A COLOUR, unlike the terminal's yellow row. Section 18
     // wants no fact carried by colour alone, and the star is the mark section
     // 16.2's mockup already uses; the bold is on top of it rather than instead.
@@ -265,33 +228,10 @@ void GameOverPanel::addRow(const Standing& standing, bool isWinner)
     // break it. The terminal's capability check does not port either - it exists
     // because a TERMINAL may have no Unicode at all, and Qt substitutes a font
     // per character.
-    QLabel* star = new QLabel(isWinner ? QStringLiteral("★") : QString(), rows);
+    const QString star = isWinner ? QStringLiteral("★") : QString();
 
-    if(isWinner)
-    {
-        QFont bold = name->font();
-        bold.setBold(true);
-
-        for(QLabel* cell : { place, name, score, star })
-            cell->setFont(bold);
-    }
-
-    grid->addWidget(place, line, 0);
-    grid->addWidget(name,  line, 1);
-    grid->addWidget(score, line, 2);
-    grid->addWidget(star,  line, 3);
-}
-
-void GameOverPanel::paintEvent(QPaintEvent* event)
-{
-    QPainter painter(this);
-
-    painter.fillRect(rect(), theme.dimmedOverlay);
-
-    QWidget::paintEvent(event);
-}
-
-void GameOverPanel::mousePressEvent(QMouseEvent* event)
-{
-    event->accept();
+    rows->addRow({ { tr("%1.").arg(standing.place), SheetTable::Tone::Plain, isWinner },
+                   { QString::fromStdString(standing.name), SheetTable::Tone::Plain, isWinner },
+                   { sheet::number(standing.score), SheetTable::Tone::Plain, isWinner },
+                   { star, SheetTable::Tone::Plain, isWinner } });
 }

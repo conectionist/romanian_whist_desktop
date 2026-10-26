@@ -1,0 +1,530 @@
+<title>Romanian Whist Table</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=Cinzel+Decorative:wght@700&family=Cinzel:wght@600;700&family=Marcellus&display=swap">
+<style>
+/* Layout: one fixed 1536x1024 club-table stage, scaled to fit the window; panels pinned around a wooden table with a felt top */
+:root
+{
+  color-scheme: dark;
+  --room: #120c07;
+  --wood: #5a331a;
+  --wood-dark: #2b170b;
+  --felt: #1d5a3a;
+  --felt-deep: #0e321f;
+  --panel-top: rgba(40, 29, 19, 0.95);
+  --panel-bottom: rgba(19, 13, 8, 0.95);
+  --gold: #c9a45c;
+  --gold-bright: #f2d38c;
+  --cream: #f1e6cc;
+  --muted: #bba783;
+  --good: #86c98f;
+  --warn: #e6b95c;
+  --bad: #e5806d;
+  --f-logo: "Cinzel Decorative", "Cinzel", Georgia, serif;
+  --f-head: "Marcellus", "Cinzel", Georgia, serif;
+  --f-body: "Alegreya Sans", "Gill Sans", "Segoe UI", sans-serif;
+}
+html, body { height: 100%; }
+body
+{
+  background: var(--room);
+  color: var(--cream);
+  font-family: var(--f-body);
+  overflow: hidden;
+}
+#viewport
+{
+  position: relative;
+  height: 100%;
+  box-sizing: border-box;
+  padding-top: 56px;
+  padding-bottom: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: radial-gradient(ellipse at 50% 42%, #3b2414 0%, #1c110a 58%, #0b0704 100%);
+  overflow: hidden;
+}
+#stage
+{
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1536px;
+  height: 1024px;
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#stage *, #stage *::before, #stage *::after { box-sizing: border-box; }
+
+/* ---------- table ---------- */
+.wood
+{
+  position: absolute;
+  /* seen from straight above: a true circle, the rim the same width all round, light and shadow even on every side */
+  left: 258px; top: 2px; width: 1020px; height: 1020px;
+  border-radius: 50%;
+  background:
+    var(--wood-tex) center / 100% 100% no-repeat,
+    #5a331a;
+  box-shadow:
+    0 0 70px rgba(0, 0, 0, 0.75),
+    inset 0 0 0 2px #2a160a,
+    inset 0 0 0 4px rgba(255, 210, 150, 0.12),
+    inset 0 0 22px rgba(0, 0, 0, 0.5);
+}
+.wood::after
+{
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background-image: var(--grain);
+  opacity: 0;
+  mix-blend-mode: overlay;
+}
+.felt
+{
+  position: absolute;
+  left: 328px; top: 72px; width: 880px; height: 880px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.38) 100%),
+    var(--felt-tex) center / 100% 100%,
+    var(--felt);
+  box-shadow:
+    0 0 0 9px #3b210f,
+    0 0 0 11px #7a4c27,
+    0 0 0 13px #2a160a,
+    inset 0 0 60px rgba(0, 0, 0, 0.55),
+    inset 0 0 18px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.felt::before
+{
+  content: "";
+  position: absolute; inset: 0;
+  background-image: var(--noise);
+  opacity: 0;
+  mix-blend-mode: soft-light;
+}
+.felt-line
+{
+  position: absolute; inset: 24px;
+  border: 1.5px solid rgba(201, 164, 92, 0.2);
+  border-radius: 50%;
+}
+
+/* ---------- panels ---------- */
+.panel
+{
+  position: absolute;
+  background: linear-gradient(180deg, var(--panel-top), var(--panel-bottom));
+  border: 1px solid #806137;
+  border-radius: 9px;
+  box-shadow:
+    inset 0 0 0 3px rgba(18, 12, 7, 0.9),
+    inset 0 0 0 4px rgba(201, 164, 92, 0.3),
+    0 12px 26px rgba(0, 0, 0, 0.55);
+}
+.logo
+{
+  left: 633px; top: 441px; width: 270px; height: 142px;
+  transform: scale(0.9);   /* 10% smaller, about its own centre */
+  background: radial-gradient(ellipse at 50% 40%, #2a6142 0%, #17402a 70%, #0f2c1d 100%);
+  border: 2px solid #b8924a;
+  border-radius: 14px;
+  display: grid; place-items: center;
+  text-align: center;
+}
+.logo::before
+{
+  content: "";
+  position: absolute; inset: 6px;
+  border: 1px solid rgba(232, 200, 130, 0.55);
+  border-radius: 9px;
+}
+.logo h1
+{
+  margin: 0;
+  font-family: var(--f-logo);
+  font-weight: 700;
+  font-size: 37px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #fbe7b2 0%, #e2b866 48%, #a77a35 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55));
+}
+.logo .club { position: absolute; top: 50%; transform: translateY(-50%); color: #d9b46a; font-size: 22px; }
+.logo .club.l { left: 16px; }
+.logo .club.r { right: 16px; }
+.logo svg { display: block; margin: 0 auto; color: #d9b46a; }
+
+/* scoreboard */
+.score { left: 24px; top: 18px; width: 236px; padding: 12px 14px 12px; transform: scale(1.2); transform-origin: 0 0; }
+.score .head { display: flex; justify-content: center; align-items: baseline; }
+.score .sub, .score .tension { text-align: center; }
+.label
+{
+  font-family: var(--f-body);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+}
+.score .round { font-family: var(--f-head); font-size: 22px; }
+.score .sub { font-size: 15px; color: var(--muted); margin-top: 1px; }
+.score table
+{
+  width: 100%; margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.score th { font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 4px 0; text-align: right; border-bottom: 1px solid rgba(201, 164, 92, 0.25); }
+.score th:first-child, .score td:first-child { text-align: left; }
+.score td { font-size: 17px; padding: 3px 0; text-align: right; }
+.score tr.turn td:first-child::before { content: "\25B8 "; color: var(--gold-bright); }
+.score tr.turn td { color: var(--gold-bright); }
+.score .divider { height: 1px; background: rgba(201, 164, 92, 0.25); margin: 8px 0; }
+/* trump, stacked: the label, the turned card as wide as the panel allows, then the suit */
+.score .trump { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.score .trump img { width: calc(154.9px / 1.2); height: auto; aspect-ratio: 500 / 726; border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55); display: block; }
+.score .trump .label { font-size: 19.8px; letter-spacing: 0.24em; margin-right: -0.24em; }
+.score .trump .name { font-family: var(--f-head); font-size: 19.8px; line-height: 1.1; white-space: nowrap; }
+.score .tension { margin-top: 8px; font-size: 14.5px; color: var(--muted); line-height: 1.3; }
+.score .tension b { color: var(--cream); font-weight: 700; }
+.red { color: #e0524a; }
+.blk { color: var(--cream); }
+
+/* seats */
+.plaque
+{
+  display: flex; gap: 12px; align-items: center;
+  padding: 8px 16px 8px 8px;
+  transition: box-shadow 0.12s ease-out;
+}
+.plaque .portrait
+{
+  width: 88px; height: 100px; flex: none;
+  border-radius: 7px; overflow: hidden;
+  border: 1px solid #a3824a;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+  filter: sepia(0.18) contrast(1.05);
+}
+.plaque .portrait svg { width: 100%; height: 100%; display: block; }
+.plaque .name { font-family: var(--f-head); font-size: 25px; white-space: nowrap; }
+.plaque .name small { font-family: var(--f-body); font-size: 15px; color: var(--muted); margin-left: 4px; }
+.plaque .name::before { content: "\25B8"; color: var(--gold-bright); margin-right: 6px; display: none; }
+.plaque.active .name::before { display: inline; }
+.plaque .stats { display: grid; gap: 4px; margin-top: 5px; font-size: 17px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plaque .stats b { color: var(--cream); font-weight: 500; }
+.plaque.active
+{
+  box-shadow:
+    inset 0 0 0 3px rgba(18, 12, 7, 0.9),
+    inset 0 0 0 4px rgba(201, 164, 92, 0.3),
+    0 0 0 3px var(--gold-bright),
+    0 0 26px rgba(242, 211, 140, 0.5),
+    0 12px 26px rgba(0, 0, 0, 0.55);
+}
+.pill
+{
+  display: inline-flex; align-items: center; gap: 6px;
+  width: fit-content;
+  padding: 2px 12px;
+  border-radius: 99px;
+  border: 1px solid rgba(201, 164, 92, 0.4);
+  color: var(--cream);
+  font-size: 19px;
+  white-space: nowrap;
+}
+.pill.on { border-color: var(--good); color: var(--good); }
+.pill.owing { border-color: var(--warn); color: var(--warn); }
+.pill.over { border-color: var(--bad); color: var(--bad); }
+.bubble
+{
+  position: absolute; left: 50%; top: -18px;
+  transform: translateX(-50%);
+  padding: 4px 14px;
+  border-radius: 99px;
+  background: var(--gold-bright); color: #2a1a0a;
+  font-family: var(--f-head); font-size: 19px; white-space: nowrap;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+  animation: bubble 1.6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes bubble
+{
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  12% { opacity: 1; transform: translate(-50%, 0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+#seat-0 { left: 618px; top: 1046px; width: 300px; z-index: 6; }
+.plaque.seat { width: 280px; }
+.plaque .name .pts { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* An opponent's hand: a row of cards standing in a wooden rack on the rim. The rack is on the table side;
+   the cards lean back from it towards their owner, so the rest of the table only ever sees their backs.
+   The camera sits above each row, so the leaning cards foreshorten and their top edges come up at you. */
+.fan
+{
+  position: absolute; width: 0; height: 0;
+  perspective: 300px; perspective-origin: 0 40px;
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.55));
+}
+.fan .back
+{
+  position: absolute; left: -31px; top: 4px;
+  width: 62px; height: 90px;
+  border-radius: 4px;
+  background-image:
+    linear-gradient(0deg, rgba(255, 240, 210, 0.16), rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.3)),
+    var(--back-p);
+  background-size: 100% 100%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  transform-origin: 50% 0;
+}
+/* the rack's front rail, lying on the rim in front of the cards' bottom edges */
+.fan .ledge
+{
+  position: absolute; top: -9px; height: 16px;
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(255, 220, 170, 0.35), rgba(255, 220, 170, 0) 30%, rgba(0, 0, 0, 0.45)),
+    var(--wood-tex) center / 900px 900px,
+    #6b3d1f;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(30, 14, 4, 0.6);
+  transform: translateZ(8px);
+}
+
+/* trick */
+#trick { position: absolute; inset: 0; pointer-events: none; }
+.tcard { position: absolute; }
+.tcard .inner
+{
+  width: 100%; height: 100%;
+  border-radius: 7px; overflow: hidden;
+  transform: rotate(var(--rot));
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+}
+.tcard img, .hcard img { width: 100%; height: 100%; display: block; }
+.tcard.winning .inner
+{
+  transform: rotate(var(--rot)) translateY(-8px);
+  box-shadow: 0 0 0 2px var(--gold-bright), 0 0 26px rgba(242, 211, 140, 0.55), 0 16px 24px rgba(0, 0, 0, 0.5);
+}
+/* the leader's mark: a gold rhombus on the felt's thin gold circle, between the leader's rack and their card */
+.leadpip
+{
+  position: absolute;
+  width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
+  background: var(--gold-bright);
+  box-shadow: 0 0 0 1px rgba(60, 40, 10, 0.5), 0 0 10px rgba(242, 211, 140, 0.8);
+}
+
+/* hand */
+#hand { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.hcard
+{
+  position: absolute; left: 0; top: 0;
+  width: 154.9px; height: 225px;
+  padding: 0; border: 0; background: none;
+  transform: translate(var(--x), var(--y)) rotate(var(--rot));
+  transform-origin: 50% 130%;
+  pointer-events: auto;
+  cursor: default;
+  outline: none;
+}
+.hcard .face
+{
+  width: 100%; height: 100%;
+  border-radius: 8px; overflow: hidden;
+  box-shadow: -3px 4px 10px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out, filter 0.15s ease-out;
+}
+.hcard.playable { cursor: pointer; }
+.hcard.playable:hover .face, .hcard.playable:focus-visible .face
+{
+  transform: translateY(-30px);
+  box-shadow: 0 0 0 2px var(--gold-bright), 0 0 22px rgba(242, 211, 140, 0.7), 0 14px 22px rgba(0, 0, 0, 0.5);
+}
+.hcard.illegal { cursor: not-allowed; }
+.hcard.illegal .face { filter: brightness(0.55) saturate(0.55); }
+
+/* current trick panel */
+.trickinfo { right: 20px; top: 18px; width: 264px; padding: 12px 16px; font-size: 17px; line-height: 1.45; transform: scale(1.2); transform-origin: 100% 0; }
+.trickinfo .title { font-family: var(--f-head); font-size: 21px; margin-bottom: 2px; }
+.trickinfo .row { color: var(--muted); }
+.trickinfo .row b { color: var(--cream); font-weight: 500; }
+.trickinfo .prompt { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(201, 164, 92, 0.25); color: var(--gold-bright); }
+
+/* buttons */
+.btn
+{
+  display: inline-flex; align-items: center; gap: 12px;
+  font-family: var(--f-head); font-size: 21px; color: var(--cream);
+  cursor: pointer;
+}
+.btn svg { width: 24px; height: 24px; flex: none; color: var(--gold); }
+.btn:hover, .btn:focus-visible { color: var(--gold-bright); outline: none; }
+.btn:hover svg, .btn:focus-visible svg { color: var(--gold-bright); }
+.panel.btn { padding: 0 22px; height: 76px; }
+.panel.btn:hover, .panel.btn:focus-visible { box-shadow: inset 0 0 0 3px rgba(18, 12, 7, 0.9), inset 0 0 0 4px rgba(242, 211, 140, 0.6), 0 0 18px rgba(242, 211, 140, 0.25), 0 12px 26px rgba(0, 0, 0, 0.55); }
+button.btn { border: 0; background: none; padding: 0; text-align: left; }
+.menubar
+{
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 46px;
+  box-sizing: border-box;
+  display: flex; align-items: center; gap: 4px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(180deg, #2e1c10, #1a1009);
+  border-bottom: 1px solid #806137;
+  box-shadow: 0 1px 0 rgba(201, 164, 92, 0.22), 0 6px 16px rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+.menubar .btn { font-size: 17px; height: 34px; padding: 0 12px; gap: 8px; border-radius: 6px; }
+.menubar .btn svg { width: 18px; height: 18px; }
+.menubar .btn:hover, .menubar .btn:focus-visible { background: rgba(201, 164, 92, 0.13); }
+.players { margin-left: auto; margin-right: 14px; display: flex; align-items: center; gap: 4px; }
+.players .label { margin-right: 6px; }
+.players button
+{
+  width: 32px; height: 30px;
+  border-radius: 6px; border: 1px solid #806137;
+  background: transparent; color: var(--cream);
+  font-family: var(--f-head); font-size: 16px;
+  cursor: pointer;
+}
+.players button:hover, .players button:focus-visible { border-color: var(--gold-bright); outline: none; }
+.players button[aria-pressed="true"] { background: #2a6142; color: var(--gold-bright); border-color: var(--gold); }
+@media (max-width: 520px) { .menubar .btn span, .players .label { display: none; } }
+#btn-history { left: 20px; top: 910px; }
+#btn-last { left: 248px; top: 910px; }
+#btn-history, #btn-last { border: 1px solid #806137; background: linear-gradient(180deg, var(--panel-top), var(--panel-bottom)); }
+
+/* bid strip */
+.bidstrip { left: 428px; top: 486px; width: 680px; padding: 16px 22px 18px; text-align: center; z-index: 7; }
+.bidstrip h2 { margin: 0 0 12px; font-family: var(--f-head); font-weight: 400; font-size: 25px; }
+.bidstrip .opts { display: flex; justify-content: center; gap: 10px; }
+.bidstrip .opt
+{
+  width: 58px; height: 62px;
+  border-radius: 8px;
+  border: 1px solid #a3824a;
+  background: linear-gradient(180deg, #2a6142, #17402a);
+  color: var(--cream);
+  font-family: var(--f-head); font-size: 28px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.bidstrip .opt:hover, .bidstrip .opt:focus-visible { border-color: var(--gold-bright); box-shadow: 0 0 0 2px var(--gold-bright), 0 0 16px rgba(242, 211, 140, 0.5); outline: none; }
+.bidstrip .opt:disabled { background: #2a211a; color: #6d604d; border-color: #4d3d28; cursor: not-allowed; box-shadow: none; text-decoration: line-through; }
+.bidstrip p { margin: 12px 0 0; color: var(--muted); font-size: 16px; }
+
+/* modal */
+.scrim { position: absolute; inset: 0; background: rgba(8, 5, 3, 0.62); z-index: 20; display: grid; place-items: center; }
+.sheet { position: relative; width: 720px; max-height: 860px; overflow: auto; padding: 26px 30px 24px; }
+.sheet h2 { margin: 0; font-family: var(--f-head); font-weight: 400; font-size: 32px; text-wrap: balance; }
+.sheet .meta { color: var(--muted); font-size: 17px; margin-top: 2px; }
+.sheet table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 18px; font-variant-numeric: tabular-nums; }
+.sheet th { text-align: right; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid rgba(201, 164, 92, 0.3); }
+.sheet td { text-align: right; padding: 7px 8px; border-bottom: 1px solid rgba(201, 164, 92, 0.1); }
+.sheet th:first-child, .sheet td:first-child { text-align: left; }
+.sheet .plus { color: var(--good); }
+.sheet .minus { color: var(--bad); }
+.sheet .note { color: var(--muted); font-size: 15px; }
+.sheet .actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+.sheet .actions button
+{
+  font-family: var(--f-head); font-size: 19px;
+  padding: 10px 20px; border-radius: 8px;
+  border: 1px solid #a3824a; color: var(--cream);
+  background: linear-gradient(180deg, #2a6142, #17402a);
+  cursor: pointer;
+}
+.sheet .actions button.quiet { background: transparent; }
+.sheet .actions button:hover, .sheet .actions button:focus-visible { border-color: var(--gold-bright); color: var(--gold-bright); outline: none; }
+.sheet ul { margin: 14px 0 0; padding-left: 20px; font-size: 17px; line-height: 1.5; max-width: 62ch; }
+.sheet .mini { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.sheet .mini figure { margin: 0; text-align: center; color: var(--muted); font-size: 15px; }
+.sheet .mini img { width: 88px; border-radius: 6px; display: block; margin-bottom: 6px; }
+.sheet .mini figure.win img { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 16px rgba(242, 211, 140, 0.5); }
+.sheet .scroll { overflow-x: auto; }
+.seg { display: inline-flex; border: 1px solid #a3824a; border-radius: 8px; overflow: hidden; margin-top: 14px; }
+.seg button { font-family: var(--f-head); font-size: 18px; padding: 8px 18px; border: 0; background: transparent; color: var(--cream); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: #2a6142; color: var(--gold-bright); }
+
+#toast
+{
+  position: absolute; left: 50%; top: 150px;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  font-size: 17px;
+  z-index: 30;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  white-space: nowrap;
+}
+#tag
+{
+  position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(187, 167, 131, 0.55);
+}
+@media (prefers-reduced-motion: reduce)
+{
+  .bubble { animation-duration: 0.01s; animation-delay: 1.5s; }
+  .hcard .face, .tcard .inner { transition: none; }
+}
+</style>
+
+<div id="viewport">
+  <nav class="menubar" aria-label="Game menu">
+    <button class="btn" id="m-new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg><span>New Game</span></button>
+    <button class="btn" id="m-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><span>Settings</span></button>
+    <button class="btn" id="m-rules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5c3-1.5 5.5-1.5 8 0v15c-2.5-1.5-5-1.5-8 0z"/><path d="M20 5c-3-1.5-5.5-1.5-8 0v15c2.5-1.5 5-1.5 8 0z"/></svg><span>Rules</span></button>
+    <div class="players" role="group" aria-label="Number of players"><span class="label">Players</span><button data-n="3">3</button><button data-n="4">4</button><button data-n="5">5</button><button data-n="6">6</button></div>
+    <button class="btn" id="m-exit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4H5v16h9"/><path d="M10 12h10M16 8l4 4-4 4"/></svg><span>Exit</span></button>
+  </nav>
+  <div id="stage" aria-label="Romanian Whist table mock-up">
+    <div class="wood"></div>
+    <div class="felt">
+      <div class="felt-line"></div>
+    </div>
+
+    <div class="panel logo">
+      <span class="club l">&#9827;</span><span class="club r">&#9827;</span>
+      <div>
+        <svg width="120" height="12" viewBox="0 0 120 12" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M2 6 H48 M72 6 H118"/><path d="M60 1 L65 6 L60 11 L55 6 Z" fill="currentColor"/><circle cx="50" cy="6" r="1.6" fill="currentColor"/><circle cx="70" cy="6" r="1.6" fill="currentColor"/></svg>
+        <h1>Romanian<br>Whist</h1>
+        <svg width="120" height="12" viewBox="0 0 120 12" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M2 6 C20 0 30 12 48 6 M72 6 C90 0 100 12 118 6"/><path d="M60 1 L65 6 L60 11 L55 6 Z" fill="currentColor"/></svg>
+      </div>
+    </div>
+
+    <div class="panel score" id="score"></div>
+
+    <div id="seats"></div>
+
+    <div id="trick"></div>
+    <div class="panel trickinfo" id="trickinfo"></div>
+
+    <div id="hand"></div>
+    <div class="panel plaque" id="seat-0"></div>
+
+    <button class="panel btn" id="btn-history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M4 9h16M4 14h16M10 4v16"/></svg>Round history</button>
+    <button class="panel btn" id="btn-last"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="10" height="14" rx="1.5"/><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h8A1.5 1.5 0 0 1 20 4.5v11a1.5 1.5 0 0 1-1.5 1.5H13"/></svg>Last trick</button>
+
+    <div class="panel bidstrip" id="bidstrip" hidden></div>
+    <div class="scrim" id="modal" hidden><div class="panel sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+    <div class="panel" id="toast" style="opacity:0"></div>
+    <div id="tag">Design mock-up &middot; real card art, simplified bots</div>
+  </div>
+</div>
+

@@ -4,6 +4,7 @@
 #include "GameFixtures.h"
 
 #include "engine/GameBridge.h"
+#include "table/TrickItem.h"
 
 #include <romanian_whist/GameEngine.h>
 
@@ -480,6 +481,64 @@ TEST_CASE("Every publishing callback emits a snapshot the GUI thread owns", "[br
         REQUIRE(snapshot->humanSeat == -1);
 }
 
+TEST_CASE("Every snapshot carries each seat's gender and face from its profile", "[bridge]")
+{
+    // THE ENGINE KNOWS ONLY NAMES, so the gender and the avatar reach a seat from
+    // the deal's profiles, seat i from profile i, on every snapshot and not only
+    // the first.
+    using Seen = std::pair<Gender, std::string>;
+
+    const auto genders = [](std::vector<PlayerProfile> profiles)
+    {
+        GameBridge bridge(std::nullopt, instant());
+        bridge.setProfiles(std::move(profiles));
+
+        std::vector<std::vector<Seen>> seen;
+        QObject::connect(&bridge, &GameBridge::stateChanged,
+                         [&seen](std::shared_ptr<const GameSnapshot> snapshot)
+                         {
+                             std::vector<Seen> seats;
+
+                             for(const SeatView& seat : snapshot->seats)
+                                 seats.emplace_back(seat.gender, seat.avatar);
+
+                             seen.push_back(std::move(seats));
+                         });
+
+        GameEngine engine;
+        engine.addObserver(&bridge);
+        engine.start(buildSetup());
+        engine.run();
+
+        return seen;
+    };
+
+    SECTION("each seat as its profile says")
+    {
+        // Seat 1 Female, against SeatView's Male, so a bridge that stamped
+        // nothing fails.
+        const auto seen = genders({ { "Ana", Gender::Male, "man-hat-mustache" },
+                                    { "Bogdan", Gender::Female, "woman-long-red-hair" } });
+
+        REQUIRE_FALSE(seen.empty());
+
+        for(const auto& seats : seen)
+            REQUIRE(seats == std::vector<Seen>{ { Gender::Male, "man-hat-mustache" },
+                                                { Gender::Female, "woman-long-red-hair" } });
+    }
+
+    SECTION("a seat without a profile keeps the default")
+    {
+        const auto seen = genders({ { "Ana", Gender::Female, "woman-long-brown-hair" } });
+
+        REQUIRE_FALSE(seen.empty());
+
+        for(const auto& seats : seen)
+            REQUIRE(seats == std::vector<Seen>{ { Gender::Female, "woman-long-brown-hair" },
+                                                { Gender::Male, "" } });
+    }
+}
+
 TEST_CASE("A game that ends on its own reports winners, not a first row", "[bridge]")
 {
     // getWinners() rather than standings.front(): a drawn game has more than one
@@ -815,4 +874,259 @@ TEST_CASE("Every snapshot names the seat on turn, or nobody", "[bridge]")
     // which is exactly what a publish() that stopped filling the field would do.
     REQUIRE(checker.sawSeat);
     REQUIRE(checker.sawNobody);
+}
+
+TEST_CASE("The lead rhombus marks the seat the engine has leading, across a real game", "[bridge]")
+{
+    // trickitem::leadSeat() reads the snapshot's phase, the trick's first entry and
+    // the engine's leader. What has to hold for that to be right is a fact about the
+    // bridge's frames, so it is checked over a whole schedule here, the way the case
+    // above checks activeSeat:
+    //
+    //   - on every bidding frame it marks nobody - onBetPlaced's above all, where
+    //     every bet is in, the table is empty and the last bidder is still on turn;
+    //   - from onBettingComplete on, with nothing on the table, it marks the seat
+    //     the engine will have lead (snapshot.leadSeat is getTrickLeaderSeat() then);
+    //   - once a round's play is over it marks nobody, though its last trick is
+    //     still on the table and the engine's leader still names somebody.
+    GameBridge bridge(std::nullopt, instant());
+
+    std::shared_ptr<const GameSnapshot> latest;
+    QObject::connect(&bridge, &GameBridge::stateChanged,
+                     [&latest](std::shared_ptr<const GameSnapshot> snapshot)
+                     { latest = std::move(snapshot); });
+
+    // After the bridge, so the latest snapshot is this callback's own - see above.
+    class LeadChecker : public IGameObserver
+    {
+    public:
+        explicit LeadChecker(const std::shared_ptr<const GameSnapshot>& _latest)
+            : latest(_latest)
+        {}
+
+        void onBetRequested(const GameEngine&, Seat) override { checkNone(); }
+        void onBetPlaced(const GameEngine&, Seat, unsigned int) override { checkNone(); }
+
+        void onBettingComplete(const GameEngine&) override
+        {
+            // Play has begun, so this frame has to mark the leader - not skip it.
+            if(!latest || !trickitem::leadSeat(*latest))
+                ++wrong;
+
+            checkEmpty();
+        }
+
+        void onTrickStarted(const GameEngine&, unsigned int, Seat) override { checkEmpty(); }
+        void onCardRequested(const GameEngine&, Seat) override { checkEmpty(); }
+        void onRoundScored(const GameEngine&) override { checkNone(); }
+        void onRoundComplete(const GameEngine&) override { checkNone(); }
+        void onGameOver(const GameEngine&) override { checkNone(); }
+
+        unsigned int marked = 0;
+        unsigned int unmarked = 0;
+        unsigned int wrong = 0;
+
+    private:
+        void checkEmpty()
+        {
+            if(!latest || !latest->table.empty())
+                return;
+
+            const std::optional<unsigned int> lead = trickitem::leadSeat(*latest);
+
+            if(!lead)
+                return;
+
+            ++marked;
+
+            if(*lead != latest->leadSeat)
+                ++wrong;
+        }
+
+        void checkNone()
+        {
+            if(!latest)
+                return;
+
+            ++unmarked;
+
+            if(trickitem::leadSeat(*latest))
+                ++wrong;
+        }
+
+        const std::shared_ptr<const GameSnapshot>& latest;
+    };
+
+    LeadChecker checker(latest);
+
+    GameEngine engine;
+    engine.addObserver(&bridge);
+    engine.addObserver(&checker);
+    engine.start(fixtures::buildSetup(4));
+    engine.run();
+
+    // Some frame had to mark a leader before a card was down, and some had to mark
+    // nobody, or this checked nothing: every trick's lead request is one, and every
+    // bid the other.
+    REQUIRE(checker.marked > 0);
+    REQUIRE(checker.unmarked > 0);
+    REQUIRE(checker.wrong == 0);
+}
+
+// THE MENU BAR'S SETTINGS (the redesign's phase 9) apply the bot speed to the game
+// in play, the owner's call of 2026-10-21. Driven through onRoundScored(), whose
+// dwell is the longest beat there is, as the pacing cases above are.
+TEST_CASE("setPacing() cuts short a beat already under way", "[bridge]")
+{
+    // A DWELL OF THIRTY SECONDS, changed to nothing a moment in. A pace() that
+    // read its length once, on the way in, would sit the thirty out; one that
+    // works its deadline out again on the wake setPacing() sends comes back now.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, Pacing{ std::chrono::milliseconds(30000),
+                                            std::chrono::milliseconds(30000),
+                                            std::chrono::milliseconds(30000) });
+
+    std::atomic<bool> returned{false};
+
+    const auto started = std::chrono::steady_clock::now();
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    // Observed here, asserted after the join: a REQUIRE that unwinds past an
+    // unjoined thread is std::terminate (see the pause case above).
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool stillWaiting = !returned;
+
+    bridge.setPacing(instant());
+
+    // BOUNDED, WITH A RESCUE only if the change does not land: a cancel ends the
+    // dwell either way, so a failure is a failed assertion rather than a
+    // thirty-second hang. Polled, as "cancelPacing() releases a PAUSED pace()"
+    // does it, so a pass does not wait the rescue's five seconds out (PR #35's
+    // review, finding #8: a thread that always slept them cost every run 5 s).
+    const auto deadline = started + std::chrono::seconds(5);
+    while(!returned && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    if(!returned)
+        bridge.cancelPacing();
+
+    worker.join();
+
+    REQUIRE(stillWaiting);
+    REQUIRE(returned);
+    REQUIRE(elapsed < std::chrono::seconds(3));
+}
+
+TEST_CASE("setPacing() lengthens the beats that follow", "[bridge]")
+{
+    // The other direction, and the same two-sided reading as "pace() actually
+    // waits": a bridge built instant takes no dwell, and one slowed afterwards
+    // takes the new one - so the change is READ, not merely accepted.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    auto started = std::chrono::steady_clock::now();
+    bridge.onRoundScored(engine);
+    REQUIRE(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(100));
+
+    bridge.setPacing(Pacing{ std::chrono::milliseconds(0),
+                             std::chrono::milliseconds(0),
+                             std::chrono::milliseconds(200) });
+
+    started = std::chrono::steady_clock::now();
+    bridge.onRoundScored(engine);
+    REQUIRE(std::chrono::steady_clock::now() - started >= std::chrono::milliseconds(100));
+}
+
+TEST_CASE("setPacing() turns the wait after each round on for the next round", "[bridge]")
+{
+    // Settings' "Wait for me after each round", turned on mid-game: the bridge
+    // holds itself at the next result, before its window could, as a game dealt
+    // with it on does (Pacing::waitAfterEachRound says why it must be here).
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    Pacing waiting = instant();
+    waiting.waitAfterEachRound = true;
+    bridge.setPacing(waiting);
+
+    std::atomic<bool> returned{false};
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    // Every delay is zero, so anything still inside onRoundScored() after this
+    // long is held.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool held = !returned;
+
+    // The window's Continue.
+    bridge.setPaused(false);
+    worker.join();
+
+    REQUIRE(held);
+    REQUIRE(returned);
+}
+
+TEST_CASE("The round result says whether the bridge held the game for it", "[bridge]")
+{
+    // PR #35's review, finding #6. The window kept its own copy of the round
+    // wait beside the bridge's, and decided whether its sheet was holding from
+    // that copy rather than from the hold the bridge had taken - two copies
+    // Settings has to keep in step mid-game. The result now carries the one the
+    // bridge acted on, read once.
+    GameEngine engine;
+    engine.start(buildSetup());
+
+    GameBridge bridge(std::nullopt, instant());
+
+    std::vector<RoundResult> results;
+    QObject::connect(&bridge, &GameBridge::roundScored,
+                     [&results](RoundResult result){ results.push_back(std::move(result)); });
+
+    // Unwaited: every delay is zero, so this returns at once, and held nothing.
+    bridge.onRoundScored(engine);
+
+    REQUIRE(results.size() == 1);
+    REQUIRE_FALSE(results.back().held);
+
+    // Waited, turned on the way Settings does it.
+    Pacing waiting = instant();
+    waiting.waitAfterEachRound = true;
+    bridge.setPacing(waiting);
+
+    std::atomic<bool> returned{false};
+
+    std::thread worker([&]
+    {
+        bridge.onRoundScored(engine);
+        returned = true;
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const bool heldThread = !returned;
+
+    // The window's Continue.
+    bridge.setPaused(false);
+    worker.join();
+
+    REQUIRE(heldThread);
+    REQUIRE(results.size() == 2);
+    REQUIRE(results.back().held);
 }

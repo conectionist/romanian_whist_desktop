@@ -2,14 +2,20 @@
 #define SEAT_ITEM_H
 
 #include "core/GameSnapshot.h"
+#include "paint/Panel.h"
+#include "paint/PictureMemo.h"
 #include "paint/Theme.h"
 
 #include <QGraphicsObject>
 #include <QRectF>
 #include <QSizeF>
+#include <QString>
 
-// One seat's plaque: name, the bid/won pill, the cards left as a stack, and the
-// turn ring (section 14).
+#include <cstddef>
+#include <string>
+
+// One seat's name panel (the table redesign's section 2.5): a portrait, the name,
+// the Taken/Bid pill, and the turn ring.
 //
 // A QGraphicsObject for the same reason CardItem is one - section 18.2 fades the
 // turn ring in over 120ms in phase E, which is a property animation on an object.
@@ -20,48 +26,108 @@
 // engages it from just before a provider is asked until just after its answer is
 // recorded, so it stays on the seat that just bid or just played and goes empty
 // between turns without any callback having to remember to say so.
-class CardItem;
-class CardRenderer;
-
-// WHERE THE THINGS ON A PLAQUE GO, which is the part of this item with a right
-// answer - so it is a free function, the split SnapshotLog.h argues for and
-// seatlayout, infostrip and bidstrip all follow. It needs no scene, no painter
-// and no seat to have that answer checked.
+// WHAT GOES WHERE ON A PANEL, and what its two lines say, which is the part of
+// this item with a right answer - so they are free functions, the split
+// SnapshotLog.h argues for and seatlayout, infostrip and bidstrip all follow.
+// They need no scene, no painter and no seat to have that answer checked.
 namespace seatitem
 {
 
+// The two lines' type sizes in table units: .name is Marcellus 25 and .pill
+// Alegreya Sans 19. Here rather than private because tablespace::minimumScale is
+// chosen to keep the name readable, and a test holds the two together.
+inline constexpr int nameSize = 25;
+inline constexpr int pillSize = 19;
+
+// page.html's .plaque, in table units, centred on the item's origin.
 struct Layout
 {
-    // The rounded rect itself, centred on the item's origin.
-    QRectF plaque;
+    // The panel's border box.
+    QRectF panel;
 
-    // The column the name and the pill get. NARROWER when a card is shown, and
-    // that is the whole reason this is computed in one place: the name is elided
-    // against this width, and a name measured against the full plaque while
-    // drawn into a narrowed one runs under the card. B2b's review found four
-    // defects of exactly that shape.
+    // The portrait's box, its 1-unit gold border included.
+    QRectF portrait;
+
+    // The column the name and the pill share: from 12 past the portrait to the
+    // panel's right padding. The name is elided against this width.
     QRectF text;
-
-    // The face-up card, EMPTY when this seat is not showing one - which is every
-    // round but a Forehead one, and every seat but another player's.
-    QRectF card;
-
-    // Where the cards-left stack is drawn instead. Its right edge is the
-    // plaque's, so the stack grows toward the middle and never reaches the name.
-    QRectF stack;
 };
 
-// `faceSize` is the card's drawn size, or an empty size when there is no card to
-// show. Taken as a parameter rather than derived here because the aspect belongs
-// to CardRenderer, which section 18.1 makes the only thing that knows what a card
-// looks like.
-Layout layoutFor(qreal cardHeight, QSizeF faceSize);
+// The panel's border box for a panel of `size`, centred on the item's origin.
+QRectF panelRect(QSizeF size);
 
-// The height a face-up card is drawn at. A fraction of the PLAQUE and not of the
-// card unit, because what it has to fit inside is the plaque - and the plaque's
-// padded inner box is only 0.38 card-heights, which is too short for anything
-// legible. This uses the plaque's full height less a margin instead.
-qreal faceHeightFor(qreal cardHeight);
+// NO CARD ON THE PANEL. A Forehead round's visible card stood in the portrait's
+// place until the redesign's phase 5, which put it face up in the seat's rack
+// (RackItem) - so the panel is the same in every round.
+Layout layoutFor(QSizeF panel);
+
+// The portrait's picture, inside its gold border: 86 x 98 table units. What
+// Theme::avatar() is asked for at, so the Card art window can show it at the size
+// the table does.
+QSizeF portraitPicture();
+
+// Section 2.5's pill, which is three states once the bidding is over and a
+// neutral one before. `Neutral` covers "No bid yet", "Bidding…" and a bid made
+// while others are still bidding, which the mock-up does not colour: nobody has
+// taken a trick yet, so "on target" would be a claim about nothing.
+enum class Pill
+{
+    Neutral,
+    OnTarget,
+    Owing,
+    Over
+};
+
+struct PillView
+{
+    QString text;
+    Pill state = Pill::Neutral;
+
+    bool operator==(const PillView&) const = default;
+};
+
+// table.js pillFor(). `active` is whether this seat is the one being asked to
+// move, and `biddingOpen` whether any seat has still to bid this round.
+//
+// NO BID IS NOT A BID OF ZERO. hasBet is on the snapshot precisely to tell them
+// apart, and reading `bet` without it makes every seat look like it bid nothing.
+// THE NUMBERS ARE ALWAYS IN THE TEXT, so the colour is never the only cue
+// (section 18).
+PillView pillFor(const SeatView& seat, bool active, bool biddingOpen);
+
+// The name line, in two parts painted in two colours: the active seat's "▸ " and
+// the name, elided against what the marker leaves of `width`.
+//
+// NO SCORE AFTER THE NAME: the scoreboard has every seat's, so the panel can be
+// as narrow as its pill (the owner's experiment of 2026-10-21). No " (you)" and no
+// "AI" tag: the mock-up has neither, and the bottom panel is yours by where it is
+// (the owner's decision of 2026-10-18; open question Q5).
+struct NameLine
+{
+    QString marker;
+    QString name;
+
+    bool operator==(const NameLine&) const = default;
+};
+
+NameLine nameLineFor(const SeatView& seat, bool active, qreal width);
+
+// EVERYTHING THE PANEL'S PICTURE SHOWS of a seat, worked out once per snapshot.
+// The picture is painted from this and composed again only when it changes, so
+// a thing drawn on the panel cannot be left out of that comparison: to be drawn
+// it has to be in here. The chrome's palette, size and ratio are not about the
+// seat, and SeatItem compares them itself.
+struct Shown
+{
+    NameLine name;
+    PillView pill;
+
+    // The seat's own portrait (SeatView::avatar), since the owner's call of
+    // 2026-10-23: the player's, wherever they sit.
+    std::string avatar;
+
+    bool operator==(const Shown&) const = default;
+};
 
 } // namespace seatitem
 
@@ -70,82 +136,77 @@ class SeatItem : public QGraphicsObject
     Q_OBJECT
 
 public:
-    // The renderer outlives every item, as CardItem documents: TableScene owns it
-    // by value and the items are its children.
+    // `panels` is the chrome cache every seat shares, owned by TableScene. Null gives
+    // the item one of its own.
     //
-    // TAKEN SINCE C4, which is when a plaque first had a card to draw. Section 17
-    // puts another seat's Forehead card face-up on their plaque, and that card
-    // comes through the same seam every other card on the table does.
-    explicit SeatItem(const CardRenderer* renderer, QGraphicsItem* parent = nullptr);
+    // NO CARD RENDERER since the redesign's phase 5: a Forehead round's card is
+    // drawn in the seat's rack, and the panel draws no card at all.
+    explicit SeatItem(panel::Cache* panels, QGraphicsItem* parent = nullptr);
 
-    // What a plaque occupies at a given card height, ring included.
-    //
-    // Static and public because the LAYOUT needs it before any seat exists:
-    // seatlayout::seatCentres() places centres inside the rect it is given, and
-    // a centre inside the rect is not the same as a plaque inside it - the two
-    // side seats hang half a plaque past the edge otherwise. TableScene insets
-    // by this before laying out, which is the same "the caller passes a shorter
-    // rect" the hand strip will use in B2b.
-    static QSizeF plaqueSize(qreal cardHeight);
+    // Everything this draws, from one snapshot's SeatView plus the facts that are
+    // not on it. Taken as a whole rather than as a dozen setters because it is
+    // repainted from a whole snapshot ~1300 times a game and a half-updated panel
+    // is a state nothing should be able to reach.
+    void setSeat(const SeatView& seat, bool active, bool biddingOpen, const Theme& theme);
 
-    // Everything this draws, from one snapshot's SeatView plus the two facts
-    // that are not on it. Taken as a whole rather than as a dozen setters
-    // because it is repainted from a whole snapshot ~1300 times a game and a
-    // half-updated plaque is a state nothing should be able to reach.
-    void setSeat(const SeatView& seat, bool active, const Theme& theme);
+    // The panel's size in TABLE units: tablespace::panelSize, which the bottom
+    // panel is too.
+    void setPanelSize(QSizeF size);
 
-    // In LOGICAL pixels. The plaque derives from the card height, which section
-    // 18.1 makes the one unit every other metric on the table comes from.
-    void setCardHeight(qreal height);
-
+    // The panel plus everything it paints past its edge - the drop shadow, and the
+    // ring and glow whether or not they are showing: a rect that changed as the
+    // turn moved would re-index the whole scene twice a card.
     QRectF boundingRect() const override;
+
+    // The panel as drawn: the part of the item that takes the mouse, so a click on
+    // it never reaches the hand beneath, while one on the shadow round it does.
+    QPainterPath shape() const override;
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
-    // WHAT THIS PLAQUE DECIDED, exposed because it is a pure query and because
-    // the decision has two consequences a test cannot otherwise separate: the
-    // card is one, and the narrowed text column and dropped stack are the other.
-    // A seat wrongly believing it has a card to show still hides the card - the
-    // hand is checked again where it is dereferenced - and would silently lay
-    // itself out as though one were there.
+    // WHAT THIS PANEL DECIDED, exposed because it is a pure query.
     seatitem::Layout layoutFor() const;
 
-    bool showsFace() const;
+    // How many times this panel has been composed: READ-ONLY and for tests, which
+    // show with it that a resize settling, or a snapshot that changes nothing
+    // here, leaves the cached panel alone - TableTopItem::renders()'s twin.
+    std::size_t compositions() const { return memo.compositions(); }
+
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
-    // Section 14's three states. `NoBid` is the fourth thing that can be true
-    // and is not a state of the pill at all: hasBet tells a genuine bid of zero
-    // from no bid yet, and a seat that has not bid must not read as on target.
-    enum class Pill
-    {
-        NoBid,
-        OnTarget,
-        Owing,
-        Over
-    };
+    // What the picture would show now, from the seat, the turn and the size.
+    seatitem::Shown shownNow() const;
 
-    Pill pillState() const;
-    QColor pillColour() const;
+    void paintPortrait(QPainter& painter, const QRectF& box) const;
+    void paintText(QPainter& painter, const QRectF& column) const;
 
-    // Places the face-up card, or hides it.
-    void refreshFace();
+    // THE WHOLE PANEL AS ONE PICTURE - the chrome, the portrait and the two lines
+    // over it - composed again only when what it shows or the ratio changes. The
+    // text and the portrait cost about half a millisecond each a frame over six
+    // panels, which a drag, painting every panel every step, cannot spare; a
+    // snapshot changes one or two panels' text, and only those are composed again.
+    // `layout` is layoutFor()'s, which paint() has already asked for.
+    const panel::Picture& picture(const seatitem::Layout& layout, qreal ratio) const;
 
-    const CardRenderer* renderer;
-
-    // ONE CARD, and a child rather than something this paints. CardItem already
-    // resolves the device pixel ratio off the widget being painted into, so a
-    // window dragged to another screen re-rasterizes rather than scaling what it
-    // had - reusing it inherits that instead of solving it a second time here.
-    //
-    // Hidden rather than deleted between rounds, because a plaque shows a card
-    // for two rounds of twenty-six and rebuilding one per snapshot is the churn
-    // TableScene's class comment rules out.
-    CardItem* face = nullptr;
+    // The panel's chrome, shared with every other seat: its two shadows are blurs,
+    // too dear to paint on every frame of a resize. `ownPanels` only when no
+    // shared cache was given.
+    mutable panel::Cache ownPanels;
+    panel::Cache* panels;
 
     SeatView seat;
     bool active = false;
-    Theme theme = Theme::light();
-    qreal cardHeight = 0.0;
+    bool biddingOpen = false;
+    Theme theme = Theme::dark();
+    QSizeF size;
+
+    // What the composed picture shows, and is painted from.
+    seatitem::Shown shown;
+
+    // The composed panel, kept until what it shows or the ratio changes.
+    mutable PictureMemo memo;
 };
 
 #endif

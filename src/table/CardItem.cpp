@@ -1,20 +1,12 @@
 #include "CardItem.h"
 
 #include "paint/CardRenderer.h"
+#include "paint/CardShadow.h"
+#include "paint/DevicePixels.h"
 
 #include <QPainter>
-#include <QStyleOptionGraphicsItem>
-#include <QWidget>
 
-namespace
-{
-
-// How far the winning card's shadow and hairline reach past the card, as a
-// fraction of the card's height. boundingRect() has to include it or the scene
-// clips the highlight to the card and leaves a trail behind a moving one.
-constexpr qreal highlightMargin = 0.06;
-
-}
+#include <algorithm>
 
 CardItem::CardItem(const CardRenderer* renderer, QGraphicsItem* parent)
     : QGraphicsObject(parent)
@@ -50,19 +42,34 @@ void CardItem::setCardHeight(qreal height)
     // is never repainted and the new one may never be visited.
     prepareGeometryChange();
     cardHeight = height;
+    shadowMemo.invalidate();
     update();
 }
 
-void CardItem::setWinning(bool isWinning, QColor accentColour)
+void CardItem::setPlayed(bool isWinning, const Theme::TablePalette& palette, cardshadow::Cache* cache)
 {
-    if(winning == isWinning && accent == accentColour)
+    setCast(isWinning ? cardshadow::Look::Winning : cardshadow::Look::Played, palette, cache);
+}
+
+void CardItem::setHeld(bool raised, const Theme::TablePalette& palette, cardshadow::Cache* cache)
+{
+    setCast(raised ? cardshadow::Look::Raised : cardshadow::Look::Held, palette, cache);
+}
+
+void CardItem::setCast(cardshadow::Look look, const Theme::TablePalette& palette, cardshadow::Cache* cache)
+{
+    const cardshadow::Colours wanted = cardshadow::colours(palette);
+
+    if(cast == look && colours == wanted && shadows == cache)
         return;
 
-    // The highlight lives outside the card, so its arrival and departure change
-    // the bounding rect as much as a resize does.
+    // The shadow lives outside the card, and the winner and a raised card rise, so
+    // any of these changes the bounding rect as much as a resize does.
     prepareGeometryChange();
-    winning = isWinning;
-    accent = accentColour;
+    cast = look;
+    colours = wanted;
+    shadows = cache;
+    shadowMemo.invalidate();
     update();
 }
 
@@ -83,46 +90,84 @@ QSizeF CardItem::cardSize() const
     return renderer->sizeForHeight(cardHeight);
 }
 
-QRectF CardItem::boundingRect() const
+QRectF CardItem::cardRect() const
 {
-    const QSizeF size = cardSize();
-
-    if(size.isEmpty())
-        return QRectF();
-
-    const qreal margin = winning ? cardHeight * highlightMargin : 0.0;
-
-    return QRectF(-size.width() / 2.0 - margin,
-                  -size.height() / 2.0 - margin,
-                  size.width() + margin * 2.0,
-                  size.height() + margin * 2.0);
+    return cardshadow::cardRect(cardSize());
 }
 
-void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget* widget)
+QRectF CardItem::boundingRect() const
+{
+    if(cardSize().isEmpty())
+        return QRectF();
+
+    const QRectF body = cardRect();
+
+    if(!cast)
+        return body;
+
+    // The shadow's whole reach, and the rise, so the scene neither clips the
+    // highlight nor leaves a trail behind a card that moves.
+    return body.translated(0.0, -cardshadow::lift(*cast)).marginsAdded(cardshadow::reach(*cast));
+}
+
+void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
 {
     const QSizeF size = cardSize();
 
     if(!renderer || size.isEmpty())
         return;
 
-    // Off the widget being painted into, which is the viewport - so a window
-    // dragged to a screen with a different ratio rasterizes again at the new one
-    // rather than scaling what it had. `widget` is null when a scene is rendered
-    // somewhere other than a view, and 1.0 is the honest answer there.
-    const qreal dpr = widget ? widget->devicePixelRatioF() : 1.0;
+    // AT THE PIXELS IT WILL COVER, which is devicepixels::effectiveRatio(): the
+    // device's ratio, so a window dragged to a screen with a different one
+    // rasterizes again rather than scaling what it had, times the scale the view
+    // draws the table at. A card 225 table units tall can land 175 pixels tall,
+    // and a pixmap rasterized at 225 would be resampled down to that on its way to
+    // the screen - the softness CardRenderer exists to prevent. The ratio stamped
+    // on the pixmap is then below 1 on a small window, which Qt draws the same way
+    // as any other.
+    //
+    // THE DEVICE'S RATIO, not the widget's: a scene rendered into an image has no
+    // widget, and the image's own ratio is what the card has to match there.
+    //
+    // AND WHILE A RESIZE SETTLES, the scale it began from, which effectiveRatio()
+    // answers with on its own (TableView): the pixmap the renderer already holds is
+    // asked for again and drawn scaled, rather than every card being rasterized
+    // afresh on every step of the drag.
+    //
+    // WITHOUT THE ITEM'S OWN SCALE (phase 12): a card in flight is scaled up or down
+    // from the size it will rest at, and the ratio above includes that scale. Asked
+    // for at each frame's own size it would miss the renderer's cache every frame -
+    // a court card takes 8 to 11 ms to rasterize - so it is asked for at the size
+    // it lands at, once, and Qt scales that picture, with the view's smooth
+    // transform, as the card moves.
+    const qreal dpr = devicepixels::effectiveRatio(*painter) / std::max(scale(), 1e-3);
 
-    const QRectF card(-size.width() / 2.0, -size.height() / 2.0, size.width(), size.height());
+    const QRectF body = cardRect();
 
-    if(winning)
+    // THE WINNER RISES toward its own top, which on every seat's card points at
+    // the table's centre, and so does a raised card in your hand, along its tilt -
+    // the shadow, glow and ring with them, as they are CSS box-shadows on the
+    // element that moves.
+    if(cast)
+        painter->translate(0.0, -cardshadow::lift(*cast));
+
+    // ONE SNAPPED CORNER FOR THE ART AND ITS SHADOW. Each is a picture of its own,
+    // and a blit rounds its own origin; laid separately at a fraction of a pixel
+    // the two could round apart, and the ring and the shadow's cut-out land a pixel
+    // off the art. The shadow is a whole number of pixels from the card's corner
+    // (cardshadow::render()), so both go down from the one point. A card turned by
+    // other than a quarter turn is resampled anyway, and this moves it under half
+    // a pixel.
+    const QPointF at = devicepixels::snapped(*painter, body.topLeft());
+
+    // Under the card: one cached picture, turned with the card by the item's
+    // rotation, so the shadow falls toward the card's own bottom.
+    if(cast && shadows)
     {
-        // A raised shadow and a thin accent hairline (section 18). Drawn before
-        // the card so the shadow sits under it rather than over its border.
-        const qreal margin = cardHeight * highlightMargin;
+        const cardshadow::Picture& picture = shadow(size, dpr);
 
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(0, 0, 0, 70));
-        painter->drawRoundedRect(card.adjusted(-margin, -margin, margin, margin),
-                                 margin, margin);
+        if(!picture.pixmap.isNull())
+            painter->drawPixmap(at + (picture.offset - body.topLeft()), picture.pixmap);
     }
 
     const QSize pixels(qRound(size.width()), qRound(size.height()));
@@ -130,15 +175,13 @@ void CardItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     const CardRenderer::State state =
         dimmed ? CardRenderer::State::Dimmed : CardRenderer::State::Normal;
 
-    const QPixmap pixmap = this->card ? renderer->face(*this->card, pixels, dpr, state)
-                                      : renderer->back(pixels, dpr);
+    const QPixmap pixmap = card ? renderer->face(*card, pixels, dpr, state)
+                                : renderer->back(pixels, dpr);
 
-    painter->drawPixmap(card.topLeft(), pixmap);
+    painter->drawPixmap(at, pixmap);
+}
 
-    if(winning)
-    {
-        painter->setBrush(Qt::NoBrush);
-        painter->setPen(QPen(accent, std::max(1.0, cardHeight * 0.016)));
-        painter->drawRoundedRect(card, cardHeight * 0.04, cardHeight * 0.04);
-    }
+const cardshadow::Picture& CardItem::shadow(QSizeF size, qreal ratio) const
+{
+    return shadowMemo.picture(ratio, [&] { return shadows->picture(size, *cast, colours, ratio); });
 }

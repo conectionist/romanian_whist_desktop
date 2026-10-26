@@ -2,32 +2,35 @@
 #define ROUND_SHEET_H
 
 #include "engine/RoundResult.h"
-#include "paint/Theme.h"
+#include "ui/Overlay.h"
 
 #include <QCoreApplication>
 #include <QString>
 #include <QStringList>
-#include <QWidget>
 
 QT_BEGIN_NAMESPACE
-class QGridLayout;
 class QLabel;
-class QPushButton;
 QT_END_NAMESPACE
 
 // Section 16.1's round sheet: what the round just scored was worth, per seat,
 // over the table it was played on.
 //
 // Translated through QCoreApplication::translate() with an explicit context, for
-// the reason InfoStrip.h and ScoreboardWidget.h give at length - this is chrome
-// a player reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of
-// our own hides every string in here from lupdate.
+// the reason table/ScoreboardItem.h gives at length - this is chrome a player
+// reads, Q_DECLARE_TR_FUNCTIONS is class-only, and a tr() wrapper of our own
+// hides every string in here from lupdate.
 namespace roundsheet
 {
 
-// "Round 7 - 6 cards - Normal". The three facts that identify a round, and the
-// same three the info strip carries across the top of the table all round.
+// "Round 7 · 6 cards · Normal". The three facts that identify a round, and the
+// same three the scoreboard carries at the top of the table all round, between
+// the same dots.
 QString titleFor(const RoundResult& result);
+
+// THE LINE UNDER THE TITLE, the mock-up's: the trump the round was played to -
+// "Trump K♥", or "No trump" in an eight-card round - and how a round is scored,
+// for a player reading the column of scores below it.
+QString metaFor(const RoundResult& result);
 
 // SECTION 16.1's "34 -> 41", and the honest rendering of a number that means two
 // different things either side of a commit. Inside onRoundScored() the total is
@@ -36,7 +39,9 @@ QString titleFor(const RoundResult& result);
 QString arrowFor(const RoundSeatResult& seat);
 
 // The round score with its sign, which is what carries the meaning - section 18
-// allows no cue that is colour alone, and the widget colours this as well.
+// allows no cue that is colour alone, and the widget colours this as well. "+7",
+// "−1" with section 2.13's minus sign (U+2212, as wide as the plus in tabular
+// figures), and "0".
 QString roundScoreFor(const RoundSeatResult& seat);
 
 // SECTION 16.1's WARNING LINES, and the reason RoundResult exists rather than
@@ -65,72 +70,52 @@ QStringList streakWarnings(const RoundResult& result);
 
 } // namespace roundsheet
 
-// The widget. THE THIRD OVERLAY, and built the way PauseOverlay and
-// GameOverPanel are because they settled the shape: a child of the window's
-// stack rather than a QDialog, dimming what is behind it and swallowing the
-// clicks that land on it, so it reads as modal without blocking the window that
-// section 4.4 needs closable.
+// The widget. An Overlay: a child of the window's stack rather than a QDialog,
+// so it reads as modal without blocking the window that section 4.4 needs
+// closable.
 //
 // ITS BUTTON SAYS "Continue" IN EVERY ROUND, where section 16.1's mockup says
 // "Deal round 8". The last round has nothing left to deal - the sheet there
 // hands over to the game-over panel - and a label that is a lie on the final
 // round is worse than one word that is true in all of them. Section 16.1 is
 // amended to record it.
-class RoundSheet : public QWidget
+class RoundSheet : public Overlay
 {
     Q_OBJECT
 
 public:
     explicit RoundSheet(QWidget* parent = nullptr);
 
-    void setTheme(const Theme& theme);
-
     // Fills the sheet from one round. Rebuilt per round rather than updated in
     // place: the seat count is fixed for a game but the rows carry per-round
-    // numbers throughout, and BidStrip's reason applies - a panel built once and
-    // rewritten is a panel whose stale half is invisible.
+    // numbers throughout, and a panel built once and rewritten is a panel whose
+    // stale half is invisible.
     void showResult(const RoundResult& result);
 
-    // Puts the keyboard on Continue, so Enter dismisses. Called by the window
-    // after it shows this rather than from showEvent(), the reason PauseOverlay
-    // records: focus taken during a show is easy to lose to whatever is shown
-    // next.
-    void focusContinue();
+    // Continue, so Enter dismisses.
+    void focusDefault() override;
 
 signals:
     void continueRequested();
 
-protected:
-    void paintEvent(QPaintEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
+    // The quiet Round history beside Continue (the redesign's phase 11): the whole
+    // game so far, opened over this sheet and closed back to it.
+    void historyRequested();
 
 private:
-    // Empties the grid COMPLETELY, headings included - see the body for why they
-    // are rebuilt per round rather than kept.
-    void clearRows();
-
-    void addHeadings();
-    void addRow(const RoundSeatResult& seat);
-
-    Theme theme = Theme::light();
-
-    // On a plaque, not on the green: Theme has no colour for text on the table
-    // surface, because textPrimary is chosen against seatPlaque. D1 found that
-    // by rendering a menu title that was dark grey on dark green.
-    QWidget* panel = nullptr;
-
     QLabel* title = nullptr;
-    QWidget* rows = nullptr;
-    QGridLayout* rowLayout = nullptr;
+    QLabel* meta = nullptr;
+
+    // A row per seat, in table order, refilled per round.
+    SheetTable* rows = nullptr;
 
     // Hidden when nothing is on four, which is most rounds - and hidden rather
     // than emptied, because this sheet is rebuilt per round and is not the
     // fixed-height info strip whose B2b finding argues the other way.
     QLabel* warning = nullptr;
 
-    QPushButton* continueButton = nullptr;
-
-    int placedRows = 0;
+    SheetButton* historyButton = nullptr;
+    SheetButton* continueButton = nullptr;
 };
 
 #endif
