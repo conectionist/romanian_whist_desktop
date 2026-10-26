@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "CardStringMaker.h"
 
@@ -7,9 +8,13 @@
 #include "table/RoundText.h"
 #include "table/ScoreboardItem.h"
 
+#include <QCoreApplication>
+#include <QHash>
 #include <QString>
+#include <QTranslator>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
 using romanian_whist::Card;
@@ -72,6 +77,41 @@ GameSnapshot roundOf(unsigned int number, unsigned int count, unsigned int cards
 
 // The bids in, totalling `sum`, in a round of `tricks` - as the snapshot carries
 // them.
+// A TRANSLATION OF ITS OWN for the scoreboard's sentences, installed for its
+// lifetime only: a test's wording, where the Romanian file is not what is tested.
+class Wording : public QTranslator
+{
+public:
+    explicit Wording(QHash<QString, QString> sentences) : sentences(std::move(sentences))
+    {
+        QCoreApplication::installTranslator(this);
+    }
+
+    ~Wording() override
+    {
+        QCoreApplication::removeTranslator(this);
+    }
+
+    Wording(const Wording&) = delete;
+    Wording& operator=(const Wording&) = delete;
+
+    QString translate(const char* context, const char* source, const char*, int) const override
+    {
+        if(QByteArrayView(context) != "scoreboard")
+            return QString();
+
+        return sentences.value(QString::fromUtf8(source));
+    }
+
+    bool isEmpty() const override
+    {
+        return false;
+    }
+
+private:
+    QHash<QString, QString> sentences;
+};
+
 GameSnapshot bidsIn(unsigned int placed, unsigned int sum, unsigned int tricks)
 {
     GameSnapshot snapshot = roundOf(5, 24, tricks);
@@ -254,6 +294,48 @@ TEST_CASE("A one-trick round reads as one trick", "[scoreboard]")
 
     REQUIRE(textruns::text(scoreboard::tensionFor(bidsIn(4, 2, 1)))
             == QStringLiteral("Bids total 2 for 1 trick: over by 1"));
+}
+
+TEST_CASE("A translation may leave the trick count out of the bid line", "[scoreboard]")
+{
+    // EACH NUMBER INTO ITS OWN MARKER: the Romanian names the total and the
+    // difference, not the tricks ("S-a licitat 18 (cu 10 peste)"), and arg(),
+    // which fills the lowest marker still standing, put the trick count into %3.
+    const Wording wording({ { QStringLiteral("Bids total %1 for %2 tricks: over by %3"),
+                              QStringLiteral("Total %1 (over by %3)") },
+                            { QStringLiteral("Bids total %1 for %2 tricks: under by %3"),
+                              QStringLiteral("Total %1 (under by %3)") } });
+
+    const textruns::Line over = scoreboard::tensionFor(bidsIn(4, 18, 8));
+
+    REQUIRE(textruns::text(over) == QStringLiteral("Total 18 (over by 10)"));
+    REQUIRE(over[1] == textruns::Run{ QStringLiteral("18"), textruns::Emphasis::Strong });
+
+    REQUIRE(textruns::text(scoreboard::tensionFor(bidsIn(4, 6, 8))) == QStringLiteral("Total 6 (under by 2)"));
+}
+
+TEST_CASE("The bid line is measured again when its wording changes", "[scoreboard]")
+{
+    // THE PANEL IS NEVER NARROWER THAN ITS BID LINE AT ITS WIDEST, and that width
+    // follows the language. It was measured once a run, so a Romanian scoreboard
+    // drawn after an English one took the English width (PR #42's review, finding
+    // #4). Short names, so the bid line, not the names, sets the width.
+    const auto width = []
+    {
+        return scoreboard::columnsFor(scoreboard::rowsFor(fourSeats())).sum();
+    };
+
+    const qreal english = width();
+
+    {
+        const Wording longer({ { QStringLiteral("Bids total %1 for %2 tricks: over by %3"),
+                                 QStringLiteral("Every bid at this table adds up to %1, for %2 tricks, "
+                                                "which is over by %3") } });
+
+        REQUIRE(width() > english + 50.0);
+    }
+
+    REQUIRE(width() == Catch::Approx(english));
 }
 
 // ---- the rows ----

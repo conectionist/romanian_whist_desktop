@@ -8,10 +8,12 @@
 #include "table/RoundText.h"
 #include "table/TableSpace.h"
 
+#include <QCoreApplication>
 #include <QFont>
 #include <QFontMetricsF>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
+#include <QStringList>
 
 #include <algorithm>
 #include <numeric>
@@ -428,16 +430,20 @@ textruns::Line tensionText(Tension form, const QString& bids, const QString& tri
 
     // THE BID TOTAL IS THE BOLD PART, so it is cut out of the sentence rather than
     // substituted into it: %1 is swapped for a character no translation contains,
-    // the rest filled in by one arg() - whichever side of %1 a translation puts
-    // them - and the sentence split where that character is.
+    // the rest filled in - whichever side of %1 a translation puts them - and the
+    // sentence split where that character is.
     const QChar cut(0xE000);
 
     sentence.replace(QStringLiteral("%1"), QString(cut));
 
-    // %2 and %3, one pass: arg() fills the lowest marker still standing first. A
-    // sentence without %3 leaves the second argument unused, and arg() asks for
-    // none.
-    sentence = by ? sentence.arg(tricks, difference) : sentence.arg(tricks);
+    // %2 AND %3 BY NAME, each into its own marker, because a translation may leave
+    // one out. The Romanian says nothing of the tricks, which the line above names:
+    // "S-a licitat 18 (cu 10 peste)". arg() fills the lowest marker still standing,
+    // so it put the trick count into %3, "cu 8 peste".
+    sentence.replace(QStringLiteral("%2"), tricks);
+
+    if(by)
+        sentence.replace(QStringLiteral("%3"), difference);
 
     const qsizetype at = sentence.indexOf(cut);
 
@@ -470,6 +476,17 @@ QChar widestDigit(const QFont& font)
     }
 
     return widest;
+}
+
+// The four sentences widestTension() measures, as the installed translation words
+// them: what its measurement depends on.
+QString tensionWording()
+{
+    return QStringList{ QCoreApplication::translate("scoreboard", "Bids so far: %1 of %2 tricks"),
+                        QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: over by %3"),
+                        QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks: under by %3"),
+                        QCoreApplication::translate("scoreboard", "Bids total %1 for %2 tricks") }
+        .join(QChar(u'\n'));
 }
 
 // THE TENSION AT ITS WIDEST, which the content is never narrower than: so the line
@@ -675,10 +692,19 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
     // Columns narrower than the tension at its widest: the room over shared in
     // proportion, as the browser shares out a table's.
     //
-    // MEASURED ONCE A RUN: four sentences at their widest numbers, which change
-    // with neither the game nor the theme. The translation that words them is
-    // installed in main(), before there is a table to draw.
-    static const qreal least = widestTension(styles.tension);
+    // MEASURED ONCE PER WORDING: four sentences at their widest numbers, which change
+    // with neither the game nor the theme, only with the translation that words
+    // them. Not once a run: a test that installs Romanian after a scoreboard was
+    // drawn in English got the English width (PR #42's review, finding #4).
+    static QString measuredWording;
+    static qreal least = 0.0;
+
+    if(const QString wording = tensionWording() ; wording != measuredWording)
+    {
+        least = widestTension(styles.tension);
+        measuredWording = wording;
+    }
+
     const qreal sum = widest.sum();
 
     if(sum >= least)
