@@ -88,6 +88,12 @@ HandItem::HandItem(const CardRenderer* _renderer, cardshadow::Cache* _shadows, Q
 {
     setAcceptHoverEvents(true);
 
+    // THE LEFT BUTTON ONLY, as the bid strip and the corner buttons take. A press
+    // plays the card at once and cannot be taken back, so a right click looking
+    // for a menu, or a middle click, must not play one (PR #42's review, finding
+    // #3). The scene passes the other buttons to whatever is behind the fan.
+    setAcceptedMouseButtons(Qt::LeftButton);
+
     // The cards draw themselves; this only places them and takes the cursor. Without
     // the flag the view still calls the empty paint() for every exposed frame, and
     // boundingRect() covers the whole fan, risen strip included.

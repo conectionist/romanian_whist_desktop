@@ -18,12 +18,18 @@ project(romanian_whist_desktop
 # back null in an installed build. Rasterizing through QSvgRenderer sidesteps
 # that plugin entirely - Svg is a linked library, not a plugin - so the card
 # art can stay vector without reopening the plugin trimming above.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets LinguistTools Svg)
+#
+# 6.7 IS THE FLOOR because the translation steps below need it:
+# qt_add_translations(SOURCE_TARGETS), QT_EXCLUDE_SOURCES_FROM_TRANSLATION and
+# tests/CMakeLists.txt's qt_add_lrelease(LRELEASE_TARGET) all arrived in 6.7.
+# Before it they do not fail with a version message: the older signatures read
+# these keywords as file or target names (PR #42's review, finding #1).
+find_package(Qt6 6.7 REQUIRED COMPONENTS Widgets LinguistTools Svg)
 
 # Turns on AUTOMOC and AUTOUIC and the rest of the modern defaults, so they do
 # not have to be set one at a time. NOT AUTORCC - see the card art below, where
 # that gap is the second of the three silent ways to embed no resources at all.
-qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup(REQUIRES 6.7)
 
 # MSVC compiles one .cpp per cl.exe invocation by default, leaving the rest of
 # a multi-core CI runner idle during the build - this is what made CI's Build

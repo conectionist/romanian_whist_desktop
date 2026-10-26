@@ -2024,6 +2024,72 @@ TEST_CASE("Play again leaves the keyboard on the table and not the menu bar", "[
     REQUIRE(focus == table);
 }
 
+TEST_CASE("Main menu gives the keyboard to the menu page and not the menu bar", "[main-window]")
+{
+    // PR #42's review, finding #5. abandonToMenu() hid the button that had the
+    // keyboard and gave it back to nothing, so Qt handed it to the next widget in
+    // the window's Tab order: the menu bar's New Game, lit as if hovered with the
+    // mouse elsewhere. From the standings and from the pause alike.
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    GameOverPanel* panel = window.findChild<GameOverPanel*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+    REQUIRE(panel != nullptr);
+    REQUIRE(pause != nullptr);
+    REQUIRE(pages != nullptr);
+    REQUIRE(newGame != nullptr);
+
+    const auto keyboardOnNewGame = [&window, pages, newGame]
+    {
+        pump(50);
+
+        QWidget* focus = window.focusWidget();
+        INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+        REQUIRE(pages->currentIndex() == 0);
+        REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+        REQUIRE(focus == newGame);
+    };
+
+    // FROM THE PAUSE, in a game still being played. First, because the dialog
+    // opens on the last game's settings, and the short game below is dealt at the
+    // fastest speed: a game after it could end before the pause.
+    //
+    // A click on the button gives it the keyboard first.
+    answerModalWatching(300);
+    newGame->click();
+    pump(1000);
+
+    window.findChild<QAction*>("exitAction")->trigger();
+    pump(100);
+
+    QPushButton* pauseMenu = pause->findChild<QPushButton*>("mainMenu");
+    REQUIRE(pauseMenu != nullptr);
+    pauseMenu->setFocus();
+    pump(50);
+
+    pauseMenu->click();
+    keyboardOnNewGame();
+
+    // AND FROM THE STANDINGS.
+    answerModalShortWatchedGame(300);
+    newGame->click();
+    REQUIRE(pumpUntil(30000, [panel]{ return panel->isVisible(); }));
+
+    QPushButton* standingsMenu = panel->findChild<QPushButton*>("gameOverMainMenu");
+    REQUIRE(standingsMenu != nullptr);
+    standingsMenu->setFocus();
+    pump(50);
+
+    standingsMenu->click();
+    keyboardOnNewGame();
+}
+
 TEST_CASE("Round history counts the rounds and a new game empties it", "[main-window]")
 {
     // The redesign's phase 11. The window keeps every RoundResult as it arrives,

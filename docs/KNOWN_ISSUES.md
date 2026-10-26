@@ -194,7 +194,8 @@ the table's scale. The scoreboard's right edge is pinned 8 pixels from the windo
 table's side margin is 16 pixels. Both shrink in table units as the scale grows. So the scoreboard's
 left edge (283 units wide at its cap, with 20-character names) moves out towards 1424.8 units, short
 of the top-right seat's right edge at 1429.5 once the scale passes about 1.7. With ordinary names
-the scoreboard is narrower and clear. The old layout had the same edge case, mirrored, on the
+the scoreboard is narrower and clear, in English. In Romanian it is wider, and reaches the panel in
+ordinary windows: see the next entry. The old layout had the same edge case, mirrored, on the
 top-left seat.
 
 **Why it was left.** No common setup reaches it. 16:9, 16:10 and wider screens are always clear,
@@ -210,3 +211,88 @@ about 1.43 : 1 (the screenshots included). In narrower windows the table is draw
 smaller, and the window's minimum size grows by a few pixels (update `TableSpaceTests`). Then add
 large squarish sizes, such as 2560 × 1800 and 3840 × 2700, to `HudTests`' clearance case; the
 second fails without the change.
+
+## In Romanian the scoreboard overlaps the top-right player's panel in squarish windows
+
+*Found in PR #42's review (finding #4). Not scheduled.*
+
+**What you see.** In Romanian, with three, five or six players, in a window narrower than about
+1.42 : 1 (4:3, 5:4, or a window dragged to a squarish shape), the scoreboard's left edge runs over
+the top-right player's panel. Ordinary names are enough. Measured in the app: by 1.2 pixels at
+1280 × 1024, 3.6 at 1600 × 1200, 6.9 at 2048 × 1536, 10.6 at 2560 × 2048 and 20 at 3840 × 2880.
+1024 × 768 stays clear by 0.7 pixels, and 16:9, 16:10 and wider windows are always clear.
+
+And with names long enough to reach the panel's cap, a wide bid line wraps. "Licitate 18 pentru 8
+mâini: cu 10 peste" does, so the scoreboard grows a line taller when the bidding closes over by 10.
+Neither happens in English.
+
+**Why.** The scoreboard is never narrower than its bid line at its widest (`widestTension()` in
+`ScoreboardItem.cpp`), so that line never wraps. Nor is it wider than the mock-up's 236
+(`widestContent`, 206 inside the border and padding), so it stays clear of the seat beside it. In
+English both hold: the widest bid line is about 195. The Romanian one, "Licitate 00 pentru 0 mâini:
+cu 00 peste" in the widest digits, is about 213.6, so both cannot hold. `columnsFor()` applies the
+cap first, for long names, and only then the bid line. So with ordinary names the panel is 243.6
+wide, 292.4 table units at the HUD's 1.2, against the 283.2 that `HudTests` treat as its widest and
+the entry above works from. With long names the cap wins and the line wraps.
+
+**Why it was left.** The overlap is a few pixels at the sizes people use, and there is none at 16:9
+or wider. The owner's call after PR #42's review.
+
+**Where it goes.** Not scheduled. If it is wanted, the simplest fix is a shorter Romanian bid line,
+no wider than the English at 14.5 pixels in Alegreya Sans (206 at most), so it fits the cap. The
+wording is the owner's. The other way is to let the panel past 236 and widen `tablespace::fitBox`
+further than the entry above suggests. Either way, run `HudTests`' "The corner panels sit inside the
+window and clear of every seat" in Romanian too, with `RomanianTranslation` and ordinary names. Mind
+that the scoreboard measures its bid line once a run (`least` in `columnsFor()`), so in a run that
+draws an English scoreboard first, a Romanian case gets the English width.
+
+## In Forehead and Hidden rounds your own card is drawn nowhere between your turns
+
+*Found in PR #42's review (finding #2). Not scheduled.*
+
+**What you see.** In a Forehead or a Hidden round, the bottom of the table shows no card for you
+while you bid and while the others play. Every opponent's rack shows its card, face up in Forehead
+and a back in Hidden. A back appears in your hand only on your turn to play. Every default game
+ends with these two rounds.
+
+**Why.** Between turns your hand is drawn from the snapshot, and the snapshot's hand is empty in
+both rounds by design, because you may not see the card (`GameSnapshot::hand`). The bid prompt
+carries no hand in them either (`BetPrompt::hand`). Only the play prompt says you hold a card, as a
+count of backs (`PlayPrompt::handIndex`, `HandItem::setPrompt()`). Before the redesign every seat
+panel, yours included, drew a small stack for its cards left, and that stack was where your card
+showed. The redesign took the stack off the panels and gave every other seat a rack, but your rack
+is never drawn, because your hand is the fan. Section 17 of `QT_CLIENT_PLAN_proposal1.md` says your
+own card is drawn face-down.
+
+**Why it was left.** A face-down card tells you little more than no card: you know you hold one,
+and the play prompt shows it when it matters. The owner's call after PR #42's review.
+
+**Where it goes.** Not scheduled. If it is wanted: in a Forehead or Hidden round, have
+`TableScene::relayout()` give the fan your seat's `cardsLeft` as backs, never playable, in place of
+the empty snapshot hand. The count is already on the snapshot (`SeatView::cardsLeft`) and names no
+card. The care is in `HandItem::setHand()`, which decides when a snapshot may replace the prompt's
+fan: a mistake there once left a blind round with nothing to click, and the game stopped. Extend
+the tests around "A snapshot arriving mid-prompt leaves a blind round's backs standing"
+(`HandItemTests.cpp`).
+
+## Five table items copy the same panel-drawing code
+
+*Found in PR #42's review (finding #8). Not scheduled.*
+
+**What you see.** Nothing on screen. It is a cost for the next change. `SeatItem`, `ScoreboardItem`,
+`TrickPanelItem`, `BidStripItem` and `TableButtonItem` build their pictures with the same lines:
+take the panel from `panel::Cache`, give up if it is null, make a transparent pixmap of its size at
+the same ratio, draw the panel into it, move by the panel's offset, and only then draw their own
+content. That is about 15 lines in five places (`SeatItem.cpp:280`, `ScoreboardItem.cpp:789`,
+`TrickPanelItem.cpp:486`, `BidStripItem.cpp:631`, `TableButtonItem.cpp:191`). A change to how a
+panel is drawn at a pixel ratio has to be made five times, and the copies can drift.
+
+**Why.** The seat came first, in phase B2a. The scoreboard, the trick panel and the corner buttons
+were built on its pattern in phase 8, and the bid strip in phase 10. Each kept its own copy.
+
+**Why it was left.** It changes nothing the player sees, and it touches five items whose pictures
+the screenshots check. The owner's call after PR #42's review.
+
+**Where it goes.** Not scheduled. If it is wanted: one helper in `src/paint/Panel.h` that takes the
+panel's picture, the ratio and a function drawing the content in the panel's own units, used by all
+five. The screenshot tool should then give pixel-identical shots.

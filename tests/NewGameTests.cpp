@@ -18,6 +18,7 @@
 #include <romanian_whist/strategies/reckoner/ReckonerKnobs.h>
 
 #include <QComboBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -1529,6 +1530,27 @@ TEST_CASE("The dialog refuses to deal a game the engine would reject", "[new-gam
     // And an empty one, which is the other thing GameEngine::start() throws on.
     first->setText("");
     REQUIRE_FALSE(deal->isEnabled());
+}
+
+TEST_CASE("The dialog's error shows a typed name as typed, never as markup", "[new-game]")
+{
+    // PR #42's review, finding #6. The message quotes the name, and a label left at
+    // Qt's default read "<b>Ana</b>" as Ana in bold, with the tags gone.
+    NewGameDialog dialog(newgame::defaults());
+
+    QLabel* error = dialog.findChild<QLabel*>("dealError");
+    QLineEdit* first = dialog.findChild<QLineEdit*>("botName0");
+    QLineEdit* second = dialog.findChild<QLineEdit*>("botName1");
+
+    REQUIRE(error != nullptr);
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+
+    first->setText(QStringLiteral("<b>Ana</b>"));
+    second->setText(QStringLiteral("<b>Ana</b>"));
+
+    REQUIRE(error->textFormat() == Qt::PlainText);
+    REQUIRE(error->text().contains(QStringLiteral("<b>Ana</b>")));
 }
 
 TEST_CASE("Watching removes the human's seat from the dialog's answer", "[new-game]")

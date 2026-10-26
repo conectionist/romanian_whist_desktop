@@ -815,6 +815,16 @@ void MainWindow::showGameOverPanel()
 
 void MainWindow::abandonToMenu()
 {
+    // WHETHER THE KEYBOARD IS ON WHAT GOES, read before anything goes: the Main
+    // menu button just pressed, on the pause or on the game-over panel, or a
+    // sheet, or the table. restoreFocus() at the end gives it to the menu page.
+    // Without that, hiding the button let Qt hand it to the next widget in the
+    // window's Tab order, the menu bar's New Game: it showed as hovered with the
+    // mouse elsewhere, and Enter did nothing on the menu page (PR #42's review,
+    // finding #5).
+    const bool hadKeyboard = holdsKeyboard(pauseOverlay) || holdsKeyboard(gameOverPanel)
+                             || holdsKeyboard(openMenuSheet()) || holdsKeyboard(pages->currentWidget());
+
     setPauseMenuVisible(false);
 
     // AND THE GAME-OVER PANEL, because this is the button on BOTH of them. From
@@ -868,6 +878,8 @@ void MainWindow::abandonToMenu()
     tableState = TableState::NoGame;
     updatePauseAction();
     showMainMenu();
+
+    restoreFocus(hadKeyboard);
 }
 
 // THE LOG SURVIVES PHASE B, demoted rather than deleted. A5 asked for this

@@ -72,9 +72,7 @@ Sized sized(QFont font, qreal pixels);
 QFont capitals(QFont font, qreal em);
 
 // TABULAR FIGURES (CSS's font-variant-numeric: tabular-nums), so a 1 and a 0 take
-// the same box and a column of numbers lines up on its own. A no-op before Qt 6.7,
-// where QFont::Tag arrived: CMakeLists.txt declares a floor of 6.5, and there the
-// digits stay proportional rather than failing to compile.
+// the same box and a column of numbers lines up on its own.
 QFont tabular(QFont font);
 
 // Where a line of text puts its baseline in a line box of `height` at `top`: CSS's

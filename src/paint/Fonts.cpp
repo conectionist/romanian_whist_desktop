@@ -92,9 +92,7 @@ QFont capitals(QFont font, qreal em)
 
 QFont tabular(QFont font)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
     font.setFeature(QFont::Tag("tnum"), 1);
-#endif
     return font;
 }
 

@@ -590,7 +590,7 @@ Each phase lists files, steps, tests, and how to know it is done. Commit at the 
 
 ### Phase 0: baseline ✅ COMPLETE
 
-1. Install Qt 6.5 or newer with the Widgets, Svg and LinguistTools modules (system packages such as
+1. Install Qt 6.7 or newer with the Widgets, Svg and LinguistTools modules (system packages such as
    `qt6-base-dev qt6-svg-dev qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools`, or
    `aqtinstall`). `docs/LOCAL_VERIFICATION.md` has the exact preset commands.
 2. Build and run the full test suite on the untouched branch. **Record the test count.**

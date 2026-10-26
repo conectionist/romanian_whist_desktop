@@ -13,6 +13,7 @@
 #include "table/HandItem.h"
 #include "table/TableSpace.h"
 
+#include <QCoreApplication>
 #include <QCursor>
 #include <QGraphicsScene>
 #include <QGraphicsSceneHoverEvent>
@@ -119,6 +120,28 @@ struct Fanned
         event.setButton(Qt::LeftButton);
 
         scene.sendEvent(&item, &event);
+    }
+
+    // A PRESS THROUGH THE SCENE, which is where the button is checked: the scene
+    // hands a press only to an item that accepts its button. clickAt() goes to
+    // the item directly and would not notice. The fan stands at the scene's
+    // origin, so its points are the scene's.
+    void pressThroughScene(QPointF where, Qt::MouseButton button)
+    {
+        QGraphicsSceneMouseEvent event(QEvent::GraphicsSceneMousePress);
+
+        event.setScenePos(where);
+        event.setButton(button);
+        event.setButtons(button);
+
+        QCoreApplication::sendEvent(&scene, &event);
+
+        QGraphicsSceneMouseEvent release(QEvent::GraphicsSceneMouseRelease);
+
+        release.setScenePos(where);
+        release.setButton(button);
+
+        QCoreApplication::sendEvent(&scene, &release);
     }
 
     // The cursor moving to a point, which is how a card comes to be raised.
@@ -620,6 +643,37 @@ TEST_CASE("A cursor that has left the fan raises nothing when the fan changes", 
     fan.item.setPlayable(true);
 
     REQUIRE_FALSE(anyRaised(fan.cards()));
+}
+
+TEST_CASE("Only the left button plays a card", "[hand]")
+{
+    // A press plays at once and cannot be taken back, so a right click looking for
+    // a menu, or a middle click, must play nothing (PR #42's review, finding #3).
+    Fanned fan(promptOf({ true, true, true }));
+
+    const std::vector<CardItem*> cards = fan.cards();
+
+    REQUIRE(cards.size() == 3);
+
+    // The last card's middle, which nothing covers.
+    const QPointF where = cards[2]->mapToParent(QPointF(0.0, 0.0));
+
+    std::vector<std::size_t> clicked;
+
+    QObject::connect(&fan.item, &HandItem::cardClicked,
+                     [&clicked](std::size_t slot){ clicked.push_back(slot); });
+
+    fan.pressThroughScene(where, Qt::RightButton);
+    fan.pressThroughScene(where, Qt::MiddleButton);
+
+    REQUIRE(clicked.empty());
+
+    // THE PREMISE: the same press with the left button reaches the card, so the
+    // two above were refused for their button and not for missing the fan.
+    fan.pressThroughScene(where, Qt::LeftButton);
+
+    REQUIRE(clicked.size() == 1);
+    REQUIRE(clicked.front() == 2);
 }
 
 TEST_CASE("An illegal slot is not playable and a legal one is", "[hand]")

@@ -963,7 +963,13 @@ NewGameDialog::NewGameDialog(const newgame::Config& _initial, QWidget* parent)
     // ---- the verdict ----
 
     error = new QLabel(this);
+    error->setObjectName("dealError");
     error->setWordWrap(true);
+
+    // PLAIN TEXT, because the message quotes a name as the player typed it, and
+    // Qt's default reads anything that looks like markup as rich text: two players
+    // called <b>Ana</b> read as "Ana" in bold (PR #42's review, finding #6).
+    error->setTextFormat(Qt::PlainText);
     stack->addWidget(error);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(this);
