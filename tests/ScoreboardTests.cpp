@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 
 #include "CardStringMaker.h"
+#include "RomanianTranslation.h"
 
 #include "paint/CardRenderer.h"
 #include "paint/TextRuns.h"
@@ -336,6 +337,26 @@ TEST_CASE("The bid line is measured again when its wording changes", "[scoreboar
     }
 
     REQUIRE(width() == Catch::Approx(english));
+}
+
+TEST_CASE("In Romanian the bid line names the total and how far over or under", "[scoreboard]")
+{
+    // The owner's wording (2026-10-26): short enough that the Romanian scoreboard
+    // is no wider than the English (HudTests), with the trick count left to the
+    // line above it, "8 cărți împărțite".
+    const RomanianTranslation romanian;
+
+    const textruns::Line over = scoreboard::tensionFor(bidsIn(4, 18, 8));
+
+    REQUIRE(textruns::text(over) == QStringLiteral("S-a licitat 18 (cu 10 peste)"));
+    REQUIRE(over[1] == textruns::Run{ QStringLiteral("18"), textruns::Emphasis::Strong });
+
+    REQUIRE(textruns::text(scoreboard::tensionFor(bidsIn(4, 6, 8))) == QStringLiteral("S-a licitat 6 (cu 2 sub)"));
+    REQUIRE(textruns::text(scoreboard::tensionFor(bidsIn(4, 2, 1))) == QStringLiteral("S-a licitat 2 (cu 1 peste)"));
+
+    // "Bids so far" keeps its wording (the owner's call).
+    REQUIRE(textruns::text(scoreboard::tensionFor(bidsIn(2, 3, 6)))
+            == QStringLiteral("Licitate până acum: 3 din 6 mâini"));
 }
 
 // ---- the rows ----

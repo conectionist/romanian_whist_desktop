@@ -194,9 +194,9 @@ the table's scale. The scoreboard's right edge is pinned 8 pixels from the windo
 table's side margin is 16 pixels. Both shrink in table units as the scale grows. So the scoreboard's
 left edge (283 units wide at its cap, with 20-character names) moves out towards 1424.8 units, short
 of the top-right seat's right edge at 1429.5 once the scale passes about 1.7. With ordinary names
-the scoreboard is narrower and clear, in English. In Romanian it is wider, and reaches the panel in
-ordinary windows: see the next entry. The old layout had the same edge case, mirrored, on the
-top-left seat.
+the scoreboard is narrower and clear, in English and in Romanian alike since the Romanian bid line
+was shortened (PR #42's review). The old layout had the same edge case, mirrored, on the top-left
+seat.
 
 **Why it was left.** No common setup reaches it. 16:9, 16:10 and wider screens are always clear,
 because there the window's height sets the scale. Squarish monitors are far narrower than 3,230
@@ -211,40 +211,6 @@ about 1.43 : 1 (the screenshots included). In narrower windows the table is draw
 smaller, and the window's minimum size grows by a few pixels (update `TableSpaceTests`). Then add
 large squarish sizes, such as 2560 × 1800 and 3840 × 2700, to `HudTests`' clearance case; the
 second fails without the change.
-
-## In Romanian the scoreboard overlaps the top-right player's panel in squarish windows
-
-*Found in PR #42's review (finding #4). Not scheduled.*
-
-**What you see.** In Romanian, with three, five or six players, in a window narrower than about
-1.42 : 1 (4:3, 5:4, or a window dragged to a squarish shape), the scoreboard's left edge runs over
-the top-right player's panel. Ordinary names are enough. Measured in the app: by 1.2 pixels at
-1280 × 1024, 3.6 at 1600 × 1200, 6.9 at 2048 × 1536, 10.6 at 2560 × 2048 and 20 at 3840 × 2880.
-1024 × 768 stays clear by 0.7 pixels, and 16:9, 16:10 and wider windows are always clear.
-
-And with names long enough to reach the panel's cap, a wide bid line wraps. "Licitate 18 pentru 8
-mâini: cu 10 peste" does, so the scoreboard grows a line taller when the bidding closes over by 10.
-Neither happens in English.
-
-**Why.** The scoreboard is never narrower than its bid line at its widest (`widestTension()` in
-`ScoreboardItem.cpp`), so that line never wraps. Nor is it wider than the mock-up's 236
-(`widestContent`, 206 inside the border and padding), so it stays clear of the seat beside it. In
-English both hold: the widest bid line is about 195. The Romanian one, "Licitate 00 pentru 0 mâini:
-cu 00 peste" in the widest digits, is about 213.6, so both cannot hold. `columnsFor()` applies the
-cap first, for long names, and only then the bid line. So with ordinary names the panel is 243.6
-wide, 292.4 table units at the HUD's 1.2, against the 283.2 that `HudTests` treat as its widest and
-the entry above works from. With long names the cap wins and the line wraps.
-
-**Why it was left.** The overlap is a few pixels at the sizes people use, and there is none at 16:9
-or wider. The owner's call after PR #42's review.
-
-**Where it goes.** Not scheduled. If it is wanted, the simplest fix is a shorter Romanian bid line,
-no wider than the English at 14.5 pixels in Alegreya Sans (206 at most), so it fits the cap. The
-wording is the owner's. The other way is to let the panel past 236 and widen `tablespace::fitBox`
-further than the entry above suggests. Either way, run `HudTests`' "The corner panels sit inside the
-window and clear of every seat" in Romanian too, with `RomanianTranslation` and ordinary names. Mind
-that the scoreboard measures its bid line once a run (`least` in `columnsFor()`), so in a run that
-draws an English scoreboard first, a Romanian case gets the English width.
 
 ## In Forehead and Hidden rounds your own card is drawn nowhere between your turns
 

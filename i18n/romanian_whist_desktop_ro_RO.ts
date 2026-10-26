@@ -961,32 +961,32 @@ Whist</source>
     <message>
         <location line="+4"/>
         <source>Bids total %1 for %2 trick: over by %3</source>
-        <translation>Licitate %1 pentru %2 mână: cu %3 peste</translation>
+        <translation>S-a licitat %1 (cu %3 peste)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids total %1 for %2 tricks: over by %3</source>
-        <translation>Licitate %1 pentru %2 mâini: cu %3 peste</translation>
+        <translation>S-a licitat %1 (cu %3 peste)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Bids total %1 for %2 trick: under by %3</source>
-        <translation>Licitate %1 pentru %2 mână: cu %3 sub</translation>
+        <translation>S-a licitat %1 (cu %3 sub)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids total %1 for %2 tricks: under by %3</source>
-        <translation>Licitate %1 pentru %2 mâini: cu %3 sub</translation>
+        <translation>S-a licitat %1 (cu %3 sub)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Bids total %1 for %2 trick</source>
-        <translation>Licitate %1 pentru %2 mână</translation>
+        <translation>S-a licitat %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Bids total %1 for %2 tricks</source>
-        <translation>Licitate %1 pentru %2 mâini</translation>
+        <translation>S-a licitat %1</translation>
     </message>
     <message>
         <location line="+144"/>

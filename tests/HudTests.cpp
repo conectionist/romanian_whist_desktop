@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
+#include "RomanianTranslation.h"
 #include "TableFixtures.h"
 
 #include "paint/CardRenderer.h"
@@ -517,30 +518,20 @@ TEST_CASE("The scoreboard keeps its right edge on the corner as its width change
     REQUIRE(std::abs(rightEdge() - corner) < 1e-6);
 }
 
-// THE PLAN'S PROMISE FOR PHASE 8: at the window sizes people play at, nothing in a
-// corner covers a seat, and nothing in a corner is cut off by the window. Each
-// size as a bare view the size of the whole window, which is a little stricter
-// than the real one: the menu bar takes height, and a wider viewport leaves the
-// corners more room beside the table.
-TEST_CASE("The corner panels sit inside the window and clear of every seat", "[hud]")
+// Every corner panel inside the window and clear of every seat, for 3 to 6 players
+// at each of `windows`, on the table `tableFor` lays. The scoreboard no wider than
+// the mock-up's 236 too: past it, it reaches the seat beside it in a squarish window.
+namespace
 {
-    // 4:3 and 5:4 since the scoreboard became as wide as its columns: narrower
-    // than about 3:2, the mock-up's 236 reached the seat beside it - the top-left
-    // seat then, the top-right since the corners swapped (2026-10-24). So the
-    // scoreboard is at its widest here (widestTableOf()).
-    //
-    // 2560 x 1440 since phase 12, which the plan names with the other three.
-    const QSize windows[] = { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900),
-                              QSize(1024, 768), QSize(1280, 1024), QSize(2560, 1440) };
-
+void requireCornersClear(GameSnapshot (*tableFor)(unsigned int), const std::vector<QSize>& windows)
+{
     for(unsigned int seats = 3 ; seats <= 6 ; seats++)
     {
         TableScene scene;
         scene.setTheme(Theme::dark());
-        scene.setSnapshot(std::make_shared<const GameSnapshot>(widestTableOf(seats)));
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(tableFor(seats)));
 
-        // At its cap: as wide as the scoreboard ever is.
-        REQUIRE(scene.scoreboardItem()->size().width() == Catch::Approx(scoreboard::mockupWidth));
+        REQUIRE(scene.scoreboardItem()->size().width() <= scoreboard::mockupWidth + 1e-6);
 
         TableView view(&scene);
         view.show();
@@ -572,6 +563,46 @@ TEST_CASE("The corner panels sit inside the window and clear of every seat", "[h
             }
         }
     }
+}
+}
+
+// THE PLAN'S PROMISE FOR PHASE 8: at the window sizes people play at, nothing in a
+// corner covers a seat, and nothing in a corner is cut off by the window. Each
+// size as a bare view the size of the whole window, which is a little stricter
+// than the real one: the menu bar takes height, and a wider viewport leaves the
+// corners more room beside the table.
+TEST_CASE("The corner panels sit inside the window and clear of every seat", "[hud]")
+{
+    // 4:3 and 5:4 since the scoreboard became as wide as its columns: narrower
+    // than about 3:2, the mock-up's 236 reached the seat beside it - the top-left
+    // seat then, the top-right since the corners swapped (2026-10-24). So the
+    // scoreboard is at its widest here (widestTableOf()), at its cap.
+    //
+    // 2560 x 1440 since phase 12, which the plan names with the other three.
+    {
+        TableScene scene;
+        scene.setTheme(Theme::dark());
+        scene.setSnapshot(std::make_shared<const GameSnapshot>(widestTableOf(3)));
+
+        REQUIRE(scene.scoreboardItem()->size().width() == Catch::Approx(scoreboard::mockupWidth));
+    }
+
+    requireCornersClear(&widestTableOf, { QSize(1920, 1080), QSize(1920, 1200), QSize(1440, 900),
+                                          QSize(1024, 768), QSize(1280, 1024), QSize(2560, 1440) });
+}
+
+// THE SAME IN ROMANIAN, with ordinary names (PR #42's review, finding #4). Its bid
+// line was wider than the English, which widened the scoreboard past the mock-up's
+// 236, and in a squarish window it ran over the top-right player's panel: by 1.2
+// pixels at 1280 x 1024 and 3.6 at 1600 x 1200. The owner's shorter wording
+// (2026-10-26, "S-a licitat 18 (cu 10 peste)") keeps it at the English width.
+// Squarish windows up to 2048 x 1536 here, where it reached 6.9 pixels.
+TEST_CASE("In Romanian the corner panels clear every seat too", "[hud]")
+{
+    const RomanianTranslation romanian;
+
+    requireCornersClear(&tableOf, { QSize(1920, 1080), QSize(1024, 768), QSize(1280, 1024),
+                                    QSize(1600, 1200), QSize(2048, 1536) });
 }
 
 TEST_CASE("The trick panel stays eight pixels in from the top-left corner", "[hud]")
