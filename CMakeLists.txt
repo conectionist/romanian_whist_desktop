@@ -485,6 +485,32 @@ endif()
 
 install(SCRIPT ${deploy_script})
 
+# The Visual C++ runtime, which windeployqt leaves out. The executable and
+# every Qt DLL import MSVCP140.dll and VCRUNTIME140.dll (and their _1 and _2
+# companions). A Windows PC that never installed the Visual C++ Redistributable
+# does not have them, and the application then fails to start with
+# "MSVCP140.dll was not found". windeployqt only handles the runtime when
+# VCINSTALLDIR is set, which CI does not do, and even then it copies just the
+# vc_redist.x64.exe installer, which nobody runs from an unzipped folder.
+#
+# CMake's own module finds the DLLs in the compiler's redist folder and installs
+# them next to the executable, which Microsoft permits ("app-local"
+# deployment). Windows looks in the application's folder first, so these copies
+# win even on a PC with an older runtime installed. That matters as much as the
+# missing case: a runtime older than the compiler that built the application is
+# not supported, and is known to crash at startup.
+#
+# The module installs its standard set, which includes a few DLLs nothing here
+# imports yet (concrt140, msvcp140_atomic_wait, msvcp140_codecvt_ids). They are
+# small, and keeping them means new code using those parts of the library
+# cannot quietly break the zip. If the module cannot find the redist folder it
+# only warns and installs nothing, so CI's "Verify the deploy" step checks that
+# the DLLs arrived.
+if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+    include(InstallRequiredSystemLibraries)
+endif()
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------

@@ -185,6 +185,15 @@ jobs:
             find staging
             exit 1
           fi
+          # The Visual C++ runtime the executable and Qt import - see the note
+          # on InstallRequiredSystemLibraries in CMakeLists.txt.
+          for dll in msvcp140.dll msvcp140_1.dll msvcp140_2.dll vcruntime140.dll vcruntime140_1.dll; do
+            if [ -z "$(find staging -iname "$dll" -print -quit)" ]; then
+              echo "::error::No $dll in the staging tree - the app cannot start on a PC without the Visual C++ runtime."
+              find staging
+              exit 1
+            fi
+          done
 
       - name: Archive
         shell: bash
