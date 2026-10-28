@@ -191,19 +191,10 @@ comments that point at them.
 ### 1. Set a comment rule, then thin the comments
 
 The code is written by an agent, so the fix that lasts is a rule in `CLAUDE.md`. Without one, the
-next change writes comments the same way. Suggested text:
-
-```markdown
-## Comments
-
-- A comment says why the code is the way it is, when the code cannot say it. One to three lines.
-- Never mention phases, plan sections, PR numbers, review findings, dates or who decided something.
-  That is history, and history goes in the commit message.
-- Never describe code that was removed or what the code used to do.
-- No capitals for emphasis. Keep the warnings that prevent a crash, a deadlock or a hang, and make
-  them short.
-- Say a reason once, next to the code it explains. Don't send the reader to another function.
-```
+next change writes comments the same way. **Done:** the rule is in `CLAUDE.md`, under "Comments".
+In short: say why, in one to three lines; no history (phases, plan sections, PRs, findings, dates,
+who decided); nothing about removed code; no capitals for emphasis; say a reason once, where it
+applies.
 
 Then clean up the existing comments, one area per PR, starting with the headers people read first:
 `GameController.h`, `MainWindow.h`, `QtMoveProvider.h`, `GameBridge.h`. A target of about 1 comment
