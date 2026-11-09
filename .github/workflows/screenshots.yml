@@ -11,6 +11,11 @@ on:
 env:
   QT_VERSION: '6.10.3'
 
+# The pictures are committed back to this branch, because a session that needs them may only reach
+# github.com, not the storage that artifacts download from.
+permissions:
+  contents: write
+
 jobs:
   shots:
     name: Take the screenshots (Linux)
@@ -44,3 +49,12 @@ jobs:
           name: desktop-screenshots
           path: shots/*.png
           if-no-files-found: error
+
+      # .gitignore keeps shots/ out of a commit, hence -f.
+      - name: Commit the screenshots to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f shots/*.png
+          git commit -m "Add the desktop's screenshots, taken on CI at ${GITHUB_SHA::7}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
