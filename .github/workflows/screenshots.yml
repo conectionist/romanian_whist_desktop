@@ -1,0 +1,45 @@
+name: Screenshots
+
+# The web page is compared with these pictures, and only a machine with Qt 6.7 or later can take them.
+on:
+  push:
+    branches: [ccr-209c0806-o444sp]
+    paths:
+      - '.github/workflows/screenshots.yml'
+  workflow_dispatch:
+
+env:
+  QT_VERSION: '6.10.3'
+
+jobs:
+  shots:
+    name: Take the screenshots (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # find_package(Qt6) does not read QT_ROOT_DIR, which install-qt-action sets.
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset default
+
+      - name: Build the tests
+        run: cmake --build --preset default --target desktop_tests --parallel
+
+      - name: Take the screenshots
+        run: WHIST_SHOTS_DIR="$GITHUB_WORKSPACE/shots" ./build/tests/desktop_tests "[.screenshot]"
+
+      - name: Upload the screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-screenshots
+          path: shots/*.png
+          if-no-files-found: error
