@@ -31,8 +31,9 @@ jobs:
           CMAKE_PREFIX_PATH: ${{ env.QT_ROOT_DIR }}
         run: cmake --preset default
 
+      # An unbounded --parallel starts every compile at once and runs the runner out of memory.
       - name: Build the tests
-        run: cmake --build --preset default --target desktop_tests --parallel
+        run: cmake --build --preset default --target desktop_tests --parallel 4
 
       - name: Take the screenshots
         run: WHIST_SHOTS_DIR="$GITHUB_WORKSPACE/shots" ./build/tests/desktop_tests "[.screenshot]"
