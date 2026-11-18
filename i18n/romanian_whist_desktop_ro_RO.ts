@@ -129,14 +129,24 @@
         <translation>Whist</translation>
     </message>
     <message>
-        <location filename="../src/MainWindow.cpp" line="+886"/>
+        <location filename="../src/MainWindow.cpp" line="+896"/>
         <source>Log</source>
         <translation>Jurnal</translation>
     </message>
     <message>
-        <location line="+30"/>
+        <location line="+25"/>
         <source>New Game</source>
         <translation>Joc nou</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Quit</source>
+        <translation>Ieșire</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Pause</source>
+        <translation>Pauză</translation>
     </message>
     <message>
         <location line="+8"/>
@@ -150,11 +160,16 @@
     </message>
     <message>
         <location line="+9"/>
-        <source>Exit</source>
-        <translation>Ieșire</translation>
+        <source>&amp;File</source>
+        <translation>&amp;Fișier</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+5"/>
+        <source>&amp;Game</source>
+        <translation>&amp;Joc</translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>&amp;View</source>
         <translation>&amp;Vizualizare</translation>
     </message>
@@ -169,7 +184,7 @@
         <translation>Grafica &amp;cărților...</translation>
     </message>
     <message>
-        <location line="+438"/>
+        <location line="+452"/>
         <source>-- stopped --</source>
         <translation>-- oprit --</translation>
     </message>
