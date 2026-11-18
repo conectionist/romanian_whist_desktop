@@ -1,7 +1,6 @@
 #ifndef MENU_BAR_H
 #define MENU_BAR_H
 
-#include "paint/Icons.h"
 #include "paint/Theme.h"
 
 #include <QColor>
@@ -10,26 +9,16 @@
 #include <QToolButton>
 #include <QWidget>
 
-#include <optional>
 #include <vector>
 
-QT_BEGIN_NAMESPACE
-class QAction;
-class QMenu;
-QT_END_NAMESPACE
+class DropdownMenu;
 
-// THE MOCK-UP'S MENU BAR, section 2.12 of docs/ui-redesign/IMPLEMENTATION_PLAN.md:
-// page.html's .menubar, added in the redesign's phase 9.
+// The mock-up's menu bar, page.html's .menubar, with File, Game and View at the left. A
+// widget of our own, installed with QMainWindow::setMenuWidget(), so it is laid out and
+// painted to the mock-up's numbers rather than a style's.
 //
-// A WIDGET OF OUR OWN, installed with QMainWindow::setMenuWidget(), and not a
-// styled QMenuBar, which is what the plan first asked for. QMenuBar draws an
-// item's icon OR its text, never both (QCommonStyle's CE_MenuBarItem), so no
-// stylesheet puts the mock-up's gold icon beside its label; and it has no stretch,
-// so Exit cannot sit at the far right. Each item is still a QAction, so what a
-// menu action gives - triggering, enabling, a shortcut - works as it did.
-//
-// IN DEVICE-INDEPENDENT PIXELS, unlike everything on the table: the bar does not
-// scale with the table, in the mock-up or here.
+// In device-independent pixels, unlike everything on the table: the bar does not scale
+// with the table, in the mock-up or here.
 namespace menubar
 {
 
@@ -41,18 +30,12 @@ inline constexpr int borderWidth = 1;
 inline constexpr int sidePadding = 16;
 inline constexpr int itemGap = 4;
 
-// .menubar .btn: 34 tall, padding 0 12, an 18 px icon 8 before its label, a
-// rounded background under the cursor; Marcellus 17.
+// .menubar .btn: 34 tall, padding 0 12, a rounded background under the cursor;
+// Marcellus 17.
 inline constexpr int itemHeight = 34;
 inline constexpr int itemPadding = 12;
-inline constexpr int iconSize = 18;
-inline constexpr int iconGap = 8;
 inline constexpr qreal itemRadius = 6.0;
 inline constexpr int labelPixels = 17;
-
-// .players' margin-right, which View takes over with the Players switch's place:
-// View ends this far, plus an item gap, before Exit.
-inline constexpr int viewMargin = 14;
 
 // The bar's box-shadow, 0 6px 16px: CSS's offset and blur radius.
 inline constexpr qreal shadowOffset = 6.0;
@@ -96,14 +79,13 @@ Colours coloursFor(const Theme::TablePalette& palette, bool enabled, bool lit);
 
 } // namespace menubar
 
-// One item: an icon, if it has one, and a label, from the QAction it stands for
-// (QToolButton::setDefaultAction()), or from a menu it opens (View).
+// One item: the label of the menu it opens.
 class MenuBarButton : public QToolButton
 {
     Q_OBJECT
 
 public:
-    explicit MenuBarButton(std::optional<icons::Icon> icon, QWidget* parent = nullptr);
+    explicit MenuBarButton(QWidget* parent = nullptr);
 
     void setTheme(const Theme& theme);
 
@@ -120,7 +102,6 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
-    std::optional<icons::Icon> icon;
     Theme theme = Theme::light();
 };
 
@@ -150,16 +131,19 @@ class MenuBar : public QWidget
     Q_OBJECT
 
 public:
-    // What the bar holds, left to right: New Game, Settings and Rules, then at the
-    // far right View (the developer's Log and Card art, where the mock-up's
-    // Players switch sits) and Exit.
+    // The bar's menus, left to right.
+    enum class Menu
+    {
+        File,
+        Game,
+        View
+    };
+
     struct Items
     {
-        QAction* newGame = nullptr;
-        QAction* settings = nullptr;
-        QAction* rules = nullptr;
-        QMenu* view = nullptr;
-        QAction* exit = nullptr;
+        DropdownMenu* file = nullptr;
+        DropdownMenu* game = nullptr;
+        DropdownMenu* view = nullptr;
     };
 
     // `window` is what the bar goes into: its shadow is made a child of it.
@@ -171,26 +155,43 @@ public:
     // For tests.
     MenuBarShadow* shadow() const;
     const std::vector<MenuBarButton*>& buttons() const;
+    MenuBarButton* button(Menu which) const;
+    DropdownMenu* menu(Menu which) const;
 
-    // Opens the View menu: Alt+V's target, since a button that pops a menu up on
-    // a press does nothing for the mnemonic's click.
-    void showViewMenu();
+    // The menu that is open, if one is.
+    DropdownMenu* openMenu() const;
+
+    // Opens a menu as the keyboard does, its first item chosen: the target of Alt+F, Alt+G
+    // and Alt+V, which a button opening its menu on a press would not answer.
+    void showMenu(Menu which);
+
+    // Where a menu is popped up, in global coordinates: its panel under its button.
+    QPoint menuPosition(Menu which) const;
+
+signals:
+    // A menu closed and no other took its place.
+    void menuClosed();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void moveEvent(QMoveEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     // Lays the shadow along the bar's bottom edge and raises it.
     void placeShadow();
 
-    MenuBarButton* addItem(QAction* action, icons::Icon icon, const QString& name);
+    void addMenu(DropdownMenu* menu, const QString& name);
+
+    // Opens the menu at `index`, closing any other. From the keyboard, its first item is
+    // chosen, as a QMenuBar's is.
+    void open(std::size_t index, bool fromKeyboard);
 
     Theme theme = Theme::light();
 
     std::vector<MenuBarButton*> items;
-    MenuBarButton* viewButton = nullptr;
+    std::vector<DropdownMenu*> menus;
 
     // A sibling, not a child, so the bar does not own it: guarded, and deleted
     // with the bar if the window has not already taken it down.

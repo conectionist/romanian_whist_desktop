@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "MainWindow.h"
+#include "RomanianTranslation.h"
 #include "WindowDriving.h"
 #include "table/BidStripItem.h"
 #include "table/HandItem.h"
@@ -11,6 +12,7 @@
 #include "ui/GameOverPanel.h"
 #include "ui/HistorySheet.h"
 #include "ui/LastTrickSheet.h"
+#include "ui/DropdownMenu.h"
 #include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
@@ -301,11 +303,10 @@ TEST_CASE("The client opens on the menu with no game running", "[main-window]")
     REQUIRE(window.findChild<QPushButton*>("newGame") != nullptr);
     REQUIRE(window.findChild<QPushButton*>("quit") != nullptr);
 
-    // NOTHING TO PAUSE, and Exit says so rather than doing nothing when
-    // clicked (PR 34's review, finding #4).
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
-    REQUIRE_FALSE(exitItem->isEnabled());
+    // Nothing to pause, and Pause says so rather than doing nothing when chosen.
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
+    REQUIRE_FALSE(pauseItem->isEnabled());
 }
 
 TEST_CASE("Esc on the menu page does nothing", "[main-window]")
@@ -331,7 +332,7 @@ TEST_CASE("Esc on the menu page does nothing", "[main-window]")
     SUCCEED("Esc with no game did not open a dialog");
 }
 
-TEST_CASE("A game paused from Exit stops, and resumes", "[main-window]")
+TEST_CASE("A game paused from Pause stops, and resumes", "[main-window]")
 {
     MainWindow window;
     window.resize(1000, 700);
@@ -349,16 +350,16 @@ TEST_CASE("A game paused from Exit stops, and resumes", "[main-window]")
 
     REQUIRE(log->blockCount() > 1);
 
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
-    REQUIRE(exitItem->isEnabled());
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
+    REQUIRE(pauseItem->isEnabled());
 
     // MEASURED ACROSS THE MIDDLE OF THE PAUSE, not from the click. The pause
     // lands at the next pace(), so a frame or two still arrives after the button
     // - what it claims is that the game is stopped THEREAFTER. The gap sampled
     // is 1.8s of a 250ms spectator beat, which is seven frames that must not
     // appear.
-    exitItem->trigger();
+    pauseItem->trigger();
 
     PauseOverlay* overlay = window.findChild<PauseOverlay*>();
     REQUIRE(overlay != nullptr);
@@ -409,7 +410,7 @@ TEST_CASE("The window can be closed while the game is paused", "[main-window]")
     window.findChild<QPushButton*>("newGame")->click();
     pump(2000);
 
-    window.findChild<QAction*>("exitAction")->trigger();
+    window.findChild<QAction*>("pauseAction")->trigger();
     pump(200);
 
     REQUIRE(window.findChild<PauseOverlay*>()->isVisible());
@@ -512,10 +513,10 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     pump(2000);
     REQUIRE(pages->currentIndex() == 1);
 
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
 
-    exitItem->trigger();
+    pauseItem->trigger();
     pump(100);
 
     QPushButton* mainMenu = window.findChild<QPushButton*>("mainMenu");
@@ -526,7 +527,7 @@ TEST_CASE("Abandoning to the main menu does not close the window", "[main-window
     REQUIRE(pages->currentIndex() == 0);
     REQUIRE(window.isVisible());
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
-    REQUIRE_FALSE(exitItem->isEnabled());
+    REQUIRE_FALSE(pauseItem->isEnabled());
 }
 
 TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main-window]")
@@ -554,7 +555,7 @@ TEST_CASE("A second game is dealt, and is neither stopped nor sprinting", "[main
     const int gameOne = log->blockCount();
     REQUIRE(gameOne > 1);
 
-    window.findChild<QAction*>("exitAction")->trigger();
+    window.findChild<QAction*>("pauseAction")->trigger();
     pump(100);
     window.findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -652,8 +653,8 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // Mid-game, with the bots pacing - so there is a backlog to leak.
     REQUIRE(scene->lastSnapshot() != nullptr);
 
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
 
     // BOTH CLICKS IN ONE TURN OF THE EVENT LOOP, and that is the whole setup:
     // pausing parks the game thread at the next pace(), and a pump between the
@@ -661,7 +662,7 @@ TEST_CASE("An abandoned game does not repaint the menu behind it", "[main-window
     // to leak. A player clicking Main menu straight after Menu is the ordinary
     // case, not a contrived one - the queue is only ever drained by the window
     // going idle.
-    exitItem->trigger();
+    pauseItem->trigger();
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
 
     // THE PUMP IS THE MEASUREMENT. Everything the abandon does is synchronous,
@@ -735,10 +736,10 @@ TEST_CASE("Resuming gives the keyboard back to the table and its digits bid", "[
     // would deliver a key press to.
     REQUIRE(window.focusWidget() == table);
 
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
 
-    exitItem->trigger();
+    pauseItem->trigger();
     pump(100);
     REQUIRE(window.focusWidget() != table);
 
@@ -825,7 +826,7 @@ TEST_CASE("Tab stays inside the sheet on top", "[main-window]")
     QCoreApplication::sendEvent(&window, &escape);
     REQUIRE_FALSE(settings->isVisible());
 
-    window.findChild<QAction*>("exitAction")->trigger();
+    window.findChild<QAction*>("pauseAction")->trigger();
     PauseOverlay* pause = window.findChild<PauseOverlay*>();
     REQUIRE(pause->isVisible());
     tabAround(pause);
@@ -890,7 +891,7 @@ TEST_CASE("Closing a sheet gives the keyboard to the page and not the menu bar",
     settings->findChild<QPushButton*>("settingsDone")->click();
     keyboardOn(table);
 
-    window.findChild<QAction*>("exitAction")->trigger();
+    window.findChild<QAction*>("pauseAction")->trigger();
     pause->findChild<QPushButton*>("resume")->click();
     keyboardOn(table);
 
@@ -951,7 +952,7 @@ TEST_CASE("Abandoning while you bid leaves nothing of the bid on the menu page",
     BidStripItem* bidStrip = scene->bidStripItem();
     REQUIRE(pumpUntil(10000, [bidStrip]{ return bidStrip->isVisible(); }));
 
-    window.findChild<QAction*>("exitAction")->trigger();
+    window.findChild<QAction*>("pauseAction")->trigger();
     pump(100);
     window.findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -1061,9 +1062,9 @@ TEST_CASE("The log dock survives a trip to the menu", "[main-window]")
     logAction->trigger();
     REQUIRE(logDock->isVisible());
 
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
-    exitItem->trigger();
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
+    pauseItem->trigger();
     pump(100);
     window.findChild<PauseOverlay*>()->findChild<QPushButton*>("mainMenu")->click();
     pump(500);
@@ -1169,10 +1170,10 @@ TEST_CASE("A finished game has a way back to the menu", "[main-window]")
     // Resume raised over a finished game would promise a game that has ended -
     // which is what the state this panel reads is for.
     window.findChild<PauseOverlay*>()->hide();
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
-    REQUIRE_FALSE(exitItem->isEnabled());
-    exitItem->trigger();
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
+    REQUIRE_FALSE(pauseItem->isEnabled());
+    pauseItem->trigger();
     pump(100);
     REQUIRE_FALSE(window.findChild<PauseOverlay*>()->isVisible());
 
@@ -1264,17 +1265,17 @@ TEST_CASE("A waited round sheet holds the game until Continue", "[main-window]")
     REQUIRE(log->blockCount() == atSheet);
     REQUIRE(sheet->isVisible());
 
-    // The sheet has the way on, so Exit is greyed while it holds.
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem != nullptr);
-    REQUIRE_FALSE(exitItem->isEnabled());
+    // The sheet has the way on, so Pause is greyed while it holds.
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem != nullptr);
+    REQUIRE_FALSE(pauseItem->isEnabled());
 
     QPushButton* continueButton = window.findChild<QPushButton*>("continueRound");
     REQUIRE(continueButton != nullptr);
     continueButton->click();
 
     REQUIRE_FALSE(sheet->isVisible());
-    REQUIRE(exitItem->isEnabled());
+    REQUIRE(pauseItem->isEnabled());
     REQUIRE(pumpUntil(10000, [&]{ return log->blockCount() > atSheet; }));
 }
 
@@ -1343,7 +1344,7 @@ TEST_CASE("The pause menu and the round sheet do not release each other",
     // anyone asks (PR 34's review, #4). It is not triggered here. Qt drops the
     // trigger of a disabled action before it reaches the window, so the refusal
     // would pass whatever setPauseMenuVisible() did; Esc above is what reaches it.
-    REQUIRE_FALSE(window.findChild<QAction*>("exitAction")->isEnabled());
+    REQUIRE_FALSE(window.findChild<QAction*>("pauseAction")->isEnabled());
 
     // THE GAME IS STILL HELD after both attempts, which is what the hazard is
     // actually about: a menu that had opened and closed would have cleared the
@@ -1420,8 +1421,8 @@ TEST_CASE("The table page is the table alone", "[main-window]")
     REQUIRE(window.menuWidget() == bar);
     REQUIRE(window.findChild<QMenuBar*>() == nullptr);
 
-    // Its Exit is the pause menu's way in for the mouse.
-    REQUIRE(window.findChild<QAction*>("exitAction") != nullptr);
+    // Its Pause is the pause menu's way in for the mouse.
+    REQUIRE(window.findChild<QAction*>("pauseAction") != nullptr);
 }
 
 // THE MENU BAR'S NEW GAME, over a game still running (the redesign's phase 9).
@@ -1470,7 +1471,7 @@ TEST_CASE("New Game from the menu bar replaces a running game", "[main-window]")
     REQUIRE(window.isVisible());
     REQUIRE(pages->currentIndex() == 1);
     REQUIRE(log->blockCount() > 1);
-    REQUIRE(window.findChild<QAction*>("exitAction")->isEnabled());
+    REQUIRE(window.findChild<QAction*>("pauseAction")->isEnabled());
 }
 
 // The owner's call of 2026-10-21: the bots wait while the setup dialog is open
@@ -1627,7 +1628,7 @@ TEST_CASE("Moving between Rules and Settings never lets the game go", "[main-win
     REQUIRE(log->blockCount() == settled);
 }
 
-TEST_CASE("Exit over Rules raises the pause menu in its place", "[main-window]")
+TEST_CASE("Pause over Rules raises the pause menu in its place", "[main-window]")
 {
     MainWindow window;
     window.resize(1000, 700);
@@ -1648,9 +1649,9 @@ TEST_CASE("Exit over Rules raises the pause menu in its place", "[main-window]")
     window.findChild<QAction*>("rulesAction")->trigger();
     REQUIRE(rules->isVisible());
 
-    QAction* exitItem = window.findChild<QAction*>("exitAction");
-    REQUIRE(exitItem->isEnabled());
-    exitItem->trigger();
+    QAction* pauseItem = window.findChild<QAction*>("pauseAction");
+    REQUIRE(pauseItem->isEnabled());
+    pauseItem->trigger();
 
     REQUIRE(pause->isVisible());
     REQUIRE_FALSE(rules->isVisible());
@@ -1723,9 +1724,9 @@ TEST_CASE("Rules opens on the menu page for the game New Game offers", "[main-wi
     REQUIRE(rules != nullptr);
     REQUIRE(rulesItem != nullptr);
 
-    // Live with no game, unlike Exit.
+    // Live with no game, unlike Pause.
     REQUIRE(rulesItem->isEnabled());
-    REQUIRE_FALSE(window.findChild<QAction*>("exitAction")->isEnabled());
+    REQUIRE_FALSE(window.findChild<QAction*>("pauseAction")->isEnabled());
 
     rulesItem->trigger();
     REQUIRE(rules->isVisible());
@@ -2065,7 +2066,7 @@ TEST_CASE("Main menu gives the keyboard to the menu page and not the menu bar", 
     newGame->click();
     pump(1000);
 
-    window.findChild<QAction*>("exitAction")->trigger();
+    window.findChild<QAction*>("pauseAction")->trigger();
     pump(100);
 
     QPushButton* pauseMenu = pause->findChild<QPushButton*>("mainMenu");
@@ -2523,4 +2524,360 @@ TEST_CASE("Rounds scored under the history leave the reader where they were", "[
 
     REQUIRE_FALSE(history->isVisible());
     REQUIRE(window.focusWidget() == continueButton);
+}
+
+namespace
+{
+
+// A key as the player presses it: sent to whatever has the keyboard, which is where Qt
+// looks for a shortcut first.
+void pressKey(QWidget* to, int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+{
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
+    QKeyEvent release(QEvent::KeyRelease, key, modifiers);
+    QCoreApplication::sendEvent(to, &press);
+    QCoreApplication::sendEvent(to, &release);
+}
+
+QList<QAction*> rowsOf(const DropdownMenu* menu)
+{
+    return menu ? menu->actions() : QList<QAction*>();
+}
+
+}
+
+TEST_CASE("The menu bar holds File Game and View with their rows in order", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    REQUIRE(bar != nullptr);
+
+    DropdownMenu* file = window.findChild<DropdownMenu*>("fileMenu");
+    DropdownMenu* game = window.findChild<DropdownMenu*>("gameMenu");
+    DropdownMenu* view = window.findChild<DropdownMenu*>("viewMenu");
+    REQUIRE(file != nullptr);
+    REQUIRE(game != nullptr);
+    REQUIRE(view != nullptr);
+
+    REQUIRE(bar->menu(MenuBar::Menu::File) == file);
+    REQUIRE(bar->menu(MenuBar::Menu::Game) == game);
+    REQUIRE(bar->menu(MenuBar::Menu::View) == view);
+
+    QAction* newGame = window.findChild<QAction*>("newGameAction");
+    QAction* quit = window.findChild<QAction*>("quitAction");
+    QAction* pause = window.findChild<QAction*>("pauseAction");
+    QAction* settings = window.findChild<QAction*>("settingsAction");
+    QAction* rules = window.findChild<QAction*>("rulesAction");
+    QAction* log = window.findChild<QDockWidget*>("logDock")->toggleViewAction();
+
+    // File: New Game, Quit.
+    REQUIRE(rowsOf(file) == QList<QAction*>({ newGame, quit }));
+    REQUIRE(file->iconOf(newGame) == icons::Icon::NewGame);
+    REQUIRE(file->iconOf(quit) == icons::Icon::Exit);
+
+    // Game: Pause, Settings, Rules.
+    REQUIRE(rowsOf(game) == QList<QAction*>({ pause, settings, rules }));
+    REQUIRE(game->iconOf(pause) == icons::Icon::Pause);
+    REQUIRE(game->iconOf(settings) == icons::Icon::Settings);
+    REQUIRE(game->iconOf(rules) == icons::Icon::Rules);
+
+    // View: Log with its tick, then Card art, a separator between.
+    const QList<QAction*> viewRows = rowsOf(view);
+    REQUIRE(viewRows.size() == 3);
+    REQUIRE(viewRows.at(0) == log);
+    REQUIRE(log->isCheckable());
+    REQUIRE_FALSE(view->iconOf(log).has_value());
+    REQUIRE(viewRows.at(1)->isSeparator());
+    REQUIRE(menubar::labelOf(viewRows.at(2)->text()) == QStringLiteral("Card art..."));
+    REQUIRE_FALSE(view->iconOf(viewRows.at(2)).has_value());
+
+    REQUIRE(pause->text() == QStringLiteral("Pause"));
+    REQUIRE(quit->text() == QStringLiteral("Quit"));
+    REQUIRE(pause->shortcut() == QKeySequence(Qt::ALT | Qt::Key_X));
+}
+
+TEST_CASE("Pause in Game is greyed with nothing to pause", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    DropdownMenu* game = bar->menu(MenuBar::Menu::Game);
+    QAction* pause = window.findChild<QAction*>("pauseAction");
+    QAction* settings = window.findChild<QAction*>("settingsAction");
+
+    // On the menu page: greyed, and the keyboard opens Game on Settings past it.
+    REQUIRE_FALSE(pause->isEnabled());
+
+    bar->showMenu(MenuBar::Menu::Game);
+    pump(20);
+    REQUIRE(game->isVisible());
+    REQUIRE(game->activeAction() == settings);
+
+    pressKey(game, Qt::Key_Escape);
+    pump(50);
+    REQUIRE_FALSE(game->isVisible());
+
+    // In a game: live, and chosen from the menu it pauses.
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(1000);
+
+    REQUIRE(pause->isEnabled());
+
+    bar->showMenu(MenuBar::Menu::Game);
+    pump(20);
+    REQUIRE(game->activeAction() == pause);
+
+    pressKey(game, Qt::Key_Return);
+    pump(100);
+
+    REQUIRE_FALSE(game->isVisible());
+    REQUIRE(window.findChild<PauseOverlay*>()->isVisible());
+}
+
+TEST_CASE("Quit in File closes the window and stops the game", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(200);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(1000);
+
+    QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    REQUIRE(pages->currentIndex() == 1);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    DropdownMenu* file = bar->menu(MenuBar::Menu::File);
+    QAction* quit = window.findChild<QAction*>("quitAction");
+    REQUIRE(quit != nullptr);
+
+    // Down to Quit and Enter, as the player chooses it; no question asked.
+    bar->showMenu(MenuBar::Menu::File);
+    pump(20);
+    pressKey(file, Qt::Key_Down);
+    REQUIRE(file->activeAction() == quit);
+
+    pressKey(file, Qt::Key_Return);
+    pump(200);
+
+    REQUIRE(QApplication::activeModalWidget() == nullptr);
+    REQUIRE_FALSE(file->isVisible());
+    REQUIRE_FALSE(window.isVisible());
+}
+
+TEST_CASE("A closed menu gives the keyboard back to the table", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    answerModalWatching(300);
+    window.findChild<QPushButton*>("newGame")->click();
+    pump(1000);
+
+    TableView* table = window.findChild<TableView*>();
+    MenuBar* bar = window.findChild<MenuBar*>();
+    REQUIRE(table != nullptr);
+
+    const auto keyboardOnTable = [&window, table]
+    {
+        pump(50);
+
+        QWidget* focus = window.focusWidget();
+        INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+        REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+        REQUIRE(focus == table);
+    };
+
+    table->setFocus(Qt::OtherFocusReason);
+    pump(20);
+
+    // Opened by a press on the button and closed with Esc.
+    MenuBarButton* view = bar->button(MenuBar::Menu::View);
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(view->rect().center()),
+                      QPointF(view->mapToGlobal(view->rect().center())), Qt::LeftButton, Qt::LeftButton,
+                      Qt::NoModifier);
+    QCoreApplication::sendEvent(view, &press);
+    pump(20);
+    REQUIRE(bar->openMenu() == bar->menu(MenuBar::Menu::View));
+
+    pressKey(bar->openMenu(), Qt::Key_Escape);
+    keyboardOnTable();
+
+    // Opened from the keyboard, switched along the bar, and closed by choosing a row.
+    bar->showMenu(MenuBar::Menu::File);
+    pump(20);
+    pressKey(bar->openMenu(), Qt::Key_Right);
+    pump(20);
+    REQUIRE(bar->openMenu() == bar->menu(MenuBar::Menu::Game));
+
+    pressKey(bar->openMenu(), Qt::Key_Escape);
+    keyboardOnTable();
+
+    // A bar button Tab put the keyboard on hands it to the table once its menu closes.
+    MenuBarButton* game = bar->button(MenuBar::Menu::Game);
+    game->setFocus(Qt::TabFocusReason);
+    pump(20);
+    REQUIRE(window.focusWidget() == game);
+
+    pressKey(game, Qt::Key_Space);
+    pump(20);
+    REQUIRE(bar->openMenu() == bar->menu(MenuBar::Menu::Game));
+
+    pressKey(bar->openMenu(), Qt::Key_Escape);
+    keyboardOnTable();
+}
+
+TEST_CASE("Choosing Rules from Game leaves the keyboard on the sheet", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    QPushButton* newGame = window.findChild<QPushButton*>("newGame");
+
+    bar->showMenu(MenuBar::Menu::Game);
+    pump(20);
+
+    DropdownMenu* game = bar->openMenu();
+    REQUIRE(game != nullptr);
+    pressKey(game, Qt::Key_Down);
+    REQUIRE(game->activeAction() == window.findChild<QAction*>("rulesAction"));
+
+    pressKey(game, Qt::Key_Return);
+    pump(100);
+
+    REQUIRE(rules->isVisible());
+
+    QWidget* focus = window.focusWidget();
+    INFO("on " << (focus ? focus->objectName().toStdString() : std::string("nothing")));
+    REQUIRE(qobject_cast<MenuBarButton*>(focus) == nullptr);
+    REQUIRE(rules->isAncestorOf(focus));
+
+    // And closed, back to the menu page's New Game.
+    rules->findChild<QPushButton*>("rulesClose")->click();
+    pump(50);
+    REQUIRE(window.focusWidget() == newGame);
+}
+
+TEST_CASE("The Alt shortcuts open the sheets and the menus", "[main-window]")
+{
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    window.activateWindow();
+    pump(200);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    RulesSheet* rules = window.findChild<RulesSheet*>();
+    SettingsSheet* settings = window.findChild<SettingsSheet*>();
+    PauseOverlay* pause = window.findChild<PauseOverlay*>();
+
+    const auto keyboard = [&window]
+    {
+        QWidget* focus = window.focusWidget();
+        return focus ? focus : static_cast<QWidget*>(&window);
+    };
+
+    // Alt+R and Alt+S, on the menu page.
+    pressKey(keyboard(), Qt::Key_R, Qt::AltModifier);
+    pump(50);
+    REQUIRE(rules->isVisible());
+
+    pressKey(keyboard(), Qt::Key_S, Qt::AltModifier);
+    pump(50);
+    REQUIRE(settings->isVisible());
+    REQUIRE_FALSE(rules->isVisible());
+
+    settings->findChild<QPushButton*>("settingsDone")->click();
+    pump(50);
+
+    // Alt+X with nothing to pause does nothing.
+    pressKey(keyboard(), Qt::Key_X, Qt::AltModifier);
+    pump(50);
+    REQUIRE_FALSE(pause->isVisible());
+
+    // Alt+F, Alt+G and Alt+V open their menus, the first row chosen.
+    const std::pair<Qt::Key, MenuBar::Menu> openers[] = { { Qt::Key_F, MenuBar::Menu::File },
+                                                           { Qt::Key_G, MenuBar::Menu::Game },
+                                                           { Qt::Key_V, MenuBar::Menu::View } };
+
+    for(const auto& [key, which] : openers)
+    {
+        CAPTURE(static_cast<int>(which));
+
+        pressKey(keyboard(), key, Qt::AltModifier);
+        pump(20);
+
+        DropdownMenu* menu = bar->menu(which);
+        REQUIRE(bar->openMenu() == menu);
+        REQUIRE(menu->activeAction() != nullptr);
+
+        pressKey(menu, Qt::Key_Escape);
+        pump(50);
+        REQUIRE(bar->openMenu() == nullptr);
+    }
+
+    // Alt+N opens the setup dialog, and Alt+X pauses the game it deals.
+    bool dialogOpened = false;
+    QTimer::singleShot(300, [&dialogOpened]
+    {
+        if(QDialog* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()))
+        {
+            dialogOpened = true;
+
+            if(QRadioButton* watch = dialog->findChild<QRadioButton*>("watching"))
+                watch->setChecked(true);
+
+            dialog->done(QDialog::Accepted);
+        }
+    });
+
+    pressKey(keyboard(), Qt::Key_N, Qt::AltModifier);
+    pump(1000);
+    REQUIRE(dialogOpened);
+    REQUIRE(window.findChild<QAction*>("pauseAction")->isEnabled());
+
+    // The offscreen platform does not hand activation back when the dialog goes, as a
+    // window manager does, and a window shortcut needs an active window.
+    window.activateWindow();
+    pump(50);
+
+    pressKey(keyboard(), Qt::Key_X, Qt::AltModifier);
+    pump(50);
+    REQUIRE(pause->isVisible());
+}
+
+TEST_CASE("The menu bar's menus and rows read in Romanian", "[main-window][language]")
+{
+    const RomanianTranslation romanian;
+
+    MainWindow window;
+    window.resize(1000, 700);
+    window.show();
+    pump(100);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    REQUIRE(bar->button(MenuBar::Menu::File)->label() == QStringLiteral("Fișier"));
+    REQUIRE(bar->button(MenuBar::Menu::Game)->label() == QStringLiteral("Joc"));
+    REQUIRE(bar->button(MenuBar::Menu::View)->label() == QStringLiteral("Vizualizare"));
+
+    REQUIRE(window.findChild<QAction*>("pauseAction")->text() == QStringLiteral("Pauză"));
+    REQUIRE(window.findChild<QAction*>("quitAction")->text() == QStringLiteral("Ieșire"));
 }
