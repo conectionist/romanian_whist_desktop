@@ -170,14 +170,15 @@ TEST_CASE("A word wider than the line stands on its own", "[text-runs]")
 
 TEST_CASE("An icon is drawn in the colour asked for and inside its box", "[text-runs]")
 {
-    // EVERY ICON, the corner buttons' two and the menu bar's four: one with
-    // markup that fails to parse draws nothing, and nothing else would say so.
+    // Every icon: one with markup that fails to parse draws nothing, and nothing else
+    // would say so.
     const icons::Icon icon = GENERATE(icons::Icon::RoundHistory,
                                       icons::Icon::LastTrick,
                                       icons::Icon::NewGame,
                                       icons::Icon::Settings,
                                       icons::Icon::Rules,
-                                      icons::Icon::Exit);
+                                      icons::Icon::Exit,
+                                      icons::Icon::Pause);
 
     CAPTURE(static_cast<int>(icon));
 

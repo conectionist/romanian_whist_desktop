@@ -54,6 +54,13 @@ QString markupFor(icons::Icon icon)
             "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' "
             "stroke='%1' stroke-opacity='%2' stroke-width='1.8'>"
             "<path d='M14 4H5v16h9'/><path d='M10 12h10M16 8l4 4-4 4'/></svg>");
+
+    case icons::Icon::Pause:
+        return QStringLiteral(
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' "
+            "stroke='%1' stroke-opacity='%2' stroke-width='1.8'>"
+            "<rect x='6' y='5' width='4' height='14' rx='1'/>"
+            "<rect x='14' y='5' width='4' height='14' rx='1'/></svg>");
     }
 
     return QString();

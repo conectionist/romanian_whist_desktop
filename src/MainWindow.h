@@ -160,8 +160,7 @@ private slots:
     // standings come down while it is up, and go back if it is cancelled.
     void showNewGameDialog();
 
-    // THE PAUSE, raised. Delegates to setPauseMenuVisible() below; it exists as
-    // its own slot because that is what the menu bar's Exit connects to.
+    // Raises the pause menu: a slot of its own because the menu bar's Pause connects to it.
     void showPauseMenu();
 
     // Abandons the running game and returns to the main menu. The second stop
@@ -204,12 +203,9 @@ private:
     // action that empties the window is not a diagnostic.
     void buildLogDock();
 
-    // Builds section 2.12's menu bar - New Game, Settings, Rules, View and Exit -
-    // and installs it with setMenuWidget(). Must run AFTER buildLogDock(), which
-    // owns an action this adds to View.
-    //
-    // NEVER CALL menuBar() AFTER IT. QMainWindow::menuBar() makes a QMenuBar when
-    // the menu widget is not one, and installing that deletes this bar.
+    // Builds the menu bar - File, Game and View - and installs it with setMenuWidget(), after
+    // buildLogDock(), whose Log goes in View. Never call menuBar() after it: it makes a
+    // QMenuBar, and installing that deletes this bar.
     void buildMenuBar();
 
     // Shows the card-art window, creating it the first time. Parented to this
@@ -233,9 +229,8 @@ private:
     // the title bar's X did nothing while the pause was up - see PauseOverlay.h.
     void setPauseMenuVisible(bool visible);
 
-    // WHETHER THE PAUSE MENU MAY GO UP NOW: a game playing, and no round sheet
-    // holding it. What setPauseMenuVisible() refuses on, and what Exit is greyed
-    // by (updatePauseAction()).
+    // Whether the pause menu may go up now: a game playing, and no round sheet holding it.
+    // Pause is greyed while it may not.
     bool canPause() const;
     void updatePauseAction();
 
@@ -369,14 +364,12 @@ private:
     // setPauseMenuVisible().
     PauseOverlay* pauseOverlay = nullptr;
 
-    // Section 2.12's bar, installed as the window's menu widget, and its items.
-    // Exit raises the pause menu, whose Main menu is the way out; it replaced
-    // phase 8's temporary Menu item.
+    // The menu bar, installed as the window's menu widget, and the actions in its menus.
     MenuBar* bar = nullptr;
     QAction* newGameAction = nullptr;
+    QAction* pauseAction = nullptr;
     QAction* settingsAction = nullptr;
     QAction* rulesAction = nullptr;
-    QAction* exitAction = nullptr;
 
     // Section 16.2's panel, the same shape as the pause menu and for the same
     // reason - it is drawn OVER the final state rather than replacing it, which
