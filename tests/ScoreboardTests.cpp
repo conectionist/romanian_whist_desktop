@@ -673,8 +673,8 @@ TEST_CASE("The columns hold still as the turn and the scores move", "[scoreboard
 
     REQUIRE(scoreboard::columnsFor(scoreboard::rowsFor(snapshot)) == before);
 
-    // Nor do a run past the fifth round, which the engine goes on counting, or a
-    // score gone negative (PR 34's review, finding #6).
+    // Nor do a two-digit run, which the engine never sends but costs nothing to
+    // allow for, or a score gone negative.
     snapshot.seats[1].winStreak = 12;
     snapshot.seats[2].lossStreak = 11;
     snapshot.seats[0].totalScore = -134;

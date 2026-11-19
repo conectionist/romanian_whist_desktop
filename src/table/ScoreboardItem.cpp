@@ -651,9 +651,8 @@ scoreboard::Columns scoreboard::columnsFor(const std::vector<Row>& rows)
 
     // Each column's widest content. The numbers at their widest values - one digit
     // for a bid or a trick count; a minus and three digits for a score, which goes
-    // negative and stays under a thousand; two digits for a run, which the engine
-    // goes on counting past the fifth round, the only one it pays for
-    // (Scoreboard.cpp) - so the columns hold still as the numbers change.
+    // negative and stays under a thousand; two digits for a run, more than the
+    // engine's 0 to 4 needs - so the columns hold still as the numbers change.
     Columns widest;
 
     widest.player = head(headingPlayer());

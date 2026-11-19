@@ -124,8 +124,8 @@ QStringList rulessheet::linesFor(const newgame::Config& config)
           << QCoreApplication::translate("rulessheet",
                                          "An exact bid scores 5 + bid. A miss loses the "
                                          "difference. Five exact bids in a row earn +10, five "
-                                         "misses cost 10; 1-card rounds neither add to a run "
-                                         "nor break one.");
+                                         "misses cost 10, then the count starts over; "
+                                         "1-card rounds neither add to a run nor break one.");
 
     return lines;
 }
