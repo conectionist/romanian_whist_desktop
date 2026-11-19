@@ -917,8 +917,8 @@ Whist</source>
     </message>
     <message>
         <location line="+3"/>
-        <source>An exact bid scores 5 + bid. A miss loses the difference. Five exact bids in a row earn +10, five misses cost 10; 1-card rounds neither add to a run nor break one.</source>
-        <translation>O licitație exactă aduce 5 + licitația. O greșeală pierde diferența. Cinci licitații exacte la rând aduc +10, cinci greșeli costă 10; rundele de o carte nici nu se adaugă la o serie, nici nu o întrerup.</translation>
+        <source>An exact bid scores 5 + bid. A miss loses the difference. Five exact bids in a row earn +10, five misses cost 10, then the count starts over; 1-card rounds neither add to a run nor break one.</source>
+        <translation>O licitație exactă aduce 5 + licitația. O greșeală pierde diferența. Cinci licitații exacte la rând aduc +10, cinci greșeli costă 10, apoi se numără de la capăt; rundele de o carte nici nu se adaugă la o serie, nici nu o întrerup.</translation>
     </message>
     <message>
         <location line="+14"/>

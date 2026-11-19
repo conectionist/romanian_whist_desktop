@@ -57,9 +57,9 @@ struct RoundSeatResult
     int roundScore = 0;
     int totalScore = 0;
 
-    // ALREADY INCLUDING THIS ROUND. Scoreboard::calculateScores() updates the
-    // streaks before onRoundScored() fires, so a four here means the NEXT one is
-    // the fifth - which is what section 16.1's warning line says.
+    // Already including this round, and 0 to 4: the engine starts a run over on
+    // the round it pays, because players count towards five and then from scratch.
+    // So a four here means the next one is the fifth, which the warning line says.
     unsigned int winStreak = 0;
     unsigned int lossStreak = 0;
 };

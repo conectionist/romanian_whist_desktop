@@ -95,10 +95,9 @@ QStringList roundsheet::streakWarnings(const RoundResult& result)
     // order, which is the order the rows above are drawn in.
     for(const RoundSeatResult& seat : result.seats)
     {
-        // EXACTLY four, in either direction. Five has already paid out and three
-        // is too early to be worth a line - and the two counters are never both
-        // engaged, because a round that advances one resets the other, so the
-        // order of these two within a seat decides nothing.
+        // Exactly four, in either direction: five pays and starts the run over, and
+        // three is too early to be worth a line. A round that advances one counter
+        // resets the other, so the order of these two within a seat decides nothing.
         if(seat.lossStreak == warnAt)
             lines.append(QCoreApplication::translate(
                              "roundsheet", "%1 has missed four in a row - a fifth costs %2.")
