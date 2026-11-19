@@ -18,6 +18,9 @@
 #include <QMouseEvent>
 #include <QPalette>
 #include <QPixmap>
+#include <QPointingDevice>
+#include <QScreen>
+#include <QTest>
 #include <QWidget>
 
 #include <cmath>
@@ -44,13 +47,13 @@ struct Fixture
     QAction* log = new QAction(QStringLiteral("&Log"), &window);
     QAction* cardArt = nullptr;
 
-    DropdownMenu* file = new DropdownMenu(QStringLiteral("&File"), &window);
-    DropdownMenu* game = new DropdownMenu(QStringLiteral("&Game"), &window);
-    DropdownMenu* view = new DropdownMenu(QStringLiteral("&View"), &window);
+    DropdownMenu* file = new DropdownMenu(QStringLiteral("File"), &window);
+    DropdownMenu* game = new DropdownMenu(QStringLiteral("Game"), &window);
+    DropdownMenu* view = new DropdownMenu(QStringLiteral("View"), &window);
 
     MenuBar* bar = nullptr;
 
-    explicit Fixture(const QString& fileTitle = QStringLiteral("&File"))
+    explicit Fixture(const QString& fileTitle = QStringLiteral("File"))
     {
         file->setTitle(fileTitle);
 
@@ -236,7 +239,7 @@ TEST_CASE("A bar button is as wide as its padding and label", "[menu-bar]")
         REQUIRE(item->width() == static_cast<int>(std::ceil(12.0 + metrics.horizontalAdvance(item->label()) + 12.0)));
     }
 
-    // Belleza 17, page.html's Marcellus 17, through section 2.3's chain.
+    // Belleza 17, page.html's Marcellus 17, through the headings' fallback chain.
     REQUIRE(menubar::labelFont().pixelSize() == 17);
     REQUIRE(menubar::labelFont().families().front() == QStringLiteral("Belleza"));
 }
@@ -782,4 +785,209 @@ TEST_CASE("A menu follows the bar's theme", "[menu-bar]")
     const QImage image = pictureOf(fixture.file);
     const QRect panel = fixture.file->panelRect();
     REQUIRE(near(image.pixelColor(panel.center().x(), panel.top() + 3), theme.table.menuTop, 3));
+}
+
+namespace
+{
+
+// Where a menu's panel is on screen once Qt has placed the popup, and its button's left edge.
+QRect placedPanel(DropdownMenu* menu)
+{
+    return menu->panelRect().translated(menu->pos());
+}
+
+int buttonLeft(MenuBarButton* button)
+{
+    return button->mapToGlobal(QPoint(0, 0)).x();
+}
+
+}
+
+TEST_CASE("Every menu's panel lies under its button where Qt puts it", "[menu-bar]")
+{
+    Fixture fixture;
+
+    for(const MenuBar::Menu which : { MenuBar::Menu::File, MenuBar::Menu::Game, MenuBar::Menu::View })
+    {
+        CAPTURE(static_cast<int>(which));
+
+        fixture.bar->showMenu(which);
+        pump(20);
+
+        DropdownMenu* menu = fixture.bar->menu(which);
+        REQUIRE(menu->pos() == fixture.bar->menuPosition(which));
+        REQUIRE(placedPanel(menu).left() == buttonLeft(fixture.bar->button(which)));
+        REQUIRE(placedPanel(menu).top() == fixture.bar->mapToGlobal(QPoint(0, menubar::height + dropdown::drop)).y());
+
+        menu->hide();
+        pump(20);
+    }
+}
+
+TEST_CASE("A menu at a screen's edge gives up its shadow there and stays under its button", "[menu-bar]")
+{
+    Fixture fixture;
+
+    const QRect area = fixture.window.screen()->availableGeometry();
+
+    // The window's left edge on the screen's: File's button is 16 in, less than the shadow's
+    // 24, and the popup would cross onto whatever lies left of the screen.
+    // The offscreen platform keeps a 2 px frame left of the window.
+    fixture.window.setGeometry(area.left(), area.top() + 100, 700, 500);
+    pump(50);
+
+    const int room = buttonLeft(fixture.bar->button(MenuBar::Menu::File)) - area.left();
+    REQUIRE(room < dropdown::shadowMargins().left());
+
+    fixture.bar->showMenu(MenuBar::Menu::File);
+    pump(20);
+
+    REQUIRE(fixture.file->x() == area.left());
+    REQUIRE(fixture.file->shadowRoom().left() == room);
+    REQUIRE(placedPanel(fixture.file).left() == buttonLeft(fixture.bar->button(MenuBar::Menu::File)));
+    REQUIRE(fixture.file->shadowRoom().right() == dropdown::shadowMargins().right());
+
+    fixture.file->hide();
+    pump(20);
+
+    // View's panel 10 short of the screen's right edge: 10 of the shadow's 24 there.
+    MenuBarButton* view = fixture.bar->button(MenuBar::Menu::View);
+    const int panelWidth = fixture.view->panelSize().width();
+    const int left = area.right() + 1 - 10 - panelWidth - view->x();
+    fixture.window.setGeometry(left, area.top() + 100, 700, 500);
+    pump(50);
+
+    fixture.bar->showMenu(MenuBar::Menu::View);
+    pump(20);
+
+    REQUIRE(fixture.view->shadowRoom().right() == 10);
+    REQUIRE(fixture.view->geometry().right() == area.right());
+    REQUIRE(placedPanel(fixture.view).left() == buttonLeft(view));
+
+    fixture.view->hide();
+    pump(20);
+
+    // Away from the edges, the whole shadow again.
+    fixture.window.setGeometry(area.left() + 40, area.top() + 100, 700, 500);
+    pump(50);
+
+    fixture.bar->showMenu(MenuBar::Menu::File);
+    pump(20);
+    REQUIRE(fixture.file->shadowRoom() == dropdown::shadowMargins());
+    REQUIRE(placedPanel(fixture.file).left() == buttonLeft(fixture.bar->button(MenuBar::Menu::File)));
+}
+
+TEST_CASE("A tap on another bar button while a menu is open switches to its menu", "[menu-bar]")
+{
+    Fixture fixture;
+
+    QPointingDevice* touchscreen = QTest::createTouchDevice();
+    QWindow* window = fixture.window.windowHandle();
+
+    // Through the window, as a finger arrives: Qt makes a mouse move and a press of it.
+    const auto tap = [&](QWidget* widget)
+    {
+        const QPoint at = window->mapFromGlobal(middleOf(widget));
+        QTest::touchEvent(window, touchscreen).press(0, at, window);
+        QTest::touchEvent(window, touchscreen).release(0, at, window);
+        pump(50);
+    };
+
+    tap(fixture.button("menuFile"));
+    REQUIRE(fixture.bar->openMenu() == fixture.file);
+
+    tap(fixture.button("menuGame"));
+    REQUIRE(fixture.bar->openMenu() == fixture.game);
+    REQUIRE_FALSE(fixture.file->isVisible());
+}
+
+TEST_CASE("A press on another bar button while a menu is open switches to its menu", "[menu-bar]")
+{
+    Fixture fixture;
+
+    fixture.bar->showMenu(MenuBar::Menu::File);
+    pump(20);
+
+    // The press reaches the open menu, which has the mouse.
+    MenuBarButton* view = fixture.button("menuView");
+    press(fixture.file, fixture.file->mapFromGlobal(middleOf(view)));
+    pump(20);
+
+    REQUIRE(fixture.bar->openMenu() == fixture.view);
+    REQUIRE_FALSE(fixture.file->isVisible());
+}
+
+TEST_CASE("A menu closed other than by a press asks that no later press be replayed", "[menu-bar]")
+{
+    // Qt decides as a popup closes whether to replay a press to what lies beneath; left to
+    // decide on a keyboard close, a later click on the menu's button reopens the menu.
+    Fixture fixture;
+
+    fixture.bar->showMenu(MenuBar::Menu::File);
+    pump(20);
+    key(fixture.file, Qt::Key_Escape);
+    pump(20);
+    REQUIRE(fixture.file->testAttribute(Qt::WA_NoMouseReplay));
+
+    // A switch along the bar closes the menu it leaves the same way.
+    fixture.bar->showMenu(MenuBar::Menu::Game);
+    pump(20);
+    key(fixture.game, Qt::Key_Right);
+    pump(20);
+    REQUIRE(fixture.game->testAttribute(Qt::WA_NoMouseReplay));
+
+    // A press on the page is replayed there, as Qt has it.
+    fixture.view->setAttribute(Qt::WA_NoMouseReplay, false);
+    const QPoint page = fixture.window.centralWidget()->mapToGlobal(QPoint(300, 300));
+    press(fixture.view, fixture.view->mapFromGlobal(page));
+    pump(20);
+    REQUIRE_FALSE(fixture.view->isVisible());
+    REQUIRE_FALSE(fixture.view->testAttribute(Qt::WA_NoMouseReplay));
+
+    // And a press on the open menu's own button is not.
+    fixture.bar->showMenu(MenuBar::Menu::Game);
+    pump(20);
+    MenuBarButton* game = fixture.button("menuGame");
+    press(fixture.game, fixture.game->mapFromGlobal(middleOf(game)));
+    pump(20);
+    REQUIRE_FALSE(fixture.game->isVisible());
+    REQUIRE(fixture.game->testAttribute(Qt::WA_NoMouseReplay));
+}
+
+TEST_CASE("Space on a bar button Tab reached opens its menu with the first row chosen", "[menu-bar]")
+{
+    Fixture fixture;
+
+    int keyboardOnBar = -1;
+    QObject::connect(fixture.bar, &MenuBar::menuClosed, [&keyboardOnBar](bool onBar){ keyboardOnBar = onBar; });
+
+    MenuBarButton* game = fixture.button("menuGame");
+    game->setFocus(Qt::TabFocusReason);
+    pump(20);
+
+    QKeyEvent space(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+    QCoreApplication::sendEvent(game, &space);
+    pump(20);
+
+    REQUIRE(fixture.bar->openMenu() == fixture.game);
+    REQUIRE(fixture.game->activeAction() == fixture.pause);
+
+    // Along the bar, the keyboard goes with it.
+    key(fixture.game, Qt::Key_Right);
+    pump(20);
+    REQUIRE(fixture.bar->openMenu() == fixture.view);
+    REQUIRE(fixture.window.focusWidget() == fixture.button("menuView"));
+
+    key(fixture.view, Qt::Key_Escape);
+    pump(50);
+    REQUIRE(keyboardOnBar == 1);
+
+    // A click on the same button is the mouse's: the keyboard is not the bar's.
+    press(game, game->rect().center());
+    pump(20);
+    REQUIRE(fixture.game->activeAction() == nullptr);
+
+    key(fixture.game, Qt::Key_Escape);
+    pump(50);
+    REQUIRE(keyboardOnBar == 0);
 }

@@ -11,7 +11,9 @@
 #include <QKeyEvent>
 #include <QLinearGradient>
 #include <QMouseEvent>
+#include <QGuiApplication>
 #include <QPainter>
+#include <QScreen>
 #include <QTimer>
 
 #include <algorithm>
@@ -138,6 +140,23 @@ QString MenuBarButton::label() const
     return menubar::labelOf(text());
 }
 
+bool MenuBarButton::pressedByKeyboard() const
+{
+    return keyboardPress;
+}
+
+void MenuBarButton::keyPressEvent(QKeyEvent* event)
+{
+    keyboardPress = true;
+    QToolButton::keyPressEvent(event);
+}
+
+void MenuBarButton::mousePressEvent(QMouseEvent* event)
+{
+    keyboardPress = false;
+    QToolButton::mousePressEvent(event);
+}
+
 QSize MenuBarButton::sizeHint() const
 {
     const QFontMetricsF metrics(menubar::labelFont());
@@ -260,8 +279,8 @@ void MenuBar::addMenu(DropdownMenu* menu, const QString& name)
     MenuBarButton* button = new MenuBarButton(this);
     button->setObjectName(name);
 
-    // In the form an action's text reaches its button: label() reads it the same way,
-    // and it carries no mnemonic to claim the window's Alt shortcut (see withoutMnemonic()).
+    // Without mnemonics: a button claims one as a shortcut of its own, and beside the
+    // window's Alt shortcut for the menu neither would fire.
     button->setText(menu ? menubar::withoutMnemonic(menu->title()) : QString());
 
     items.push_back(button);
@@ -272,7 +291,10 @@ void MenuBar::addMenu(DropdownMenu* menu, const QString& name)
 
     // On the press, as a menu bar opens its menus, so a press, a drag and a release on a
     // row choose it.
-    connect(button, &QAbstractButton::pressed, this, [this, index]{ open(index, false); });
+    connect(button, &QAbstractButton::pressed, this, [this, index, button]
+    {
+        open(index, button->pressedByKeyboard());
+    });
 
     connect(menu, &QMenu::aboutToHide, this, [this, button]
     {
@@ -282,7 +304,7 @@ void MenuBar::addMenu(DropdownMenu* menu, const QString& name)
         QTimer::singleShot(0, this, [this]
         {
             if(!openMenu())
-                emit menuClosed();
+                emit menuClosed(keyboardOnBar);
         });
     });
 
@@ -344,14 +366,43 @@ void MenuBar::showMenu(Menu which)
     open(static_cast<std::size_t>(which), true);
 }
 
+QPoint MenuBar::panelCorner(Menu which) const
+{
+    return mapToGlobal(QPoint(button(which)->x(), height() + dropdown::drop));
+}
+
+QMargins MenuBar::shadowRoom(Menu which) const
+{
+    QMargins room = dropdown::shadowMargins();
+
+    const DropdownMenu* popup = menu(which);
+    const QPoint corner = panelCorner(which);
+
+    const QScreen* screen = QGuiApplication::screenAt(corner);
+
+    if(!screen)
+        screen = this->screen();
+
+    if(!popup || !screen)
+        return room;
+
+    // Qt keeps a popup inside the available area of the screen at its origin.
+    const QRect area = screen->availableGeometry();
+    const QRect panel(corner, popup->panelSize());
+
+    room.setLeft(std::min(room.left(), panel.left() - area.left()));
+    room.setTop(std::min(room.top(), panel.top() - area.top()));
+    room.setRight(std::min(room.right(), area.right() - panel.right()));
+    room.setBottom(std::min(room.bottom(), area.bottom() - panel.bottom()));
+
+    return QMargins(std::max(0, room.left()), std::max(0, room.top()), std::max(0, room.right()),
+                    std::max(0, room.bottom()));
+}
+
 QPoint MenuBar::menuPosition(Menu which) const
 {
-    const MenuBarButton* under = button(which);
-    const QMargins margins = dropdown::shadowMargins();
-
-    const QPoint panel = mapToGlobal(QPoint(under->x(), height() + dropdown::drop));
-
-    return panel - QPoint(margins.left(), margins.top());
+    const QMargins room = shadowRoom(which);
+    return panelCorner(which) - QPoint(room.left(), room.top());
 }
 
 void MenuBar::open(std::size_t index, bool fromKeyboard)
@@ -361,18 +412,28 @@ void MenuBar::open(std::size_t index, bool fromKeyboard)
     if(!menu || !isEnabled())
         return;
 
+    MenuBarButton* opener = items.at(index);
+
+    // The keyboard stays on the bar when it opened the menu from a button Tab put it on,
+    // and moves along the bar with Left and Right.
+    const bool switching = openMenu() != nullptr;
+    const bool focused = window()->focusWidget() == opener;
+    keyboardOnBar = fromKeyboard && (focused || (switching && keyboardOnBar));
+
     for(DropdownMenu* other : menus)
     {
         if(other && other != menu && other->isVisible())
             other->hide();
     }
 
-    // A press on the open menu's own button closes it and must not be replayed to the
-    // button, which would open it again; the filter below sets this for that press.
-    menu->setAttribute(Qt::WA_NoMouseReplay, false);
+    if(keyboardOnBar && !focused)
+        opener->setFocus(Qt::TabFocusReason);
 
-    items.at(index)->setDown(true);
-    menu->popup(menuPosition(static_cast<Menu>(index)));
+    const Menu which = static_cast<Menu>(index);
+
+    opener->setDown(true);
+    menu->setShadowRoom(shadowRoom(which));
+    menu->popup(menuPosition(which));
 
     if(!fromKeyboard)
         return;
@@ -410,10 +471,12 @@ bool MenuBar::eventFilter(QObject* watched, QEvent* event)
     }
 
     // The open menu has the mouse, so it is here that the cursor reaching another button
-    // is seen, and a press on this menu's own button.
+    // is seen, and a press on a button.
     if(event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress)
     {
-        const QPoint global = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
+        const QMouseEvent* mouse = static_cast<QMouseEvent*>(event);
+        const bool press = event->type() == QEvent::MouseButtonPress;
+        const QPoint global = mouse->globalPosition().toPoint();
 
         for(std::size_t i = 0 ; i < items.size() ; i++)
         {
@@ -422,12 +485,21 @@ bool MenuBar::eventFilter(QObject* watched, QEvent* event)
             if(!button->isVisible() || !button->rect().contains(button->mapFromGlobal(global)))
                 continue;
 
-            if(event->type() == QEvent::MouseButtonPress)
+            // A press on the open menu's own button closes it, and replayed to the button
+            // it would open it again.
+            if(i == index)
             {
-                if(i == index)
+                if(press)
                     menus.at(index)->setAttribute(Qt::WA_NoMouseReplay);
+
+                break;
             }
-            else if(i != index && button->isEnabled())
+
+            // A tap reaches Qt as a made-up move and then a press: switching on that move,
+            // the press would land on the new menu's own button and close it.
+            const bool realMove = mouse->source() == Qt::MouseEventNotSynthesized || mouse->buttons() != Qt::NoButton;
+
+            if(button->isEnabled() && (press || realMove))
             {
                 open(i, false);
                 return true;

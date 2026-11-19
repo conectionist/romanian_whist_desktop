@@ -16,6 +16,11 @@
 #include <QStyleOptionMenuItem>
 #include <QWindow>
 
+#if QT_CONFIG(xcb)
+#include <QGuiApplication>
+#include <QLibrary>
+#endif
+
 #include <algorithm>
 #include <cmath>
 
@@ -107,6 +112,40 @@ int insideOfPanel()
     return dropdown::borderWidth + dropdown::padding;
 }
 
+// Whether the X server's transparent pixels show what lies beneath: only while a compositing
+// manager owns _NET_WM_CM_S<screen>. Asked of Xlib, found at run time in the copy Qt's xcb
+// plugin loaded, so the build needs no X11 headers or libraries and no private Qt module.
+bool composited()
+{
+#if QT_CONFIG(xcb)
+    const auto* x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+
+    if(!x11 || !x11->display())
+        return true;
+
+    using InternAtom = unsigned long (*)(Display*, const char*, int);
+    using SelectionOwner = unsigned long (*)(Display*, unsigned long);
+    using DefaultScreen = int (*)(Display*);
+
+    static const auto internAtom = reinterpret_cast<InternAtom>(QLibrary::resolve(QStringLiteral("X11"), 6, "XInternAtom"));
+    static const auto selectionOwner =
+        reinterpret_cast<SelectionOwner>(QLibrary::resolve(QStringLiteral("X11"), 6, "XGetSelectionOwner"));
+    static const auto defaultScreen =
+        reinterpret_cast<DefaultScreen>(QLibrary::resolve(QStringLiteral("X11"), 6, "XDefaultScreen"));
+
+    if(!internAtom || !selectionOwner || !defaultScreen)
+        return true;
+
+    Display* display = x11->display();
+    const QByteArray name = "_NET_WM_CM_S" + QByteArray::number(defaultScreen(display));
+
+    // Created if missing, so the owner is asked of an atom that exists.
+    return selectionOwner(display, internAtom(display, name.constData(), 0)) != 0;
+#else
+    return true;
+#endif
+}
+
 }
 
 QMargins dropdown::shadowMargins()
@@ -135,8 +174,7 @@ DropdownMenu::DropdownMenu(const QString& title, QWidget* parent) : QMenu(title,
     rows->setParent(this);
     setStyle(rows);
 
-    const int inside = insideOfPanel();
-    setContentsMargins(dropdown::shadowMargins() + QMargins(inside, inside, inside, inside));
+    setShadowRoom(dropdown::shadowMargins());
 }
 
 void DropdownMenu::setTheme(const Theme& _theme)
@@ -164,9 +202,31 @@ std::optional<icons::Icon> DropdownMenu::iconOf(const QAction* action) const
     return *found;
 }
 
+void DropdownMenu::setShadowRoom(const QMargins& _room)
+{
+    const QMargins most = dropdown::shadowMargins();
+
+    room = QMargins(std::clamp(_room.left(), 0, most.left()), std::clamp(_room.top(), 0, most.top()),
+                    std::clamp(_room.right(), 0, most.right()), std::clamp(_room.bottom(), 0, most.bottom()));
+
+    const int inside = insideOfPanel();
+    setContentsMargins(room + QMargins(inside, inside, inside, inside));
+    framePicture = QPixmap();
+}
+
+QMargins DropdownMenu::shadowRoom() const
+{
+    return room;
+}
+
 QRect DropdownMenu::panelRect() const
 {
-    return rect().marginsRemoved(dropdown::shadowMargins());
+    return rect().marginsRemoved(room);
+}
+
+QSize DropdownMenu::panelSize() const
+{
+    return sizeHint().shrunkBy(room);
 }
 
 QRect DropdownMenu::rowRect(const QAction* action) const
@@ -229,8 +289,18 @@ QSize DropdownMenu::sizeHint() const
 
 bool DropdownMenu::isTranslucent() const
 {
-    const QWindow* window = windowHandle();
-    return !window || window->format().hasAlpha();
+    return translucent;
+}
+
+void DropdownMenu::setVisible(bool visible)
+{
+    // Qt decides as a popup closes whether a later press is replayed to what lies beneath,
+    // and only a press can be replayed: closed any other way, a click on the button that
+    // opened it would be replayed to the button and open it again.
+    if(!visible && !pressing)
+        setAttribute(Qt::WA_NoMouseReplay);
+
+    QMenu::setVisible(visible);
 }
 
 void DropdownMenu::updateMask()
@@ -388,13 +458,14 @@ void DropdownMenu::mousePressEvent(QMouseEvent* event)
     // press anywhere else outside does.
     const QPoint at = event->position().toPoint();
 
-    if(rect().contains(at) && !panelRect().contains(at))
-    {
-        hide();
-        return;
-    }
+    pressing = true;
 
-    QMenu::mousePressEvent(event);
+    if(rect().contains(at) && !panelRect().contains(at))
+        hide();
+    else
+        QMenu::mousePressEvent(event);
+
+    pressing = false;
 }
 
 void DropdownMenu::mouseMoveEvent(QMouseEvent* event)
@@ -415,6 +486,9 @@ void DropdownMenu::mouseMoveEvent(QMouseEvent* event)
 void DropdownMenu::showEvent(QShowEvent* event)
 {
     QMenu::showEvent(event);
+
+    const QWindow* window = windowHandle();
+    translucent = !window || (window->format().hasAlpha() && composited());
 
     framePicture = QPixmap();
     updateMask();

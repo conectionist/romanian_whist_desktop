@@ -129,7 +129,7 @@
         <translation>Whist</translation>
     </message>
     <message>
-        <location filename="../src/MainWindow.cpp" line="+896"/>
+        <location filename="../src/MainWindow.cpp" line="+888"/>
         <source>Log</source>
         <translation>Jurnal</translation>
     </message>
@@ -160,18 +160,18 @@
     </message>
     <message>
         <location line="+9"/>
-        <source>&amp;File</source>
-        <translation>&amp;Fișier</translation>
+        <source>File</source>
+        <translation>Fișier</translation>
     </message>
     <message>
         <location line="+5"/>
-        <source>&amp;Game</source>
-        <translation>&amp;Joc</translation>
+        <source>Game</source>
+        <translation>Joc</translation>
     </message>
     <message>
         <location line="+7"/>
-        <source>&amp;View</source>
-        <translation>&amp;Vizualizare</translation>
+        <source>View</source>
+        <translation>Vizualizare</translation>
     </message>
     <message>
         <location line="+5"/>

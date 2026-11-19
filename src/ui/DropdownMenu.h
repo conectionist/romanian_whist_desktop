@@ -48,7 +48,7 @@ inline constexpr qreal tickWidth = 2.0;
 // the bar: a popup reaching higher would cover the bar's buttons and take their mouse.
 QMargins shadowMargins();
 
-// The shortcut's font: Alegreya Sans 14, through section 2.3's fallback chain.
+// The shortcut's font: Alegreya Sans 14, through the body text's fallback chain.
 QFont shortcutFont();
 
 } // namespace dropdown
@@ -67,8 +67,17 @@ public:
 
     std::optional<icons::Icon> iconOf(const QAction* action) const;
 
+    // How much of the shadow the popup has room for on each side, at most shadowMargins().
+    // Less where a screen edge is near: Qt moves a popup that crosses the edge, and the
+    // panel would move off its button with it.
+    void setShadowRoom(const QMargins& room);
+    QMargins shadowRoom() const;
+
     // The panel's place in the popup, which leaves room round it for the shadow.
     QRect panelRect() const;
+
+    // The panel's size, without the room for its shadow.
+    QSize panelSize() const;
 
     // Where `action`'s row is drawn and takes the mouse: its place in the menu, across
     // the panel's inside.
@@ -78,6 +87,7 @@ public:
     int rowWidth() const;
 
     QSize sizeHint() const override;
+    void setVisible(bool visible) override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -88,8 +98,8 @@ protected:
     void actionEvent(QActionEvent* event) override;
 
 private:
-    // Whether the window system shows the popup's transparent pixels as transparent.
-    // Where it does not, the popup is cut to the panel's shape and has no shadow.
+    // Whether the window system shows the popup's transparent pixels as transparent, as of
+    // its last show. Where it does not, the popup is cut to the panel's shape and has no shadow.
     bool isTranslucent() const;
     void updateMask();
 
@@ -102,6 +112,11 @@ private:
     Theme theme = Theme::light();
     QHash<const QAction*, icons::Icon> rowIcons;
     QPixmap framePicture;
+    QMargins room = dropdown::shadowMargins();
+    bool translucent = true;
+
+    // Set while a mouse press is being handled, the one close Qt may replay.
+    bool pressing = false;
 };
 
 #endif

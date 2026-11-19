@@ -67,7 +67,7 @@ The owner wants to see each phase's visual result without running the app. When 
    `sheet-history.png` and `sheet-last-trick.png` too, as the other sheets are. Since phase 13,
    `language.png`: the language dialog at its own size. And `menu-file-open.png`,
    `menu-game-open.png` and `menu-view-open.png`: the 1920×1080 window on the main-menu page
-   with each menu bar menu open, drawn in where the bar places it.
+   with each menu bar menu open, drawn in where Qt placed it.
 2. Pair each one with the mock-up picture of the same name in `docs/ui-redesign/screenshots/`
    (`.jpg`): client on the left, mock-up on the right, each labelled. Save the pair as
    `build/shots/phase-N/compare-<name>.png` (Pillow is installed). `build/` is git-ignored, so

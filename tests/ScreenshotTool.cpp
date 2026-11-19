@@ -1060,9 +1060,9 @@ TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
 }
 
 // menu-file-open.png, menu-game-open.png and menu-view-open.png: the window at 1920 x 1080
-// on the menu page, with each menu open. The offscreen screen is smaller than the window and
-// grab() leaves popups out, so the menu is drawn into the window's picture where the bar
-// places it.
+// on the menu page, with each menu open. grab() leaves popups out, so the menu is drawn into
+// the window's picture where Qt put it. The offscreen screen is only 800 x 800, but the three
+// menus open inside it at the window's left, so where Qt put them is where they would be.
 TEST_CASE("Screenshots of the menu bar's menus", "[.screenshot]")
 {
     const ShotsTranslation translation;
@@ -1099,8 +1099,14 @@ TEST_CASE("Screenshots of the menu bar's menus", "[.screenshot]")
 
         {
             QPainter painter(&picture);
-            painter.drawPixmap(window.mapFromGlobal(bar->menuPosition(which)), dropdown);
+            painter.drawPixmap(window.mapFromGlobal(menu->pos()), dropdown);
         }
+
+        // A picture of where the panel was asked for and not where it went would hide a
+        // panel that slid off its button.
+        const QRect panel = menu->panelRect().translated(menu->pos());
+        CHECK(panel.left() == bar->button(which)->mapToGlobal(QPoint(0, 0)).x());
+        CHECK(QRect(window.mapToGlobal(QPoint(0, 0)), window.size()).contains(panel));
 
         const QString path = QDir(dir).filePath(QString::fromUtf8(file));
         REQUIRE(picture.save(path));

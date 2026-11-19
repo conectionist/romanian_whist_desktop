@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QFont>
+#include <QMargins>
 #include <QPointer>
 #include <QToolButton>
 #include <QWidget>
@@ -95,14 +96,20 @@ public:
     // What is drawn, and sized for: text(), mnemonics read as Qt reads them.
     QString label() const;
 
+    // Whether the last press came from the keyboard rather than the mouse.
+    bool pressedByKeyboard() const;
+
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     Theme theme = Theme::light();
+    bool keyboardPress = false;
 };
 
 // The bar's shadow, on whatever page lies under the bar. The mock-up's bar is
@@ -168,9 +175,13 @@ public:
     // Where a menu is popped up, in global coordinates: its panel under its button.
     QPoint menuPosition(Menu which) const;
 
+    // How much of its shadow a menu has room for there before a screen's edge.
+    QMargins shadowRoom(Menu which) const;
+
 signals:
-    // A menu closed and no other took its place.
-    void menuClosed();
+    // A menu closed and no other took its place. `keyboardOnBar`: it was opened by the
+    // keyboard from a bar button that has the keyboard, and keeps it.
+    void menuClosed(bool keyboardOnBar);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -184,6 +195,9 @@ private:
 
     void addMenu(DropdownMenu* menu, const QString& name);
 
+    // The panel's top-left corner, in global coordinates.
+    QPoint panelCorner(Menu which) const;
+
     // Opens the menu at `index`, closing any other. From the keyboard, its first item is
     // chosen, as a QMenuBar's is.
     void open(std::size_t index, bool fromKeyboard);
@@ -192,6 +206,7 @@ private:
 
     std::vector<MenuBarButton*> items;
     std::vector<DropdownMenu*> menus;
+    bool keyboardOnBar = false;
 
     // A sibling, not a child, so the bar does not own it: guarded, and deleted
     // with the bar if the window has not already taken it down.

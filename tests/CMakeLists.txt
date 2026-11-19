@@ -117,8 +117,13 @@ qt_add_resources(desktop_tests "desktop_tests_translations"
 )
 add_dependencies(desktop_tests desktop_tests_lrelease)
 
+# QTest for touch: a tap reaches widgets only through the window system's path, which
+# QTest::touchEvent drives.
+find_package(Qt6 REQUIRED COMPONENTS Test)
+
 target_link_libraries(desktop_tests PRIVATE
     desktop_core
+    Qt6::Test
     Catch2::Catch2WithMain
 )
 

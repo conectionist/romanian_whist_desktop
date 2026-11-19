@@ -476,8 +476,8 @@ void MainWindow::showPauseMenu()
 {
     setPauseMenuVisible(true);
 
-    // EXIT OVER RULES OR SETTINGS: the pause menu goes up and the sheet comes
-    // down. In that order, so the game is never released between the two holds.
+    // Pause over Rules or Settings: the pause menu goes up and the sheet comes down, in that
+    // order, so the game is never released between the two holds.
     if(pauseOverlay->isVisible())
         hideMenuSheets();
 }
@@ -688,20 +688,16 @@ void MainWindow::restoreFocus(bool hadKeyboard)
         return;
     }
 
-    // THE TABLE WHILE YOU BID, whose digit keys reach this window and bid - and
-    // not the next widget in the Tab order, the menu bar's New Game, where Space
-    // would open the setup dialog over the game.
+    // The table while you bid, whose digit keys reach this window and bid, and not the next
+    // widget in the Tab order, the menu bar's File, where Space would open its menu.
     if(bidStrip->isVisible())
     {
         table->setFocus(Qt::OtherFocusReason);
         return;
     }
 
-    // AND OTHERWISE THE PAGE, when what went had the keyboard. Hiding the button
-    // that had it hands it to the next widget in the window's Tab order, which
-    // is the menu bar's New Game, made last: it showed as hovered with the mouse
-    // far away, and Space opened the setup dialog over the game (PR #35's
-    // review, finding #3).
+    // And otherwise the page, when what went had the keyboard. Hiding the button that had it
+    // hands it to the next widget in the window's Tab order, the menu bar's File, made last.
     //
     // NOT OTHERWISE: then the keyboard is where the player put it. The first
     // version of #3's fix fell back every time, and an unwaited round sheet,
@@ -813,13 +809,9 @@ void MainWindow::showGameOverPanel()
 
 void MainWindow::abandonToMenu()
 {
-    // WHETHER THE KEYBOARD IS ON WHAT GOES, read before anything goes: the Main
-    // menu button just pressed, on the pause or on the game-over panel, or a
-    // sheet, or the table. restoreFocus() at the end gives it to the menu page.
-    // Without that, hiding the button let Qt hand it to the next widget in the
-    // window's Tab order, the menu bar's New Game: it showed as hovered with the
-    // mouse elsewhere, and Enter did nothing on the menu page (PR #42's review,
-    // finding #5).
+    // Whether the keyboard is on what goes, read before anything goes, so it can be given to
+    // the menu page: hiding the button that had it would hand it to the next widget in the
+    // window's Tab order, the menu bar's File.
     const bool hadKeyboard = holdsKeyboard(pauseOverlay) || holdsKeyboard(gameOverPanel)
                              || holdsKeyboard(openMenuSheet()) || holdsKeyboard(pages->currentWidget());
 
@@ -951,19 +943,19 @@ void MainWindow::buildMenuBar()
     // and a closed menu is not one.
     addActions({ newGameAction, pauseAction, settingsAction, rulesAction });
 
-    DropdownMenu* file = new DropdownMenu(tr("&File"), this);
+    DropdownMenu* file = new DropdownMenu(tr("File"), this);
     file->setObjectName(QStringLiteral("fileMenu"));
     file->addItem(newGameAction, icons::Icon::NewGame);
     file->addItem(quitAction, icons::Icon::Exit);
 
-    DropdownMenu* game = new DropdownMenu(tr("&Game"), this);
+    DropdownMenu* game = new DropdownMenu(tr("Game"), this);
     game->setObjectName(QStringLiteral("gameMenu"));
     game->addItem(pauseAction, icons::Icon::Pause);
     game->addItem(settingsAction, icons::Icon::Settings);
     game->addItem(rulesAction, icons::Icon::Rules);
 
     // The developer's menu: the log is the thing to reach for when the table looks wrong.
-    DropdownMenu* view = new DropdownMenu(tr("&View"), this);
+    DropdownMenu* view = new DropdownMenu(tr("View"), this);
     view->setObjectName(QStringLiteral("viewMenu"));
 
     // Qt's own action for the dock, not one of ours - see buildLogDock().
@@ -991,10 +983,13 @@ void MainWindow::buildMenuBar()
     opener(Qt::Key_G, MenuBar::Menu::Game);
     opener(Qt::Key_V, MenuBar::Menu::View);
 
-    // A closed menu gives the keyboard back to the window's focus widget, which is a bar
-    // button if Tab put it there: the page takes it instead, as when a sheet closes.
-    connect(bar, &MenuBar::menuClosed, this, [this]
+    // A closed menu gives the keyboard back to the window's focus widget. A bar button keeps
+    // it only if the keyboard opened the menu from there; otherwise the page takes it.
+    connect(bar, &MenuBar::menuClosed, this, [this](bool keyboardOnBar)
     {
+        if(keyboardOnBar)
+            return;
+
         QWidget* focus = focusWidget();
 
         if(!focus || qobject_cast<MenuBarButton*>(focus))
@@ -1055,9 +1050,8 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // bid bubbles, which the new game's first frame cannot be told apart from.
     scene->newGame();
 
-    // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
-    // lives on. Reachable since phase 9: the menu bar's New Game stays live
-    // while the pause menu is up, so a game can be dealt from under it.
+    // And the pause with them, before prepare() replaces the bridge the flag lives on: File's
+    // New Game stays live while the pause menu is up, so a game can be dealt from under it.
     pauseOverlay->hide();
 
     // AND THE PANEL THE LAST GAME ENDED ON. showNewGameDialog() takes it down
@@ -1088,11 +1082,9 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
 
     showTable();
 
-    // A NEW GAME STARTS WITH THE KEYBOARD ON ITS TABLE. It comes from the setup
-    // dialog, which had it, and often from under the standings, whose Play again
-    // had it before them: that panel went down while the dialog was up, handing
-    // the keyboard to the next widget in the Tab order - the menu bar's New Game,
-    // lit as though hovered - or to nothing at all.
+    // A new game starts with the keyboard on its table. The standings went down while the
+    // setup dialog was up, handing it to the next widget in the Tab order, the menu bar's
+    // File, or to nothing at all.
     table->setFocus(Qt::OtherFocusReason);
 
     // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one

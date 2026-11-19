@@ -2654,7 +2654,12 @@ TEST_CASE("Quit in File closes the window and stops the game", "[main-window]")
     pump(1000);
 
     QStackedWidget* pages = window.findChild<QStackedWidget*>();
+    QPlainTextEdit* log = window.findChild<QPlainTextEdit*>();
     REQUIRE(pages->currentIndex() == 1);
+
+    // A game being played: its log grows.
+    const int before = log->blockCount();
+    REQUIRE(pumpUntil(5000, [&]{ return log->blockCount() > before; }));
 
     MenuBar* bar = window.findChild<MenuBar*>();
     DropdownMenu* file = bar->menu(MenuBar::Menu::File);
@@ -2673,6 +2678,13 @@ TEST_CASE("Quit in File closes the window and stops the game", "[main-window]")
     REQUIRE(QApplication::activeModalWidget() == nullptr);
     REQUIRE_FALSE(file->isVisible());
     REQUIRE_FALSE(window.isVisible());
+
+    // And the game stopped with it: the log has its last line and gets no more.
+    REQUIRE(log->toPlainText().contains(QStringLiteral("-- stopped --")));
+
+    const int atClose = log->blockCount();
+    pump(1000);
+    REQUIRE(log->blockCount() == atClose);
 }
 
 TEST_CASE("A closed menu gives the keyboard back to the table", "[main-window]")
@@ -2716,7 +2728,7 @@ TEST_CASE("A closed menu gives the keyboard back to the table", "[main-window]")
     pressKey(bar->openMenu(), Qt::Key_Escape);
     keyboardOnTable();
 
-    // Opened from the keyboard, switched along the bar, and closed by choosing a row.
+    // Opened from the keyboard, switched along the bar, and closed with Esc.
     bar->showMenu(MenuBar::Menu::File);
     pump(20);
     pressKey(bar->openMenu(), Qt::Key_Right);
@@ -2726,13 +2738,27 @@ TEST_CASE("A closed menu gives the keyboard back to the table", "[main-window]")
     pressKey(bar->openMenu(), Qt::Key_Escape);
     keyboardOnTable();
 
-    // A bar button Tab put the keyboard on hands it to the table once its menu closes.
+    // A bar button Tab put the keyboard on keeps it when Space opened its menu, its first
+    // row chosen as Alt+G would.
     MenuBarButton* game = bar->button(MenuBar::Menu::Game);
     game->setFocus(Qt::TabFocusReason);
     pump(20);
     REQUIRE(window.focusWidget() == game);
 
     pressKey(game, Qt::Key_Space);
+    pump(20);
+    REQUIRE(bar->openMenu() == bar->menu(MenuBar::Menu::Game));
+    REQUIRE(bar->openMenu()->activeAction() == window.findChild<QAction*>("pauseAction"));
+
+    pressKey(bar->openMenu(), Qt::Key_Escape);
+    pump(50);
+    REQUIRE(window.focusWidget() == game);
+
+    // But a click on it is the mouse's, and the table takes the keyboard back.
+    QMouseEvent click(QEvent::MouseButtonPress, QPointF(game->rect().center()),
+                      QPointF(game->mapToGlobal(game->rect().center())), Qt::LeftButton, Qt::LeftButton,
+                      Qt::NoModifier);
+    QCoreApplication::sendEvent(game, &click);
     pump(20);
     REQUIRE(bar->openMenu() == bar->menu(MenuBar::Menu::Game));
 
