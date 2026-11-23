@@ -13,6 +13,7 @@
 #include "ui/HistorySheet.h"
 #include "ui/LastTrickSheet.h"
 #include "ui/MainMenuPage.h"
+#include "ui/DropdownMenu.h"
 #include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
@@ -411,15 +412,12 @@ bool MainWindow::canPause() const
     return !roundSheetHolding;
 }
 
-// EXIT SAYS WHAT A CLICK ON IT WOULD DO: greyed wherever canPause() would refuse
-// it - on the menu page, over the game-over panel, under a round sheet that is
-// holding the game - rather than live and doing nothing (PR 34's review, finding
-// #4, made of the Menu item Exit replaced). Called wherever either of canPause()'s
-// two facts changes.
+// Pause is greyed wherever canPause() would refuse it, rather than live and doing nothing.
+// Called wherever either of canPause()'s two facts changes.
 void MainWindow::updatePauseAction()
 {
-    if(exitAction)
-        exitAction->setEnabled(canPause());
+    if(pauseAction)
+        pauseAction->setEnabled(canPause());
 }
 
 void MainWindow::setPauseMenuVisible(bool visible)
@@ -429,8 +427,8 @@ void MainWindow::setPauseMenuVisible(bool visible)
     // is the hardening phase E's box asks for on the fan's two sources, applied
     // to the pause before it has a chance to go wrong.
     //
-    // NOTHING TO PAUSE, OR NOTHING TO RAISE IT OVER: see canPause(). Esc comes
-    // here whatever Exit shows.
+    // Nothing to pause, or a round sheet holding the game. Esc reaches this even while
+    // Pause is greyed.
     if(visible && !canPause())
         return;
 
@@ -478,8 +476,8 @@ void MainWindow::showPauseMenu()
 {
     setPauseMenuVisible(true);
 
-    // EXIT OVER RULES OR SETTINGS: the pause menu goes up and the sheet comes
-    // down. In that order, so the game is never released between the two holds.
+    // Pause over Rules or Settings: the pause menu goes up and the sheet comes down, in that
+    // order, so the game is never released between the two holds.
     if(pauseOverlay->isVisible())
         hideMenuSheets();
 }
@@ -690,20 +688,16 @@ void MainWindow::restoreFocus(bool hadKeyboard)
         return;
     }
 
-    // THE TABLE WHILE YOU BID, whose digit keys reach this window and bid - and
-    // not the next widget in the Tab order, the menu bar's New Game, where Space
-    // would open the setup dialog over the game.
+    // The table while you bid, whose digit keys reach this window and bid, and not the next
+    // widget in the Tab order, the menu bar's File, where Space would open its menu.
     if(bidStrip->isVisible())
     {
         table->setFocus(Qt::OtherFocusReason);
         return;
     }
 
-    // AND OTHERWISE THE PAGE, when what went had the keyboard. Hiding the button
-    // that had it hands it to the next widget in the window's Tab order, which
-    // is the menu bar's New Game, made last: it showed as hovered with the mouse
-    // far away, and Space opened the setup dialog over the game (PR #35's
-    // review, finding #3).
+    // And otherwise the page, when what went had the keyboard. Hiding the button that had it
+    // hands it to the next widget in the window's Tab order, the menu bar's File, made last.
     //
     // NOT OTHERWISE: then the keyboard is where the player put it. The first
     // version of #3's fix fell back every time, and an unwaited round sheet,
@@ -815,13 +809,9 @@ void MainWindow::showGameOverPanel()
 
 void MainWindow::abandonToMenu()
 {
-    // WHETHER THE KEYBOARD IS ON WHAT GOES, read before anything goes: the Main
-    // menu button just pressed, on the pause or on the game-over panel, or a
-    // sheet, or the table. restoreFocus() at the end gives it to the menu page.
-    // Without that, hiding the button let Qt hand it to the next widget in the
-    // window's Tab order, the menu bar's New Game: it showed as hovered with the
-    // mouse elsewhere, and Enter did nothing on the menu page (PR #42's review,
-    // finding #5).
+    // Whether the keyboard is on what goes, read before anything goes, so it can be given to
+    // the menu page: hiding the button that had it would hand it to the next widget in the
+    // window's Tab order, the menu bar's File.
     const bool hadKeyboard = holdsKeyboard(pauseOverlay) || holdsKeyboard(gameOverPanel)
                              || holdsKeyboard(openMenuSheet()) || holdsKeyboard(pages->currentWidget());
 
@@ -918,17 +908,23 @@ void MainWindow::buildLogDock()
 
 void MainWindow::buildMenuBar()
 {
-    // SECTION 2.12's FOUR, and a QAction each so that what a menu action gives -
-    // a trigger, a greyed state, a shortcut - works as it did on the QMenuBar this
-    // replaced. The bar's buttons stand for them (QToolButton::setDefaultAction()).
-    //
-    // ALT AND A LETTER, set as each action's shortcut. A painted label has no
-    // underline to show a mnemonic with, and the button takes its text from the
-    // action without the '&' anyway.
+    // A QAction each, so a row's trigger, greyed state and shortcut are Qt's. Alt and a
+    // letter is the shortcut: a painted label has no underline to show a mnemonic with.
     newGameAction = new QAction(tr("New Game"), this);
     newGameAction->setObjectName(QStringLiteral("newGameAction"));
     newGameAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_N));
     connect(newGameAction, &QAction::triggered, this, &MainWindow::showNewGameDialog);
+
+    // Through closeEvent(), as the menu page's Quit, so a game in play is stopped first.
+    QAction* quitAction = new QAction(tr("Quit"), this);
+    quitAction->setObjectName(QStringLiteral("quitAction"));
+    connect(quitAction, &QAction::triggered, this, &MainWindow::close);
+
+    // The pause menu's way in for the mouse; Esc is the keyboard's.
+    pauseAction = new QAction(tr("Pause"), this);
+    pauseAction->setObjectName(QStringLiteral("pauseAction"));
+    pauseAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_X));
+    connect(pauseAction, &QAction::triggered, this, &MainWindow::showPauseMenu);
 
     // Both live on every page. Settings changes the game in play and the next
     // one; Rules gives the rules for the game on the table, or on the menu page
@@ -943,38 +939,62 @@ void MainWindow::buildMenuBar()
     rulesAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_R));
     connect(rulesAction, &QAction::triggered, this, &MainWindow::showRules);
 
-    // THE PAUSE MENU'S WAY IN FOR THE MOUSE, and Esc is its keyboard half. The
-    // mock-up's Exit "returns to the main menu"; it does so through the pause
-    // menu, so it can be taken back with Resume. It replaces the temporary Menu
-    // item phase 8 put here when it took the prompt bar's Menu button away.
-    exitAction = new QAction(tr("Exit"), this);
-    exitAction->setObjectName(QStringLiteral("exitAction"));
-    exitAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_X));
-    connect(exitAction, &QAction::triggered, this, &MainWindow::showPauseMenu);
+    // On the window too: an action's shortcut works only from a visible widget it is on,
+    // and a closed menu is not one.
+    addActions({ newGameAction, pauseAction, settingsAction, rulesAction });
 
-    // THE DEVELOPER'S MENU, kept: the log is the thing to reach for when the table
-    // looks wrong. At the right, in the place of the mock-up's Players switch,
-    // which was not a game control either (the owner's call, 2026-10-21).
-    QMenu* view = new QMenu(tr("&View"), this);
+    DropdownMenu* file = new DropdownMenu(tr("File"), this);
+    file->setObjectName(QStringLiteral("fileMenu"));
+    file->addItem(newGameAction, icons::Icon::NewGame);
+    file->addItem(quitAction, icons::Icon::Exit);
+
+    DropdownMenu* game = new DropdownMenu(tr("Game"), this);
+    game->setObjectName(QStringLiteral("gameMenu"));
+    game->addItem(pauseAction, icons::Icon::Pause);
+    game->addItem(settingsAction, icons::Icon::Settings);
+    game->addItem(rulesAction, icons::Icon::Rules);
+
+    // The developer's menu: the log is the thing to reach for when the table looks wrong.
+    DropdownMenu* view = new DropdownMenu(tr("View"), this);
     view->setObjectName(QStringLiteral("viewMenu"));
 
     // Qt's own action for the dock, not one of ours - see buildLogDock().
     QAction* logAction = logDock->toggleViewAction();
     logAction->setText(tr("&Log"));
-    view->addAction(logAction);
+    view->addItem(logAction);
 
     view->addSeparator();
 
     QAction* cardArtAction = view->addAction(tr("&Card art..."));
     connect(cardArtAction, &QAction::triggered, this, &MainWindow::showCardArt);
 
-    bar = new MenuBar({ newGameAction, settingsAction, rulesAction, view, exitAction }, this);
+    bar = new MenuBar({ file, game, view }, this);
     bar->setTheme(theme);
     setMenuWidget(bar);
 
-    // View pops its menu up on a press, so a shortcut's click would do nothing.
-    QShortcut* viewShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_V), this);
-    connect(viewShortcut, &QShortcut::activated, bar, &MenuBar::showViewMenu);
+    // A button opens its menu on a press, so a shortcut's click would do nothing.
+    const auto opener = [this](Qt::Key key, MenuBar::Menu which)
+    {
+        QShortcut* shortcut = new QShortcut(QKeySequence(Qt::ALT | key), this);
+        connect(shortcut, &QShortcut::activated, bar, [this, which]{ bar->showMenu(which); });
+    };
+
+    opener(Qt::Key_F, MenuBar::Menu::File);
+    opener(Qt::Key_G, MenuBar::Menu::Game);
+    opener(Qt::Key_V, MenuBar::Menu::View);
+
+    // A closed menu gives the keyboard back to the window's focus widget. A bar button keeps
+    // it only if the keyboard opened the menu from there; otherwise the page takes it.
+    connect(bar, &MenuBar::menuClosed, this, [this](bool keyboardOnBar)
+    {
+        if(keyboardOnBar)
+            return;
+
+        QWidget* focus = focusWidget();
+
+        if(!focus || qobject_cast<MenuBarButton*>(focus))
+            restoreFocus(true);
+    });
 
     updatePauseAction();
 }
@@ -1030,9 +1050,8 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
     // bid bubbles, which the new game's first frame cannot be told apart from.
     scene->newGame();
 
-    // AND THE PAUSE WITH THEM, before prepare() replaces the bridge the flag
-    // lives on. Reachable since phase 9: the menu bar's New Game stays live
-    // while the pause menu is up, so a game can be dealt from under it.
+    // And the pause with them, before prepare() replaces the bridge the flag lives on: File's
+    // New Game stays live while the pause menu is up, so a game can be dealt from under it.
     pauseOverlay->hide();
 
     // AND THE PANEL THE LAST GAME ENDED ON. showNewGameDialog() takes it down
@@ -1063,11 +1082,9 @@ void MainWindow::startGame(GameDeal deal, std::optional<Seat> humanSeat, Pacing 
 
     showTable();
 
-    // A NEW GAME STARTS WITH THE KEYBOARD ON ITS TABLE. It comes from the setup
-    // dialog, which had it, and often from under the standings, whose Play again
-    // had it before them: that panel went down while the dialog was up, handing
-    // the keyboard to the next widget in the Tab order - the menu bar's New Game,
-    // lit as though hovered - or to nothing at all.
+    // A new game starts with the keyboard on its table. The standings went down while the
+    // setup dialog was up, handing it to the next widget in the Tab order, the menu bar's
+    // File, or to nothing at all.
     table->setFocus(Qt::OtherFocusReason);
 
     // A REAL SEAT since C1, where phases A and B passed std::nullopt. The one
@@ -1307,11 +1324,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    // BEFORE THE MODIFIER GUARD AND BEFORE THE DIGITS. Esc raises the pause
-    // menu, which is the keyboard half of the menu bar's Exit, and
-    // dismisses it again - so the key that opened it is the key that leaves.
-    // Checked first because the digit path below subtracts Key_1 from whatever
-    // arrives and would otherwise have to reason about the result.
+    // Esc raises the pause menu, as Pause does, and dismisses it again. Checked before the
+    // modifier guard and the digits: the digit path subtracts Key_1 from whatever arrives.
     //
     // THE MENU BAR'S SHEETS FIRST, which open over the pause menu as over
     // everything else: Esc closes the one on top, as the mock-up's does.

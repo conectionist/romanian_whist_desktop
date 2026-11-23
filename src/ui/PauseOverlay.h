@@ -3,9 +3,8 @@
 
 #include "ui/Overlay.h"
 
-// What the menu bar's Exit raises, and Esc. Resume, or abandon the game and go
-// back to the main menu. An Overlay, for the reasons recorded there - it began
-// as a modal QDialog, and this is the sheet that found out why it could not be.
+// What the menu bar's Pause raises, and Esc: Resume, or abandon the game and go back to the
+// main menu. An Overlay, not a modal dialog, for the reasons recorded there.
 //
 // THE PAUSE ITSELF IS NOT THIS CLASS'S. MainWindow keeps this widget's
 // visibility and GameController::setPaused() in lockstep - see

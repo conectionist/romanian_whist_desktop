@@ -18,6 +18,8 @@
 #include "ui/HistorySheet.h"
 #include "ui/LanguageDialog.h"
 #include "ui/LastTrickSheet.h"
+#include "ui/DropdownMenu.h"
+#include "ui/MenuBar.h"
 #include "ui/NewGameDialog.h"
 #include "ui/PauseOverlay.h"
 #include "ui/RoundSheet.h"
@@ -31,6 +33,7 @@
 #include <QGraphicsItem>
 #include <QGraphicsSceneHoverEvent>
 #include <QLineEdit>
+#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QRadioButton>
@@ -1054,6 +1057,67 @@ TEST_CASE("A screenshot of the main menu page", "[.screenshot]")
     std::cout << path.toStdString() << ": the main menu page\n";
 
     CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1080));
+}
+
+// menu-file-open.png, menu-game-open.png and menu-view-open.png: the window at 1920 x 1080
+// on the menu page, with each menu open. grab() leaves popups out, so the menu is drawn into
+// the window's picture where Qt put it. The offscreen screen is only 800 x 800, but the three
+// menus open inside it at the window's left, so where Qt put them is where they would be.
+TEST_CASE("Screenshots of the menu bar's menus", "[.screenshot]")
+{
+    const ShotsTranslation translation;
+
+    const QString dir = shotsDirectory();
+    REQUIRE(QDir().mkpath(dir));
+
+    MainWindow window;
+    window.resize(1920, 1080);
+    window.show();
+    pump(200);
+
+    MenuBar* bar = window.findChild<MenuBar*>();
+    REQUIRE(bar != nullptr);
+
+    const std::pair<const char*, MenuBar::Menu> shots[] = { { "menu-file-open.png", MenuBar::Menu::File },
+                                                            { "menu-game-open.png", MenuBar::Menu::Game },
+                                                            { "menu-view-open.png", MenuBar::Menu::View } };
+
+    for(const auto& [file, which] : shots)
+    {
+        bar->showMenu(which);
+        pump(100);
+
+        DropdownMenu* menu = bar->menu(which);
+        REQUIRE(menu->isVisible());
+
+        // The last row lit, as under the cursor, so a picture shows both looks.
+        menu->setActiveAction(menu->actions().isEmpty() ? nullptr : menu->actions().last());
+        pump(50);
+
+        QPixmap picture = window.grab();
+        const QPixmap dropdown = menu->grab();
+
+        {
+            QPainter painter(&picture);
+            painter.drawPixmap(window.mapFromGlobal(menu->pos()), dropdown);
+        }
+
+        // A picture of where the panel was asked for and not where it went would hide a
+        // panel that slid off its button.
+        const QRect panel = menu->panelRect().translated(menu->pos());
+        CHECK(panel.left() == bar->button(which)->mapToGlobal(QPoint(0, 0)).x());
+        CHECK(QRect(window.mapToGlobal(QPoint(0, 0)), window.size()).contains(panel));
+
+        const QString path = QDir(dir).filePath(QString::fromUtf8(file));
+        REQUIRE(picture.save(path));
+
+        std::cout << path.toStdString() << ": the menu page with a menu open\n";
+
+        menu->hide();
+        pump(50);
+
+        CHECK(picture.deviceIndependentSize().toSize() == QSize(1920, 1080));
+    }
 }
 
 // ---- the language dialog, for the redesign's phase 13 ----

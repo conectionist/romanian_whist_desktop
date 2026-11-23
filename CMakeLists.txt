@@ -168,6 +168,8 @@ qt_add_library(desktop_core STATIC
     src/ui/LanguageDialog.cpp
     src/ui/MenuBar.h
     src/ui/MenuBar.cpp
+    src/ui/DropdownMenu.h
+    src/ui/DropdownMenu.cpp
     src/ui/Overlay.h
     src/ui/Overlay.cpp
     src/ui/PauseOverlay.h
