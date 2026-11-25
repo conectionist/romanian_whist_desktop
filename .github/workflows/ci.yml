@@ -236,8 +236,8 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: apt-get install -y --no-install-recommends xvfb xauth xdotool
 
-      # --language skips the first-run language dialog, so the window waited for is the main
-      # one. It must appear within 20 s and the app must still be running 2 s later.
+      # --language skips the first-run language dialog (titled Whist), so the window waited for
+      # is the main one. It must appear within 20 s and the app must still be running 2 s later.
       - name: Start the app
         working-directory: ${{ needs.build-linux.outputs.name }}
         env:
@@ -246,8 +246,7 @@ jobs:
           xvfb-run -a sh -c '
             bin/romanian_whist_desktop --language en &
             app=$!
-            timeout 20 xdotool search --sync --all --onlyvisible \
-              --classname romanian_whist_desktop --name "^Romanian Whist\$" > /dev/null
+            timeout 20 xdotool search --sync --onlyvisible --name "^Romanian Whist\$" > /dev/null
             shown=$?
             sleep 2
             kill -0 "$app" 2> /dev/null
