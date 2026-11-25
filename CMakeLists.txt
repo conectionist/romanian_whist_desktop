@@ -508,6 +508,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if(WHIST_XCB_CURSOR)
         get_filename_component(xcb_cursor_file "${WHIST_XCB_CURSOR}" REALPATH)
         install(FILES "${xcb_cursor_file}" DESTINATION ${CMAKE_INSTALL_LIBDIR} RENAME libxcb-cursor.so.0)
+
+        # Its MIT licence asks for the notice to travel with every copy. This is where Debian
+        # and Ubuntu keep it.
+        set(xcb_cursor_notice /usr/share/doc/libxcb-cursor0/copyright)
+        if(EXISTS ${xcb_cursor_notice})
+            install(FILES ${xcb_cursor_notice} DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/libxcb-cursor)
+        else()
+            message(WARNING "${xcb_cursor_notice} not found: libxcb-cursor ships without its licence notice.")
+        endif()
     else()
         message(WARNING "libxcb-cursor.so.0 not found (apt install libxcb-cursor0): "
                         "an installed tree will not start on a desktop that lacks it.")

@@ -14,7 +14,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Qt is not on any runner in a usable version - ubuntu-latest's apt Qt6 is 6.4,
+# Qt is not on any runner in a usable version - ubuntu-22.04's apt Qt6 is 6.2,
 # below the 6.7 floor in find_package(Qt6 6.7 REQUIRED ...) - so every build job
 # installs the official Qt binary distribution first. That install is also where
 # the shipped libraries come from: cmake --install runs the deploy script
@@ -151,6 +151,16 @@ jobs:
             find staging
             exit 1
           fi
+          if [ -z "$(find staging -name 'libxcb-cursor.so.0' -print -quit)" ]; then
+            echo "::error::No libxcb-cursor.so.0 in the staging tree - the app cannot open a window on a stock Ubuntu desktop."
+            find staging
+            exit 1
+          fi
+          if [ -z "$(find staging -path '*/licenses/libxcb-cursor/copyright' -print -quit)" ]; then
+            echo "::error::No licence notice for the bundled libxcb-cursor in the staging tree."
+            find staging
+            exit 1
+          fi
 
       # cmake -E tar rather than the platform's own tar/zip: it is guaranteed
       # present (we already require cmake), behaves identically on all three
@@ -200,7 +210,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends xvfb xauth \
+          apt-get install -y --no-install-recommends \
             libgl1 libegl1 libopengl0 libfontconfig1 libfreetype6 libdbus-1-3 libglib2.0-0 \
             libx11-6 libx11-xcb1 libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 \
@@ -220,18 +230,34 @@ jobs:
             exit 1
           fi
 
-      # timeout's exit status 124 means the app was still running after 10 s.
+      # After the library check, so that what these pull in cannot hide a missing library.
+      - name: Install the test tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: apt-get install -y --no-install-recommends xvfb xauth xdotool
+
+      # --language skips the first-run language dialog, so the window waited for is the main
+      # one. It must appear within 20 s and the app must still be running 2 s later.
       - name: Start the app
         working-directory: ${{ needs.build-linux.outputs.name }}
         env:
           QT_DEBUG_PLUGINS: '1'
         run: |
-          status=0
-          timeout 10 xvfb-run -a bin/romanian_whist_desktop || status=$?
-          if [ "$status" -ne 124 ]; then
-            echo "::error::The app exited with status $status within 10 s on ${{ matrix.image }}."
+          xvfb-run -a sh -c '
+            bin/romanian_whist_desktop --language en &
+            app=$!
+            timeout 20 xdotool search --sync --all --onlyvisible \
+              --classname romanian_whist_desktop --name "^Romanian Whist\$" > /dev/null
+            shown=$?
+            sleep 2
+            kill -0 "$app" 2> /dev/null
+            running=$?
+            kill "$app" 2> /dev/null
+            [ "$shown" -eq 0 ] && [ "$running" -eq 0 ]
+          ' || {
+            echo "::error::The main window did not appear, or the app did not stay running, on ${{ matrix.image }}."
             exit 1
-          fi
+          }
 
   build-windows:
     name: Build (Windows)

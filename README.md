@@ -200,6 +200,8 @@ docs/         design notes, plans and the table redesign
 - **Player portraits:** generated with AI image tools (ChatGPT, Meta AI, Lumo and Claude).
 - **Fonts:** Alegreya Sans, Belleza and Cinzel Decorative, under the SIL Open Font License. Each
   font's licence is next to it in [resources/fonts/](resources/fonts/).
+- **libxcb-cursor:** shipped in the Linux release's `lib/`, under the MIT licence. Its notice is
+  in the release's `share/licenses/libxcb-cursor/`.
 
 ## License
 
