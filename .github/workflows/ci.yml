@@ -192,7 +192,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: ${{ needs.build-linux.outputs.name }}
+          name: ${{ needs.build-linux.outputs.name }}.tar.gz
           skip-decompress: true
 
       - name: Install the desktop's libraries
