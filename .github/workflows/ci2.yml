@@ -194,6 +194,12 @@ jobs:
               exit 1
             fi
           done
+          # Windows' own ICU stub, which CMakeLists.txt removes after windeployqt.
+          if [ -n "$(find staging -iname 'icuuc.dll' -print -quit)" ]; then
+            echo "::error::icuuc.dll is in the staging tree - it stops the app from starting on Windows 10 1809."
+            find staging
+            exit 1
+          fi
 
       - name: Archive
         shell: bash

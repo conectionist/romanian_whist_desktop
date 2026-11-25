@@ -456,6 +456,10 @@ qt_deploy_runtime_dependencies(
         --no-system-d3d-compiler
         --no-opengl-sw
 )
+# windeployqt copies Windows' own icuuc.dll from System32: a stub that forwards to icu.dll,
+# which Windows 10 1809 does not have. Beside the executable it would win over the system copy.
+# Versioned names such as icuuc74.dll belong to a Qt that ships its own ICU and are kept.
+file(REMOVE \"\${QT_DEPLOY_PREFIX}/\${QT_DEPLOY_BIN_DIR}/icuuc.dll\")
 ")
 else()
     qt_generate_deploy_script(
