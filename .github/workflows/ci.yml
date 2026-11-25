@@ -69,8 +69,8 @@ jobs:
       # qt_deploy_runtime_dependencies() rewrites RPATHs with patchelf so the
       # archived binary finds the Qt libraries shipped beside it rather than
       # whatever the host happens to have.
-      - name: Install patchelf
-        run: sudo apt-get update && sudo apt-get install -y patchelf
+      - name: Install patchelf and libxcb-cursor0
+        run: sudo apt-get update && sudo apt-get install -y patchelf libxcb-cursor0
 
       # QT_ROOT_DIR is exported by install-qt-action, but it does not set
       # CMAKE_PREFIX_PATH, and find_package(Qt6) does not read QT_ROOT_DIR.

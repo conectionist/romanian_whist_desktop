@@ -500,6 +500,20 @@ endif()
 ")
 endif()
 
+# Qt's xcb platform plugin needs libxcb-cursor.so.0, which a stock Ubuntu desktop does not
+# install, and the deploy script leaves system libraries out. Without it the app cannot open a
+# window on X11 or XWayland. It is a small, stable library, so it ships in lib/.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_library(WHIST_XCB_CURSOR NAMES libxcb-cursor.so.0)
+    if(WHIST_XCB_CURSOR)
+        get_filename_component(xcb_cursor_file "${WHIST_XCB_CURSOR}" REALPATH)
+        install(FILES "${xcb_cursor_file}" DESTINATION ${CMAKE_INSTALL_LIBDIR} RENAME libxcb-cursor.so.0)
+    else()
+        message(WARNING "libxcb-cursor.so.0 not found (apt install libxcb-cursor0): "
+                        "an installed tree will not start on a desktop that lacks it.")
+    endif()
+endif()
+
 # The Visual C++ runtime, which windeployqt leaves out. The executable and
 # every Qt DLL import MSVCP140.dll and VCRUNTIME140.dll (and their _1 and _2
 # companions). A Windows PC that never installed the Visual C++ Redistributable
