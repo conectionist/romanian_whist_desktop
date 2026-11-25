@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(romanian_whist_desktop
-    VERSION 2.1.1
+    VERSION 2.1.2
     DESCRIPTION "Qt desktop client for Romanian Whist"
     LANGUAGES CXX)
 
