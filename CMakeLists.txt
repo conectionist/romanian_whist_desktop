@@ -485,6 +485,21 @@ endif()
 
 install(SCRIPT ${deploy_script})
 
+# windeployqt copies Windows' own icuuc.dll from System32: a stub that forwards to icu.dll,
+# which Windows 10 1809 does not have. Beside the executable it would win over the system copy.
+# Versioned names such as icuuc74.dll belong to a Qt that ships its own ICU and are kept.
+# This is not in the deploy script's CONTENT because qt_generate_deploy_script is a macro,
+# which expands the escaped variables there at configure time, while they are still empty.
+if(WIN32)
+    install(CODE "
+set(icu_stub \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/icuuc.dll\")
+if(EXISTS \"\${icu_stub}\")
+    message(STATUS \"Removing: \${icu_stub}\")
+    file(REMOVE \"\${icu_stub}\")
+endif()
+")
+endif()
+
 # The Visual C++ runtime, which windeployqt leaves out. The executable and
 # every Qt DLL import MSVCP140.dll and VCRUNTIME140.dll (and their _1 and _2
 # companions). A Windows PC that never installed the Visual C++ Redistributable
